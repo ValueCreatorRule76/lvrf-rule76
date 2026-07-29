@@ -5,7 +5,9 @@
     "contract_version": "1.0.0",
     "constitutional_authority": "Rule76 Constitution",
     "simulation_boundary": "commit",
-    "note": "Stages baseline and attach use figures sourced from Skillsoft public filings. Stages model through return are SIMULATED for mechanism demonstration, with synthetic actors. No real person is represented as having committed to or verified anything."
+    "note": "Stages baseline and attach use figures sourced from Skillsoft public filings. Stages model through return are SIMULATED for mechanism demonstration, with synthetic actors. No real person is represented as having committed to or verified anything.",
+    "banner_title": "SIMULATION \u2014 MECHANISM DEMONSTRATION",
+    "deck": "A single capability, attached to one business metric the institution already reports, walked through all seven stages of the value spine \u2014 and stopped by its own disclosure gate before it could claim more than its evidence supports. Use A: the vendor measuring itself."
   },
   "tenant": {
     "id": "Skillsoft",

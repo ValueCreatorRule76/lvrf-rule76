@@ -10,6 +10,7 @@ Flexbox and tables only — CSS Grid is unreliable in WeasyPrint.
 """
 
 import json
+import sys
 from pathlib import Path
 from datetime import datetime, timezone
 from weasyprint import HTML
@@ -81,39 +82,59 @@ def tag(txt, cls=""):
 
 def build(fx, run):
     d, h = run["delta"], run["health"]
+    c0 = run["confidence"]
     vo, bm = fx["value_outcome"], fx["business_metric"]
     verified = run["realization"] == "verified"
+    cap = fx["capability"]
+    inst = fx["institution"]
+    zero_badge = tag('CUSTOMER ZERO','ok') if inst.get("is_tenant_self") else tag(inst.get('industry','')[:34])
 
-    # ---- banners ----
-    banners = f"""
+    # ---- banners: provenance note, then the gate in its actual state ----
+    prov = f"""
     <div class="banner">
-      <p class="t">SIMULATION — MECHANISM DEMONSTRATION</p>
-      <p>Stages <strong>baseline</strong> and <strong>attach</strong> use figures sourced
-      from Skillsoft public filings. Stages <strong>model</strong> through
-      <strong>return</strong> are simulated with synthetic actors, marked
-      {tag('SIM','sim')} throughout. No real individual is represented as having
-      committed to or verified anything. Skillsoft has not reported Q2 FY2027.</p>
-    </div>
+      <p class="t">{fx['run'].get('banner_title','PROVENANCE')}</p>
+      <p>{fx['run']['note']}</p>
+    </div>"""
+
+    if verified:
+        gate = f"""
+    <div class="banner gate">
+      <p class="t">DISCLOSURE GATE — CLEARED FOR {run['disclosure'].replace('_',' ').upper()}</p>
+      <p>Realization is <strong>VERIFIED</strong>. Evidence on both sides of the delta was
+      confirmed by an authority over the source, and
+      <strong>{fx['persons']['verifier']['name']}, {fx['persons']['verifier']['title']}</strong>
+      is the verifier of record. Computed confidence is
+      <strong>{c0['score']:g}/100 ({c0['band'].upper()})</strong> — attested evidence earns
+      partial credit, so a record of this shape cannot exceed 80 without independent
+      verification. That ceiling is deliberate.</p>
+    </div>"""
+    else:
+        gate = f"""
     <div class="banner gate">
       <p class="t">DISCLOSURE GATE — {run['disclosure'].replace('_',' ').upper()}</p>
       <p>Realization status is <strong>{run['realization'].upper()}</strong>, not verified.
-      Evidence supporting the measured actual is not source-verified and no named human
-      verifier is of record. <strong>This record may not be released to a customer.</strong>
-      The schema constraint <span class="mono">value_outcomes_verified_requires_human</span>
-      would reject an attempt to force verification.</p>
+      Evidence supporting the measured actual is not confirmed by an authority over its
+      source, and no named human verifier is of record.
+      <strong>This record may not be released to a customer.</strong> The schema constraint
+      <span class="mono">value_outcomes_verified_requires_human</span> would reject an
+      attempt to force verification.</p>
     </div>"""
+    banners = prov + gate
 
     # ---- hero ----
+    def sim_tag(flag):
+        return "simulated" if flag else "attested"
+    unit = "" if len(bm['unit']) > 4 else bm['unit']
     hero = f"""
     <div class="hero">
-      <div class="c"><p class="l">Baseline</p><p class="v">{vo['baseline_value']}{bm['unit']}</p>
-        <p class="u">30 Apr 2026 · sourced</p></div>
-      <div class="c"><p class="l">Target</p><p class="v">{vo['target_value']}{bm['unit']}</p>
-        <p class="u">committed · simulated</p></div>
-      <div class="c"><p class="l">Measured</p><p class="v">{vo['actual_value']}{bm['unit']}</p>
-        <p class="u">31 Jul 2026 · simulated</p></div>
+      <div class="c"><p class="l">Baseline</p><p class="v">{vo['baseline_value']}{unit}</p>
+        <p class="u">{vo['baseline_measured_at']} · {sim_tag(not vo.get('baseline_sourced'))}</p></div>
+      <div class="c"><p class="l">Target</p><p class="v">{vo['target_value']}{unit}</p>
+        <p class="u">committed · {sim_tag(vo.get('target_simulated'))}</p></div>
+      <div class="c"><p class="l">Measured</p><p class="v">{vo['actual_value']}{unit}</p>
+        <p class="u">{vo['actual_measured_at']} · {sim_tag(vo.get('actual_simulated'))}</p></div>
       <div class="c"><p class="l">Delta</p><p class="v">{d['raw']:+}</p>
-        <p class="u">{d['pct_of_target']}% of target</p></div>
+        <p class="u">{d['pct_of_target']}% of target · {bm['direction']} is better</p></div>
     </div>"""
 
     # ---- evidence ----
@@ -168,20 +189,18 @@ def build(fx, run):
     <p class="mark">RULE<span>76</span></p>
     <p class="kicker">LVRF · Realization Record · v1</p>
 
-    <h1>Value-Based Renewal Execution<br>Dollar Retention Rate</h1>
-    <p class="deck">A single capability, attached to one business metric the institution
-    already reports, walked through all seven stages of the value spine — and stopped by
-    its own disclosure gate before it could claim more than its evidence supports.</p>
+    <h1>{cap['name']}<br>{bm['name']}</h1>
+    <p class="deck">{fx['run'].get('deck', 'A single capability, attached to one business metric the institution already reports, walked through all seven stages of the value spine.')}</p>
 
     {banners}
 
     <table>
       <tr><th>Tenant</th><th>Institution</th><th>Engagement</th><th>Value engineer</th><th>Renewal</th></tr>
       <tr><td class="f">{fx['tenant']['id']}</td>
-          <td class="f">{fx['institution']['name']} {tag('CUSTOMER ZERO','ok')}</td>
+          <td class="f">{inst['name']} {zero_badge}</td>
           <td>{fx['engagement']['name']}</td>
           <td>{fx['persons']['value_engineer']['name']}</td>
-          <td class="s">31 Jan 2027</td></tr>
+          <td class="s">{fx['engagement'].get('renewal_date','—')}</td></tr>
     </table>
 
     <h2><span class="n">01</span>The Metric</h2>
@@ -200,7 +219,7 @@ def build(fx, run):
     <h2><span class="n">02</span>Baseline, Target, Measured</h2>
     {hero}
     <div class="note">
-      <span class="t">CURRENCY IMPACT — INFERENCE, NOT DISCLOSURE</span>
+      <span class="t">CURRENCY IMPACT — {'INFERENCE, NOT DISCLOSURE' if vo.get('impact_is_inference', True) else 'ATTESTED BASIS'}</span>
       {vo['currency_code']} {vo['currency_impact']:,.0f}. Basis: {vo['impact_basis']}
       <br><br>The schema refuses a currency figure without a stated basis
       (<span class="mono">value_outcomes_impact_requires_basis</span>). A number whose
@@ -215,7 +234,9 @@ def build(fx, run):
       <tr><td class="s">Definition</td><td>{fx['capability']['description']}</td></tr>
       <tr><td class="s">Assessed movement</td>
           <td>{fx['assessment']['prior_score']} → {fx['assessment']['score']}
-          of {fx['assessment']['scale_max']} {tag('SIM','sim')}</td></tr>
+          of {fx['assessment']['scale_max']}
+          {tag('SIM','sim') if fx['assessment'].get('simulated') else ''}
+          {('· ' + str(fx['assessment']['population']) + ' assessed') if fx['assessment'].get('population') else ''}</td></tr>
     </table>
     <p>Learning is the mechanism, not the claim. Per AMENDMENT-001 Article II the
     assessment exists to evidence that capability moved — it is not itself the value.</p>
@@ -309,11 +330,13 @@ def build(fx, run):
 
 
 def main():
-    fx = json.loads((HERE / "customer_zero.json").read_text())
+    fixture = sys.argv[1] if len(sys.argv) > 1 else "customer_zero.json"
+    fx = json.loads((HERE / fixture).read_text())
     run = json.loads((OUT / "spine_run.json").read_text())
     html = build(fx, run)
-    (OUT / "realization_record.html").write_text(html)
-    pdf = OUT / "LVRF_Realization_Record_Customer_Zero.pdf"
+    stem = Path(fixture).stem
+    (OUT / f"realization_record_{stem}.html").write_text(html)
+    pdf = OUT / f"LVRF_Realization_Record_{stem.replace('_','-')}.pdf"
     HTML(string=html, base_url=str(HERE)).write_pdf(pdf)
     print(f"rendered -> {pdf}")
 

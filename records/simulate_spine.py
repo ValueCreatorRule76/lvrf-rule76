@@ -98,6 +98,50 @@ CONFIDENCE_FACTORS = {
 
 CONFIDENCE_BANDS = [(80, "high"), (55, "medium"), (0, "low")]
 
+# ---------------------------------------------------------------------------
+# Attestation credit
+#
+# In Use B a vendor measures a CUSTOMER's business metric. The vendor cannot
+# independently verify the customer's internal figure — it has no access to the
+# customer's system of record. Without a middle tier, 50 of the 100 confidence
+# points would be permanently unreachable and the product would be unusable for
+# the engagement it exists to serve.
+#
+# An attestation is the customer's own metric owner putting their name to the
+# figure. In audit terms that is a management representation: necessary,
+# accepted, and weaker than substantive testing.
+#
+# 0.6 is chosen deliberately. A flawlessly executed Use B record — definition
+# confirmed, both sides attested, basis evidenced, real sponsor, real verifier —
+# scores exactly 80, the floor of HIGH. It has to do everything right to get
+# there, and it can never exceed 80 without genuine independent verification.
+# That ceiling is the honest one.
+#
+# An attestation only counts if the attester is INSTITUTION-scoped and real. A
+# vendor attesting to a customer's number is an assertion wearing a signature.
+# ---------------------------------------------------------------------------
+
+ATTESTATION_CREDIT = 0.6
+
+
+def _evidence_credit(ev, persons):
+    """Return (credit 0..1, label) for one evidence item."""
+    if not ev.get("source_verified"):
+        return 0.0, "unverified"
+
+    if ev.get("kind") == "attestation" or ev.get("attested_by"):
+        who = ev.get("attested_by")
+        p = persons.get(who) if who else None
+        if p is None:
+            return 0.0, "attestation with no named attester"
+        if p.get("synthetic"):
+            return 0.0, f"attester synthetic ({p['name']})"
+        if p.get("scope") != "institution":
+            return 0.0, f"attester is vendor-side ({p['name']}) — not an authority on the customer's metric"
+        return ATTESTATION_CREDIT, f"attested by {p['name']}, {p['title']}"
+
+    return 1.0, "independently source-verified"
+
 
 class Spine:
     """Walks the value spine and accumulates a heartbeat ledger."""
@@ -248,7 +292,12 @@ class Spine:
         """The disclosure gate. HB-0016 is severity 5 for a reason."""
         vo = self.fx["value_outcome"]
         actual_ev = [e for e in self.fx["evidence"] if e["supports"] == "actual"]
-        all_verified = bool(actual_ev) and all(e["source_verified"] for e in actual_ev)
+        # The gate asks whether the source was confirmed by an authority over it,
+        # not how strong that confirmation is. Attestation by the customer's own
+        # metric owner satisfies the gate; the confidence model separately records
+        # that it is weaker than independent verification.
+        all_verified = bool(actual_ev) and any(
+            _evidence_credit(e, self.fx["persons"])[0] > 0 for e in actual_ev)
         verifier = self.fx["persons"]["verifier"]
 
         if all_verified and not verifier["synthetic"]:
@@ -410,7 +459,10 @@ class Spine:
               "Calculation method NOT disclosed by the source. The metric cannot be "
               "independently reproduced.")
 
-        # 2 & 3. Evidence verification by what it supports
+        # 2 & 3. Evidence strength by what it supports. Graded, not binary:
+        # independent verification earns full credit, attestation earns
+        # ATTESTATION_CREDIT, anything else earns nothing.
+        persons = fx["persons"]
         for key, supports in (("baseline_evidence_verified", "baseline"),
                               ("actual_evidence_verified", "actual")):
             weight = CONFIDENCE_FACTORS[key][0]
@@ -418,11 +470,14 @@ class Spine:
             if not rel:
                 award(key, 0, f"No evidence attached to the {supports}.")
                 continue
-            verified = [e for e in rel if e["source_verified"]]
-            earned = weight * (len(verified) / len(rel))
-            award(key, earned,
-                  f"{len(verified)} of {len(rel)} {supports} evidence items "
-                  f"source-verified.")
+            graded = [_evidence_credit(e, persons) for e in rel]
+            best = max(c for c, _ in graded)
+            note = next(lbl for c, lbl in graded if c == best)
+            n_att = sum(1 for c, _ in graded if 0 < c < 1)
+            n_ind = sum(1 for c, _ in graded if c >= 1)
+            detail = (f"{len(rel)} item(s): {n_ind} independent, {n_att} attested. "
+                      f"Strongest — {note}.")
+            award(key, weight * best, detail)
 
         # 4. Impact basis
         weight = CONFIDENCE_FACTORS["impact_basis_evidenced"][0]
@@ -432,13 +487,15 @@ class Spine:
         else:
             basis_ev = [e for e in ev if e["supports"] == "impact_basis"]
             has_basis = bool(vo.get("impact_basis"))
-            verified_basis = [e for e in basis_ev if e["source_verified"]]
-            if has_basis and verified_basis and not vo.get("impact_is_inference", True):
-                award("impact_basis_evidenced", weight, "Basis stated and evidenced.")
-            elif has_basis and verified_basis:
+            graded = [_evidence_credit(e, fx["persons"]) for e in basis_ev]
+            best = max((c for c, _ in graded), default=0.0)
+            if has_basis and best > 0 and not vo.get("impact_is_inference", True):
+                note = next(lbl for c, lbl in graded if c == best)
+                award("impact_basis_evidenced", weight, f"Basis stated and evidenced — {note}.")
+            elif has_basis and best > 0:
                 award("impact_basis_evidenced", weight * 0.5,
-                      "Basis stated and partially evidenced, but self-declared as "
-                      "inference. Half credit.")
+                      "Basis stated and evidenced, but self-declared as inference. "
+                      "Half credit.")
             else:
                 award("impact_basis_evidenced", 0,
                       "Currency claimed without stated, evidenced basis.")

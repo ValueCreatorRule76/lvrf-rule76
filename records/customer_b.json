@@ -1,0 +1,172 @@
+{
+  "run": {
+    "label": "Use B \u2014 vendor engagement at a customer institution",
+    "executed_at": "2026-07-29T15:30:00Z",
+    "contract_version": "1.0.0",
+    "constitutional_authority": "Rule76 Constitution",
+    "simulation_boundary": "none",
+    "note": "ILLUSTRATIVE COMPOSITE. Northgate Utilities is not a real Skillsoft customer; it is a constructed engagement of a shape typical for a regulated utility, built to exercise Use B end to end. Every figure is invented for demonstration. No real institution, individual, or measurement is represented. Contrast with customer_zero.json, which uses sourced public figures for the baseline.",
+    "use_case": "B",
+    "use_case_note": "Use A (customer zero) measures the VENDOR's own sales capability against the vendor's own metric. Use B measures a CUSTOMER's workforce capability against the CUSTOMER's business metric. Same schema, different value hypothesis. Use B is the engagement shape a value engineering role actually performs.",
+    "banner_title": "ILLUSTRATIVE COMPOSITE \u2014 NOT A REAL ENGAGEMENT",
+    "deck": "Use B: a vendor measuring a customer's workforce capability against the customer's own regulatory metric. Evidence is attested by the customer's authorities rather than independently verified, which clears the gate but caps confidence at 80. This is the engagement shape a value engineering function actually performs."
+  },
+  "tenant": {
+    "id": "Skillsoft",
+    "is_self_measuring": false
+  },
+  "institution": {
+    "name": "Northgate Utilities",
+    "industry": "Regulated electric utility \u2014 transmission and distribution",
+    "is_tenant_self": false
+  },
+  "persons": {
+    "value_engineer": {
+      "name": "Brad Piver",
+      "title": "Value Engineer",
+      "scope": "tenant",
+      "synthetic": false
+    },
+    "account_executive": {
+      "name": "K. Ahluwalia",
+      "title": "Enterprise Account Executive",
+      "scope": "tenant",
+      "synthetic": false
+    },
+    "sponsor": {
+      "name": "D. Okonkwo",
+      "title": "VP Transmission Operations",
+      "scope": "institution",
+      "synthetic": false
+    },
+    "metric_owner": {
+      "name": "R. Castellanos",
+      "title": "Director, Environmental Health & Safety",
+      "scope": "institution",
+      "synthetic": false
+    },
+    "verifier": {
+      "name": "S. Bhatt",
+      "title": "Director, Financial Planning & Analysis",
+      "scope": "institution",
+      "synthetic": false
+    },
+    "assessor": {
+      "name": "M. Lindqvist",
+      "title": "Manager, Technical Training",
+      "scope": "institution",
+      "synthetic": false
+    }
+  },
+  "engagement": {
+    "name": "Switching Order Verification \u2014 Field Operations",
+    "renewal_date": "2027-03-31"
+  },
+  "capability": {
+    "name": "Switching order verification",
+    "role_family": "Field operations supervisor",
+    "description": "The supervisor's demonstrated ability to independently verify a switching order against the network model and identify a conflicting condition before authorising work. The failure mode this capability guards against is a switching error, which is a leading cause of recordable injury in transmission and distribution operations."
+  },
+  "business_metric": {
+    "name": "Total Recordable Incident Rate (TRIR)",
+    "unit": "incidents per 200,000 hours worked",
+    "direction": "decrease",
+    "source_system": "Northgate EHS incident management system, reconciled to OSHA 300A annual summary",
+    "reporting_cadence": "Monthly, with annual regulatory filing",
+    "calculation_confirmed": true,
+    "definition_notes": "Standard OSHA formula: (recordable incidents x 200,000) / total hours worked. Calculation method confirmed with the metric owner and reconcilable to the filed 300A. Direction is DECREASE \u2014 a lower figure is better, which inverts the delta logic relative to a retention metric."
+  },
+  "value_outcome": {
+    "baseline_value": 1.42,
+    "baseline_measured_at": "2026-01-31",
+    "baseline_sourced": true,
+    "target_value": 1.1,
+    "target_simulated": false,
+    "actual_value": 1.08,
+    "actual_measured_at": "2026-07-31",
+    "actual_simulated": false,
+    "currency_impact": 2960000.0,
+    "currency_code": "USD",
+    "impact_basis": "0.34 reduction in TRIR across 4.1M hours worked equates to approximately 7 avoided recordable incidents. Applied at Northgate's own fully-loaded cost per recordable incident of $423,000 \u2014 a figure supplied and attested by Northgate FP&A, comprising direct medical, indemnity, crew downtime, investigation, and regulatory response. Excludes any allowance for insurance premium effect or reputational cost. Attested, not independently audited.",
+    "impact_is_inference": false,
+    "confidence": "high"
+  },
+  "evidence": [
+    {
+      "kind": "attestation",
+      "summary": "TRIR of 1.42 for the twelve months ended 31 January 2026 across the transmission and distribution field population.",
+      "provenance": "Attested by R. Castellanos, Director EHS, Northgate Utilities. Drawn from the EHS incident management system and reconciled to the filed OSHA 300A.",
+      "source_reference": "Northgate EHS export EHS-2026-0131; OSHA 300A FY2025",
+      "confidence": "high",
+      "source_verified": true,
+      "attested_by": "metric_owner",
+      "attested_at": "2026-02-14",
+      "supports": "baseline",
+      "simulated": false
+    },
+    {
+      "kind": "attestation",
+      "summary": "TRIR of 1.08 for the twelve months ended 31 July 2026, same population and methodology.",
+      "provenance": "Attested by R. Castellanos, Director EHS, Northgate Utilities. Same system and reconciliation basis as the baseline.",
+      "source_reference": "Northgate EHS export EHS-2026-0731",
+      "confidence": "high",
+      "source_verified": true,
+      "attested_by": "metric_owner",
+      "attested_at": "2026-08-07",
+      "supports": "actual",
+      "simulated": false
+    },
+    {
+      "kind": "attestation",
+      "summary": "Fully-loaded cost per recordable incident of $423,000, and 4.1M hours worked in the measurement period.",
+      "provenance": "Attested by S. Bhatt, Director FP&A, Northgate Utilities. Derived from Northgate's own incident cost model.",
+      "source_reference": "Northgate FP&A incident cost model, rev 2026.2",
+      "confidence": "medium",
+      "source_verified": true,
+      "attested_by": "verifier",
+      "attested_at": "2026-08-11",
+      "supports": "impact_basis",
+      "simulated": false
+    },
+    {
+      "kind": "assessment_result",
+      "summary": "Assessed switching order verification capability across 214 field operations supervisors moved from 2.1 to 3.9 on a 0-5 scale.",
+      "provenance": "Coach-of-record assessment by M. Lindqvist, Manager Technical Training, Northgate Utilities. Scored against the published rubric; AI-assisted drafting of narrative feedback only.",
+      "source_reference": "Northgate assessment cycle 2026-H1",
+      "confidence": "high",
+      "source_verified": true,
+      "attested_by": "assessor",
+      "attested_at": "2026-07-24",
+      "supports": "actual",
+      "simulated": false
+    },
+    {
+      "kind": "observation",
+      "summary": "Twelve documented instances of supervisors halting a switching sequence after identifying a conflicting network condition.",
+      "provenance": "Operations control room log review. Corroborating rather than primary; no attestation obtained.",
+      "source_reference": "Northgate control room log sample, Mar-Jun 2026",
+      "confidence": "low",
+      "source_verified": false,
+      "attested_by": null,
+      "attested_at": null,
+      "supports": "actual",
+      "simulated": false
+    }
+  ],
+  "assessment": {
+    "score": 3.9,
+    "scale_min": 0.0,
+    "scale_max": 5.0,
+    "prior_score": 2.1,
+    "ai_assisted": true,
+    "simulated": false,
+    "population": 214,
+    "population_note": "Cohort assessment across 214 supervisors. The schema has no cohort object, so this attaches to the assessor of record with the population recorded here. Modelling gap, not a data error."
+  },
+  "stewardship_return": {
+    "kind": "lever_pattern",
+    "summary": "In regulated operations, the defensible metric is the one the regulator already compels the customer to file.",
+    "narrative": "Northgate did not need to be persuaded that TRIR mattered, nor to build a measurement apparatus for it \u2014 the OSHA 300A already existed and was already audited internally. The value engineer's work was attaching a capability to it, not inventing a metric. This is the strongest available position for LVRF: a customer's regulatory filing is a source the customer cannot dispute and a vendor cannot fabricate. Candidate for the regulated-industry pack, and for CVAF where the same substitution applies to compliance-driven commercial cases.",
+    "target_chapel": "rule76"
+  }
+}
