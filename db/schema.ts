@@ -513,6 +513,8 @@ export const heartbeats = pgTable('heartbeats', {
   constitutionalAuthority: text('constitutional_authority').notNull()
     .default('Rule76 Constitution'),
   ...governance(),
+  /** Override: heartbeats are keyed on register ID (text), not UUID. */
+  supersededById: text('superseded_by_id'),
 }, (t) => [
   /** Zero is a legitimate weight — a heartbeat may be informational. */
   check('heartbeats_health_weight_range', sql`${t.healthWeight} >= 0 AND ${t.healthWeight} <= 10`),

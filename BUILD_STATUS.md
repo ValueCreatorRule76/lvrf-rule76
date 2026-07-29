@@ -41,6 +41,27 @@ ledger across six weighted factors.
 
 ---
 
+## Known defects
+
+Found reviewing the generated migration (`db/drizzle/0000_*.sql`) before anything was
+applied to the database.
+
+- **Defect 1 — resolved.** `heartbeats.superseded_by_id` inherited `uuid` from
+  `governance()`, but `heartbeats.id` is `text` (register IDs like `HB-0001`) — the
+  column could never hold a valid reference. Overridden in `db/schema.ts` immediately
+  after `...governance()` to `text('superseded_by_id')`. Migration regenerated from a
+  clean `db/drizzle/`; column confirmed `text` where every other table still has `uuid`.
+- **Defect 2 — open, deferred.** Neither `superseded_by_id` nor `steward_person_id`
+  carries a foreign key on any of the 18 tables — 49 FKs generated, none for these two
+  columns. Unconstrained UUIDs are the orphaned-relation defect class this file warns
+  against. Deferred deliberately rather than rushed: `stewardPersonId` is circular
+  through `persons`, and `supersededById` is a genuine self-reference requiring Drizzle's
+  `AnyPgColumn` return-type annotation on the FK builder — both need to be done as a
+  considered `0001` migration, not a same-sitting edit. Nothing currently writes either
+  column, so there is no live orphan risk yet.
+
+---
+
 ## First spine run — customer zero
 
 | | |
