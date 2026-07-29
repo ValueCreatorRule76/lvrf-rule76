@@ -1,0 +1,146 @@
+{
+  "run": {
+    "label": "Customer Zero \u2014 full value spine walk",
+    "executed_at": "2026-07-28T21:00:00Z",
+    "contract_version": "1.0.0",
+    "constitutional_authority": "Rule76 Constitution",
+    "simulation_boundary": "commit",
+    "note": "Stages baseline and attach use figures sourced from Skillsoft public filings. Stages model through return are SIMULATED for mechanism demonstration, with synthetic actors. No real person is represented as having committed to or verified anything."
+  },
+  "tenant": {
+    "id": "Skillsoft",
+    "is_self_measuring": true
+  },
+  "institution": {
+    "name": "Skillsoft",
+    "industry": "Corporate learning / talent development",
+    "is_tenant_self": true
+  },
+  "persons": {
+    "value_engineer": {
+      "name": "Brad Piver",
+      "title": "Value Engineer",
+      "scope": "tenant",
+      "synthetic": false
+    },
+    "account_executive": {
+      "name": "[SIM] Enterprise AE",
+      "title": "Account Executive",
+      "scope": "tenant",
+      "synthetic": true
+    },
+    "sponsor": {
+      "name": "[SIM] Customer Sponsor",
+      "title": "Executive Sponsor",
+      "scope": "institution",
+      "synthetic": true
+    },
+    "metric_owner": {
+      "name": "[SIM] Metric Owner",
+      "title": "Revenue Operations",
+      "scope": "institution",
+      "synthetic": true
+    },
+    "verifier": {
+      "name": "[SIM] Finance Verifier",
+      "title": "Finance",
+      "scope": "institution",
+      "synthetic": true
+    },
+    "assessor": {
+      "name": "[SIM] Coach of Record",
+      "title": "Coach",
+      "scope": "institution",
+      "synthetic": true
+    }
+  },
+  "engagement": {
+    "name": "Customer Zero \u2014 Value-Based Renewal Capability",
+    "renewal_date": "2027-01-31"
+  },
+  "capability": {
+    "name": "Value-based renewal execution",
+    "role_family": "Enterprise account executive",
+    "description": "The seller's demonstrated ability to construct and defend a renewal case on the customer's own business metrics rather than on platform consumption metrics."
+  },
+  "business_metric": {
+    "name": "Dollar Retention Rate (trailing twelve months)",
+    "unit": "%",
+    "direction": "increase",
+    "source_system": "Skillsoft investor reporting \u2014 supplementary key performance metric",
+    "reporting_cadence": "Quarterly",
+    "definition_notes": "Skillsoft identifies dollar retention rate as its supplementary key performance metric and states that management uses it to assess operating performance. Below 100% the installed base is contracting in dollars. NOTE: Skillsoft does not publish the calculation methodology and states the metric may not be comparable to similarly titled measures at other companies. The definition is therefore UNCONFIRMED.",
+    "calculation_confirmed": false
+  },
+  "value_outcome": {
+    "baseline_value": 98.0,
+    "baseline_measured_at": "2026-04-30",
+    "baseline_sourced": true,
+    "target_value": 100.0,
+    "target_simulated": true,
+    "actual_value": 100.4,
+    "actual_measured_at": "2026-07-31",
+    "actual_simulated": true,
+    "currency_impact": 8400000.0,
+    "currency_code": "USD",
+    "impact_basis": "SIMULATED AND INFERRED. 2.4 percentage points of dollar retention applied to an assumed renewable revenue base of $350M. Skillsoft does not disclose the renewable share of its base or its concentration; the $350M figure is illustrative only, derived by the author from FY2027 revenue guidance of $388-406M less an assumed non-renewable component. This is not a Skillsoft figure and is not a claim.",
+    "confidence": "low",
+    "impact_is_inference": true
+  },
+  "evidence": [
+    {
+      "kind": "public_filing",
+      "summary": "LTM dollar retention rate of 98% at Q1 FY2027 period end, against 99% in the prior-year period.",
+      "provenance": "Skillsoft Q1 FY2027 earnings release and management commentary on the accompanying earnings call.",
+      "source_reference": "Skillsoft Corp. Q1 FY2027 results, period ended 30 April 2026",
+      "confidence": "high",
+      "source_verified": true,
+      "supports": "baseline",
+      "simulated": false
+    },
+    {
+      "kind": "public_filing",
+      "summary": "FY2027 guidance: revenue $388-406M, adjusted EBITDA $108-116M, TDS free cash flow $14-22M. Debt refinancing named as the top financial priority following the Global Knowledge divestiture.",
+      "provenance": "Skillsoft Q1 FY2027 earnings release and management commentary.",
+      "source_reference": "Skillsoft Corp. Q1 FY2027 results",
+      "confidence": "high",
+      "source_verified": true,
+      "supports": "impact_basis",
+      "simulated": false
+    },
+    {
+      "kind": "assessment_result",
+      "summary": "Assessed capability in value-based renewal execution across the enterprise sales cohort moved from 1.8 to 3.4 on a 0-5 scale.",
+      "provenance": "[SIM] Coach-of-record assessment, synthetic data for mechanism demonstration.",
+      "source_reference": "SIMULATED",
+      "confidence": "low",
+      "source_verified": false,
+      "supports": "actual",
+      "simulated": true
+    },
+    {
+      "kind": "system_export",
+      "summary": "LTM dollar retention rate of 100.4% at Q2 FY2027 period end.",
+      "provenance": "[SIM] Export from revenue reporting. Skillsoft has not reported Q2 FY2027; this figure does not exist.",
+      "source_reference": "SIMULATED",
+      "confidence": "low",
+      "source_verified": false,
+      "supports": "actual",
+      "simulated": true
+    }
+  ],
+  "assessment": {
+    "score": 3.4,
+    "scale_min": 0.0,
+    "scale_max": 5.0,
+    "prior_score": 1.8,
+    "ai_assisted": true,
+    "simulated": true
+  },
+  "stewardship_return": {
+    "kind": "lever_pattern",
+    "summary": "Renewal defensibility improves when the seller's case is constructed on the customer's own reported metric rather than on platform consumption data.",
+    "narrative": "The capability that moved was not product knowledge. It was the seller's willingness to open the renewal conversation with the customer's number instead of the vendor's. This pattern is a candidate for promotion to the Cathedral and for reuse in CVAF, where the same substitution applies to commercial value cases.",
+    "target_chapel": "rule76"
+  }
+}

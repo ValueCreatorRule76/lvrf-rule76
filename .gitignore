@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+records/out/
+*.local
+.DS_Store
+.vscode/settings.json

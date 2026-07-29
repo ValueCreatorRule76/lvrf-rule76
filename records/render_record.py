@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""
+LVRF — Realization Record renderer
+
+    python3 render_record.py
+
+Reads out/spine_run.json + customer_zero.json, emits the Rule76 PDF.
+Design tokens are cited from CLAUDE.md, not reinvented here.
+Flexbox and tables only — CSS Grid is unreliable in WeasyPrint.
+"""
+
+import json
+from pathlib import Path
+from datetime import datetime, timezone
+from weasyprint import HTML
+
+HERE = Path(__file__).parent
+OUT = HERE / "out"
+
+INK, GOLD, SILVER, OFFWHITE = "#09090A", "#C9A24A", "#C0C0C0", "#FAFAFA"
+
+CSS = f"""
+@page {{
+  size: letter; margin: 0.8in 0.85in 0.9in 0.85in;
+  @bottom-left {{ content: "Rule76 · LVRF Realization Record · Customer Zero";
+    font-family: Barlow; font-size: 7pt; color: #8A8A8A; letter-spacing: .04em; }}
+  @bottom-right {{ content: counter(page) " / " counter(pages);
+    font-family: Barlow; font-size: 7pt; color: #8A8A8A; }}
+}}
+html {{ font-size: 9.6pt; }}
+body {{ font-family: Barlow, sans-serif; color: {INK}; line-height: 1.46; }}
+.mark {{ font-family: "Bebas Neue"; font-size: 14pt; letter-spacing: .16em; margin: 0 0 1pt; }}
+.mark span {{ color: {GOLD}; }}
+.kicker {{ font-size: 7pt; letter-spacing: .18em; text-transform: uppercase;
+  color: #8A8A8A; margin: 0 0 14pt; }}
+h1 {{ font-family: "Bebas Neue"; font-size: 27pt; line-height: 1.03;
+  letter-spacing: .012em; margin: 0 0 5pt; }}
+.deck {{ font-size: 10.5pt; color: #3A3A3C; margin: 0 0 14pt; max-width: 5.3in; }}
+h2 {{ font-family: "Bebas Neue"; font-size: 14pt; letter-spacing: .05em;
+  margin: 19pt 0 3pt; padding-bottom: 3pt; border-bottom: .6pt solid #D8D8D8; }}
+h2 .n {{ color: {GOLD}; margin-right: 6pt; }}
+p {{ margin: 0 0 7pt; }}
+
+.banner {{ border: 1.4pt solid {INK}; padding: 9pt 11pt; margin: 0 0 14pt; }}
+.banner .t {{ font-family: "Bebas Neue"; font-size: 13pt; letter-spacing: .09em;
+  margin: 0 0 3pt; }}
+.banner p {{ font-size: 8.5pt; margin: 0; color: #3A3A3C; }}
+.banner.gate {{ border-color: {GOLD}; background: {OFFWHITE}; }}
+.banner.gate .t {{ color: {GOLD}; }}
+
+table {{ width: 100%; border-collapse: collapse; font-size: 8.6pt; margin: 5pt 0 9pt; }}
+th {{ text-align: left; font-size: 6.8pt; letter-spacing: .12em; text-transform: uppercase;
+  color: #8A8A8A; padding: 0 7pt 4pt 0; border-bottom: .6pt solid {SILVER}; }}
+td {{ padding: 5pt 7pt 5pt 0; border-bottom: .5pt solid #EAEAEA; vertical-align: top; }}
+td.f {{ font-weight: 600; white-space: nowrap; }}
+td.s {{ font-size: 7.2pt; color: #8A8A8A; }}
+.tag {{ font-size: 6.6pt; letter-spacing: .1em; text-transform: uppercase;
+  padding: 1pt 4pt; border: .5pt solid {SILVER}; color: #5A5A5A; white-space: nowrap; }}
+.tag.sim {{ border-color: {INK}; color: {INK}; font-weight: 600; }}
+.tag.ok {{ border-color: {GOLD}; color: {GOLD}; }}
+
+.hero {{ display: flex; gap: 10pt; margin: 6pt 0 12pt; }}
+.hero .c {{ flex: 1; border-top: 1.6pt solid {GOLD}; padding-top: 6pt; }}
+.hero .l {{ font-size: 6.6pt; letter-spacing: .13em; text-transform: uppercase;
+  color: #8A8A8A; margin: 0 0 2pt; }}
+.hero .v {{ font-family: "Bebas Neue"; font-size: 21pt; line-height: 1; margin: 0; }}
+.hero .u {{ font-size: 7.2pt; color: #8A8A8A; margin: 2pt 0 0; }}
+
+.note {{ background: {OFFWHITE}; border: .6pt solid #E2E2E2; padding: 8pt 10pt;
+  margin: 9pt 0; font-size: 8.2pt; color: #3A3A3C; }}
+.note .t {{ font-family: "Bebas Neue"; font-size: 9.5pt; letter-spacing: .1em;
+  color: {GOLD}; display: block; margin-bottom: 2pt; }}
+.avoid {{ page-break-inside: avoid; }}
+.mono {{ font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 7.4pt; }}
+"""
+
+
+def tag(txt, cls=""):
+    return f'<span class="tag {cls}">{txt}</span>'
+
+
+def build(fx, run):
+    d, h = run["delta"], run["health"]
+    vo, bm = fx["value_outcome"], fx["business_metric"]
+    verified = run["realization"] == "verified"
+
+    # ---- banners ----
+    banners = f"""
+    <div class="banner">
+      <p class="t">SIMULATION — MECHANISM DEMONSTRATION</p>
+      <p>Stages <strong>baseline</strong> and <strong>attach</strong> use figures sourced
+      from Skillsoft public filings. Stages <strong>model</strong> through
+      <strong>return</strong> are simulated with synthetic actors, marked
+      {tag('SIM','sim')} throughout. No real individual is represented as having
+      committed to or verified anything. Skillsoft has not reported Q2 FY2027.</p>
+    </div>
+    <div class="banner gate">
+      <p class="t">DISCLOSURE GATE — {run['disclosure'].replace('_',' ').upper()}</p>
+      <p>Realization status is <strong>{run['realization'].upper()}</strong>, not verified.
+      Evidence supporting the measured actual is not source-verified and no named human
+      verifier is of record. <strong>This record may not be released to a customer.</strong>
+      The schema constraint <span class="mono">value_outcomes_verified_requires_human</span>
+      would reject an attempt to force verification.</p>
+    </div>"""
+
+    # ---- hero ----
+    hero = f"""
+    <div class="hero">
+      <div class="c"><p class="l">Baseline</p><p class="v">{vo['baseline_value']}{bm['unit']}</p>
+        <p class="u">30 Apr 2026 · sourced</p></div>
+      <div class="c"><p class="l">Target</p><p class="v">{vo['target_value']}{bm['unit']}</p>
+        <p class="u">committed · simulated</p></div>
+      <div class="c"><p class="l">Measured</p><p class="v">{vo['actual_value']}{bm['unit']}</p>
+        <p class="u">31 Jul 2026 · simulated</p></div>
+      <div class="c"><p class="l">Delta</p><p class="v">{d['raw']:+}</p>
+        <p class="u">{d['pct_of_target']}% of target</p></div>
+    </div>"""
+
+    # ---- evidence ----
+    ev_rows = ""
+    for e in fx["evidence"]:
+        badges = tag("SIM", "sim") if e["simulated"] else tag("SOURCED", "ok")
+        ver = tag("VERIFIED", "ok") if e["source_verified"] else tag("UNVERIFIED")
+        ev_rows += f"""<tr>
+          <td class="s">{e['supports']}</td>
+          <td>{e['summary']}</td>
+          <td class="s">{e['provenance']}</td>
+          <td>{badges} {ver}</td></tr>"""
+
+    # ---- heartbeats ----
+    hb_rows = "".join(
+        f"""<tr><td class="f">{e['heartbeatId']}</td><td>{e['eventType']}</td>
+        <td class="s">{e['valueStage']}</td><td class="s">{e['category']}</td>
+        <td class="s">{e['producer']}</td>
+        <td>{tag(e['healthState'].upper(), 'ok' if e['healthState']=='healthy' else '')}</td>
+        <td class="mono">{e['contentHash'][:12]}</td></tr>"""
+        for e in run["events"])
+
+    # ---- health ----
+    hd_rows = ""
+    for dim in h["dimensions"]:
+        score = ("<em>UNMEASURED</em>" if dim["score"] is None
+                 else f"<strong>{dim['score']}</strong>")
+        n = dim.get("events", 0)
+        hd_rows += (f"<tr><td>{dim['dimension']}</td><td class=\"s\">{dim['weight']}%</td>"
+                    f"<td>{score}</td><td class=\"s\">{n or '—'}</td></tr>")
+
+    # ---- findings ----
+    f_rows = "".join(
+        f"""<tr><td class="f">{c}</td><td>{tag(s.upper())}</td><td>{m}</td></tr>"""
+        for c, s, m in run["findings"])
+
+    c = run["confidence"]
+    c_rows = ""
+    for f in c["factors"]:
+        pct = f["earned"] / f["weight"] if f["weight"] else 0
+        cls = "ok" if pct >= 0.99 else ("" if pct > 0 else "sim")
+        c_rows += (f"""<tr><td class="s">{f['question']}</td>
+          <td class="f">{f['earned']:g} / {f['weight']}</td>
+          <td>{tag('FULL' if pct>=0.99 else ('PARTIAL' if pct>0 else 'ZERO'), cls)}</td>
+          <td class="s">{f['note']}</td></tr>""")
+
+    sr = fx["stewardship_return"]
+
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>{CSS}</style></head><body>
+
+    <p class="mark">RULE<span>76</span></p>
+    <p class="kicker">LVRF · Realization Record · v1</p>
+
+    <h1>Value-Based Renewal Execution<br>Dollar Retention Rate</h1>
+    <p class="deck">A single capability, attached to one business metric the institution
+    already reports, walked through all seven stages of the value spine — and stopped by
+    its own disclosure gate before it could claim more than its evidence supports.</p>
+
+    {banners}
+
+    <table>
+      <tr><th>Tenant</th><th>Institution</th><th>Engagement</th><th>Value engineer</th><th>Renewal</th></tr>
+      <tr><td class="f">{fx['tenant']['id']}</td>
+          <td class="f">{fx['institution']['name']} {tag('CUSTOMER ZERO','ok')}</td>
+          <td>{fx['engagement']['name']}</td>
+          <td>{fx['persons']['value_engineer']['name']}</td>
+          <td class="s">31 Jan 2027</td></tr>
+    </table>
+
+    <h2><span class="n">01</span>The Metric</h2>
+    <table>
+      <tr><th style="width:22%">Field</th><th>Value</th></tr>
+      <tr><td class="s">Name</td><td class="f">{bm['name']}</td></tr>
+      <tr><td class="s">Unit / direction</td><td>{bm['unit']} · higher is better</td></tr>
+      <tr><td class="s">Source system</td><td>{bm['source_system']}</td></tr>
+      <tr><td class="s">Cadence</td><td>{bm['reporting_cadence']}</td></tr>
+      <tr><td class="s">Definition</td><td>{bm['definition_notes']}</td></tr>
+    </table>
+    <p>The metric is not one LVRF invented. It is the number the institution has already
+    asked the market to judge it by, which is the whole basis of the record's
+    defensibility.</p>
+
+    <h2><span class="n">02</span>Baseline, Target, Measured</h2>
+    {hero}
+    <div class="note">
+      <span class="t">CURRENCY IMPACT — INFERENCE, NOT DISCLOSURE</span>
+      {vo['currency_code']} {vo['currency_impact']:,.0f}. Basis: {vo['impact_basis']}
+      <br><br>The schema refuses a currency figure without a stated basis
+      (<span class="mono">value_outcomes_impact_requires_basis</span>). A number whose
+      derivation is unstated cannot be defended, so it cannot be recorded.
+    </div>
+
+    <h2><span class="n">03</span>The Capability</h2>
+    <table>
+      <tr><th style="width:22%">Field</th><th>Value</th></tr>
+      <tr><td class="s">Capability</td><td class="f">{fx['capability']['name']}</td></tr>
+      <tr><td class="s">Role family</td><td>{fx['capability']['role_family']}</td></tr>
+      <tr><td class="s">Definition</td><td>{fx['capability']['description']}</td></tr>
+      <tr><td class="s">Assessed movement</td>
+          <td>{fx['assessment']['prior_score']} → {fx['assessment']['score']}
+          of {fx['assessment']['scale_max']} {tag('SIM','sim')}</td></tr>
+    </table>
+    <p>Learning is the mechanism, not the claim. Per AMENDMENT-001 Article II the
+    assessment exists to evidence that capability moved — it is not itself the value.</p>
+
+    <h2><span class="n">04</span>Evidence Ledger</h2>
+    <table>
+      <tr><th style="width:11%">Supports</th><th style="width:31%">Summary</th>
+          <th style="width:34%">Provenance</th><th>State</th></tr>
+      {ev_rows}
+    </table>
+
+    <h2><span class="n">05</span>Heartbeat Ledger</h2>
+    <p>Ten events, every one registered. An unregistered heartbeat is refused by the
+    foreign key to <span class="mono">heartbeats</span> — HEARTBEAT-REGISTER §1 enforced
+    structurally rather than documentarily.</p>
+    <table>
+      <tr><th>ID</th><th>Event</th><th>Stage</th><th>Category</th><th>Producer</th>
+          <th>State</th><th>Hash</th></tr>
+      {hb_rows}
+    </table>
+
+    <h2><span class="n">06</span>Institutional Health</h2>
+    <table>
+      <tr><th style="width:42%">Dimension</th><th>Weight</th><th>Score</th><th>Events</th></tr>
+      {hd_rows}
+      <tr><td class="f">COMPOSITE</td><td class="s">{h['coverage_pct']}% covered</td>
+          <td class="f">{h['composite']} &nbsp; {tag(h['band'])}</td><td></td></tr>
+    </table>
+    <div class="note">
+      <span class="t">WHY THIS IS NOT 100</span>
+      {h['basis']}<br><br>Security is reported UNMEASURED rather than scored — no security
+      heartbeat fired in this run. Per AMENDMENT-001 Article VII, a dimension with nothing
+      executed against it cannot be asserted as compliant. The composite sits in WATCH
+      because verification was refused, not because the mechanism failed. Financial /
+      Value Realization is the seventh dimension established by AMENDMENT-003, weighted at
+      10 rather than 20: institutional health measures faithfulness, not performance.
+    </div>
+
+    <h2><span class="n">07</span>Findings</h2>
+    <table>
+      <tr><th style="width:8%">Code</th><th style="width:13%">Severity</th><th>Finding</th></tr>
+      {f_rows}
+    </table>
+
+    <h2><span class="n">08</span>Confidence Ledger</h2>
+    <p>Confidence is <strong>computed from the evidence ledger, not asserted.</strong> A
+    value engineer able to type "high" would eventually type it under pressure. The six
+    factors below are the questions a finance function actually asks, weighted by how badly
+    a negative answer damages the record.</p>
+    <table>
+      <tr><th style="width:30%">Factor</th><th style="width:11%">Earned</th>
+          <th style="width:11%">State</th><th>Basis</th></tr>
+      {c_rows}
+      <tr><td class="f">COMPUTED CONFIDENCE</td>
+          <td class="f">{c['score']:g} / 100</td>
+          <td>{tag(c['band'].upper(), 'sim' if c['band']=='low' else 'ok')}</td>
+          <td class="s">{c['method']}</td></tr>
+    </table>
+    <div class="note">
+      <span class="t">WHAT THE MISSING {100 - c['score']:g} POINTS ARE</span>
+      This is not a grade. It is a work list, and every lost point names a specific,
+      obtainable input: the metric's calculation method (20), source-verified evidence for
+      the measured actual (25), an evidenced rather than inferred impact basis (5), a named
+      human sponsor of record (10), and a named human verifier of record (10).<br><br>
+      A record at {c['score']:g}/100 is not defensible to a finance function, and this
+      document says so on its own face rather than leaving a reader to discover it.
+    </div>
+
+    <h2><span class="n">09</span>Return to the Cathedral</h2>
+    <table>
+      <tr><th style="width:22%">Field</th><th>Value</th></tr>
+      <tr><td class="s">Kind</td><td class="f">{sr['kind'].replace('_',' ')}</td></tr>
+      <tr><td class="s">Pattern</td><td>{sr['summary']}</td></tr>
+      <tr><td class="s">Narrative</td><td>{sr['narrative']}</td></tr>
+      <tr><td class="s">Target</td><td>{sr['target_chapel']}</td></tr>
+    </table>
+    <p>The spine's terminal stage is a write, not a label. This is the mechanism by which
+    the finding compounds institutionally rather than ending at the engagement.</p>
+
+    <div class="note avoid">
+      <span class="t">RECORD INTEGRITY</span>
+      Content hash <span class="mono">{run['record_hash']}</span><br>
+      Document version 1 · Contract version {fx['run']['contract_version']} ·
+      Rendered {datetime.now(timezone.utc).strftime('%d %b %Y %H:%M UTC')}<br><br>
+      Every rendering is logged with a SHA-256 over the payload that produced it, so any
+      document in a customer's hands traces to the exact data behind it. Corrections
+      create a new version; they never overwrite one.
+    </div>
+
+    </body></html>"""
+
+
+def main():
+    fx = json.loads((HERE / "customer_zero.json").read_text())
+    run = json.loads((OUT / "spine_run.json").read_text())
+    html = build(fx, run)
+    (OUT / "realization_record.html").write_text(html)
+    pdf = OUT / "LVRF_Realization_Record_Customer_Zero.pdf"
+    HTML(string=html, base_url=str(HERE)).write_pdf(pdf)
+    print(f"rendered -> {pdf}")
+
+
+if __name__ == "__main__":
+    main()
