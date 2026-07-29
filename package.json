@@ -10,7 +10,9 @@
     "start": "node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx server/seed/seedCustomerZero.ts",
+    "spine:walk": "tsx server/spine/walkSpine.ts"
   },
   "repository": {
     "type": "git",

@@ -21,17 +21,13 @@ argument, it is out of scope for 1.x. Say so rather than building it.
 
 ### The two spines
 
-LVRF has two, because it has two users.
+Two users, two spines. Enums are in `db/schema.ts`.
 
-- **Value spine** (the operator, 7 stages) — `baseline → attach → model → commit →
-  measure → verify → return`. Mirrors CVAF's ECC spine. This is the primary workflow.
-- **Learning spine** (the subject, 13 stages) — `observe → assess → understand → plan
-  → learn → practice → reflect → demonstrate → measure → preserve → improve → teach →
-  return_to_rule76`. Nests *inside* `attach`/`measure` as the mechanism producing the
-  capability change.
-
-The learning spine's terminal stage is a **write**, not a label. Two prior documents
-truncated it at `teach`; that is a defect, not a variant.
+- **Value spine** (7 stages, the operator) — `baseline → attach → model → commit →
+  measure → verify → return`. Primary workflow. Mirrors CVAF's ECC spine.
+- **Learning spine** (13 stages, the subject) — nests *inside* `attach`/`measure` as the
+  mechanism producing capability change. Its terminal stage `return_to_rule76` is a
+  **write**, not a label; two prior documents truncated it at `teach`, which is a defect.
 
 ---
 
@@ -81,11 +77,14 @@ Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
 > **Caddy is pinned to IPv4 deliberately.** `localhost` resolved to `::1` while
 > Express binds IPv4, which 502s. Do not "simplify" it back to `localhost`.
 
-**Chosen, not yet installed:** Express + argon2 sessions · Drizzle ORM + Drizzle Kit
-(schema in TS, versioned migrations) · React/Vite + Tailwind · WeasyPrint 69.0
-(`pip install weasyprint --break-system-packages`, then Bebas Neue and Barlow into
-`~/.fonts` and **`fc-cache -f`** — skip the cache step and rendering falls back to
-default fonts silently).
+**Installed:** Drizzle ORM 0.45.2 + Drizzle Kit 0.31.10, Express, `pg`. Migration
+`0000_far_praxagora.sql` applied locally; 18 heartbeats seeded; 24 triggers active.
+
+**Not yet:** argon2 sessions (the actor header in `actorContext.ts` is a spoofable
+placeholder — fail-closed outside development before any mutation route ships) ·
+React/Vite + Tailwind · WeasyPrint 69.0 on the VPS (`pip install weasyprint
+--break-system-packages`, fonts into `~/.fonts`, then **`fc-cache -f`** — skip it and
+rendering silently falls back to default fonts).
 
 Separate repo, database and VPS from CVAF. CVAF carries live revenue; nothing here
 may reach it.
@@ -102,19 +101,33 @@ only**; Grid is fine in the React SPA.
 
 Canonical. Do not restate these values anywhere else in the repo — cite this file.
 
-| Token | Value |
-|---|---|
-| ink | `#09090A` |
-| gold | `#C9A24A` |
-| silver | `#C0C0C0` |
-| off-white | `#FAFAFA` |
-| display | Bebas Neue |
-| body | Barlow |
+| Token | Value | Notes |
+|---|---|---|
+| `--ink` | `#09090A` | |
+| `--gold` | `#C9A24A` | Rules, fills, display numerals, text **on ink**. |
+| `--gold-ink` | `#8A6A22` | **Only** permitted gold for small text on light. Never a fill. |
+| `--silver` | `#C0C0C0` | |
+| `--offwhite` | `#FAFAFA` | |
+| `--ink-45` | `#6E6E72` | Muted **informational** text. 5.08:1. |
+| `--ink-25` | `#A0A0A4` | 2.61:1 — decorative/disabled **only**. May not carry information. |
+| `--healthy` | `#2F6B4F` | HEALTHY · VERIFIED |
+| `--warning` | `#A8631F` | WARNING · UNVERIFIED |
+| `--critical` | `#8F2A2A` | CRITICAL · NOT_REALIZED |
+| `--failure` | `#5C1212` | CONSTITUTIONAL FAILURE — filled/inverted only |
+| display | Bebas Neue | |
+| body | Barlow | |
+| mono | `ui-monospace` stack | Hashes, IDs, register numbers |
 
 `#C8A24A` is a typo that appeared in an early PDF. The SPA's HSL value is drift. Gold is
 `#C9A24A`.
 
-No decorative stripes.
+**Gold on white is 2.40:1 — it fails WCAG AA at every size.** Use `--gold-ink` for small
+text on light surfaces. Gold on ink is 8.29:1 and fine. See `AMENDMENT-004`.
+
+**Health state WATCH has no colour of its own** — it reuses gold, which already means
+*notice this* in the printed records. One meaning, one value, across print and screen.
+
+No decorative stripes. No component may restate a hex value — cite the token.
 
 ---
 
@@ -135,6 +148,7 @@ code is authoritative and the departure is recorded here.
 | A8 | Product reoriented from learner-facing to **vendor-facing** | CDS-001 targets a CLO; the actual buyer is a CRO |
 | A9 | `tenants` added above `institutions`; two spines formalized | A vendor operates across many customer institutions |
 | A10 | `COMPASS-INHERITANCE-AUDIT` §14/§15 amended via `AMENDMENT-001` | §14 certified LVRF as learner-facing and assigned it Learning ROI; both superseded |
+| A11 | UI semantic palette established via `AMENDMENT-004` | Design system was print-only; health and realization states had no colour |
 
 ---
 
@@ -144,51 +158,35 @@ LVRF is a Chapel. The governing instruments live in the **`rule76-cathedral`**
 repo, not here. Where they and this file conflict, the conflict must be **named**,
 not resolved silently.
 
-**Adopted without reservation — normative for this repo:**
+**Adopted without reservation — normative:**
 
-- `HEARTBEAT-REGISTER.md` (R76-HB-001). Twelve registered heartbeats, seven
-  categories, five health states, six severity levels, the canonical event
-  contract (§11) and persistence rules (§12). It is the most implementable
-  instrument in the corpus.
-  - `db/schema.ts` holds the register as the `heartbeats` table; `heartbeat_events`
-    is foreign-keyed to it. **An unregistered event is refused by Postgres.**
-    Seed with `db/seed_heartbeat_register.sql`.
+- `HEARTBEAT-REGISTER.md` (R76-HB-001). Eighteen registered heartbeats (12 original +
+  HB-0013..0018 via `AMENDMENT-002`), seven categories, five health states, six severity
+  levels, the §11 event contract and §12 persistence rules.
+  - `db/schema.ts` holds the register as the `heartbeats` table; `heartbeat_events` is
+    foreign-keyed to it, so **an unregistered event is refused by Postgres.** Seed with
+    `db/seed_heartbeat_register.sql`.
   - **Adding a heartbeat is a governance act.** If a feature needs one that isn't
     registered, stop and say so — do not insert a row.
-  - **Known gap:** no `financial` or `learning` heartbeat is registered. LVRF's
-    core events (baseline established, target committed, value verified) have no
-    registered heartbeat yet. This requires a register amendment before those
-    events can be emitted constitutionally.
-- `COMPASS-INHERITANCE-AUDIT` Principles I–V, root object set, and every finding
-  other than §14/§15.
+- `COMPASS-INHERITANCE-AUDIT` Principles I–V, the root object set, and every finding other
+  than §14/§15.
 
-**Amended by `AMENDMENT-001` (ratified 28 Jul 2026, in force):**
+**Amended and in force:** `AMENDMENT-001` (Chapel reorientation, LVAF→LVRF, Learning ROI
+struck), `AMENDMENT-002` (register extension), `AMENDMENT-003` (seventh health dimension),
+`AMENDMENT-004` (UI semantic palette). All four ratified; all four implemented in code.
 
-- §14 LVRF ownership — now Value Baseline, Capability-to-Metric Attachment,
-  Realization Record, Evidence Coverage, Confirmation Gap. Learning assessments
-  and competencies are retained as **mechanism**, not owned capability.
-- Learning ROI **struck** as an owned capability. Report numerator and investment
-  separately; never compute the ratio.
-- Compass consolidated to the §15 definition. Two competing definitions superseded.
-
-**Unresolved — do not build against either side:**
-
-- Compass sits **above** the Canonical Object Constitution in
-  `HEARTBEAT-REGISTER` §3, and as a **sibling** of the Chapels in
-  `COMPASS-INHERITANCE-AUDIT` §4. Parent in one diagram, peer in another.
-- The **Repository Constitution** is IN PROGRESS and will govern immutability,
-  snapshots and lineage. `record_documents` here is **provisional** and must be
-  reconciled when that instrument ratifies.
+**Unresolved — do not build against either side:** Compass is **above** the Canonical
+Object Constitution in `HEARTBEAT-REGISTER` §3 and a **sibling** of the Chapels in
+`COMPASS-INHERITANCE-AUDIT` §4 — parent in one diagram, peer in another. The **Repository
+Constitution** is IN PROGRESS; `record_documents` is **provisional** until it ratifies.
 
 ---
 
 ## The one document registry rule
 
-**No file in this repo may restate a canonical value — only cite this one.**
-
-Spine sequences, design tokens, object ownership, ratification authority: defined here,
-referenced everywhere. Two golds and four spines happened because canonical values were
-restated in multiple places with nothing declaring authority. Cite, don't copy.
+**No file may restate a canonical value — cite this one.** Spine sequences, tokens, object
+ownership, ratification authority: defined here, referenced everywhere. Two golds and four
+spines happened because canonical values were restated with nothing declaring authority.
 
 ---
 

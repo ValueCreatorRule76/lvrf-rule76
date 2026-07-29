@@ -35,15 +35,16 @@ END $$;
 -- classified as a soft_delete so the log distinguishes retirement from
 -- ordinary revision.
 
+-- MUST be AFTER. A BEFORE INSERT trigger fires on the proposed row before
+-- ON CONFLICT resolution, which logs inserts of ids that are never persisted.
 CREATE OR REPLACE FUNCTION lvrf_audit() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE op audit_operation;
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    op := 'insert';
     INSERT INTO audit_log (table_name, record_id, operation, actor_person_id, old_row, new_row)
-    VALUES (TG_TABLE_NAME, NEW.id::text, op, lvrf_current_actor(), NULL, to_jsonb(NEW));
-    RETURN NEW;
+    VALUES (TG_TABLE_NAME, NEW.id::text, 'insert', lvrf_current_actor(), NULL, to_jsonb(NEW));
+    RETURN NULL;
   END IF;
 
   IF TG_OP = 'UPDATE' THEN
@@ -54,11 +55,19 @@ BEGIN
     END IF;
     INSERT INTO audit_log (table_name, record_id, operation, actor_person_id, old_row, new_row)
     VALUES (TG_TABLE_NAME, NEW.id::text, op, lvrf_current_actor(), to_jsonb(OLD), to_jsonb(NEW));
-    NEW.updated_at := now();
-    RETURN NEW;
+    RETURN NULL;
   END IF;
 
   RETURN NULL;
+END $$;
+
+-- Separate, because updated_at mutation requires BEFORE and NEW is not
+-- writable in an AFTER trigger.
+CREATE OR REPLACE FUNCTION lvrf_touch() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at := now();
+  RETURN NEW;
 END $$;
 
 -- ------------------------------------------------------------------
@@ -90,8 +99,13 @@ BEGIN
   FOREACH t IN ARRAY governed LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_audit', t);
     EXECUTE format(
-      'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON %I
+      'CREATE TRIGGER %I AFTER INSERT OR UPDATE ON %I
          FOR EACH ROW EXECUTE FUNCTION lvrf_audit()', t || '_audit', t);
+
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_touch', t);
+    EXECUTE format(
+      'CREATE TRIGGER %I BEFORE UPDATE ON %I
+         FOR EACH ROW EXECUTE FUNCTION lvrf_touch()', t || '_touch', t);
 
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_no_delete', t);
     EXECUTE format(
@@ -120,9 +134,10 @@ COMMIT;
 -- ------------------------------------------------------------------
 -- Verification
 -- ------------------------------------------------------------------
--- 12 governed tables, 24 distinct triggers (_audit, _no_delete). Expect 36 rows here:
--- information_schema.triggers emits one row per event manipulation, and the _audit
--- trigger fires on both INSERT and UPDATE, so each table contributes 3 rows, not 2.
+-- 12 governed tables, 36 distinct triggers (_audit, _touch, _no_delete).
+-- Expect 48 rows here: information_schema.triggers emits one row per event
+-- manipulation, and _audit now fires on both INSERT and UPDATE, so each
+-- table contributes 4 rows (2 + 1 + 1), not 3.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

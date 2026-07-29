@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LVRF Studio · Value Baseline Workbench</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/lvrf-icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/lvrf-icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/lvrf-icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════════
+   RULE76 UI TOKENS
+   Base tokens are canonical — see CLAUDE.md. Do not restate elsewhere.
+   Semantic states marked PROPOSED require ratification.
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  /* canonical */
+  --ink:        #09090A;
+  --gold:       #C9A24A;
+  --silver:     #C0C0C0;
+  --offwhite:   #FAFAFA;
+
+  /* derived neutrals */
+  --paper:      #FFFFFF;
+  --ink-70:     #3A3A3C;
+  --ink-45:     #6E6E72;
+  --ink-25:     #A0A0A4;
+  --rule:       #E4E4E6;
+  --rule-soft:  #EFEFF1;
+
+  /* PROPOSED — semantic states. One alarm colour only; gold already
+     carries "notice". All deep and desaturated to sit with ink + silver. */
+  --healthy:    #2F6B4F;
+  --watch:      #C9A24A;
+  --warning:    #A8631F;
+  --critical:   #8F2A2A;
+  --failure:    #5C1212;
+
+  /* Gold on white is 2.40:1 — fails AA at every size. This is the only
+     permitted gold for small text on light. Never a fill. AMD-004 Art. II. */
+  --gold-ink:   #8A6A22;
+
+  --display: 'Bebas Neue', sans-serif;
+  --body:    'Barlow', system-ui, sans-serif;
+  --mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --rail: 208px;
+  --aside: 336px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--offwhite);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ── type roles ───────────────────────────────────────────────── */
+.eyebrow {
+  font-family: var(--body); font-size: 10px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--ink-45);
+}
+.figure { font-family: var(--display); line-height: .88; letter-spacing: .01em; }
+.mono { font-family: var(--mono); font-size: 11px; letter-spacing: -.01em; }
+
+/* ══════════════════════════════════════════════════════════════════
+   SHELL
+   ══════════════════════════════════════════════════════════════════ */
+.shell { display: flex; min-height: 100vh; }
+
+/* ── left rail: the value spine ───────────────────────────────── */
+.rail {
+  width: var(--rail); flex: 0 0 var(--rail);
+  background: var(--ink); color: var(--offwhite);
+  padding: 20px 0 24px; position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+}
+.brand { padding: 0 16px 20px; }
+/* The supplied artwork is dark-surface only. It lives here because the rail is
+   ink; it may not be placed on a light surface. See design/BRAND.md. */
+.brand-logo { display: block; width: 100%; max-width: 172px; height: auto; }
+/* Fallback if the asset is missing — keeps the rail legible rather than blank. */
+.brand-logo:not([src]), .brand-logo[src=""] { display: none; }
+.brand-sub {
+  font-size: 8.5px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ink-45); margin: 9px 0 0;
+}
+
+.spine-label { padding: 0 18px 10px; }
+.spine-label .eyebrow { color: var(--ink-25); }
+
+.spine { list-style: none; margin: 0; padding: 0; flex: 1; }
+.spine li { position: relative; }
+.spine a {
+  display: flex; align-items: baseline; gap: 11px;
+  padding: 9px 18px; text-decoration: none;
+  color: rgba(250,250,250,.42); transition: color .15s, background .15s;
+}
+.spine a:hover { color: rgba(250,250,250,.78); background: rgba(255,255,255,.04); }
+.spine .num {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0;
+  color: rgba(250,250,250,.28); min-width: 15px;
+}
+.spine .name {
+  font-family: var(--display); font-size: 16px; letter-spacing: .07em;
+}
+
+/* stage states */
+.spine .done a { color: rgba(250,250,250,.72); }
+.spine .done .num { color: var(--gold); }
+.spine .current a {
+  color: var(--offwhite); background: rgba(201,162,74,.14);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+.spine .current .num { color: var(--gold); }
+.spine .blocked a { color: rgba(250,250,250,.3); }
+.spine .blocked .name { text-decoration: line-through; text-decoration-thickness: 1px; }
+.stage-note {
+  padding: 1px 18px 7px 44px; font-size: 10.5px;
+  color: rgba(250,250,250,.4); font-style: italic;
+}
+.current .stage-note { color: var(--gold); font-style: normal; }
+
+.rail-foot { padding: 16px 18px 0; border-top: 1px solid rgba(255,255,255,.1); }
+.rail-foot .k { font-size: 10px; color: rgba(250,250,250,.4); letter-spacing: .08em; text-transform: uppercase; }
+.rail-foot .v { font-family: var(--display); font-size: 17px; letter-spacing: .05em; }
+
+/* ── centre column ────────────────────────────────────────────── */
+.main { flex: 1; min-width: 0; }
+
+.topbar {
+  background: var(--paper); border-bottom: 1px solid var(--rule);
+  padding: 15px 30px; display: flex; align-items: center;
+  justify-content: space-between; gap: 20px; flex-wrap: wrap;
+}
+.crumb { font-size: 12px; color: var(--ink-45); }
+.crumb b { color: var(--ink); font-weight: 600; }
+.crumb .sep { color: var(--silver); margin: 0 7px; }
+
+.btn {
+  font-family: var(--body); font-size: 12px; font-weight: 600;
+  letter-spacing: .04em; padding: 7px 15px; border: 1px solid var(--ink);
+  background: var(--paper); color: var(--ink); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.btn:hover { background: var(--ink); color: var(--offwhite); }
+.btn[disabled] {
+  border-color: var(--silver); color: var(--ink-25);
+  cursor: not-allowed; background: var(--paper);
+}
+.btn[disabled]:hover { background: var(--paper); color: var(--ink-25); }
+.btn-primary { background: var(--ink); color: var(--offwhite); }
+.btn-primary:hover { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+
+/* ── the gate: a refusal should look like one ─────────────────── */
+.gate {
+  background: var(--ink); color: var(--offwhite);
+  padding: 15px 30px; border-bottom: 3px solid var(--gold);
+  display: flex; gap: 20px; align-items: flex-start;
+}
+.gate-icon {
+  font-family: var(--display); font-size: 30px; color: var(--gold);
+  line-height: 1; flex: 0 0 auto;
+}
+.gate h2 {
+  font-family: var(--display); font-size: 18px; letter-spacing: .07em;
+  margin: 0 0 3px; color: var(--gold);
+}
+.gate p { margin: 0; font-size: 12.5px; color: rgba(250,250,250,.82); max-width: 66ch; }
+.gate code {
+  font-family: var(--mono); font-size: 11px;
+  background: rgba(255,255,255,.1); padding: 1px 4px;
+}
+
+.body-pad { padding: 24px 30px 56px; }
+
+.rec-head { margin-bottom: 22px; }
+.rec-head h1 {
+  font-family: var(--display); font-size: 40px; line-height: .98;
+  letter-spacing: .012em; margin: 5px 0 6px; max-width: 22ch;
+}
+.rec-head .sub { font-size: 13.5px; color: var(--ink-70); max-width: 62ch; margin: 0; }
+
+/* ── measurement row ──────────────────────────────────────────── */
+.measures { display: flex; gap: 1px; background: var(--rule); margin-bottom: 22px; }
+.measure { flex: 1; background: var(--paper); padding: 14px 16px 15px; min-width: 0; }
+.measure .eyebrow { display: block; margin-bottom: 6px; }
+.measure .figure { font-size: 34px; }
+.measure .unit { font-family: var(--body); font-size: 15px; font-weight: 400; color: var(--ink-45); }
+.measure .meta { font-size: 10.5px; color: var(--ink-45); margin: 5px 0 0; }
+.measure.delta { background: var(--ink); color: var(--offwhite); }
+.measure.delta .eyebrow { color: var(--gold); }
+.measure.delta .meta { color: rgba(250,250,250,.6); }
+
+/* ── cards & tables ───────────────────────────────────────────── */
+.card { background: var(--paper); border: 1px solid var(--rule); margin-bottom: 20px; }
+.card > header {
+  padding: 11px 16px; border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.card > header h3 {
+  font-family: var(--display); font-size: 15px; letter-spacing: .07em; margin: 0;
+}
+.card > header h3 .n { color: var(--gold); margin-right: 6px; }
+.card-body { padding: 14px 16px 16px; }
+.card-body > p:first-child { margin-top: 0; }
+.card-body > p:last-child { margin-bottom: 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+thead th {
+  text-align: left; font-size: 9.5px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--ink-45);
+  padding: 9px 12px; border-bottom: 1px solid var(--silver); white-space: nowrap;
+}
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num { font-family: var(--mono); white-space: nowrap; }
+td.strong { font-weight: 600; }
+td.dim { color: var(--ink-45); font-size: 11.5px; }
+
+/* ── badges ───────────────────────────────────────────────────── */
+.badge {
+  display: inline-block; font-size: 9.5px; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 2px 6px; border: 1px solid currentColor; white-space: nowrap;
+}
+.b-healthy  { color: var(--healthy); }
+.b-watch    { color: var(--gold-ink); }
+.b-warning  { color: var(--warning); }
+.b-critical { color: var(--critical); }
+.b-failure  { color: var(--offwhite); background: var(--failure); border-color: var(--failure); }
+.b-neutral  { color: var(--ink-45); }
+.b-sim      { color: var(--ink); border-width: 1.5px; }
+.b-solid    { color: var(--offwhite); background: var(--ink); border-color: var(--ink); }
+
+/* ══════════════════════════════════════════════════════════════════
+   SIGNATURE — the confidence instrument
+   Six blocks, width = weight, filled = earned. The hollow blocks are
+   the work remaining. This is the one element the product is
+   remembered by, so nothing around it competes.
+   ══════════════════════════════════════════════════════════════════ */
+.aside {
+  width: var(--aside); flex: 0 0 var(--aside);
+  background: var(--paper); border-left: 1px solid var(--rule);
+  padding: 22px 22px 40px; position: sticky; top: 0;
+  height: 100vh; overflow-y: auto;
+}
+
+.conf-head { border-bottom: 3px solid var(--ink); padding-bottom: 12px; margin-bottom: 16px; }
+.conf-score { display: flex; align-items: baseline; gap: 9px; }
+.conf-score .figure { font-size: 66px; }
+.conf-score .of { font-family: var(--display); font-size: 22px; color: var(--ink-25); }
+.conf-band {
+  font-family: var(--display); font-size: 17px; letter-spacing: .1em;
+  margin: 2px 0 0; color: var(--critical);
+}
+.conf-method { font-size: 11px; color: var(--ink-45); margin: 9px 0 0; font-style: italic; }
+
+/* the instrument */
+.instrument { display: flex; gap: 2px; height: 46px; margin-bottom: 4px; }
+.seg { position: relative; background: var(--rule-soft); overflow: hidden; }
+.seg .fill { position: absolute; inset: 0; background: var(--ink); }
+.seg.partial .fill { background: repeating-linear-gradient(
+  135deg, var(--ink) 0 3px, #2E2E30 3px 6px); }
+.seg.empty { border: 1px dashed var(--silver); background: transparent; }
+.seg .w {
+  position: absolute; bottom: 3px; left: 0; right: 0; text-align: center;
+  font-family: var(--mono); font-size: 9px; color: var(--offwhite);
+}
+.seg.empty .w { color: var(--ink-25); }
+.instrument-key {
+  display: flex; justify-content: space-between; font-size: 9.5px;
+  color: var(--ink-45); letter-spacing: .06em; text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.factors { list-style: none; margin: 0 0 20px; padding: 0; }
+.factors li {
+  display: flex; gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid var(--rule-soft); align-items: flex-start;
+}
+.factors .pts {
+  font-family: var(--mono); font-size: 11px; min-width: 44px;
+  text-align: right; flex: 0 0 auto; padding-top: 1px;
+}
+.factors .earned { color: var(--healthy); font-weight: 600; }
+.factors .lost { color: var(--ink-25); }
+.factors .q { font-size: 12px; line-height: 1.4; }
+.factors .why { font-size: 10.5px; color: var(--ink-45); margin: 2px 0 0; }
+
+.callout { background: var(--offwhite); border-left: 3px solid var(--gold); padding: 12px 14px; }
+.callout h4 {
+  font-family: var(--display); font-size: 14px; letter-spacing: .07em;
+  color: var(--ink); margin: 0 0 5px;
+}
+.callout p { font-size: 11.5px; color: var(--ink-70); margin: 0; }
+.callout ol { margin: 7px 0 0; padding-left: 17px; font-size: 11.5px; color: var(--ink-70); }
+.callout li { margin-bottom: 3px; }
+
+/* ── health strip ─────────────────────────────────────────────── */
+.health-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 12px; }
+.health-row .dim-name { flex: 1; min-width: 0; }
+.health-row .bar { width: 74px; height: 5px; background: var(--rule-soft); flex: 0 0 auto; }
+.health-row .bar i { display: block; height: 100%; background: var(--ink); }
+.health-row .sc { font-family: var(--mono); font-size: 11px; min-width: 40px; text-align: right; }
+/* AMENDMENT-004 Art. III — UNMEASURED carries information, so it must be
+   legible. --ink-45 (5.08:1), never --ink-25 (2.61:1). */
+.health-row.unmeasured .dim-name,
+.health-row.unmeasured .sc { color: var(--ink-45); font-style: italic; }
+.health-row.unmeasured .bar { border: 1px dashed var(--silver); background: transparent; }
+
+/* ── tokens reference ─────────────────────────────────────────── */
+.swatches { display: flex; flex-wrap: wrap; gap: 1px; background: var(--rule); }
+.sw { background: var(--paper); padding: 0; flex: 1 1 108px; min-width: 108px; }
+.sw .chip { height: 46px; }
+.sw .meta { padding: 7px 9px 9px; }
+.sw .nm { font-size: 10.5px; font-weight: 600; }
+.sw .hx { font-family: var(--mono); font-size: 10px; color: var(--ink-45); }
+.sw .st { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+
+/* ── responsive ───────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .shell { flex-wrap: wrap; }
+  .aside { width: 100%; flex: 1 1 100%; height: auto; position: static;
+           border-left: 0; border-top: 1px solid var(--rule); }
+}
+@media (max-width: 860px) {
+  .rail { position: static; height: auto; width: 100%; flex: 1 1 100%; }
+  .spine { display: flex; flex-wrap: wrap; }
+  .spine li { flex: 1 1 auto; }
+  .stage-note { display: none; }
+  .measures { flex-wrap: wrap; }
+  .measure { flex: 1 1 44%; }
+  .rec-head h1 { font-size: 30px; }
+  .body-pad, .topbar, .gate { padding-left: 18px; padding-right: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ════════ LEFT RAIL — THE VALUE SPINE ════════ -->
+  <nav class="rail" aria-label="Value spine">
+    <div class="brand">
+      <img class="brand-logo" src="assets/lvrf-mark.png"
+           alt="LVRF — Learning Value Realization Framework Studio">
+      <p class="brand-sub">Value Baseline Workbench</p>
+    </div>
+
+    <div class="spine-label"><span class="eyebrow">Value Spine</span></div>
+
+    <ol class="spine">
+      <li class="done"><a href="#"><span class="num">01</span><span class="name">Baseline</span></a>
+        <p class="stage-note">98.0% · sourced</p></li>
+      <li class="done"><a href="#"><span class="num">02</span><span class="name">Attach</span></a>
+        <p class="stage-note">1 capability</p></li>
+      <li class="done"><a href="#"><span class="num">03</span><span class="name">Model</span></a>
+        <p class="stage-note">target 100.0%</p></li>
+      <li class="done"><a href="#"><span class="num">04</span><span class="name">Commit</span></a>
+        <p class="stage-note">synthetic sponsor</p></li>
+      <li class="done"><a href="#"><span class="num">05</span><span class="name">Measure</span></a>
+        <p class="stage-note">100.4% · simulated</p></li>
+      <li class="current"><a href="#" aria-current="step"><span class="num">06</span><span class="name">Verify</span></a>
+        <p class="stage-note">Refused — gate held</p></li>
+      <li class="blocked"><a href="#"><span class="num">07</span><span class="name">Return</span></a>
+        <p class="stage-note">Awaiting verification</p></li>
+    </ol>
+
+    <div class="rail-foot">
+      <p class="k" style="margin:0 0 2px">Institutional health</p>
+      <p class="v" style="margin:0;color:var(--gold)">88.3 · WATCH</p><!-- gold on ink = 8.29:1, compliant -->
+      <p class="k" style="margin:9px 0 2px">Coverage</p>
+      <p class="v" style="margin:0">90%</p>
+    </div>
+  </nav>
+
+  <!-- ════════ CENTRE ════════ -->
+  <main class="main">
+
+    <div class="topbar">
+      <p class="crumb" style="margin:0">
+        Skillsoft <span class="sep">/</span>
+        Skillsoft <span class="badge b-neutral">Customer zero</span> <span class="sep">/</span>
+        <b>Customer Zero — Value-Based Renewal Capability</b>
+      </p>
+      <div style="display:flex;gap:8px">
+        <button class="btn">Add evidence</button>
+        <button class="btn btn-primary">Render record</button>
+        <button class="btn" disabled title="Blocked: outcome is not verified">Share with customer</button>
+      </div>
+    </div>
+
+    <!-- the gate -->
+    <section class="gate" role="status">
+      <span class="gate-icon" aria-hidden="true">✕</span>
+      <div>
+        <h2>Verification refused — record is internal</h2>
+        <p>
+          Evidence supporting the measured actual is not source-verified, and the verifier of
+          record is synthetic. Realization holds at <strong>measured</strong>.
+          <code>value_outcomes_verified_requires_human</code> will reject any attempt to force
+          this. Sharing is disabled until a named human verifier confirms sources.
+        </p>
+      </div>
+    </section>
+
+    <div class="body-pad">
+
+      <header class="rec-head">
+        <span class="eyebrow">Realization Record · v1 · Draft</span>
+        <h1>Value-Based Renewal Execution</h1>
+        <p class="sub">
+          Dollar Retention Rate (trailing twelve months) — the metric Skillsoft has asked the
+          market to judge it by. One capability, attached to one number the institution already
+          reports.
+        </p>
+      </header>
+
+      <!-- measurement row -->
+      <div class="measures">
+        <div class="measure">
+          <span class="eyebrow">Baseline</span>
+          <p class="figure" style="margin:0">98.0<span class="unit">%</span></p>
+          <p class="meta">30 Apr 2026 · public filing</p>
+        </div>
+        <div class="measure">
+          <span class="eyebrow">Target</span>
+          <p class="figure" style="margin:0">100.0<span class="unit">%</span></p>
+          <p class="meta">Committed · <span class="badge b-sim">SIM</span></p>
+        </div>
+        <div class="measure">
+          <span class="eyebrow">Measured</span>
+          <p class="figure" style="margin:0">100.4<span class="unit">%</span></p>
+          <p class="meta">31 Jul 2026 · <span class="badge b-sim">SIM</span></p>
+        </div>
+        <div class="measure delta">
+          <span class="eyebrow">Delta</span>
+          <p class="figure" style="margin:0">+2.4</p>
+          <p class="meta">120% of target · not verified</p>
+        </div>
+      </div>
+
+      <!-- evidence -->
+      <section class="card">
+        <header>
+          <h3><span class="n">01</span>Evidence ledger</h3>
+          <span class="badge b-neutral">2 of 4 verified</span>
+        </header>
+        <table>
+          <thead><tr>
+            <th style="width:88px">Supports</th><th>Summary</th>
+            <th style="width:150px">Provenance</th><th style="width:150px">State</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td class="dim">Baseline</td>
+              <td>LTM dollar retention rate of 98% at Q1 FY2027, against 99% prior year.</td>
+              <td class="dim">Q1 FY2027 earnings release</td>
+              <td><span class="badge b-healthy">Verified</span></td>
+            </tr>
+            <tr>
+              <td class="dim">Impact basis</td>
+              <td>FY2027 guidance and refinancing priority.</td>
+              <td class="dim">Q1 FY2027 earnings call</td>
+              <td><span class="badge b-healthy">Verified</span></td>
+            </tr>
+            <tr>
+              <td class="dim">Actual</td>
+              <td>Assessed capability moved 1.8 → 3.4 of 5.0 across the enterprise cohort.</td>
+              <td class="dim">Coach of record <span class="badge b-sim">SIM</span></td>
+              <td><span class="badge b-warning">Unverified</span></td>
+            </tr>
+            <tr>
+              <td class="dim">Actual</td>
+              <td>LTM dollar retention rate of 100.4% at Q2 FY2027.</td>
+              <td class="dim">Revenue reporting <span class="badge b-sim">SIM</span></td>
+              <td><span class="badge b-warning">Unverified</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- heartbeats -->
+      <section class="card">
+        <header>
+          <h3><span class="n">02</span>Heartbeat ledger</h3>
+          <span class="badge b-neutral">10 events · all registered</span>
+        </header>
+        <table>
+          <thead><tr>
+            <th style="width:74px">ID</th><th>Event</th><th style="width:78px">Stage</th>
+            <th style="width:106px">Category</th><th style="width:92px">State</th>
+            <th style="width:100px">Hash</th>
+          </tr></thead>
+          <tbody>
+            <tr><td class="num strong">HB-0013</td><td>Value Baseline Established</td><td class="dim">baseline</td><td class="dim">financial</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">6bab7c53a5f0</td></tr>
+            <tr><td class="num strong">HB-0009</td><td>Evidence Attached</td><td class="dim">baseline</td><td class="dim">integrity</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">55eaa8ca7a0b</td></tr>
+            <tr><td class="num strong">HB-0004</td><td>Canonical Object Created</td><td class="dim">attach</td><td class="dim">operational</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">6c88b4d9c11a</td></tr>
+            <tr><td class="num strong">HB-0005</td><td>Canonical Object Updated</td><td class="dim">model</td><td class="dim">governance</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">2b8c17c1d0e4</td></tr>
+            <tr><td class="num strong">HB-0014</td><td>Value Target Committed</td><td class="dim">commit</td><td class="dim">governance</td><td><span class="badge b-watch">Watch</span></td><td class="num">a1f0c9b23d77</td></tr>
+            <tr><td class="num strong">HB-0018</td><td>Capability Change Evidenced</td><td class="dim">measure</td><td class="dim">learning</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">df42e6a8b910</td></tr>
+            <tr><td class="num strong">HB-0015</td><td>Value Realized</td><td class="dim">measure</td><td class="dim">financial</td><td><span class="badge b-watch">Watch</span></td><td class="num">90cb3f7e2a15</td></tr>
+            <tr><td class="num strong">HB-0016</td><td>Value Verified</td><td class="dim">verify</td><td class="dim">constitutional</td><td><span class="badge b-warning">Warning</span></td><td class="num">7e5d1a4c8b30</td></tr>
+            <tr><td class="num strong">HB-0017</td><td>Realization Record Published</td><td class="dim">verify</td><td class="dim">integrity</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">c33b80f61d92</td></tr>
+            <tr><td class="num strong">HB-0004</td><td>Canonical Object Created</td><td class="dim">return</td><td class="dim">operational</td><td><span class="badge b-healthy">Healthy</span></td><td class="num">18a97e2d4f6b</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- health -->
+      <section class="card">
+        <header>
+          <h3><span class="n">03</span>Institutional health</h3>
+          <span class="badge b-watch">88.3 · Watch · 90% coverage</span>
+        </header>
+        <div class="card-body">
+          <div class="health-row"><span class="dim-name">Constitutional Compliance</span>
+            <span class="bar"><i style="width:68%"></i></span><span class="sc">68.0</span>
+            <span class="badge b-warning">25%</span></div>
+          <div class="health-row"><span class="dim-name">Governance Integrity</span>
+            <span class="bar"><i style="width:92%"></i></span><span class="sc">92.4</span>
+            <span class="badge b-neutral">25%</span></div>
+          <div class="health-row"><span class="dim-name">Operational Health</span>
+            <span class="bar"><i style="width:100%"></i></span><span class="sc">100.0</span>
+            <span class="badge b-neutral">15%</span></div>
+          <div class="health-row"><span class="dim-name">Data Integrity</span>
+            <span class="bar"><i style="width:100%"></i></span><span class="sc">100.0</span>
+            <span class="badge b-neutral">10%</span></div>
+          <div class="health-row unmeasured"><span class="dim-name">Security</span>
+            <span class="bar"></span><span class="sc">—</span>
+            <span class="badge b-neutral">10%</span></div>
+          <div class="health-row"><span class="dim-name">Financial / Value Realization</span>
+            <span class="bar"><i style="width:92%"></i></span><span class="sc">92.1</span>
+            <span class="badge b-neutral">10%</span></div>
+          <div class="health-row"><span class="dim-name">Learning &amp; Improvement</span>
+            <span class="bar"><i style="width:100%"></i></span><span class="sc">100.0</span>
+            <span class="badge b-neutral">5%</span></div>
+
+          <div class="callout" style="margin-top:14px">
+            <h4>Security reads unmeasured, not compliant</h4>
+            <p>
+              No security heartbeat fired in this run, so the dimension is excluded from the
+              denominator rather than scored. Coverage is published alongside the composite —
+              a score of 100 at 40% coverage describes an unobserved institution, not a
+              healthy one.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- design tokens -->
+      <section class="card">
+        <header>
+          <h3><span class="n">04</span>Rule76 UI tokens</h3>
+          <span class="badge b-sim">AMD-004 · ratified</span>
+        </header>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--ink-70);max-width:70ch">
+            Base tokens are canonical and defined once in <code class="mono">CLAUDE.md</code>.
+            The five semantic states below do not yet exist in the design system — the PDF
+            pipeline never needed them. They are proposed here rather than invented per
+            component, because a colour introduced twice becomes a colour defined twice.
+          </p>
+          <div class="swatches" style="margin-top:12px">
+            <div class="sw"><div class="chip" style="background:var(--ink)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Ink</p><p class="hx" style="margin:0">#09090A</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--gold)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Gold</p><p class="hx" style="margin:0">#C9A24A</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--silver)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Silver</p><p class="hx" style="margin:0">#C0C0C0</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--offwhite);border-bottom:1px solid var(--rule)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Off-white</p><p class="hx" style="margin:0">#FAFAFA</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--healthy)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Healthy</p><p class="hx" style="margin:0">#2F6B4F</p><p class="st" style="margin:0">Ratified</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--warning)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Warning</p><p class="hx" style="margin:0">#A8631F</p><p class="st" style="margin:0">Ratified</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--critical)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Critical</p><p class="hx" style="margin:0">#8F2A2A</p><p class="st" style="margin:0">Ratified</p></div></div>
+            <div class="sw"><div class="chip" style="background:var(--failure)"></div>
+              <div class="meta"><p class="nm" style="margin:0">Const. failure</p><p class="hx" style="margin:0">#5C1212</p><p class="st" style="margin:0">Ratified</p></div></div>
+          </div>
+          <p style="font-size:11.5px;color:var(--ink-45);margin:12px 0 0;max-width:70ch">
+            <strong style="color:var(--ink)">Watch has no colour of its own.</strong> It reuses
+            gold, which already means <em>notice this</em> throughout the printed records. Four
+            new values instead of five, and one alarm colour rather than a dashboard palette.
+          </p>
+        </div>
+      </section>
+
+    </div><!-- /body-pad -->
+  </main>
+
+  <!-- ════════ RIGHT — THE CONFIDENCE INSTRUMENT ════════ -->
+  <aside class="aside" aria-label="Confidence ledger">
+
+    <span class="eyebrow">Computed confidence</span>
+    <div class="conf-head">
+      <div class="conf-score">
+        <span class="figure">30</span><span class="of">/100</span>
+      </div>
+      <p class="conf-band">LOW</p>
+      <p class="conf-method">
+        Derived from the evidence ledger. Cannot be set by hand — the computed band governs.
+      </p>
+    </div>
+
+    <div class="instrument" role="img"
+         aria-label="Confidence: 25 of 25 baseline evidence earned, 5 of 10 impact basis partial, 20 metric definition, 25 actual evidence, 10 commit and 10 verifier unearned">
+      <div class="seg" style="flex:25"><span class="fill"></span><span class="w">25</span></div>
+      <div class="seg partial" style="flex:10"><span class="fill" style="right:50%"></span><span class="w" style="color:var(--ink)">5/10</span></div>
+      <div class="seg empty" style="flex:20"><span class="w">20</span></div>
+      <div class="seg empty" style="flex:25"><span class="w">25</span></div>
+      <div class="seg empty" style="flex:10"><span class="w">10</span></div>
+      <div class="seg empty" style="flex:10"><span class="w">10</span></div>
+    </div>
+    <p class="instrument-key"><span>Earned 30</span><span>Outstanding 70</span></p>
+
+    <ul class="factors">
+      <li>
+        <span class="pts earned">25/25</span>
+        <span><span class="q">Baseline supported by source-verified evidence</span>
+          <p class="why">Q1 FY2027 earnings release. Public, reproducible.</p></span>
+      </li>
+      <li>
+        <span class="pts">5/10</span>
+        <span><span class="q">Impact basis stated and evidenced</span>
+          <p class="why">Basis stated and partially evidenced, but self-declared as inference. Half credit.</p></span>
+      </li>
+      <li>
+        <span class="pts lost">0/20</span>
+        <span><span class="q">Metric calculation method known</span>
+          <p class="why">Not disclosed by the source. The metric cannot be independently reproduced.</p></span>
+      </li>
+      <li>
+        <span class="pts lost">0/25</span>
+        <span><span class="q">Measured actual source-verified</span>
+          <p class="why">0 of 2 actual evidence items source-verified.</p></span>
+      </li>
+      <li>
+        <span class="pts lost">0/10</span>
+        <span><span class="q">Named human sponsor of record</span>
+          <p class="why">Sponsor of record is synthetic.</p></span>
+      </li>
+      <li>
+        <span class="pts lost">0/10</span>
+        <span><span class="q">Named human verifier of record</span>
+          <p class="why">Verifier of record is synthetic.</p></span>
+      </li>
+    </ul>
+
+    <div class="callout">
+      <h4>The missing 70 points are a work list</h4>
+      <p>Not a grade. Each one names a specific, obtainable input:</p>
+      <ol>
+        <li>The metric's calculation method — <strong>20</strong></li>
+        <li>Source-verified evidence for the actual — <strong>25</strong></li>
+        <li>An evidenced rather than inferred basis — <strong>5</strong></li>
+        <li>A named human sponsor — <strong>10</strong></li>
+        <li>A named human verifier — <strong>10</strong></li>
+      </ol>
+    </div>
+
+  </aside>
+</div>
+
+</body>
+</html>
