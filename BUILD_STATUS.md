@@ -39,6 +39,25 @@ ledger across six weighted factors.
 
 **Documents** — `records/render_record.py` produces the Realization Record via WeasyPrint.
 
+### Migration applied — 29 July 2026
+
+- Migration `0000_far_praxagora.sql` applied to local `lvrf`.
+- 18 heartbeats registered, all seven constitutional categories populated, zero empty.
+- 24 distinct triggers across 12 governed tables (`_audit`, `_no_delete`).
+- `lvrf_app` holds SELECT, INSERT, REFERENCES, TRIGGER on `audit_log` and `heartbeat_events` —
+  no UPDATE, DELETE or TRUNCATE. Append-only holds.
+- `audit_log` = 0 rows, expected: the register seed runs before `hardening.sql`, so those
+  inserts predate the audit trigger.
+
+### Acceptance tests — all pass
+
+| Test | Result |
+|---|---|
+| Hard `DELETE FROM heartbeats` | `ERROR: LVRF: heartbeats is a governed object; hard DELETE is prohibited. Set deleted_at instead.` — raised by `lvrf_block_delete` |
+| Unscoped person insert (no `tenant_id`, no `institution_id`) | `ERROR: new row for relation "persons" violates check constraint "persons_scoped_to_exactly_one"` |
+| `heartbeat_events` insert with `heartbeat_id = 'HB-9999'` | `ERROR: insert or update on table "heartbeat_events" violates foreign key constraint "heartbeat_events_heartbeat_id_heartbeats_id_fk"` — `DETAIL: Key (heartbeat_id)=(HB-9999) is not present in table "heartbeats".` |
+| `heartbeats` count after the rejected DELETE | Still **18** |
+
 ---
 
 ## Known defects

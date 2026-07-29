@@ -120,7 +120,9 @@ COMMIT;
 -- ------------------------------------------------------------------
 -- Verification
 -- ------------------------------------------------------------------
--- Expect 24 rows (12 governed tables x 2 triggers).
+-- 12 governed tables, 24 distinct triggers (_audit, _no_delete). Expect 36 rows here:
+-- information_schema.triggers emits one row per event manipulation, and the _audit
+-- trigger fires on both INSERT and UPDATE, so each table contributes 3 rows, not 2.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

@@ -114,6 +114,7 @@ SELECT unnest(enum_range(NULL::heartbeat_category)) AS empty_category
 EXCEPT
 SELECT category FROM heartbeats;
 
--- The two maximum-severity heartbeats. Expect HB-0016 and HB-0017.
+-- Maximum-severity heartbeats. Expect six: HB-0003, HB-0006, HB-0007, HB-0010 were
+-- already severity 5 in the original register; HB-0016 and HB-0017 added the other two.
 SELECT id, name, category, failure_severity
 FROM heartbeats WHERE failure_severity = 5 ORDER BY id;
