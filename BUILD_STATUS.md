@@ -10,11 +10,11 @@
 |---|---|
 | `AMENDMENT-001` — Chapel reorientation, LVAF→LVRF, Learning ROI struck | **Ratified** |
 | `AMENDMENT-002` — Heartbeat Register extension, HB-0013..0018 | **Ratified** |
-| `AMENDMENT-003` — Financial as seventh health dimension | **PROPOSED — awaiting ratification** |
+| `AMENDMENT-003` — Financial as seventh health dimension | **Ratified** |
 | `AMENDMENT-004` — Pack as Cathedral canonical object | Not drafted |
 
-`AMENDMENT-003` is already implemented in `records/simulate_spine.py`. Code is ahead of
-governance on this one item. Ratify or amend.
+All three ratified amendments are implemented in code. Governance and implementation are
+in step — no drift outstanding.
 
 ---
 
@@ -39,46 +39,6 @@ ledger across six weighted factors.
 
 **Documents** — `records/render_record.py` produces the Realization Record via WeasyPrint.
 
-### Migration applied — 29 July 2026
-
-- Migration `0000_far_praxagora.sql` applied to local `lvrf`.
-- 18 heartbeats registered, all seven constitutional categories populated, zero empty.
-- 24 distinct triggers across 12 governed tables (`_audit`, `_no_delete`).
-- `lvrf_app` holds SELECT, INSERT, REFERENCES, TRIGGER on `audit_log` and `heartbeat_events` —
-  no UPDATE, DELETE or TRUNCATE. Append-only holds.
-- `audit_log` = 0 rows, expected: the register seed runs before `hardening.sql`, so those
-  inserts predate the audit trigger.
-
-### Acceptance tests — all pass
-
-| Test | Result |
-|---|---|
-| Hard `DELETE FROM heartbeats` | `ERROR: LVRF: heartbeats is a governed object; hard DELETE is prohibited. Set deleted_at instead.` — raised by `lvrf_block_delete` |
-| Unscoped person insert (no `tenant_id`, no `institution_id`) | `ERROR: new row for relation "persons" violates check constraint "persons_scoped_to_exactly_one"` |
-| `heartbeat_events` insert with `heartbeat_id = 'HB-9999'` | `ERROR: insert or update on table "heartbeat_events" violates foreign key constraint "heartbeat_events_heartbeat_id_heartbeats_id_fk"` — `DETAIL: Key (heartbeat_id)=(HB-9999) is not present in table "heartbeats".` |
-| `heartbeats` count after the rejected DELETE | Still **18** |
-
----
-
-## Known defects
-
-Found reviewing the generated migration (`db/drizzle/0000_*.sql`) before anything was
-applied to the database.
-
-- **Defect 1 — resolved.** `heartbeats.superseded_by_id` inherited `uuid` from
-  `governance()`, but `heartbeats.id` is `text` (register IDs like `HB-0001`) — the
-  column could never hold a valid reference. Overridden in `db/schema.ts` immediately
-  after `...governance()` to `text('superseded_by_id')`. Migration regenerated from a
-  clean `db/drizzle/`; column confirmed `text` where every other table still has `uuid`.
-- **Defect 2 — open, deferred.** Neither `superseded_by_id` nor `steward_person_id`
-  carries a foreign key on any of the 18 tables — 49 FKs generated, none for these two
-  columns. Unconstrained UUIDs are the orphaned-relation defect class this file warns
-  against. Deferred deliberately rather than rushed: `stewardPersonId` is circular
-  through `persons`, and `supersededById` is a genuine self-reference requiring Drizzle's
-  `AnyPgColumn` return-type annotation on the FK builder — both need to be done as a
-  considered `0001` migration, not a same-sitting edit. Nothing currently writes either
-  column, so there is no live orphan risk yet.
-
 ---
 
 ## First spine run — customer zero
@@ -99,16 +59,76 @@ verifier was of record.
 
 ---
 
+## Use A and Use B — both walked, 29 July
+
+| | Use A · customer zero | Use B · Northgate Utilities |
+|---|---|---|
+| What is measured | The **vendor's** sales capability | A **customer's** workforce capability |
+| Metric | Skillsoft LTM dollar retention | Customer TRIR, per OSHA 300A |
+| Direction | increase | **decrease** — first test of that path |
+| Evidence | public filing + unverified simulation | **attested** by customer authorities |
+| Delta | +2.4, 120% of target | −0.34, 106% of target |
+| Institutional health | 88.3 · WATCH | 99.1 · HEALTHY |
+| Confidence | **30 / 100 · LOW** | **80 / 100 · HIGH** |
+| Realization | **measured** — refused | **verified** |
+| Disclosure | internal | customer_shared |
+
+Use B is the engagement shape the value engineering role actually performs. Use A proves
+the mechanism; it does not demonstrate the job.
+
+### Attestation credit — the design decision behind it
+
+A vendor cannot independently verify a customer's internal figure; it has no access to the
+customer's system of record. Without a middle tier, 50 of 100 confidence points would be
+permanently unreachable and the product unusable for its purpose.
+
+Two concepts were separated:
+
+- **The gate** (`source_verified`) asks whether the source was confirmed **by an authority
+  over it**. A public filing is self-authoritative. A customer's internal metric is
+  authoritative when the customer's own metric owner attests to it. Attestation therefore
+  clears the gate, and Use B records can reach `verified`.
+- **Confidence** asks how **strong** that confirmation is. Attestation earns
+  `ATTESTATION_CREDIT = 0.6`, because a management representation is weaker than
+  substantive testing.
+
+`0.6` is chosen so a flawlessly executed Use B record scores exactly **80** — the floor of
+HIGH. It must do everything right to get there, and **cannot exceed 80 without genuine
+independent verification.** That ceiling is deliberate and is printed on the document.
+
+An attestation counts only if the attester is **institution-scoped and real**. A vendor
+attesting to a customer's number is an assertion wearing a signature.
+
+---
+
+## 0001 — Defect 2 closed, verifier role added
+
+Schema patched and validated (drizzle-kit 0.31.10, drizzle-orm 0.45.2). Generates:
+
+- **12 self-referencing `superseded_by_fk`** — one per governed table, `ON DELETE restrict`.
+  Declared in each table's config array via `foreignKey()`, because a shared `governance()`
+  helper cannot express a self-reference. On `heartbeats` the column is `text` and correctly
+  targets the register's text primary key.
+- **12 `steward_person_id → persons.id`** — resolved with a lazy `AnyPgColumn` thunk, which
+  is what permits the `tenants → persons → tenants` cycle and the `persons` self-reference.
+- **`personRole` gains `value_verifier`.** HB-0016 requires a named human verifier and the
+  enum had no value for one. Named by **function, not department** — the authority may sit
+  in Finance, Internal Audit or RevOps.
+
+**Defect 2 is closed.** The orphaned-relation class is now structurally impossible on every
+governed table.
+
+### Separation of duties — API-enforced, not schema-enforced
+
+A `value_verifier` must not also be the `metric_owner` for the same metric, and for a
+customer's metric must be **institution-scoped**. Neither rule can be a CHECK — both span
+tables. They live in the route and must not be removed.
+
+---
+
 ## Not built — next, in priority order
 
-1. **Use B record.** Customer zero measures Skillsoft's *sales capability*. The role
-   requires measuring a *customer's* workforce capability against the *customer's* metric.
-   Different value hypothesis, same schema. Fixture change plus item 2.
-2. **Attestation weighting in the confidence engine.** A vendor cannot source-verify a
-   customer's internal metric, so 50 of 100 points are structurally unreachable in Use B.
-   `evidenceKind` already includes `attestation`; the engine must credit it at partial
-   weight.
-3. **Confirmation-gap engine.** `AMENDMENT-001` Article II assigned LVRF ownership of
+1. **Confirmation-gap engine.** `AMENDMENT-001` Article II assigned LVRF ownership of
    Confirmation Gap. Nothing computes it.
 4. **Industry Pack model.** Two axes, not one: vertical packs (industry → metric library,
    attestation authority, regulatory overlay) crossed with horizontal packs (role family →
