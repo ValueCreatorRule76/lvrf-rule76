@@ -1,0 +1,32 @@
+ALTER TYPE "public"."person_role" ADD VALUE 'value_verifier' BEFORE 'learner';--> statement-breakpoint
+ALTER TABLE "value_outcomes" DROP CONSTRAINT "value_outcomes_impact_requires_basis";--> statement-breakpoint
+ALTER TABLE "value_outcomes" RENAME COLUMN "currency_impact" TO "claimed_currency_impact";--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD COLUMN "realized_currency_impact" numeric(18, 2);--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD COLUMN "promised_measured_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "assessments" ADD CONSTRAINT "assessments_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "assessments" ADD CONSTRAINT "assessments_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."assessments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "business_metrics" ADD CONSTRAINT "business_metrics_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "business_metrics" ADD CONSTRAINT "business_metrics_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."business_metrics"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "capabilities" ADD CONSTRAINT "capabilities_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "capabilities" ADD CONSTRAINT "capabilities_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."capabilities"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "engagements" ADD CONSTRAINT "engagements_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "engagements" ADD CONSTRAINT "engagements_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."engagements"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "evidence" ADD CONSTRAINT "evidence_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "evidence" ADD CONSTRAINT "evidence_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."evidence"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "heartbeats" ADD CONSTRAINT "heartbeats_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "heartbeats" ADD CONSTRAINT "heartbeats_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."heartbeats"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "institutions" ADD CONSTRAINT "institutions_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "institutions" ADD CONSTRAINT "institutions_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."institutions"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "persons" ADD CONSTRAINT "persons_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reflections" ADD CONSTRAINT "reflections_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "reflections" ADD CONSTRAINT "reflections_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."reflections"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stewardship_returns" ADD CONSTRAINT "stewardship_returns_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "stewardship_returns" ADD CONSTRAINT "stewardship_returns_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."stewardship_returns"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tenants" ADD CONSTRAINT "tenants_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "tenants" ADD CONSTRAINT "tenants_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD CONSTRAINT "value_outcomes_steward_person_id_persons_id_fk" FOREIGN KEY ("steward_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD CONSTRAINT "value_outcomes_superseded_by_fk" FOREIGN KEY ("superseded_by_id") REFERENCES "public"."value_outcomes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD CONSTRAINT "value_outcomes_realized_requires_measurement" CHECK ("value_outcomes"."realized_currency_impact" IS NULL OR "value_outcomes"."realization" <> 'claimed');--> statement-breakpoint
+ALTER TABLE "value_outcomes" ADD CONSTRAINT "value_outcomes_impact_requires_basis" CHECK (("value_outcomes"."claimed_currency_impact" IS NULL AND "value_outcomes"."realized_currency_impact" IS NULL)
+        OR "value_outcomes"."impact_basis" IS NOT NULL);

@@ -318,7 +318,7 @@ export async function walkSpine(): Promise<WalkResult> {
       .set({
         valueStage: 'model',
         targetValue: String(vo.target_value),
-        currencyImpact: String(vo.currency_impact),
+        claimedCurrencyImpact: String(vo.currency_impact),
         currencyCode: vo.currency_code,
         impactBasis: vo.impact_basis,
       })
@@ -333,7 +333,7 @@ export async function walkSpine(): Promise<WalkResult> {
       actorPersonId: seeded.persons.valueEngineer.id,
       payload: {
         targetValue: vo.target_value,
-        currencyImpact: vo.currency_impact,
+        claimedCurrencyImpact: vo.currency_impact,
         impactBasisStated: Boolean(vo.impact_basis),
       },
     });
@@ -530,7 +530,7 @@ export async function walkSpine(): Promise<WalkResult> {
       baselineValue: vo.baseline_value,
       targetValue: vo.target_value,
       actualValue: vo.actual_value,
-      currencyImpact: vo.currency_impact,
+      claimedCurrencyImpact: vo.currency_impact,
       realization,
       disclosure,
     };

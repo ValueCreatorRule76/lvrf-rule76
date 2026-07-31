@@ -16,8 +16,9 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable, pgEnum, uuid, text, numeric, integer, boolean,
-  timestamp, jsonb, bigserial, index, unique, check, primaryKey,
+  timestamp, jsonb, bigserial, index, unique, check, primaryKey, foreignKey,
 } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
 /* ================================================================== */
 /* Enums                                                              */
@@ -77,6 +78,12 @@ export const documentDisclosure = pgEnum('document_disclosure', [
 export const personRole = pgEnum('person_role', [
   // vendor-side (tenant-scoped) — primary users
   'value_engineer', 'account_executive', 'revenue_leader', 'ai_steward',
+  // 0001 — HB-0016 requires a named human verifier and the enum had no value for
+  // one. Deliberately named by FUNCTION not department: the authority may sit in
+  // Finance, Internal Audit or RevOps. Separation of duties: a value_verifier
+  // must not also be the metric_owner for the same metric, and for a customer's
+  // metric must be institution-scoped. Enforced in the API, not the schema.
+  'value_verifier',
   // customer-side (institution-scoped) — subjects and approvers
   'learner', 'coach', 'metric_owner', 'executive_sponsor',
   // governance
@@ -96,7 +103,8 @@ const governance = () => ({
   status: lifecycleStatus('status').notNull().default('draft'),
   version: integer('version').notNull().default(1),
   supersededById: uuid('superseded_by_id'),
-  stewardPersonId: uuid('steward_person_id'),
+  stewardPersonId: uuid('steward_person_id')
+    .references((): AnyPgColumn => persons.id, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -116,7 +124,9 @@ export const tenants = pgTable('tenants', {
   /** True when the tenant is also measuring itself. Customer zero. */
   isSelfMeasuring: boolean('is_self_measuring').notNull().default(false),
   ...governance(),
-}, (t) => [unique('tenants_name_key').on(t.name)]);
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'tenants_superseded_by_fk' }).onDelete('restrict'),unique('tenants_name_key').on(t.name)]);
 
 /* ================================================================== */
 /* Institution — a customer of the tenant                             */
@@ -131,6 +141,8 @@ export const institutions = pgTable('institutions', {
   isTenantSelf: boolean('is_tenant_self').notNull().default(false),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'institutions_superseded_by_fk' }).onDelete('restrict'),
   unique('institutions_tenant_name_key').on(t.tenantId, t.name),
   index('institutions_tenant_idx').on(t.tenantId),
 ]);
@@ -155,6 +167,8 @@ export const persons = pgTable('persons', {
   title: text('title'),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'persons_superseded_by_fk' }).onDelete('restrict'),
   check(
     'persons_scoped_to_exactly_one',
     sql`(${t.tenantId} IS NOT NULL)::int + (${t.institutionId} IS NOT NULL)::int = 1`,
@@ -193,6 +207,8 @@ export const engagements = pgTable('engagements', {
   renewalDate: timestamp('renewal_date', { withTimezone: true }),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'engagements_superseded_by_fk' }).onDelete('restrict'),
   index('engagements_tenant_idx').on(t.tenantId),
   index('engagements_institution_idx').on(t.institutionId),
   index('engagements_stage_idx').on(t.valueStage),
@@ -221,6 +237,8 @@ export const businessMetrics = pgTable('business_metrics', {
   definitionNotes: text('definition_notes'),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'business_metrics_superseded_by_fk' }).onDelete('restrict'),
   unique('business_metrics_institution_name_key').on(t.institutionId, t.name),
   index('business_metrics_institution_idx').on(t.institutionId),
 ]);
@@ -239,7 +257,9 @@ export const capabilities = pgTable('capabilities', {
   /** Every capability has an owner. Volume II's Definition of Success, enforced. */
   ownerPersonId: uuid('owner_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   ...governance(),
-}, (t) => [index('capabilities_institution_idx').on(t.institutionId)]);
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'capabilities_superseded_by_fk' }).onDelete('restrict'),index('capabilities_institution_idx').on(t.institutionId)]);
 
 /* ================================================================== */
 /* Assessment — mechanism, not primary workflow                       */
@@ -265,6 +285,8 @@ export const assessments = pgTable('assessments', {
   notes: text('notes'),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'assessments_superseded_by_fk' }).onDelete('restrict'),
   check('assessments_score_in_range', sql`${t.score} >= ${t.scaleMin} AND ${t.score} <= ${t.scaleMax}`),
   check('assessments_scale_sane', sql`${t.scaleMax} > ${t.scaleMin}`),
   index('assessments_learner_idx').on(t.learnerPersonId),
@@ -294,6 +316,8 @@ export const evidence = pgTable('evidence', {
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'evidence_superseded_by_fk' }).onDelete('restrict'),
   index('evidence_institution_idx').on(t.institutionId),
   index('evidence_verified_idx').on(t.sourceVerified),
 ]);
@@ -315,6 +339,8 @@ export const reflections = pgTable('reflections', {
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'reflections_superseded_by_fk' }).onDelete('restrict'),
   check(
     'reflections_human_review_before_ratification',
     sql`${t.status} NOT IN ('ratified','active') OR (${t.reviewedByPersonId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)`,
@@ -360,10 +386,27 @@ export const valueOutcomes = pgTable('value_outcomes', {
   actualValue: numeric('actual_value', { precision: 18, scale: 4 }),
   actualMeasuredAt: timestamp('actual_measured_at', { withTimezone: true }),
 
-  currencyImpact: numeric('currency_impact', { precision: 18, scale: 2 }),
+  /**
+   * Claimed vs realized are SEPARATE columns, not one.
+   *
+   * The confirmation gap engine cannot compute a dollar variance from a single
+   * value — it needs the amount claimed at `commit` and the amount realized at
+   * `verify`. A single column silently overwrites the claim with the outcome,
+   * which erases the only evidence that the claim was ever wrong. That is the
+   * exact record a finance function wants to see.
+   */
+  claimedCurrencyImpact: numeric('claimed_currency_impact', { precision: 18, scale: 2 }),
+  realizedCurrencyImpact: numeric('realized_currency_impact', { precision: 18, scale: 2 }),
   currencyCode: text('currency_code').default('USD'),
   /** How the currency figure was derived. Required whenever one is stated. */
   impactBasis: text('impact_basis'),
+
+  /**
+   * The measurement date committed to, distinct from the date it arrived.
+   * A practice that always delivers LATE is a different failure from one that
+   * delivers SHORT, and without this the two are indistinguishable.
+   */
+  promisedMeasuredAt: timestamp('promised_measured_at', { withTimezone: true }),
 
   realization: realizationStatus('realization').notNull().default('claimed'),
   confidence: confidenceLevel('confidence').notNull().default('low'),
@@ -372,6 +415,8 @@ export const valueOutcomes = pgTable('value_outcomes', {
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'value_outcomes_superseded_by_fk' }).onDelete('restrict'),
   /** Cannot claim measurement without the measurement. */
   check(
     'value_outcomes_measured_requires_actual',
@@ -382,10 +427,19 @@ export const valueOutcomes = pgTable('value_outcomes', {
     'value_outcomes_verified_requires_human',
     sql`${t.realization} <> 'verified' OR (${t.verifiedByPersonId} IS NOT NULL AND ${t.verifiedAt} IS NOT NULL AND ${t.sourceVerified} = true)`,
   ),
-  /** A currency figure must state how it was derived. No unexplained money. */
+  /** No unexplained money, claimed or realized. */
   check(
     'value_outcomes_impact_requires_basis',
-    sql`${t.currencyImpact} IS NULL OR ${t.impactBasis} IS NOT NULL`,
+    sql`(${t.claimedCurrencyImpact} IS NULL AND ${t.realizedCurrencyImpact} IS NULL)
+        OR ${t.impactBasis} IS NOT NULL`,
+  ),
+  /**
+   * A realized figure cannot exist before there is a measurement to realize it
+   * from. Prevents back-filling an outcome with a result it never measured.
+   */
+  check(
+    'value_outcomes_realized_requires_measurement',
+    sql`${t.realizedCurrencyImpact} IS NULL OR ${t.realization} <> 'claimed'`,
   ),
   /** A committed target requires both a target and a named committer. */
   check(
@@ -461,6 +515,8 @@ export const stewardshipReturns = pgTable('stewardship_returns', {
   promotedAt: timestamp('promoted_at', { withTimezone: true }),
   ...governance(),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'stewardship_returns_superseded_by_fk' }).onDelete('restrict'),
   check(
     'stewardship_returns_requires_source',
     sql`${t.sourceReflectionId} IS NOT NULL OR ${t.sourceValueOutcomeId} IS NOT NULL`,
@@ -516,6 +572,8 @@ export const heartbeats = pgTable('heartbeats', {
   /** Override: heartbeats are keyed on register ID (text), not UUID. */
   supersededById: text('superseded_by_id'),
 }, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'heartbeats_superseded_by_fk' }).onDelete('restrict'),
   /** Zero is a legitimate weight — a heartbeat may be informational. */
   check('heartbeats_health_weight_range', sql`${t.healthWeight} >= 0 AND ${t.healthWeight} <= 10`),
   check('heartbeats_failure_severity_range', sql`${t.failureSeverity} >= 0 AND ${t.failureSeverity} <= 5`),

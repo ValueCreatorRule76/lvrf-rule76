@@ -126,9 +126,99 @@ tables. They live in the route and must not be removed.
 
 ---
 
+## Confirmation gap engine — built 29 July
+
+`records/confirmation_gap.py`. AMENDMENT-001 Article II assigned LVRF ownership of
+Confirmation Gap; nothing computed it until now.
+
+**Design decision: the gap is a portfolio instrument, not a record one.** A single
+outcome's target-versus-actual is arithmetic. The question a finance function actually
+asks is *"when this function gives me a number, how wrong is it usually, and in which
+direction?"* — a property of a body of records. Direction is weighted above magnitude: a
+practice consistently 10% conservative is trustworthy; one consistently 10% optimistic is
+not, at identical absolute error.
+
+**It refuses below n=5.** Portfolio bias is not reported over an insufficient population —
+same discipline as the health model reporting UNMEASURED rather than assuming compliance.
+Dispersion requires n=12.
+
+### First run — the distinction that matters
+
+| Outcome | Confirmed | Admissible |
+|---|---|---|
+| Northgate · TRIR 1.42→1.08 vs target 1.10 | **yes** — 106.2% of claim | **yes** |
+| Skillsoft · DRR 98→100.4 vs target 100.0 | **yes** — 120.0% of claim | **no** |
+
+The Skillsoft outcome hit its target and is still excluded, because realization is
+`measured` rather than `verified`. **A claim you cannot substantiate earns no credit toward
+the practice's record, even when it happens to be right.** Portfolio bias therefore reads
+NOT REPORTED at 1 admissible outcome.
+
+### Two schema gaps it cannot work around → 0002
+
+1. **Currency confirmation.** `value_outcomes.currency_impact` is a single column.
+   Confirming a currency claim needs the amount claimed **at commit** and realized **at
+   verify** as separate values. Requires `claimed_currency_impact` and
+   `realized_currency_impact`. **This blocks the dollar confirmation gap — the metric a CFO
+   cares about most.**
+2. **Measurement punctuality.** No `promised_measured_at`, so slippage between the
+   committed measurement date and the actual one is uncomputable. A practice that always
+   delivers *late* is a distinct failure from one that delivers *short*, and the engine
+   cannot currently tell them apart.
+
+Both surfaced by executing, not by review. That is now four findings from running code
+against zero from thirteen specification volumes.
+
+---
+
+## 0001 — folded, not yet generated
+
+The three confirmation-gap columns were folded into the same migration as Defect 2 and the
+verifier role. One migration, not two. **Schema validated; migration not yet generated or
+applied.**
+
+`value_outcomes` now carries:
+
+| Column | Purpose |
+|---|---|
+| `claimed_currency_impact` | The figure asserted at `commit` |
+| `realized_currency_impact` | The figure measured at `verify` |
+| `promised_measured_at` | The measurement date committed to |
+
+`currency_impact` is **renamed** to `claimed_currency_impact`. `drizzle-kit generate` will
+prompt interactively — choose **rename**, not create. Safe: nothing in `value_outcomes` is
+real data.
+
+Two constraints updated or added:
+
+- `value_outcomes_impact_requires_basis` — extended to cover both figures. No unexplained
+  money, claimed or realized.
+- `value_outcomes_realized_requires_measurement` — a realized figure cannot exist while
+  realization is still `claimed`. Prevents back-filling an outcome with a result it never
+  measured.
+
+**Why two columns and not one.** A single `currency_impact` silently overwrites the claim
+with the outcome, which erases the only evidence the claim was ever wrong — precisely the
+record a finance function wants. The confirmation gap engine names this as the metric a CFO
+cares about most, and it was uncomputable until now.
+
+### Apply order
+
+```
+pg_dump -Fc lvrf > ~/Backups/lvrf/pre-0001.dump
+npx drizzle-kit generate        # answer "rename" at the prompt
+cat db/drizzle/0001_*.sql       # read before applying
+npx drizzle-kit migrate
+```
+
+Expect **24 ADD CONSTRAINT**, one `ALTER TYPE ... ADD VALUE 'value_verifier'`, three new
+columns, one rename, two CHECK changes.
+
+---
+
 ## Not built — next, in priority order
 
-1. **Confirmation-gap engine.** `AMENDMENT-001` Article II assigned LVRF ownership of
+1. **Wire the confirmation gap to the two new columns** once 0001 is applied. `AMENDMENT-001` Article II assigned LVRF ownership of
    Confirmation Gap. Nothing computes it.
 4. **Industry Pack model.** Two axes, not one: vertical packs (industry → metric library,
    attestation authority, regulatory overlay) crossed with horizontal packs (role family →
