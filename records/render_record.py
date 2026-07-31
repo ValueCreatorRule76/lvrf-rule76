@@ -331,10 +331,24 @@ def build(fx, run):
 
 def main():
     fixture = sys.argv[1] if len(sys.argv) > 1 else "customer_zero.json"
-    fx = json.loads((HERE / fixture).read_text())
-    run = json.loads((OUT / "spine_run.json").read_text())
-    html = build(fx, run)
     stem = Path(fixture).stem
+    fx = json.loads((HERE / fixture).read_text())
+
+    run_path = OUT / f"spine_run_{stem}.json"
+    if not run_path.exists():
+        raise SystemExit(
+            f"No spine run for '{stem}'. Expected {run_path.name}.\n"
+            f"Run:  python3 simulate_spine.py {fixture}\n"
+            f"Refusing to render — a document built from another fixture's run "
+            f"would carry the wrong numbers without saying so.")
+    run = json.loads(run_path.read_text())
+
+    if run.get("source_fixture") not in (None, stem):
+        raise SystemExit(
+            f"Run/fixture mismatch: {run_path.name} was produced from "
+            f"'{run['source_fixture']}', not '{stem}'. Refusing to render.")
+
+    html = build(fx, run)
     (OUT / f"realization_record_{stem}.html").write_text(html)
     pdf = OUT / f"LVRF_Realization_Record_{stem.replace('_','-')}.pdf"
     HTML(string=html, base_url=str(HERE)).write_pdf(pdf)

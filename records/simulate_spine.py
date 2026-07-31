@@ -562,12 +562,22 @@ class Spine:
 
 
 def main():
-    fixture_path = HERE / (sys.argv[1] if len(sys.argv) > 1 else "customer_zero.json")
+    fixture_name = sys.argv[1] if len(sys.argv) > 1 else "customer_zero.json"
+    fixture_path = HERE / fixture_name
     fixture = json.loads(fixture_path.read_text())
     result = Spine(fixture).run()
 
+    # Stamp the run with the fixture that produced it. render_record.py refuses
+    # to render if this does not match the fixture it was asked for — otherwise a
+    # stale run silently produces a document with the wrong numbers, which is
+    # worse than a crash.
+    stem = Path(fixture_name).stem
+    result["source_fixture"] = stem
+
     OUT.mkdir(exist_ok=True)
-    (OUT / "spine_run.json").write_text(json.dumps(result, indent=2))
+    # Per-fixture filename. A single fixed name meant a second run overwrote the
+    # first, so a portfolio could never exist. confirmation_gap.py globs these.
+    (OUT / f"spine_run_{stem}.json").write_text(json.dumps(result, indent=2))
 
     # ---- console ledger --------------------------------------------------
     print("\n" + "=" * 78)
@@ -618,6 +628,7 @@ def main():
             print(f"  [{code}] {sev.upper()}")
             for line in _wrap(msg, 72):
                 print(f"        {line}")
+    print(f"written           out/spine_run_{stem}.json")
     print()
     return result
 
