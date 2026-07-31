@@ -83,11 +83,13 @@
     "actual_value": 100.4,
     "actual_measured_at": "2026-07-31",
     "actual_simulated": true,
-    "currency_impact": 8400000.0,
     "currency_code": "USD",
-    "impact_basis": "SIMULATED AND INFERRED. 2.4 percentage points of dollar retention applied to an assumed renewable revenue base of $350M. Skillsoft does not disclose the renewable share of its base or its concentration; the $350M figure is illustrative only, derived by the author from FY2027 revenue guidance of $388-406M less an assumed non-renewable component. This is not a Skillsoft figure and is not a claim.",
+    "impact_basis": "SIMULATED AND INFERRED. Points of dollar retention applied to an assumed renewable revenue base of $350M. Skillsoft does not disclose the renewable share of its base or its concentration; the $350M is illustrative only, derived by the author from FY2027 revenue guidance of $388-406M less an assumed non-renewable component. CLAIMED derives from the target of +2.0 points, REALIZED from the simulated actual of +2.4. Neither is a Skillsoft figure and neither is a claim.",
     "confidence": "low",
-    "impact_is_inference": true
+    "impact_is_inference": true,
+    "claimed_currency_impact": 7000000.0,
+    "realized_currency_impact": 8400000.0,
+    "promised_measured_at": "2026-07-31"
   },
   "evidence": [
     {

@@ -218,12 +218,33 @@ def build(fx, run):
 
     <h2><span class="n">02</span>Baseline, Target, Measured</h2>
     {hero}
+    <table>
+      <tr><th style="width:24%">Currency</th><th style="width:24%">Amount</th><th>Derived from</th></tr>
+      <tr><td class="s">Claimed at commit</td>
+          <td class="f">{vo['currency_code']} {vo['claimed_currency_impact']:,.0f}</td>
+          <td class="s">The committed target of {vo['target_value']}</td></tr>
+      <tr><td class="s">Realized at measure</td>
+          <td class="f">{vo['currency_code']} {vo['realized_currency_impact']:,.0f}</td>
+          <td class="s">The measured actual of {vo['actual_value']}</td></tr>
+      <tr><td class="s">Confirmation gap</td>
+          <td class="f">{d['currency']['gap']:+,.0f}</td>
+          <td class="s">{d['currency']['share_of_claim']:.1%} of claim
+          {'· delivered above claim' if d['currency']['share_of_claim'] >= 1 else '· delivered below claim'}</td></tr>
+      <tr><td class="s">Measured on time</td>
+          <td class="f">{'yes' if d.get('on_time') else 'no'}</td>
+          <td class="s">{d.get('punctuality_days', 0):+} day(s) against a promise of
+          {vo.get('promised_measured_at','—')}</td></tr>
+    </table>
     <div class="note">
-      <span class="t">CURRENCY IMPACT — {'INFERENCE, NOT DISCLOSURE' if vo.get('impact_is_inference', True) else 'ATTESTED BASIS'}</span>
-      {vo['currency_code']} {vo['currency_impact']:,.0f}. Basis: {vo['impact_basis']}
-      <br><br>The schema refuses a currency figure without a stated basis
-      (<span class="mono">value_outcomes_impact_requires_basis</span>). A number whose
-      derivation is unstated cannot be defended, so it cannot be recorded.
+      <span class="t">BASIS — {'INFERENCE, NOT DISCLOSURE' if vo.get('impact_is_inference', True) else 'ATTESTED'}</span>
+      {vo['impact_basis']}
+      <br><br><strong>Claimed and realized are separate figures, deliberately.</strong> A
+      single currency column would be overwritten at measurement with the outcome, erasing
+      the only evidence the claim was ever wrong — which is precisely the record a finance
+      function wants to see. The schema refuses either figure without a stated basis
+      (<span class="mono">value_outcomes_impact_requires_basis</span>) and refuses a realized
+      figure before a measurement exists
+      (<span class="mono">value_outcomes_realized_requires_measurement</span>).
     </div>
 
     <h2><span class="n">03</span>The Capability</h2>

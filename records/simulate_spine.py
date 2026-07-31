@@ -234,18 +234,22 @@ class Spine:
         )
 
     def stage_model(self):
+        """The claim is made here and nowhere else. It is never overwritten."""
         vo = self.fx["value_outcome"]
         self.emit(
             "HB-0005", stage="model",
             subject_table="value_outcomes", subject_id="VO-0001",
             actor=self.fx["persons"]["value_engineer"]["name"],
             payload={"targetValue": vo["target_value"],
-                     "currencyImpact": vo["currency_impact"],
+                     "claimedCurrencyImpact": vo.get("claimed_currency_impact"),
+                     "promisedMeasuredAt": vo.get("promised_measured_at"),
                      "impactBasisStated": bool(vo.get("impact_basis"))},
         )
-        # Schema CHECK value_outcomes_impact_requires_basis, enforced here too.
-        if vo.get("currency_impact") is not None and not vo.get("impact_basis"):
-            raise ValueError("currency_impact requires impact_basis")
+        # Mirrors CHECK value_outcomes_impact_requires_basis.
+        if (vo.get("claimed_currency_impact") is not None
+                or vo.get("realized_currency_impact") is not None) \
+                and not vo.get("impact_basis"):
+            raise ValueError("a currency figure requires impact_basis")
 
     def stage_commit(self):
         vo = self.fx["value_outcome"]
@@ -278,12 +282,18 @@ class Spine:
             actor_is_agent=False,
         )
         vo = self.fx["value_outcome"]
+        # Mirrors CHECK value_outcomes_realized_requires_measurement — a realized
+        # figure cannot exist while realization is still 'claimed'.
+        if vo.get("realized_currency_impact") is not None and vo.get("actual_value") is None:
+            raise ValueError("realized_currency_impact requires a measured actual")
         self.emit(
             "HB-0015", stage="measure",
             subject_table="value_outcomes", subject_id="VO-0001",
             actor=self.fx["persons"]["metric_owner"]["name"],
             payload={"actualValue": vo["actual_value"],
                      "actualMeasuredAt": vo["actual_measured_at"],
+                     "realizedCurrencyImpact": vo.get("realized_currency_impact"),
+                     "promisedMeasuredAt": vo.get("promised_measured_at"),
                      "simulated": vo["actual_simulated"]},
             health_state="watch" if vo["actual_simulated"] else "healthy",
         )
@@ -425,7 +435,7 @@ class Spine:
             return {"available": False}
         raw = a - b
         improved = raw > 0 if direction == "increase" else raw < 0
-        return {
+        out = {
             "available": True,
             "raw": round(raw, 3),
             "improved": improved,
@@ -433,6 +443,29 @@ class Spine:
             "pct_of_target": (round((raw / (t - b)) * 100, 1)
                               if t is not None and (t - b) != 0 else None),
         }
+
+        # Currency variance — computable only because claimed and realized are
+        # separate columns. A single field would have overwritten the claim.
+        cc, rc = vo.get("claimed_currency_impact"), vo.get("realized_currency_impact")
+        out["currency"] = {"claimed": cc, "realized": rc}
+        if cc is not None and rc is not None and cc != 0:
+            out["currency"]["gap"] = round(rc - cc, 2)
+            out["currency"]["share_of_claim"] = round(rc / cc, 4)
+        else:
+            out["currency"]["gap"] = None
+            out["currency"]["share_of_claim"] = None
+
+        # Punctuality — was it measured when promised?
+        promised, actual_at = vo.get("promised_measured_at"), vo.get("actual_measured_at")
+        if promised and actual_at:
+            from datetime import date
+            d1 = date.fromisoformat(promised[:10]); d2 = date.fromisoformat(actual_at[:10])
+            out["punctuality_days"] = (d2 - d1).days
+            out["on_time"] = out["punctuality_days"] <= 0
+        else:
+            out["punctuality_days"] = None
+            out["on_time"] = None
+        return out
 
     # -- confidence ---------------------------------------------------------
 
@@ -481,7 +514,7 @@ class Spine:
 
         # 4. Impact basis
         weight = CONFIDENCE_FACTORS["impact_basis_evidenced"][0]
-        if vo.get("currency_impact") is None:
+        if vo.get("claimed_currency_impact") is None and vo.get("realized_currency_impact") is None:
             award("impact_basis_evidenced", weight,
                   "No currency figure claimed — nothing to substantiate.")
         else:
@@ -598,6 +631,18 @@ def main():
         print(f"  improved        {d['improved']}")
         print(f"  target met      {d['target_met']}")
         print(f"  % of target     {d['pct_of_target']}%")
+        cur = d.get("currency", {})
+        if cur.get("claimed") is not None:
+            print(f"  claimed         ${cur['claimed']:,.0f}")
+            print(f"  realized        "
+                  + (f"${cur['realized']:,.0f}" if cur.get("realized") is not None else "—"))
+            if cur.get("gap") is not None:
+                print(f"  currency gap    ${cur['gap']:+,.0f}   "
+                      f"({cur['share_of_claim']:.1%} of claim)")
+        if d.get("punctuality_days") is not None:
+            late = d["punctuality_days"]
+            print(f"  punctuality     {late:+} day(s) "
+                  f"{'on/ahead of promise' if late <= 0 else 'LATE'}")
 
     h = result["health"]
     print(f"\nInstitutional health")

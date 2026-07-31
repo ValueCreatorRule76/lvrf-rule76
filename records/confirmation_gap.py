@@ -84,6 +84,13 @@ def outcome_gap(fx, run):
     promised = (base - tgt) if decreasing else (tgt - base)
     delivered = (base - act) if decreasing else (act - base)
 
+    # Currency and punctuality are computed in the spine run; carried, not
+    # recomputed, so there is one source of arithmetic.
+    dl = run.get("delta", {})
+    g["currency"] = dl.get("currency", {})
+    g["punctuality_days"] = dl.get("punctuality_days")
+    g["on_time"] = dl.get("on_time")
+
     g["measurable"] = True
     g["promised_improvement"] = round(promised, 4)
     g["delivered_improvement"] = round(delivered, 4)
@@ -126,6 +133,29 @@ def portfolio(gaps):
 
     shares = [g["delivered_share"] for g in admissible if g["delivered_share"] is not None]
     out["reported"] = True
+
+    # Currency bias — the figure a finance function actually asks for. Only
+    # computable because claimed and realized are separate columns.
+    cshares = [g["currency"]["share_of_claim"] for g in admissible
+               if g.get("currency", {}).get("share_of_claim") is not None]
+    if cshares:
+        cmean = statistics.fmean(cshares)
+        out["currency_population"] = len(cshares)
+        out["mean_currency_share"] = round(cmean, 4)
+        out["currency_bias_band"], out["currency_bias_note"] = next(
+            (name, note) for thr, name, note in BIAS_BANDS if cmean >= thr)
+    else:
+        out["currency_population"] = 0
+        out["mean_currency_share"] = None
+
+    # Punctuality — delivering LATE is a distinct failure from delivering SHORT.
+    late = [g["punctuality_days"] for g in admissible if g.get("punctuality_days") is not None]
+    if late:
+        out["punctuality_population"] = len(late)
+        out["mean_slippage_days"] = round(statistics.fmean(late), 1)
+        out["on_time_rate"] = round(sum(1 for d in late if d <= 0) / len(late), 4)
+    else:
+        out["punctuality_population"] = 0
     out["confirmation_rate"] = round(sum(1 for g in admissible if g["confirmed"]) / n, 4)
     mean_share = statistics.fmean(shares)
     out["mean_delivered_share"] = round(mean_share, 4)
@@ -144,18 +174,18 @@ def portfolio(gaps):
 
 
 # ── Schema gaps this engine cannot work around ────────────────────────────
-SCHEMA_GAPS = [
+# Both gaps recorded here on 29 July were closed by migration 0001. Kept as a
+# record of what the engine could not do before the schema supported it.
+SCHEMA_GAPS = []
+CLOSED_GAPS = [
     ("currency confirmation",
-     "`value_outcomes.currency_impact` is a single column. Confirming a currency "
-     "claim requires the amount claimed AT COMMIT and the amount realized AT "
-     "VERIFY as separate values. The schema conflates them, so the dollar "
-     "confirmation gap — the one a CFO cares about most — cannot be computed. "
-     "Requires `claimed_currency_impact` and `realized_currency_impact`."),
+     "CLOSED by 0001. `claimed_currency_impact` and `realized_currency_impact` are "
+     "separate columns, so the dollar variance is computable. A single column "
+     "overwrote the claim with the outcome and erased the only evidence the claim "
+     "was ever wrong."),
     ("measurement punctuality",
-     "There is no `promised_measured_at`. Time slippage between the measurement "
-     "date committed to and the date it actually arrived is uncomputable. A "
-     "practice that always delivers late is a distinct failure from one that "
-     "delivers short, and this engine currently cannot distinguish them."),
+     "CLOSED by 0001. `promised_measured_at` distinguishes a practice that delivers "
+     "LATE from one that delivers SHORT."),
 ]
 
 
@@ -191,6 +221,14 @@ def main():
         print(f"    promised      {g['promised_improvement']:+}")
         print(f"    delivered     {g['delivered_improvement']:+}")
         print(f"    gap           {g['gap']:+}   ({g['delivered_share']:.1%} of claim)")
+        cur = g.get("currency", {})
+        if cur.get("share_of_claim") is not None:
+            print(f"    currency      ${cur['claimed']:,.0f} claimed -> "
+                  f"${cur['realized']:,.0f} realized   "
+                  f"({cur['share_of_claim']:.1%}, {cur['gap']:+,.0f})")
+        if g.get("punctuality_days") is not None:
+            print(f"    punctuality   {g['punctuality_days']:+} day(s)"
+                  f"{'' if g['on_time'] else '   <- LATE'}")
         print(f"    confirmed     {g['confirmed']}")
         print(f"    admissible    {g['admissible']}"
               f"{'' if g['evidence_admissible'] else '   <- realization not verified'}")
@@ -214,22 +252,38 @@ def main():
         print(f"  BIAS BAND             {p['bias_band'].upper()}")
         for line in _wrap(p["bias_note"], 72):
             print(f"    {line}")
+        if p.get("mean_currency_share") is not None:
+            print(f"\n  mean currency share   {p['mean_currency_share']:.1%}"
+                  f"   (n={p['currency_population']})")
+            print(f"  CURRENCY BIAS         {p['currency_bias_band'].upper()}")
+            for line in _wrap(p["currency_bias_note"], 72):
+                print(f"    {line}")
+        if p.get("punctuality_population"):
+            print(f"\n  on-time rate          {p['on_time_rate']:.1%}")
+            print(f"  mean slippage         {p['mean_slippage_days']:+} day(s)")
         if p["dispersion_reported"]:
             print(f"  dispersion (sd)       {p['dispersion_sd']:.3f}")
         else:
             for line in _wrap(p["dispersion_note"], 72):
                 print(f"    {line}")
 
-    print(f"\n\nSchema gaps blocking full computation ({len(SCHEMA_GAPS)})")
-    print("-" * 78)
-    for name, detail in SCHEMA_GAPS:
-        print(f"\n  {name.upper()}")
-        for line in _wrap(detail, 72):
-            print(f"    {line}")
+    if SCHEMA_GAPS:
+        print(f"\n\nSchema gaps blocking full computation ({len(SCHEMA_GAPS)})")
+        print("-" * 78)
+        for name, detail in SCHEMA_GAPS:
+            print(f"\n  {name.upper()}")
+            for line in _wrap(detail, 72):
+                print(f"    {line}")
+    else:
+        print(f"\n\nSchema gaps: none. {len(CLOSED_GAPS)} closed by migration 0001.")
+        print("-" * 78)
+        for name, detail in CLOSED_GAPS:
+            print(f"  {name} — {detail.split('.')[0]}.")
 
     (HERE / "out" / "confirmation_gap.json").write_text(
         json.dumps({"outcomes": gaps, "portfolio": p,
-                    "schema_gaps": [{"name": n, "detail": d} for n, d in SCHEMA_GAPS]},
+                    "schema_gaps": [{"name": n, "detail": d} for n, d in SCHEMA_GAPS],
+                    "closed_gaps": [{"name": n, "detail": d} for n, d in CLOSED_GAPS]},
                    indent=2))
     print(f"\n\nwritten -> out/confirmation_gap.json\n")
 

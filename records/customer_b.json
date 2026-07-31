@@ -85,11 +85,13 @@
     "actual_value": 1.08,
     "actual_measured_at": "2026-07-31",
     "actual_simulated": false,
-    "currency_impact": 2960000.0,
     "currency_code": "USD",
-    "impact_basis": "0.34 reduction in TRIR across 4.1M hours worked equates to approximately 7 avoided recordable incidents. Applied at Northgate's own fully-loaded cost per recordable incident of $423,000 \u2014 a figure supplied and attested by Northgate FP&A, comprising direct medical, indemnity, crew downtime, investigation, and regulatory response. Excludes any allowance for insurance premium effect or reputational cost. Attested, not independently audited.",
+    "impact_basis": "METHOD. Recordable incidents = TRIR x hours / 200,000. Over 4.1M hours worked in the measurement period, each 1.00 of TRIR equates to 20.5 incidents. Valued at Northgate's own fully-loaded cost per recordable incident of $423,000 \u2014 supplied and attested by Northgate FP&A, comprising direct medical, indemnity, crew downtime, investigation and regulatory response. Excludes insurance premium effect and reputational cost. CLAIMED figure derives from the committed target of 1.10 (6.56 incidents avoided). REALIZED figure derives from the measured actual of 1.08 (6.97 avoided). Attested, not independently audited.",
     "impact_is_inference": false,
-    "confidence": "high"
+    "confidence": "high",
+    "claimed_currency_impact": 2774880.0,
+    "realized_currency_impact": 2948310.0,
+    "promised_measured_at": "2026-07-31"
   },
   "evidence": [
     {
