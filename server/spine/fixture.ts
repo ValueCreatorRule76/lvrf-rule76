@@ -28,6 +28,9 @@ export interface EvidenceFixture {
   source_verified: boolean;
   supports: 'baseline' | 'attach' | 'actual' | 'impact_basis';
   simulated: boolean;
+  /** Key into `persons` (e.g. "metric_owner") when this evidence is an attestation. */
+  attested_by?: string | null;
+  attested_at?: string | null;
 }
 
 export interface CustomerZeroFixture {
@@ -69,7 +72,9 @@ export interface CustomerZeroFixture {
     actual_value: number;
     actual_measured_at: string;
     actual_simulated: boolean;
-    currency_impact: number;
+    /** 0001 split currency_impact into these two; they are never the same value. */
+    claimed_currency_impact: number | null;
+    realized_currency_impact: number | null;
     currency_code: string;
     impact_basis: string;
     confidence: 'low' | 'medium' | 'high';

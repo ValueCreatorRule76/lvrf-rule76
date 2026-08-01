@@ -704,6 +704,20 @@ export const heartbeatEvents = pgTable('heartbeat_events', {
   institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
   engagementId: uuid('engagement_id').references(() => engagements.id, { onDelete: 'restrict' }),
 
+  /**
+   * The run this event belongs to. 0003.
+   *
+   * NO `.references()` here deliberately — the constraint is DEFERRABLE
+   * INITIALLY DEFERRED, which Drizzle's column builder cannot express. It is
+   * declared in `db/hardening.sql` as raw SQL. Do not "fix" this by adding a
+   * reference; that would create a second, non-deferred constraint and break
+   * the atomic walk.
+   *
+   * Nullable: events predating runs, and events outside a walk (HB-0001
+   * system init, HB-0002 authentication), legitimately have none.
+   */
+  valueRunId: uuid('value_run_id'),
+
   eventType: text('event_type').notNull(),
   /** §11. The emitting component. */
   producer: text('producer').notNull(),
@@ -728,6 +742,7 @@ export const heartbeatEvents = pgTable('heartbeat_events', {
 }, (t) => [
   check('heartbeat_events_severity_range', sql`${t.severity} >= 0 AND ${t.severity} <= 5`),
   index('heartbeat_registered_idx').on(t.heartbeatId),
+  index('heartbeat_run_idx').on(t.valueRunId),
   index('heartbeat_subject_idx').on(t.subjectTable, t.subjectId),
   index('heartbeat_occurred_idx').on(t.occurredAt),
   index('heartbeat_engagement_idx').on(t.engagementId),

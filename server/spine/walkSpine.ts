@@ -1,7 +1,7 @@
 import '../env.js';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import { withActorTransaction, type Db } from '../db/withActorTransaction.js';
@@ -9,6 +9,7 @@ import * as schema from '../../db/schema.js';
 import { loadFixture } from './fixture.js';
 import { sha256Hex } from './hash.js';
 import { seedCustomerZero, type SeedResult } from '../seed/seedCustomerZero.js';
+import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceResult } from './confidenceModel.js';
 
 /**
  * Walks all seven value-spine stages against the database, in TypeScript
@@ -35,6 +36,22 @@ const REQUIRED_HEARTBEATS = [
 
 type ValueStage = (typeof schema.valueStage.enumValues)[number];
 type HealthState = (typeof schema.healthState.enumValues)[number];
+
+export interface WalkOptions {
+  /**
+   * Raise partway through the walk, after the named stage's heartbeats are
+   * emitted, to prove the walk is atomic: a failed run must leave zero
+   * heartbeat_events. Development/test only — never honoured outside it, so
+   * this cannot become a way to abort a real walk in production.
+   */
+  failAt?: ValueStage;
+}
+
+function maybeFail(opts: WalkOptions | undefined, stage: ValueStage): void {
+  if (process.env.NODE_ENV !== 'production' && opts?.failAt === stage) {
+    throw new Error(`--fail-at=${stage}: deliberate failure for atomicity testing. No row from this walk should persist.`);
+  }
+}
 
 interface HeartbeatRegisterRow {
   id: string;
@@ -92,6 +109,8 @@ interface EmitContext {
   contractVersion: string;
   constitutionalAuthority: string;
   events: EmittedHeartbeat[];
+  /** 0003. Stamped on every event so a walk's ledger is attributable to the run. */
+  valueRunId: string;
 }
 
 async function emit(
@@ -131,6 +150,7 @@ async function emit(
     tenantId: ctx.tenantId,
     institutionId: ctx.institutionId,
     engagementId: ctx.engagementId,
+    valueRunId: ctx.valueRunId,
     eventType: reg.name,
     producer: reg.producer,
     severity,
@@ -169,12 +189,14 @@ export interface VerifyGuardResult {
 
 export interface WalkResult {
   seeded: SeedResult;
+  valueRunId: string;
   valueOutcomeId: string;
   recordDocumentId: string;
   stewardshipReturnId: string;
   events: EmittedHeartbeat[];
   realization: string;
   disclosure: string;
+  confidence: ConfidenceResult;
   verifyGuard: VerifyGuardResult | null;
   rowsWritten: {
     evidence: number;
@@ -184,10 +206,11 @@ export interface WalkResult {
     record_documents: number;
     stewardship_returns: number;
     heartbeat_events: number;
+    value_runs: number;
   };
 }
 
-export async function walkSpine(): Promise<WalkResult> {
+export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
   const fixture = await loadFixture();
   const seeded = await seedCustomerZero();
 
@@ -199,10 +222,13 @@ export async function walkSpine(): Promise<WalkResult> {
     record_documents: 0,
     stewardship_returns: 0,
     heartbeat_events: 0,
+    value_runs: 0,
   };
 
   return withActorTransaction(pool, seeded.persons.valueEngineer.id, async (db, client: PoolClient) => {
     const register = await loadHeartbeatRegister(db);
+    // 0003: identity generated before the walk; the row is still written last.
+    const valueRunId = randomUUID();
     const ctx: EmitContext = {
       db,
       register,
@@ -212,6 +238,7 @@ export async function walkSpine(): Promise<WalkResult> {
       contractVersion: fixture.run.contract_version,
       constitutionalAuthority: fixture.run.constitutional_authority,
       events: [],
+      valueRunId,
     };
 
     const vo = fixture.value_outcome;
@@ -261,6 +288,8 @@ export async function walkSpine(): Promise<WalkResult> {
       });
     }
 
+    maybeFail(opts, 'baseline');
+
     // ---- STAGE 2: attach -----------------------------------------------------
     // attach a capability to that metric — the hypothesis. The capability and
     // business metric were already seeded as static reference data; what gets
@@ -305,20 +334,22 @@ export async function walkSpine(): Promise<WalkResult> {
       },
     });
 
+    maybeFail(opts, 'attach');
+
     // ---- STAGE 3: model --------------------------------------------------------
     // model target and financial impact
-    if (vo.currency_impact != null && !vo.impact_basis) {
+    if (vo.claimed_currency_impact != null && !vo.impact_basis) {
       // Schema CHECK value_outcomes_impact_requires_basis would reject this
       // exact write. Fail before attempting it rather than relying on the
       // database to catch a known-bad payload.
-      throw new Error('currency_impact requires impact_basis — refusing to attempt an UPDATE the schema would reject.');
+      throw new Error('claimed_currency_impact requires impact_basis — refusing to attempt an UPDATE the schema would reject.');
     }
     await db
       .update(schema.valueOutcomes)
       .set({
         valueStage: 'model',
         targetValue: String(vo.target_value),
-        claimedCurrencyImpact: String(vo.currency_impact),
+        claimedCurrencyImpact: vo.claimed_currency_impact != null ? String(vo.claimed_currency_impact) : null,
         currencyCode: vo.currency_code,
         impactBasis: vo.impact_basis,
       })
@@ -333,10 +364,12 @@ export async function walkSpine(): Promise<WalkResult> {
       actorPersonId: seeded.persons.valueEngineer.id,
       payload: {
         targetValue: vo.target_value,
-        claimedCurrencyImpact: vo.currency_impact,
+        claimedCurrencyImpact: vo.claimed_currency_impact,
         impactBasisStated: Boolean(vo.impact_basis),
       },
     });
+
+    maybeFail(opts, 'model');
 
     // ---- STAGE 4: commit ---------------------------------------------------------
     // the customer agrees the target is the right one
@@ -363,6 +396,8 @@ export async function walkSpine(): Promise<WalkResult> {
       },
       healthState: fixture.persons.sponsor.synthetic ? 'watch' : 'healthy',
     });
+
+    maybeFail(opts, 'commit');
 
     // ---- STAGE 5: measure ---------------------------------------------------------
     // a measured actual arrives from the customer's system of record
@@ -438,6 +473,7 @@ export async function walkSpine(): Promise<WalkResult> {
         realization: 'measured',
         actualValue: String(vo.actual_value),
         actualMeasuredAt: new Date(vo.actual_measured_at),
+        realizedCurrencyImpact: vo.realized_currency_impact != null ? String(vo.realized_currency_impact) : null,
       })
       .where(eq(schema.valueOutcomes.id, valueOutcomeId));
 
@@ -456,11 +492,25 @@ export async function walkSpine(): Promise<WalkResult> {
       healthState: vo.actual_simulated ? 'watch' : 'healthy',
     });
 
+    maybeFail(opts, 'measure');
+
     // ---- STAGE 6: verify -----------------------------------------------------------
     // a named human confirms sources and the delta — the disclosure gate
-    const allActualEvidenceVerified = actualEvidence.length > 0 && actualEvidence.every((e) => e.source_verified);
+    //
+    // ANY, not EVERY: db/CONFIDENCE_MODEL.md's verification-gate section. The
+    // gate asks whether the source was confirmed by an authority over it, not
+    // how strong that confirmation is — one item clearing (independently
+    // verified, or attested by a named, institution-scoped, non-synthetic
+    // authority) is enough. Requiring every item would mean a weak
+    // corroborating source (e.g. an unverified control-room observation)
+    // downgrades an otherwise-cleared record, which teaches value engineers to
+    // omit corroborating sources. Confidence separately grades on MAX credit;
+    // the record still discloses ALL evidence, verified or not.
+    const anyActualEvidenceVerified =
+      actualEvidence.length > 0 &&
+      actualEvidence.some((e) => evidenceCredit(fixtureEvidenceToInput(fixture, e)).credit > 0);
     const verifierSynthetic = fixture.persons.verifier.synthetic;
-    const canVerify = allActualEvidenceVerified && !verifierSynthetic;
+    const canVerify = anyActualEvidenceVerified && !verifierSynthetic;
     let verifyGuard: VerifyGuardResult | null = null;
 
     if (canVerify) {
@@ -514,11 +564,13 @@ export async function walkSpine(): Promise<WalkResult> {
       actorPersonId: seeded.persons.verifier.id,
       payload: {
         realizationAdvancedTo: realization,
-        allActualEvidenceVerified,
+        anyActualEvidenceVerified,
         verifierSynthetic,
       },
       healthState: realization === 'verified' ? 'healthy' : 'warning',
     });
+
+    maybeFail(opts, 'verify');
 
     // ---- STAGE 7: return -------------------------------------------------------------
     // the finding returns to the portfolio and to Rule76
@@ -530,7 +582,8 @@ export async function walkSpine(): Promise<WalkResult> {
       baselineValue: vo.baseline_value,
       targetValue: vo.target_value,
       actualValue: vo.actual_value,
-      claimedCurrencyImpact: vo.currency_impact,
+      claimedCurrencyImpact: vo.claimed_currency_impact,
+      realizedCurrencyImpact: vo.realized_currency_impact,
       realization,
       disclosure,
     };
@@ -587,16 +640,69 @@ export async function walkSpine(): Promise<WalkResult> {
     await db.update(schema.valueOutcomes).set({ valueStage: 'return' }).where(eq(schema.valueOutcomes.id, valueOutcomeId));
     await db.update(schema.engagements).set({ valueStage: 'return' }).where(eq(schema.engagements.id, seeded.engagement.id));
 
+    maybeFail(opts, 'return');
+
+    // ---- 0003: value_runs -----------------------------------------------------------
+    // Computed, never asserted or estimated — db/CONFIDENCE_MODEL.md. The
+    // computed band governs; value_outcomes.confidence is advisory only.
+    const confidence = computeConfidence({
+      metricDefinitionConfirmed: bm.calculation_confirmed,
+      evidence: fixture.evidence.map((e) => fixtureEvidenceToInput(fixture, e)),
+      claimedCurrencyImpact: vo.claimed_currency_impact,
+      realizedCurrencyImpact: vo.realized_currency_impact,
+      impactBasisStated: Boolean(vo.impact_basis),
+      impactIsInference: vo.impact_is_inference,
+      sponsorName: seeded.persons.sponsor.fullName,
+      verifierName: seeded.persons.verifier.fullName,
+      assertedConfidence: vo.confidence,
+    });
+
+    const [{ priorRunCount }] = await db
+      .select({ priorRunCount: sql<number>`count(*)::int` })
+      .from(schema.valueRuns)
+      .where(eq(schema.valueRuns.engagementId, seeded.engagement.id));
+
+    const runPayload = {
+      engagement: fixture.engagement.name,
+      capability: fixture.capability.name,
+      businessMetric: bm.name,
+      baselineValue: vo.baseline_value,
+      targetValue: vo.target_value,
+      actualValue: vo.actual_value,
+      claimedCurrencyImpact: vo.claimed_currency_impact,
+      realizedCurrencyImpact: vo.realized_currency_impact,
+      realization,
+      disclosure,
+      confidence,
+    };
+    const payloadHash = sha256Hex(runPayload);
+
+    await db.insert(schema.valueRuns).values({
+      id: valueRunId,
+      tenantId: seeded.tenant.id,
+      engagementId: seeded.engagement.id,
+      runNumber: priorRunCount + 1,
+      terminalValueStage: 'return',
+      confidenceScore: String(confidence.score),
+      confidenceBand: confidence.band,
+      payloadHash,
+      payload: runPayload,
+      walkedByPersonId: seeded.persons.valueEngineer.id,
+    });
+    rowsWritten.value_runs += 1;
+
     rowsWritten.heartbeat_events = ctx.events.length;
 
     return {
       seeded,
+      valueRunId,
       valueOutcomeId: valueOutcomeRow.id,
       recordDocumentId: recordDocument.id,
       stewardshipReturnId: stewardshipReturn.id,
       events: ctx.events,
       realization,
       disclosure,
+      confidence,
       verifyGuard,
       rowsWritten,
     };
@@ -605,10 +711,26 @@ export async function walkSpine(): Promise<WalkResult> {
 
 const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
+/**
+ * --fail-at=<stage>: development/test only. walkSpine() itself refuses to
+ * honour opts.failAt when NODE_ENV === 'production', so this flag cannot
+ * abort a real walk in production even if passed by mistake.
+ */
+function parseFailAt(): ValueStage | undefined {
+  const arg = process.argv.find((a) => a.startsWith('--fail-at='));
+  if (!arg) return undefined;
+  if (process.env.NODE_ENV === 'production') {
+    console.error('--fail-at is refused when NODE_ENV=production; ignoring.');
+    return undefined;
+  }
+  return arg.slice('--fail-at='.length) as ValueStage;
+}
+
 if (isMain) {
-  walkSpine()
+  walkSpine({ failAt: parseFailAt() })
     .then((result) => {
       console.log('Value spine walk complete — Customer Zero.\n');
+      console.log(`value_run           ${result.valueRunId}`);
       console.log(`value_outcome       ${result.valueOutcomeId}`);
       console.log(`record_document     ${result.recordDocumentId}`);
       console.log(`stewardship_return  ${result.stewardshipReturnId}\n`);
@@ -628,6 +750,10 @@ if (isMain) {
 
       console.log(`\nRealization         ${result.realization.toUpperCase()}`);
       console.log(`Disclosure          ${result.disclosure.toUpperCase()}`);
+      console.log(
+        `Confidence          ${result.confidence.score.toFixed(1)} / ${result.confidence.band.toUpperCase()}` +
+          (result.confidence.overridesAssertion ? ` (overrides asserted ${result.confidence.asserted})` : ''),
+      );
 
       if (result.verifyGuard) {
         console.log('\nVerify guard — confirmed blocking, not adjusted:');

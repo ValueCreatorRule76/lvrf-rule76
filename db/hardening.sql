@@ -181,6 +181,23 @@ GRANT SELECT, INSERT ON heartbeat_events TO lvrf_app;
 GRANT USAGE, SELECT ON SEQUENCE audit_log_id_seq        TO lvrf_app;
 GRANT USAGE, SELECT ON SEQUENCE heartbeat_events_id_seq TO lvrf_app;
 
+-- ------------------------------------------------------------------
+-- 7. 0003 · run attribution, deferred
+-- ------------------------------------------------------------------
+-- DEFERRABLE INITIALLY DEFERRED so a walk can emit events referencing a run
+-- that is inserted at the end of the same transaction. Checked at COMMIT.
+--
+-- Drizzle cannot express DEFERRABLE, so `schema.ts` declares the column
+-- without a reference and the constraint lives here. Adding `.references()`
+-- there would create a second, non-deferred constraint and break atomicity.
+
+ALTER TABLE heartbeat_events DROP CONSTRAINT IF EXISTS heartbeat_events_value_run_fk;
+ALTER TABLE heartbeat_events
+  ADD CONSTRAINT heartbeat_events_value_run_fk
+  FOREIGN KEY (value_run_id) REFERENCES value_runs(id)
+  ON DELETE RESTRICT
+  DEFERRABLE INITIALLY DEFERRED;
+
 COMMIT;
 
 -- ------------------------------------------------------------------
