@@ -13,7 +13,22 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime, timezone
-from weasyprint import HTML
+
+try:
+    from weasyprint import HTML
+except (ImportError, OSError) as exc:
+    # OSError, not just ImportError: WeasyPrint imports but fails to load its
+    # native libraries under macOS system Python, because SIP strips DYLD_* env
+    # vars before the interpreter starts. No library path can fix that — the
+    # interpreter has to change. See records/ENVIRONMENT.md.
+    raise SystemExit(
+        f"\nWeasyPrint unavailable under {sys.executable}\n"
+        f"  {type(exc).__name__}: {exc}\n\n"
+        "This is almost always the wrong interpreter rather than a missing package.\n"
+        "macOS system Python cannot run WeasyPrint's native bindings.\n\n"
+        "  npm run record:render -- <fixture.json>\n"
+        "  /opt/homebrew/bin/python3 records/render_record.py <fixture.json>\n\n"
+        "Setup and the reasoning behind it: records/ENVIRONMENT.md\n") from exc
 
 HERE = Path(__file__).parent
 OUT = HERE / "out"

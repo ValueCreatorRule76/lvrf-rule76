@@ -51,8 +51,12 @@ These encode failures already paid for in CVAF 1.2. Violating them recreates kno
 6. **The disclosure gate is visible.** A record that is not `verified` must *render* as
    unverified. Never suppress the banner to make a document look finished.
 7. **Never `npm audit fix --force`.**
-8. **Back up before migrating.** `pg_dump -Fc` before any schema change against a
-   database with data in it.
+8. **`pg_dump -Fc` before any migration** against a database holding data.
+9. **The repo is authoritative for `db/schema.ts`.** Edit in place; never replace wholesale
+   from an external copy — a full-file overwrite silently reverted the
+   `heartbeats.superseded_by_id` text override once. Diff any incoming whole file.
+10. **Self-referencing FKs must match the primary key's type.** `heartbeats.id` is `text`;
+    every other governed table's is `uuid`. Verification query in `BUILD_STATUS.md` (D-P1).
 
 ### The governing AI principle
 
@@ -67,33 +71,32 @@ sells, which is defensibility.
 
 ## Stack
 
-**Installed and verified on the VPS `srv1862778`:** Postgres 16.14 (db `lvrf`, role
-`lvrf_app`, localhost only, **data page checksums on**, tuning drop-in at
-`conf.d/10-lvrf-tuning.conf` for 8GB RAM) · pgvector 0.6.0 (unused for now) ·
+**VPS `srv1862778`:** Postgres 16.14 (db `lvrf`, role `lvrf_app`, localhost only,
+**checksums on**, tuning at `conf.d/10-lvrf-tuning.conf` for 8GB) · pgvector 0.6.0 unused ·
 Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
-`lvrf-rule76.com`, proxying `127.0.0.1:3001` · nightly `pg_dump -Fc` at 03:00,
-14-day retention.
+`lvrf-rule76.com` proxying `127.0.0.1:3001` · nightly `pg_dump -Fc` at 03:00, 14-day
+retention.
 
-> **Caddy is pinned to IPv4 deliberately.** `localhost` resolved to `::1` while
-> Express binds IPv4, which 502s. Do not "simplify" it back to `localhost`.
+> **Caddy is pinned to IPv4 deliberately.** `localhost` resolves to `::1`, Express binds
+> IPv4 — that 502s. Do not "simplify" it back to `localhost`.
 
 **Installed:** Drizzle ORM 0.45.2 + Drizzle Kit 0.31.10, Express, `pg`. Migration
 `0000_far_praxagora.sql` applied locally; 18 heartbeats seeded; 24 triggers active.
 
-**Not yet:** argon2 sessions (the actor header in `actorContext.ts` is a spoofable
-placeholder — fail-closed outside development before any mutation route ships) ·
-React/Vite + Tailwind · WeasyPrint 69.0 on the VPS (`pip install weasyprint
---break-system-packages`, fonts into `~/.fonts`, then **`fc-cache -f`** — skip it and
-rendering silently falls back to default fonts).
+**WeasyPrint 69.0 installed on the dev Mac**, not the VPS. It needs Homebrew Python —
+macOS system Python cannot load its native bindings and no library path fixes that. Use
+`npm run record:render`, never bare `python3`. Setup, the SIP reasoning, and
+`npm run env:check`: **`records/ENVIRONMENT.md`**.
+
+**Not yet:** argon2 sessions — the actor header in `actorContext.ts` is **spoofable**;
+fail-closed outside development before any mutation route ships · React/Vite + Tailwind ·
+WeasyPrint on the VPS.
 
 Separate repo, database and VPS from CVAF. CVAF carries live revenue; nothing here
 may reach it.
 
-### WeasyPrint constraints
-
-CSS **Grid is unreliable** — use flexbox and HTML tables. QA every template with
-`pdftoppm -png` and actually look at it. The Grid restriction is **PDF-pipeline
-only**; Grid is fine in the React SPA.
+**WeasyPrint:** CSS **Grid is unreliable** — flexbox and tables only. QA with
+`pdftoppm -png` and look at it. PDF-pipeline only; Grid is fine in the SPA.
 
 ---
 
@@ -158,18 +161,14 @@ LVRF is a Chapel. The governing instruments live in the **`rule76-cathedral`**
 repo, not here. Where they and this file conflict, the conflict must be **named**,
 not resolved silently.
 
-**Adopted without reservation — normative:**
-
-- `HEARTBEAT-REGISTER.md` (R76-HB-001). Eighteen registered heartbeats (12 original +
-  HB-0013..0018 via `AMENDMENT-002`), seven categories, five health states, six severity
-  levels, the §11 event contract and §12 persistence rules.
-  - `db/schema.ts` holds the register as the `heartbeats` table; `heartbeat_events` is
-    foreign-keyed to it, so **an unregistered event is refused by Postgres.** Seed with
-    `db/seed_heartbeat_register.sql`.
-  - **Adding a heartbeat is a governance act.** If a feature needs one that isn't
-    registered, stop and say so — do not insert a row.
-- `COMPASS-INHERITANCE-AUDIT` Principles I–V, the root object set, and every finding other
-  than §14/§15.
+**Adopted without reservation — normative:** `HEARTBEAT-REGISTER.md` (R76-HB-001) —
+18 registered heartbeats, seven categories, five health states, six severity levels, the
+§11 event contract and §12 persistence rules. `db/schema.ts` holds the register as the
+`heartbeats` table with `heartbeat_events` foreign-keyed to it, so **an unregistered event
+is refused by Postgres**; seed via `db/seed_heartbeat_register.sql`. **Adding a heartbeat is
+a governance act** — if a feature needs one that isn't registered, stop and say so rather
+than inserting a row. Also adopted: `COMPASS-INHERITANCE-AUDIT` Principles I–V, the root
+object set, and every finding other than §14/§15.
 
 **Amended and in force:** `AMENDMENT-001` (Chapel reorientation, LVAF→LVRF, Learning ROI
 struck), `AMENDMENT-002` (register extension), `AMENDMENT-003` (seventh health dimension),

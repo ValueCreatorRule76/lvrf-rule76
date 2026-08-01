@@ -12,7 +12,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx server/seed/seedCustomerZero.ts",
-    "spine:walk": "tsx server/spine/walkSpine.ts"
+    "spine:walk": "tsx server/spine/walkSpine.ts",
+    "record:render": "./records/py.sh records/render_record.py",
+    "record:simulate": "python3 records/simulate_spine.py",
+    "gap": "python3 records/confirmation_gap.py",
+    "env:check": "bash records/env_check.sh"
   },
   "repository": {
     "type": "git",
