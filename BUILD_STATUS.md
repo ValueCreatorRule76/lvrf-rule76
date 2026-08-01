@@ -300,6 +300,21 @@ reproducible hash; version 1 stands as the record of what was rendered before th
 changed. Same principle as the phantom audit rows in `DEFECT-001` — history accumulates
 rather than being tidied.
 
+### Note — Customer Zero's value_runs start at run_number 3, not 1
+
+The locked-run trigger tests above (**Finding — a locked run is permanent**) inserted their
+proof rows directly against the Customer Zero engagement: `run_number` 999 (locked,
+`confidence_score = 80.0`) and 1000 (unlocked, `confidence_score = 0.0`). Both are manual
+test fixtures, not walk output.
+
+`walkSpine.ts`'s own runs against that engagement therefore land at `run_number` 3 and 4,
+not 1 and 2 — `run_number` is computed as a count of existing rows for the engagement plus
+one, and it counted the two test rows correctly. **Run 999 is left in place deliberately**
+— locked and permanent by design, it is the standing proof that
+`lvrf_locked_run_immutable` works. Recorded here so a future reader of `value_runs` does
+not mistake run 4 for the fourth real walk of this engagement; it is the second. Use B's
+engagement was untouched before 0003 testing, so its runs there are a clean 1 and 2.
+
 ---
 
 ## Rules enforced in the API, not the schema

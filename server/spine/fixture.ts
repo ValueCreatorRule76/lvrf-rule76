@@ -1,16 +1,20 @@
 import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * One source of truth for the fixture data: records/customer_zero.json, the
- * same file records/simulate_spine.py reads. Field names below mirror the
- * JSON exactly (snake_case) rather than being remapped to camelCase, so a
- * diff against the fixture file stays legible.
+ * One source of truth for the fixture data: records/*.json, the same files
+ * records/simulate_spine.py reads. Field names below mirror the JSON exactly
+ * (snake_case) rather than being remapped to camelCase, so a diff against the
+ * fixture file stays legible.
  */
 
-const FIXTURE_PATH = fileURLToPath(
-  new URL('../../records/customer_zero.json', import.meta.url),
-);
+const RECORDS_DIR = fileURLToPath(new URL('../../records/', import.meta.url));
+
+/** basename() strips any directory component — resolution never leaves records/. */
+function fixturePath(fixtureFile: string): string {
+  return `${RECORDS_DIR}${basename(fixtureFile)}`;
+}
 
 export interface PersonFixture {
   name: string;
@@ -97,7 +101,13 @@ export interface CustomerZeroFixture {
   };
 }
 
-export async function loadFixture(): Promise<CustomerZeroFixture> {
-  const raw = await readFile(FIXTURE_PATH, 'utf-8');
+export async function loadFixture(fixtureFile: string = 'customer_zero.json'): Promise<CustomerZeroFixture> {
+  const path = fixturePath(fixtureFile);
+  let raw: string;
+  try {
+    raw = await readFile(path, 'utf-8');
+  } catch (err) {
+    throw new Error(`Cannot read fixture "${fixtureFile}" (resolved to ${path}): ${(err as Error).message}`);
+  }
   return JSON.parse(raw) as CustomerZeroFixture;
 }

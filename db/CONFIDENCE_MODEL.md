@@ -158,6 +158,45 @@ values to fit.** These figures are cited in `BUILD_STATUS.md`, printed on two re
 records, and quoted in the Skillsoft discovery agenda as the confidence arithmetic. They
 are load-bearing outside the codebase.
 
+**Accepted limitation: `value_runs.payload_hash` has no Python reference to diff against.**
+`value_runs` did not exist before 0003 — `records/simulate_spine.py` never computed a hash
+for it, and the client zero milestone retires that file. Building a Python implementation
+just to satisfy a parity check would be manufacturing a comparison that serves no one; the
+retirement was the decision, and the honest position after it is that the hash is
+**internally reproducible** — same input, same output, same language — which is what
+matters once TypeScript is the only implementation left. This is recorded as an accepted
+limitation, not an open item.
+
+---
+
+## Payload hashing — numbers as strings
+
+`db/CONFIDENCE_MODEL.md`'s hash (and every heartbeat `content_hash`, via the same
+`server/spine/hash.ts` utility) is computed over the payload with **every number converted
+to a string first**.
+
+**The problem this avoids.** `30` and `30.0` are the identical JSON number — the "one is an
+int, one is a float" distinction is a formatting choice, not a value difference. But
+JavaScript's `JSON.stringify(30)` produces `"30"` while Python's `json.dumps(30.0)` produces
+`"30.0"`: the same logical value, hashed from two languages, disagreeing in text and
+therefore in hash. That is a **latent, silent, cross-language bug** — the kind that
+surfaces in six months looking like data corruption, because nothing about a hash mismatch
+says "formatting," it just says "different."
+
+**The fix is not to reconcile the formats.** A rule that tries to make JavaScript print
+numbers exactly the way Python would is a rule you have to keep maintaining against every
+new field, and it is barely testable — you are asserting behavior of a language runtime,
+not of this codebase. Converting every number to a string before hashing removes the
+disagreement instead of chasing it: `"30.0"` is `"30.0"` in both languages, because by the
+time either language sees it, it is no longer a number with a formatting opinion — it is
+already a string.
+
+**The cost, stated plainly.** The hash then covers a canonical *representation* of the
+payload, not the numeric values themselves bit-for-bit. That is the correct trade for what
+this hash is for: it attests that a given document came from a given set of inputs, not
+that a downstream reader can recover an exact IEEE-754 value from it. A stable
+representation serves that guarantee exactly.
+
 ---
 
 ## What must never happen

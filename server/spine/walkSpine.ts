@@ -45,6 +45,8 @@ export interface WalkOptions {
    * this cannot become a way to abort a real walk in production.
    */
   failAt?: ValueStage;
+  /** records/*.json filename to walk. Defaults to customer_zero.json. */
+  fixtureFile?: string;
 }
 
 function maybeFail(opts: WalkOptions | undefined, stage: ValueStage): void {
@@ -211,8 +213,8 @@ export interface WalkResult {
 }
 
 export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
-  const fixture = await loadFixture();
-  const seeded = await seedCustomerZero();
+  const fixture = await loadFixture(opts?.fixtureFile);
+  const seeded = await seedCustomerZero(opts?.fixtureFile);
 
   const rowsWritten = {
     evidence: 0,
@@ -661,8 +663,15 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       .select({ priorRunCount: sql<number>`count(*)::int` })
       .from(schema.valueRuns)
       .where(eq(schema.valueRuns.engagementId, seeded.engagement.id));
+    const runNumber = priorRunCount + 1;
 
-    const runPayload = {
+    // payloadHash covers everything the run asserts about itself, including
+    // its own identity and sequence — but not the hash field, which cannot
+    // hash itself. The stored payload then carries all three so the
+    // document is self-describing without joining back to its own row.
+    const runPayloadBase = {
+      valueRunId,
+      runNumber,
       engagement: fixture.engagement.name,
       capability: fixture.capability.name,
       businessMetric: bm.name,
@@ -675,13 +684,14 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       disclosure,
       confidence,
     };
-    const payloadHash = sha256Hex(runPayload);
+    const payloadHash = sha256Hex(runPayloadBase);
+    const runPayload = { ...runPayloadBase, payloadHash };
 
     await db.insert(schema.valueRuns).values({
       id: valueRunId,
       tenantId: seeded.tenant.id,
       engagementId: seeded.engagement.id,
-      runNumber: priorRunCount + 1,
+      runNumber,
       terminalValueStage: 'return',
       confidenceScore: String(confidence.score),
       confidenceBand: confidence.band,
@@ -712,24 +722,62 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
 const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 /**
+ * Usage: tsx walkSpine.ts [fixture.json] [--fail-at=<stage>]
+ *
+ * Every argument must be recognised. A fixture path that was typed wrong, or
+ * a --fail-at value that doesn't match a real stage, must abort the process
+ * rather than be silently dropped — a walk that runs to completion because
+ * its input was quietly ignored is a passing test against the wrong thing,
+ * which is worse than a crash.
+ *
  * --fail-at=<stage>: development/test only. walkSpine() itself refuses to
  * honour opts.failAt when NODE_ENV === 'production', so this flag cannot
  * abort a real walk in production even if passed by mistake.
  */
-function parseFailAt(): ValueStage | undefined {
-  const arg = process.argv.find((a) => a.startsWith('--fail-at='));
-  if (!arg) return undefined;
-  if (process.env.NODE_ENV === 'production') {
-    console.error('--fail-at is refused when NODE_ENV=production; ignoring.');
-    return undefined;
+function parseArgs(argv: string[]): { fixtureFile?: string; failAt?: ValueStage } {
+  const FAIL_AT_PREFIX = '--fail-at=';
+  let fixtureFile: string | undefined;
+  let failAt: ValueStage | undefined;
+
+  for (const arg of argv) {
+    if (arg.startsWith(FAIL_AT_PREFIX)) {
+      const value = arg.slice(FAIL_AT_PREFIX.length);
+      if (!(schema.valueStage.enumValues as readonly string[]).includes(value)) {
+        console.error(
+          `Unrecognised --fail-at value "${value}". Must be one of: ${schema.valueStage.enumValues.join(', ')}.`,
+        );
+        process.exit(1);
+      }
+      if (failAt !== undefined) {
+        console.error('--fail-at passed more than once.');
+        process.exit(1);
+      }
+      failAt = value as ValueStage;
+    } else if (arg.startsWith('--')) {
+      console.error(`Unrecognised argument "${arg}". Only a fixture filename and --fail-at=<stage> are accepted.`);
+      process.exit(1);
+    } else {
+      if (fixtureFile !== undefined) {
+        console.error(`Only one fixture path is accepted; got both "${fixtureFile}" and "${arg}".`);
+        process.exit(1);
+      }
+      fixtureFile = arg;
+    }
   }
-  return arg.slice('--fail-at='.length) as ValueStage;
+
+  if (failAt !== undefined && process.env.NODE_ENV === 'production') {
+    console.error('--fail-at is refused when NODE_ENV=production; ignoring.');
+    failAt = undefined;
+  }
+
+  return { fixtureFile, failAt };
 }
 
 if (isMain) {
-  walkSpine({ failAt: parseFailAt() })
+  const { fixtureFile, failAt } = parseArgs(process.argv.slice(2));
+  walkSpine({ fixtureFile, failAt })
     .then((result) => {
-      console.log('Value spine walk complete — Customer Zero.\n');
+      console.log(`Value spine walk complete — ${fixtureFile ?? 'customer_zero.json'}.\n`);
       console.log(`value_run           ${result.valueRunId}`);
       console.log(`value_outcome       ${result.valueOutcomeId}`);
       console.log(`record_document     ${result.recordDocumentId}`);

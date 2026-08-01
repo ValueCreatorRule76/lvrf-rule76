@@ -8,7 +8,9 @@ import * as schema from '../../db/schema.js';
 import { loadFixture, type PersonFixture } from '../spine/fixture.js';
 
 /**
- * Idempotent seed for the Customer Zero fixture (records/customer_zero.json).
+ * Idempotent seed from a records/*.json fixture — defaults to
+ * records/customer_zero.json, but accepts any fixture filename (e.g.
+ * "customer_b.json") to seed that engagement's reference data instead.
  * Safe to re-run: every entity is looked up by the natural key already in
  * db/schema.ts before it is written.
  *
@@ -150,8 +152,8 @@ export interface SeedResult {
   engagement: typeof schema.engagements.$inferSelect;
 }
 
-export async function seedCustomerZero(): Promise<SeedResult> {
-  const fixture = await loadFixture();
+export async function seedCustomerZero(fixtureFile?: string): Promise<SeedResult> {
+  const fixture = await loadFixture(fixtureFile);
 
   // Brad Piver is the first real person in a fresh database — there is no
   // existing actor to attribute his own creation to. Resolve first (a read
