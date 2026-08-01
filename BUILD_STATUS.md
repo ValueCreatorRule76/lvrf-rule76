@@ -238,6 +238,72 @@ None may be removed without an amendment.
 3. **Disclosure requires a locked run.** `record_documents.disclosure = 'customer_shared'`
    requires the referenced `value_run` to be **locked**. Spans tables; cannot be a CHECK.
 
+## 0002 applied — 1 August
+
+Migration `0002_sloppy_cerebro.sql`. Backup taken first. Verified against the live database:
+
+- `value_runs` — 25 columns, 7 FKs including two self-referencing
+- `evidence` — 6 AMENDMENT-005 columns, 3 new CHECKs
+- `record_documents.value_run_id` present
+- 18 seeded heartbeats intact
+- **38 distinct triggers**, up from 36
+
+### Finding — a locked run is permanent
+
+Discovered by testing rather than design. `lvrf_locked_run_immutable` permits exactly one
+column to change after a lock — `superseded_by_id`. `deleted_at` is not on that list, so
+**a locked run cannot be soft-deleted.** It cannot be hard-deleted either; it is a governed
+table.
+
+Verified:
+
+| Attempt on a locked run | Result |
+|---|---|
+| `UPDATE confidence_score` | **REFUSED** — trigger raises |
+| `UPDATE superseded_by_id` | `UPDATE 1` — the one permitted change |
+| `UPDATE deleted_at, status='retired'` | **REFUSED** |
+| Insert a new run with `supersedes_run_id` | `INSERT 0 1` — the correct exit |
+
+**This is kept deliberately.** A locked run is the version the institution said it would
+defend. Permitting retirement means a value case can be quietly withdrawn after the fact,
+and the confirmation gap depends on refuted claims surviving — a practice that can delete
+its bad runs is not measuring itself, it is curating. Same reasoning as the phantom audit
+rows in `DEFECT-001`: history that can be tidied proves nothing.
+
+**Consequence:** unlocked runs are retirable; **locked runs are forever.** Locking is
+therefore a consequential act, which it should be. The exit is to supersede, which records
+that the run was replaced and by what.
+
+Not filed as an amendment — it is a consequence of a ratified principle rather than a new
+one.
+
+### Rollback note
+
+Two statements in a single `psql -c` share one implicit transaction. When the second
+raised, the first rolled back with it. Useful confirmation that a failed trigger leaves no
+partial state — and a reminder to run destructive tests as separate invocations.
+
+---
+
+## Rules enforced in the API, not the schema
+
+Three, each spanning tables and therefore beyond a CHECK. **None may be removed without an
+amendment.**
+
+| # | Rule | Where |
+|---|---|---|
+| 1 | Actor context — every mutating request sets `lvrf.actor_person_id` inside the transaction, or audit rows record a null actor | `server/middleware/actorContext.ts` |
+| 2 | Separation of duties — a `value_verifier` may not be the `metric_owner` for the same metric; for a customer's metric the verifier must be institution-scoped | verification route |
+| 3 | **`record_documents.disclosure = 'customer_shared'` requires the referenced `value_run` to be locked** | document route |
+
+Rule 3 is the connection between locking and the disclosure gate: an unlocked run is
+exploratory, and exploratory work does not go to a customer.
+
+**Known weakness on rule 1.** The actor is currently read from an `X-Actor-Person-Id`
+header, which any caller can set. An audit log that can be forged is worse than none — it
+manufactures confidence. Must be fail-closed outside development before the first mutation
+route ships.
+
 ---
 
 ## Not built — next, in priority order
