@@ -1,5 +1,6 @@
 import '../env.js';
 import { randomUUID } from 'node:crypto';
+import { basename, extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { PoolClient } from 'pg';
@@ -10,6 +11,7 @@ import { loadFixture } from './fixture.js';
 import { sha256Hex } from './hash.js';
 import { seedCustomerZero, type SeedResult } from '../seed/seedCustomerZero.js';
 import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceResult } from './confidenceModel.js';
+import { computeDelta, type DeltaResult } from './deltaEngine.js';
 
 /**
  * Walks all seven value-spine stages against the database, in TypeScript
@@ -192,6 +194,7 @@ export interface VerifyGuardResult {
 export interface WalkResult {
   seeded: SeedResult;
   valueRunId: string;
+  sourceFixture: string;
   valueOutcomeId: string;
   recordDocumentId: string;
   stewardshipReturnId: string;
@@ -199,6 +202,7 @@ export interface WalkResult {
   realization: string;
   disclosure: string;
   confidence: ConfidenceResult;
+  delta: DeltaResult;
   verifyGuard: VerifyGuardResult | null;
   rowsWritten: {
     evidence: number;
@@ -213,8 +217,14 @@ export interface WalkResult {
 }
 
 export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
-  const fixture = await loadFixture(opts?.fixtureFile);
-  const seeded = await seedCustomerZero(opts?.fixtureFile);
+  const fixtureFile = opts?.fixtureFile ?? 'customer_zero.json';
+  // Stem only, no extension — e.g. 'customer_b'. Stamped on the run so a
+  // mismatch between a run and the fixture it's rendered against can be
+  // caught, the way render_record.py's guard used to before the run's
+  // provenance stopped being recorded anywhere. db/DELTA_AND_PROVENANCE.md.
+  const sourceFixture = basename(fixtureFile, extname(fixtureFile));
+  const fixture = await loadFixture(fixtureFile);
+  const seeded = await seedCustomerZero(fixtureFile);
 
   const rowsWritten = {
     evidence: 0,
@@ -659,6 +669,19 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       assertedConfidence: vo.confidence,
     });
 
+    // db/DELTA_AND_PROVENANCE.md Part 1 — the confirmation gap's per-outcome
+    // half. Pure computation over already-known fixture values; no new write.
+    const delta: DeltaResult = computeDelta({
+      baselineValue: vo.baseline_value,
+      targetValue: vo.target_value,
+      actualValue: vo.actual_value,
+      claimedCurrencyImpact: vo.claimed_currency_impact,
+      realizedCurrencyImpact: vo.realized_currency_impact,
+      promisedMeasuredAt: vo.promised_measured_at,
+      actualMeasuredAt: vo.actual_measured_at,
+      direction: bm.direction,
+    });
+
     const [{ priorRunCount }] = await db
       .select({ priorRunCount: sql<number>`count(*)::int` })
       .from(schema.valueRuns)
@@ -672,6 +695,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     const runPayloadBase = {
       valueRunId,
       runNumber,
+      sourceFixture,
       engagement: fixture.engagement.name,
       capability: fixture.capability.name,
       businessMetric: bm.name,
@@ -683,6 +707,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       realization,
       disclosure,
       confidence,
+      delta,
     };
     const payloadHash = sha256Hex(runPayloadBase);
     const runPayload = { ...runPayloadBase, payloadHash };
@@ -695,6 +720,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       terminalValueStage: 'return',
       confidenceScore: String(confidence.score),
       confidenceBand: confidence.band,
+      sourceFixture,
       payloadHash,
       payload: runPayload,
       walkedByPersonId: seeded.persons.valueEngineer.id,
@@ -706,6 +732,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     return {
       seeded,
       valueRunId,
+      sourceFixture,
       valueOutcomeId: valueOutcomeRow.id,
       recordDocumentId: recordDocument.id,
       stewardshipReturnId: stewardshipReturn.id,
@@ -713,6 +740,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       realization,
       disclosure,
       confidence,
+      delta,
       verifyGuard,
       rowsWritten,
     };

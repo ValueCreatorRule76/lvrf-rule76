@@ -540,6 +540,19 @@ export const valueRuns = pgTable('value_runs', {
   /** Relock: this run supersedes an earlier locked one. */
   supersedesRunId: uuid('supersedes_run_id'),
 
+  /**
+   * The fixture file this run was walked from, e.g. 'customer_b'.
+   *
+   * Restores a guard lost in the move to Postgres: render_record.py refused
+   * to render when a run came from a different fixture than the one
+   * requested. Nothing recorded which fixture produced a row, so the
+   * refusal became inoperative and a document could silently carry another
+   * engagement's numbers.
+   *
+   * Nullable — runs predating this column have none, which is accurate.
+   */
+  sourceFixture: text('source_fixture'),
+
   /** SHA-256 over payload. Makes the snapshot tamper-evident. */
   payloadHash: text('payload_hash').notNull(),
   payload: jsonb('payload').notNull(),

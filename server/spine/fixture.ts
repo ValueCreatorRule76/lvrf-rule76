@@ -83,6 +83,7 @@ export interface CustomerZeroFixture {
     impact_basis: string;
     confidence: 'low' | 'medium' | 'high';
     impact_is_inference: boolean;
+    promised_measured_at: string | null;
   };
   evidence: EvidenceFixture[];
   assessment: {
