@@ -115,7 +115,59 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------
--- 5. Append-only privileges
+-- 5. 0002 — AMENDMENT-005 and value_runs governance triggers
+-- ------------------------------------------------------------------
+-- Neither can be a CHECK — both span tables or need OLD/NEW.
+
+-- 5a. AI-sourced evidence may not support a measured actual.
+-- AMD-005 Article I, enforced.
+
+CREATE OR REPLACE FUNCTION lvrf_block_ai_actual() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE ai boolean;
+BEGIN
+  IF NEW.supports <> 'actual' THEN RETURN NEW; END IF;
+  SELECT e.ai_sourced INTO ai FROM evidence e WHERE e.id = NEW.evidence_id;
+  IF ai THEN
+    RAISE EXCEPTION
+      'LVRF: AI-sourced evidence may not support a measured actual. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcome_evidence_no_ai_actual ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_no_ai_actual
+  BEFORE INSERT OR UPDATE ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_ai_actual();
+
+-- 5b. A locked run is immutable.
+-- Locking has no meaning if the row can still be edited. Only
+-- superseded_by_id may change after a lock — that is how a relock records
+-- that this run was replaced.
+
+CREATE OR REPLACE FUNCTION lvrf_locked_run_immutable() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.locked_at IS NULL THEN RETURN NEW; END IF;
+  IF to_jsonb(NEW) - 'superseded_by_id' - 'updated_at'
+     IS DISTINCT FROM to_jsonb(OLD) - 'superseded_by_id' - 'updated_at' THEN
+    RAISE EXCEPTION
+      'LVRF: value_run % is locked and immutable. Relock by creating a new run '
+      'that supersedes it — do not edit history.', OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_runs_locked_immutable ON value_runs;
+CREATE TRIGGER value_runs_locked_immutable
+  BEFORE UPDATE ON value_runs
+  FOR EACH ROW EXECUTE FUNCTION lvrf_locked_run_immutable();
+
+-- ------------------------------------------------------------------
+-- 6. Append-only privileges
 -- ------------------------------------------------------------------
 -- The app can write history and read it. It cannot rewrite it.
 -- This is FA-001's "AI may never rewrite history" made unbreakable —
@@ -134,10 +186,12 @@ COMMIT;
 -- ------------------------------------------------------------------
 -- Verification
 -- ------------------------------------------------------------------
--- 12 governed tables, 36 distinct triggers (_audit, _touch, _no_delete).
--- Expect 48 rows here: information_schema.triggers emits one row per event
--- manipulation, and _audit now fires on both INSERT and UPDATE, so each
--- table contributes 4 rows (2 + 1 + 1), not 3.
+-- 12 governed tables × 3 (_audit, _touch, _no_delete) = 36, plus the 0002
+-- pair (value_outcome_evidence_no_ai_actual, value_runs_locked_immutable)
+-- = 38 distinct triggers.
+-- Expect 51 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 48;
+-- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE (+1).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

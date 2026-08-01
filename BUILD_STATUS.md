@@ -216,6 +216,30 @@ columns, one rename, two CHECK changes.
 
 ---
 
+## 0002 — applied 1 August. AMENDMENT-005 evidence columns, value_runs, disclosure link
+
+Migration `0002_sloppy_cerebro.sql` generated from the patched schema and applied to the
+local `lvrf` database (`pg_dump` to `~/Backups/lvrf/pre-0002.dump` first). Six governed-research
+columns and three CHECKs on `evidence`; `value_runs` (25 columns, 7 FKs, two self-referencing);
+`record_documents.value_run_id`. No drops.
+
+Both 0002 triggers are installed in `db/hardening.sql` §5 and applied live — trigger count
+36 → **38**. The locked-run trigger is verified to bite: an UPDATE against a locked run
+raises; `superseded_by_id` remains writable, which is how a relock records replacement.
+
+### Rules the API must carry — now three
+
+None may be removed without an amendment.
+
+1. **Separation of duties.** A `value_verifier` must not also be the `metric_owner` for the
+   same metric, and for a customer's metric must be institution-scoped. (0001, above.)
+2. **The actor-context transaction.** Every mutation route sets
+   `lvrf.actor_person_id` per transaction so the audit trigger can attribute the write.
+3. **Disclosure requires a locked run.** `record_documents.disclosure = 'customer_shared'`
+   requires the referenced `value_run` to be **locked**. Spans tables; cannot be a CHECK.
+
+---
+
 ## Not built — next, in priority order
 
 1. **Wire the confirmation gap to the two new columns** once 0001 is applied. `AMENDMENT-001` Article II assigned LVRF ownership of
