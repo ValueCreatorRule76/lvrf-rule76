@@ -90,6 +90,17 @@ export const personRole = pgEnum('person_role', [
   'rule76_steward', 'administrator',
 ]);
 
+/** Seven constitutional categories. HEARTBEAT-REGISTER §6. */
+export const heartbeatCategory = pgEnum('heartbeat_category', [
+  'operational', 'governance', 'integrity', 'financial',
+  'learning', 'security', 'constitutional',
+]);
+
+/** HEARTBEAT-REGISTER §8 / COMPASS-HEARTBEAT-STATUS §8. */
+export const healthState = pgEnum('health_state', [
+  'healthy', 'watch', 'warning', 'critical', 'constitutional_failure',
+]);
+
 export const auditOperation = pgEnum('audit_operation', ['insert', 'update', 'soft_delete']);
 
 /* ================================================================== */
@@ -314,8 +325,34 @@ export const evidence = pgTable('evidence', {
   assessmentId: uuid('assessment_id').references(() => assessments.id, { onDelete: 'restrict' }),
   capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
+
+  /* ── AMENDMENT-005 · governed research ─────────────────────────── */
+  /** Located by a model rather than a person. */
+  aiSourced: boolean('ai_sourced').notNull().default(false),
+  /** The query that produced it. Required when aiSourced. */
+  researchQuery: text('research_query'),
+  /** Which system, and when. Required when aiSourced. */
+  researchTool: text('research_tool'),
+  /**
+   * A named human OPENED the cited source and confirmed it says what the
+   * summary claims. Not that the URL resolves — that the content matches.
+   * This is the only control that catches a fabricated citation.
+   */
+  citationResolved: boolean('citation_resolved').notNull().default(false),
+  citationResolvedByPersonId: uuid('citation_resolved_by_person_id')
+    .references(() => persons.id, { onDelete: 'restrict' }),
+  citationResolvedAt: timestamp('citation_resolved_at', { withTimezone: true }),
   ...governance(),
 }, (t) => [
+  check('evidence_ai_requires_query',
+    sql`${t.aiSourced} = false
+        OR (${t.researchQuery} IS NOT NULL AND ${t.researchTool} IS NOT NULL)`),
+  check('evidence_resolution_requires_human',
+    sql`${t.citationResolved} = false
+        OR (${t.citationResolvedByPersonId} IS NOT NULL AND ${t.citationResolvedAt} IS NOT NULL)`),
+  /** AI-sourced evidence cannot self-certify. AMD-005 Article III. */
+  check('evidence_ai_verify_requires_resolution',
+    sql`${t.sourceVerified} = false OR ${t.aiSourced} = false OR ${t.citationResolved} = true`),
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'evidence_superseded_by_fk' }).onDelete('restrict'),
   index('evidence_institution_idx').on(t.institutionId),
@@ -458,6 +495,75 @@ export const valueOutcomeEvidence = pgTable('value_outcome_evidence', {
 }, (t) => [primaryKey({ columns: [t.valueOutcomeId, t.evidenceId] })]);
 
 /* ================================================================== */
+/* Value Run — the immutable snapshot                                 */
+/* ================================================================== */
+
+/**
+ * A walk of the value spine, captured whole.
+ *
+ * Live objects (`value_outcomes`, `evidence`) mutate. A run does not — it is a
+ * payload plus a hash, fixed at the moment it was walked.
+ *
+ * LOCKING declares a run authoritative: the one the institution would defend.
+ * Unlocked runs are exploratory. RELOCKING is not an edit — it is a new run
+ * that supersedes the prior one via `supersedesRunId`, so the superseded
+ * version survives. History accumulates; it is never rewritten.
+ *
+ * `record_documents.value_run_id` ties a document to the run it rendered from,
+ * and a document may not be `customer_shared` unless that run is locked. That
+ * is the connection between locking and the disclosure gate.
+ *
+ * Five capabilities depend on this object: Lock/Relock, Value Runs, Executive
+ * Outputs, Roadmap, Close Plans.
+ */
+export const valueRuns = pgTable('value_runs', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  engagementId: uuid('engagement_id').notNull().references(() => engagements.id, { onDelete: 'restrict' }),
+  /** Sequential within an engagement. */
+  runNumber: integer('run_number').notNull(),
+
+  terminalValueStage: valueStage('terminal_value_stage').notNull(),
+
+  /** Snapshotted at walk time. Zero is a legitimate confidence score. */
+  confidenceScore: numeric('confidence_score', { precision: 5, scale: 1 }).notNull(),
+  confidenceBand: confidenceLevel('confidence_band').notNull(),
+  institutionalHealth: numeric('institutional_health', { precision: 5, scale: 1 }),
+  healthBand: healthState('health_band'),
+  /** Share of dimension weight actually measured. Published with the score. */
+  healthCoveragePct: integer('health_coverage_pct'),
+
+  /** Locking declares the run authoritative. Immutability is trigger-enforced. */
+  lockedAt: timestamp('locked_at', { withTimezone: true }),
+  lockedByPersonId: uuid('locked_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  lockReason: text('lock_reason'),
+  /** Relock: this run supersedes an earlier locked one. */
+  supersedesRunId: uuid('supersedes_run_id'),
+
+  /** SHA-256 over payload. Makes the snapshot tamper-evident. */
+  payloadHash: text('payload_hash').notNull(),
+  payload: jsonb('payload').notNull(),
+
+  walkedByPersonId: uuid('walked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  walkedAt: timestamp('walked_at', { withTimezone: true }).notNull().defaultNow(),
+  ...governance(),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'value_runs_superseded_by_fk' }).onDelete('restrict'),
+  foreignKey({ columns: [t.supersedesRunId], foreignColumns: [t.id],
+    name: 'value_runs_supersedes_fk' }).onDelete('restrict'),
+  unique('value_runs_engagement_number_key').on(t.engagementId, t.runNumber),
+  /** A lock requires a named human and a stated reason. */
+  check('value_runs_lock_is_complete',
+    sql`${t.lockedAt} IS NULL
+        OR (${t.lockedByPersonId} IS NOT NULL AND ${t.lockReason} IS NOT NULL)`),
+  check('value_runs_confidence_range',
+    sql`${t.confidenceScore} >= 0 AND ${t.confidenceScore} <= 100`),
+  index('value_runs_engagement_idx').on(t.engagementId),
+  index('value_runs_locked_idx').on(t.lockedAt),
+]);
+
+/* ================================================================== */
 /* Record Document — the rendered deliverable                          */
 /* ================================================================== */
 
@@ -475,6 +581,12 @@ export const recordDocuments = pgTable('record_documents', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
   engagementId: uuid('engagement_id').notNull().references(() => engagements.id, { onDelete: 'restrict' }),
   valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  /**
+   * The run this document rendered from. Nullable only for documents produced
+   * before value_runs existed. The API must refuse `customer_shared` unless the
+   * referenced run is locked — that rule spans tables and cannot be a CHECK.
+   */
+  valueRunId: uuid('value_run_id').references(() => valueRuns.id, { onDelete: 'restrict' }),
 
   documentVersion: integer('document_version').notNull().default(1),
   disclosure: documentDisclosure('disclosure').notNull().default('draft'),
@@ -527,17 +639,6 @@ export const stewardshipReturns = pgTable('stewardship_returns', {
 /* ================================================================== */
 /* Heartbeat Registry — R76-HB-001                                    */
 /* ================================================================== */
-
-/** Seven constitutional categories. HEARTBEAT-REGISTER §6. */
-export const heartbeatCategory = pgEnum('heartbeat_category', [
-  'operational', 'governance', 'integrity', 'financial',
-  'learning', 'security', 'constitutional',
-]);
-
-/** HEARTBEAT-REGISTER §8 / COMPASS-HEARTBEAT-STATUS §8. */
-export const healthState = pgEnum('health_state', [
-  'healthy', 'watch', 'warning', 'critical', 'constitutional_failure',
-]);
 
 /**
  * The Heartbeat Register, as a table.

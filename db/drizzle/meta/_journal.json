@@ -15,6 +15,13 @@
       "when": 1785457529080,
       "tag": "0001_huge_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785594133409,
+      "tag": "0002_sloppy_cerebro",
+      "breakpoints": true
     }
   ]
 }
