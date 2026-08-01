@@ -283,6 +283,23 @@ Two statements in a single `psql -c` share one implicit transaction. When the se
 raised, the first rolled back with it. Useful confirmation that a failed trigger leaves no
 partial state — and a reminder to run destructive tests as separate invocations.
 
+### Note — one record_document predates value_runs
+
+One row in `record_documents`, rendered 29 July, `document_version = 1`,
+`disclosure = internal`, `value_run_id NULL`. It predates `value_runs` and the
+`record_documents` payload shape changed during 0003 prep, so its `content_hash`
+can no longer be reproduced from current code.
+
+**Not a defect.** The document never left the institution — `internal`, never
+`customer_shared` — so no external party holds a hash that fails to resolve. The row is
+accurate about what it was.
+
+**Not rewritten.** `record_documents` is governed and versioned on
+`(value_outcome_id, document_version)`. The next render produces version 2 with a
+reproducible hash; version 1 stands as the record of what was rendered before the shape
+changed. Same principle as the phantom audit rows in `DEFECT-001` — history accumulates
+rather than being tidied.
+
 ---
 
 ## Rules enforced in the API, not the schema
