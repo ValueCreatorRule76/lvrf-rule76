@@ -13,6 +13,8 @@ import { sha256Hex } from './hash.js';
 import { seedCustomerZero, type SeedResult } from '../seed/seedCustomerZero.js';
 import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceResult } from './confidenceModel.js';
 import { computeDelta, type DeltaResult } from './deltaEngine.js';
+import { computeHealth, type HealthResult } from './healthModel.js';
+import { buildHeartbeatPlan, createPlanCursor } from './heartbeatLedger.js';
 
 /**
  * Walks all seven value-spine stages against the database, in TypeScript
@@ -64,6 +66,8 @@ interface HeartbeatRegisterRow {
   category: string;
   producer: string;
   failureSeverity: number;
+  /** db/HEALTH_MODEL.md's within-dimension weight. Not selecting this makes the health model wrong, not absent. */
+  healthWeight: number;
 }
 
 async function loadHeartbeatRegister(db: Db): Promise<Map<string, HeartbeatRegisterRow>> {
@@ -74,6 +78,7 @@ async function loadHeartbeatRegister(db: Db): Promise<Map<string, HeartbeatRegis
       category: schema.heartbeats.category,
       producer: schema.heartbeats.producer,
       failureSeverity: schema.heartbeats.failureSeverity,
+      healthWeight: schema.heartbeats.healthWeight,
     })
     .from(schema.heartbeats)
     .where(inArray(schema.heartbeats.id, [...REQUIRED_HEARTBEATS]));
@@ -103,6 +108,9 @@ export interface EmittedHeartbeat {
   actorPersonId: string;
   healthState: HealthState;
   contentHash: string;
+  /** db/HEALTH_MODEL.md — dimension and within-dimension weight, from the register. */
+  category: string;
+  healthWeight: number;
 }
 
 interface EmitContext {
@@ -181,6 +189,8 @@ async function emit(
     actorPersonId: opts.actorPersonId,
     healthState,
     contentHash,
+    category: reg.category,
+    healthWeight: reg.healthWeight,
   };
   ctx.events.push(event);
   return contentHash;
@@ -208,6 +218,7 @@ export interface WalkResult {
   disclosure: string;
   confidence: ConfidenceResult;
   delta: DeltaResult;
+  health: HealthResult;
   verifyGuard: VerifyGuardResult | null;
   rowsWritten: {
     evidence: number;
@@ -262,6 +273,45 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     const bm = fixture.business_metric;
     const valueOutcomeId = randomUUID();
 
+    // Hoisted from STAGE 6: this is pure (fixture data plus confidenceModel's
+    // shared evidenceCredit gate — no DB reads), so it's knowable before the
+    // walk begins. STAGE 6 still performs the actual conditional UPDATE and
+    // savepoint verification below; only the prediction of what it will find
+    // moved earlier, so the full heartbeat plan can be built once, up front,
+    // and drive every emit() call rather than being reconstructed by a second
+    // implementation for the health model.
+    //
+    // ANY, not EVERY: db/CONFIDENCE_MODEL.md's verification-gate section. The
+    // gate asks whether the source was confirmed by an authority over it, not
+    // how strong that confirmation is — one item clearing (independently
+    // verified, or attested by a named, institution-scoped, non-synthetic
+    // authority) is enough. Requiring every item would mean a weak
+    // corroborating source (e.g. an unverified control-room observation)
+    // downgrades an otherwise-cleared record, which teaches value engineers to
+    // omit corroborating sources. Confidence separately grades on MAX credit;
+    // the record still discloses ALL evidence, verified or not.
+    const actualEvidence = fixture.evidence.filter((e) => e.supports === 'actual');
+    const anyActualEvidenceVerified =
+      actualEvidence.length > 0 &&
+      actualEvidence.some((e) => evidenceCredit(fixtureEvidenceToInput(fixture, e)).credit > 0);
+    const verifierSynthetic = fixture.persons.verifier.synthetic;
+    const canVerify = anyActualEvidenceVerified && !verifierSynthetic;
+    const realization = canVerify ? 'verified' : 'measured';
+    const disclosure = realization === 'verified' ? 'customer_shared' : 'internal';
+
+    // db/HEALTH_MODEL.md — one plan, consumed in order as the walk emits.
+    // server/spine/verifyConfidenceParity.ts calls buildHeartbeatPlan()
+    // directly with the same inputs to check the health acceptance values,
+    // rather than re-deriving this sequence by hand.
+    const heartbeatPlan = buildHeartbeatPlan({
+      baselineEvidenceCount: fixture.evidence.filter((e) => e.supports === 'baseline').length,
+      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      actualSimulated: vo.actual_simulated,
+      realization,
+      disclosure,
+    });
+    const planCursor = createPlanCursor(heartbeatPlan);
+
     // ---- STAGE 1: baseline --------------------------------------------------
     // establish the customer's current-state metric from their source system
     await emit(ctx, 'HB-0013', {
@@ -276,6 +326,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         baselineMeasuredAt: vo.baseline_measured_at,
         sourced: vo.baseline_sourced,
       },
+      healthState: planCursor.next('HB-0013'),
     });
 
     const baselineEvidenceIds: string[] = [];
@@ -302,6 +353,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         subjectId: row.id,
         actorPersonId: seeded.persons.valueEngineer.id,
         payload: { provenance: ev.provenance, sourceVerified: ev.source_verified },
+        healthState: planCursor.next('HB-0009'),
       });
     }
 
@@ -349,6 +401,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         roleFamily: fixture.capability.role_family,
         attachedToMetric: bm.name,
       },
+      healthState: planCursor.next('HB-0004'),
     });
 
     maybeFail(opts, 'attach');
@@ -384,6 +437,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         claimedCurrencyImpact: vo.claimed_currency_impact,
         impactBasisStated: Boolean(vo.impact_basis),
       },
+      healthState: planCursor.next('HB-0005'),
     });
 
     maybeFail(opts, 'model');
@@ -411,7 +465,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         committedBy: fixture.persons.sponsor.name,
         synthetic: fixture.persons.sponsor.synthetic,
       },
-      healthState: fixture.persons.sponsor.synthetic ? 'watch' : 'healthy',
+      healthState: planCursor.next('HB-0014'),
     });
 
     maybeFail(opts, 'commit');
@@ -453,9 +507,9 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         scaleMax: a.scale_max,
         aiAssisted: a.ai_assisted,
       },
+      healthState: planCursor.next('HB-0018'),
     });
 
-    const actualEvidence = fixture.evidence.filter((e) => e.supports === 'actual');
     for (const ev of actualEvidence) {
       const [row] = await db
         .insert(schema.evidence)
@@ -506,28 +560,18 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         actualMeasuredAt: vo.actual_measured_at,
         simulated: vo.actual_simulated,
       },
-      healthState: vo.actual_simulated ? 'watch' : 'healthy',
+      healthState: planCursor.next('HB-0015'),
     });
 
     maybeFail(opts, 'measure');
 
     // ---- STAGE 6: verify -----------------------------------------------------------
-    // a named human confirms sources and the delta — the disclosure gate
-    //
-    // ANY, not EVERY: db/CONFIDENCE_MODEL.md's verification-gate section. The
-    // gate asks whether the source was confirmed by an authority over it, not
-    // how strong that confirmation is — one item clearing (independently
-    // verified, or attested by a named, institution-scoped, non-synthetic
-    // authority) is enough. Requiring every item would mean a weak
-    // corroborating source (e.g. an unverified control-room observation)
-    // downgrades an otherwise-cleared record, which teaches value engineers to
-    // omit corroborating sources. Confidence separately grades on MAX credit;
-    // the record still discloses ALL evidence, verified or not.
-    const anyActualEvidenceVerified =
-      actualEvidence.length > 0 &&
-      actualEvidence.some((e) => evidenceCredit(fixtureEvidenceToInput(fixture, e)).credit > 0);
-    const verifierSynthetic = fixture.persons.verifier.synthetic;
-    const canVerify = anyActualEvidenceVerified && !verifierSynthetic;
+    // a named human confirms sources and the delta — the disclosure gate.
+    // anyActualEvidenceVerified / verifierSynthetic / canVerify / realization
+    // were computed above, before STAGE 1, since the gate is pure fixture
+    // arithmetic with no DB dependency. What happens here is the actual
+    // consequence of that decision: the conditional UPDATE and the savepoint
+    // proof that Postgres refuses the alternative.
     let verifyGuard: VerifyGuardResult | null = null;
 
     if (canVerify) {
@@ -569,8 +613,6 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       }
     }
 
-    const realization = canVerify ? 'verified' : 'measured';
-
     await db.update(schema.valueOutcomes).set({ valueStage: 'verify' }).where(eq(schema.valueOutcomes.id, valueOutcomeId));
     await db.update(schema.engagements).set({ valueStage: 'verify' }).where(eq(schema.engagements.id, seeded.engagement.id));
 
@@ -584,14 +626,13 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         anyActualEvidenceVerified,
         verifierSynthetic,
       },
-      healthState: realization === 'verified' ? 'healthy' : 'warning',
+      healthState: planCursor.next('HB-0016'),
     });
 
     maybeFail(opts, 'verify');
 
     // ---- STAGE 7: return -------------------------------------------------------------
     // the finding returns to the portfolio and to Rule76
-    const disclosure = realization === 'verified' ? 'customer_shared' : 'internal';
     const recordPayload = {
       engagement: fixture.engagement.name,
       capability: fixture.capability.name,
@@ -627,7 +668,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       subjectId: recordDocument.id,
       actorPersonId: seeded.persons.valueEngineer.id,
       payload: { contentHash, disclosure, documentVersion: 1 },
-      healthState: disclosure !== 'customer_shared' ? 'healthy' : 'watch',
+      healthState: planCursor.next('HB-0017'),
     });
 
     const sr = fixture.stewardship_return;
@@ -652,6 +693,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       subjectId: stewardshipReturn.id,
       actorPersonId: seeded.persons.valueEngineer.id,
       payload: { kind: sr.kind, summary: sr.summary, targetChapel: sr.target_chapel },
+      healthState: planCursor.next('HB-0004'),
     });
 
     await db.update(schema.valueOutcomes).set({ valueStage: 'return' }).where(eq(schema.valueOutcomes.id, valueOutcomeId));
@@ -687,6 +729,11 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       direction: bm.direction,
     });
 
+    // db/HEALTH_MODEL.md — COMPASS-HEARTBEAT-STATUS §7. Computed from the
+    // ledger this walk actually emitted, not asserted. A dimension with no
+    // events is UNMEASURED, not zero and not assumed compliant.
+    const health = computeHealth(ctx.events);
+
     const [{ priorRunCount }] = await db
       .select({ priorRunCount: sql<number>`count(*)::int` })
       .from(schema.valueRuns)
@@ -713,6 +760,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       disclosure,
       confidence,
       delta,
+      health,
     };
     const payloadHash = sha256Hex(runPayloadBase);
     const runPayload = { ...runPayloadBase, payloadHash };
@@ -725,6 +773,9 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       terminalValueStage: 'return',
       confidenceScore: String(confidence.score),
       confidenceBand: confidence.band,
+      institutionalHealth: health.composite != null ? String(health.composite) : null,
+      healthBand: health.band,
+      healthCoveragePct: health.coveragePct,
       sourceFixture,
       payloadHash,
       payload: runPayload,
@@ -749,6 +800,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       disclosure,
       confidence,
       delta,
+      health,
       verifyGuard,
       rowsWritten,
     };

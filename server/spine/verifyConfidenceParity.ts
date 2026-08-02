@@ -2,22 +2,37 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceLevel } from './confidenceModel.js';
 import { computeDelta } from './deltaEngine.js';
+import { computeHealth, type HealthEventInput, type HealthState } from './healthModel.js';
+import { buildHeartbeatPlan } from './heartbeatLedger.js';
 import type { CustomerZeroFixture } from './fixture.js';
 
 /**
- * Two acceptance tests against the retired Python: db/CONFIDENCE_MODEL.md's
- * confidence/gate arithmetic, and db/DELTA_AND_PROVENANCE.md's delta engine.
- * Reads both fixtures directly — no database, no seeding — because the
- * assertion is about the arithmetic and the gate, not about a full
- * customer_b walk (which nothing in this codebase wires up yet; only
- * customer_zero has a seed/walk path).
+ * Three acceptance tests against the retired Python: db/CONFIDENCE_MODEL.md's
+ * confidence/gate arithmetic, db/DELTA_AND_PROVENANCE.md's delta engine, and
+ * db/HEALTH_MODEL.md's institutional health composite. Reads both fixtures
+ * directly — no database, no seeding — because the assertion is about the
+ * arithmetic and the gate, not about a full customer_b walk (which nothing
+ * in this codebase wires up yet; only customer_zero has a seed/walk path).
+ *
+ * Health needs the actual ten-event heartbeat ledger a walk would emit, with
+ * each event's real health_state. That sequence is buildHeartbeatPlan() —
+ * server/spine/heartbeatLedger.ts — the same function server/spine/walkSpine.ts
+ * drives its emit() calls from, not a second copy of the rule reconstructed
+ * here by hand. REGISTER_SUBSET below is the one remaining, much narrower
+ * duplication: the `heartbeats` table's category/health_weight for the nine
+ * heartbeats a walk emits, confirmed against the live register rather than
+ * guessed, needed only because this script has no database connection.
  *
  * The realization and disclosure checks use the SAME evidenceCredit /
  * fixtureEvidenceToInput functions server/spine/walkSpine.ts calls — one
  * gate implementation, not a second one reproduced here. That duplication is
  * exactly what let the two implementations disagree the first time this
  * test was written, silently, on the highest-stakes rule in the system
- * (whether a record may be shown to a customer).
+ * (whether a record may be shown to a customer). The same principle is why
+ * buildHeartbeatPlan() moved out of this file: REGISTER_SUBSET/buildHeartbeat-
+ * Ledger() used to be a second, hand-synchronised implementation of the
+ * walk's health_state logic — exactly that shape of risk, caught before it
+ * caused a second silent divergence.
  *
  * If a number here does not match, one implementation is wrong. Do not
  * adjust the expected values to fit — both spec files are explicit that
@@ -36,6 +51,13 @@ interface DeltaExpectation {
   onTime: boolean;
 }
 
+interface HealthExpectation {
+  dimensions: Record<string, number | null>;
+  composite: number;
+  band: HealthState;
+  coveragePct: number;
+}
+
 interface Expectation {
   file: string;
   score: number;
@@ -43,6 +65,7 @@ interface Expectation {
   realization: 'measured' | 'verified';
   disclosure: 'internal' | 'customer_shared';
   delta: DeltaExpectation;
+  health: HealthExpectation;
 }
 
 // db/DELTA_AND_PROVENANCE.md's acceptance table. Both share values (1.2,
@@ -65,6 +88,24 @@ const EXPECTATIONS: Expectation[] = [
       punctualityDays: 0,
       onTime: true,
     },
+    // db/HEALTH_MODEL.md — taken from the reference implementation, not
+    // derived by hand. Constitutional reads 68.0 because HB-0016 fired at
+    // 'warning' when verification was refused: the composite is depressed
+    // because the framework declined to overclaim, which is correct.
+    health: {
+      dimensions: {
+        'Constitutional Compliance': 68.0,
+        'Governance Integrity': 92.9,
+        'Operational Health': 100.0,
+        'Data Integrity': 100.0,
+        Security: null,
+        'Financial / Value Realization': 92.1,
+        'Learning & Improvement': 100.0,
+      },
+      composite: 88.3,
+      band: 'watch',
+      coveragePct: 90,
+    },
   },
   {
     file: '../../records/customer_b.json',
@@ -82,8 +123,51 @@ const EXPECTATIONS: Expectation[] = [
       punctualityDays: 0,
       onTime: true,
     },
+    health: {
+      dimensions: {
+        'Constitutional Compliance': 100.0,
+        'Governance Integrity': 100.0,
+        'Operational Health': 100.0,
+        'Data Integrity': 92.1,
+        Security: null,
+        'Financial / Value Realization': 100.0,
+        'Learning & Improvement': 100.0,
+      },
+      composite: 99.1,
+      band: 'healthy',
+      coveragePct: 90,
+    },
   },
 ];
+
+/**
+ * Mirrors the `heartbeats` register for the nine heartbeats a walk emits —
+ * confirmed against the live table (category, health_weight), not guessed.
+ * Not read from the database: this script runs with no DB connection, and
+ * this is stable, ratified constitutional data (the register), not fixture
+ * data or walk logic — a materially lower-risk duplication than the
+ * sequence/health_state RULE, which is not duplicated here; see
+ * buildHeartbeatPlan() in server/spine/heartbeatLedger.ts for that.
+ */
+const REGISTER_SUBSET: Record<string, { category: string; healthWeight: number }> = {
+  'HB-0004': { category: 'operational', healthWeight: 10 },
+  'HB-0005': { category: 'governance', healthWeight: 10 },
+  'HB-0009': { category: 'integrity', healthWeight: 8 },
+  'HB-0013': { category: 'financial', healthWeight: 9 },
+  'HB-0014': { category: 'governance', healthWeight: 9 },
+  'HB-0015': { category: 'financial', healthWeight: 10 },
+  'HB-0016': { category: 'constitutional', healthWeight: 10 },
+  'HB-0017': { category: 'integrity', healthWeight: 9 },
+  'HB-0018': { category: 'learning', healthWeight: 7 },
+};
+
+/** Enriches buildHeartbeatPlan()'s (heartbeatId, healthState) steps with the register's (category, healthWeight). */
+function enrichWithRegister(steps: { heartbeatId: string; healthState: HealthState }[]): HealthEventInput[] {
+  return steps.map((step) => {
+    const reg = REGISTER_SUBSET[step.heartbeatId];
+    return { heartbeatId: step.heartbeatId, category: reg.category, healthWeight: reg.healthWeight, healthState: step.healthState };
+  });
+}
 
 /**
  * Mirrors server/spine/walkSpine.ts STAGE 6 exactly: ANY actual-supporting
@@ -152,11 +236,32 @@ async function main() {
     };
     const deltaOk = Object.values(deltaChecks).every(Boolean);
 
+    const heartbeatPlan = buildHeartbeatPlan({
+      baselineEvidenceCount: fixture.evidence.filter((e) => e.supports === 'baseline').length,
+      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      actualSimulated: vo.actual_simulated,
+      realization,
+      disclosure,
+    });
+    const health = computeHealth(enrichWithRegister(heartbeatPlan));
+    const he = expectation.health;
+    const dimensionChecks = health.dimensions.map((d) => ({
+      dimension: d.dimension,
+      ok: d.score === he.dimensions[d.dimension],
+    }));
+    const healthChecks = {
+      dimensions: dimensionChecks.every((d) => d.ok),
+      composite: health.composite === he.composite,
+      band: health.band === he.band,
+      coveragePct: health.coveragePct === he.coveragePct,
+    };
+    const healthOk = Object.values(healthChecks).every(Boolean);
+
     const scoreOk = confidence.score === expectation.score;
     const bandOk = confidence.band === expectation.band;
     const realizationOk = realization === expectation.realization;
     const disclosureOk = disclosure === expectation.disclosure;
-    const ok = scoreOk && bandOk && realizationOk && disclosureOk && deltaOk;
+    const ok = scoreOk && bandOk && realizationOk && disclosureOk && deltaOk && healthOk;
     if (!ok) failed = true;
 
     console.log(`${fixture.run.label}`);
@@ -176,6 +281,17 @@ async function main() {
       `${deltaChecks.gap && deltaChecks.shareOfClaim ? 'OK' : 'MISMATCH'}`);
     console.log(`  punctuality ${delta.punctuality_days} day(s), on_time ${delta.on_time}  ` +
       `${deltaChecks.punctualityDays && deltaChecks.onTime ? 'OK' : 'MISMATCH'}`);
+    console.log(
+      `  health      composite ${health.composite} [${health.band}], coverage ${health.coveragePct}%  ` +
+        `${healthChecks.composite && healthChecks.band && healthChecks.coveragePct ? 'OK' : 'MISMATCH'}`,
+    );
+    for (const d of dimensionChecks) {
+      const row = health.dimensions.find((r) => r.dimension === d.dimension)!;
+      console.log(
+        `    ${d.dimension.padEnd(30)} ${row.score == null ? 'UNMEASURED' : row.score.toFixed(1).padStart(5)}  ` +
+          `${d.ok ? 'OK' : 'MISMATCH'}`,
+      );
+    }
     if (!ok) {
       console.log('  factor breakdown:');
       for (const f of confidence.factors) {
@@ -198,6 +314,18 @@ async function main() {
             console.log(`    ${key.padEnd(16)} got ${JSON.stringify(actualByKey[key])} expected ${JSON.stringify(de[key])}`);
           }
         }
+      }
+      if (!healthOk) {
+        console.log('  health breakdown:');
+        for (const d of dimensionChecks) {
+          if (!d.ok) {
+            const row = health.dimensions.find((r) => r.dimension === d.dimension)!;
+            console.log(`    ${d.dimension.padEnd(30)} got ${JSON.stringify(row.score)} expected ${JSON.stringify(he.dimensions[d.dimension])}`);
+          }
+        }
+        if (!healthChecks.composite) console.log(`    composite got ${health.composite} expected ${he.composite}`);
+        if (!healthChecks.band) console.log(`    band got ${health.band} expected ${he.band}`);
+        if (!healthChecks.coveragePct) console.log(`    coveragePct got ${health.coveragePct} expected ${he.coveragePct}`);
       }
     }
     console.log();
