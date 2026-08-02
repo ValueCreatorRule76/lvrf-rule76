@@ -85,11 +85,23 @@ def outcome_gap(fx, run):
     delivered = (base - act) if decreasing else (act - base)
 
     # Currency and punctuality are computed in the spine run; carried, not
-    # recomputed, so there is one source of arithmetic.
-    dl = run.get("delta", {})
-    g["currency"] = dl.get("currency", {})
-    g["punctuality_days"] = dl.get("punctuality_days")
-    g["on_time"] = dl.get("on_time")
+    # recomputed, so there is one source of arithmetic. A measured actual
+    # (checked above) guarantees delta.available and its currency/
+    # punctuality_days/on_time keys — if they're missing, the delta shape has
+    # drifted from db/DELTA_AND_PROVENANCE.md, and defaulting to {}/None here
+    # instead of raising is exactly how the currency section vanished
+    # silently before: a missing key read as "nothing to report" rather than
+    # "something is wrong."
+    dl = run.get("delta")
+    if not isinstance(dl, dict) or any(k not in dl for k in ("currency", "punctuality_days", "on_time")):
+        raise ValueError(
+            f"{fx['institution']['name']}: run['delta'] is missing currency/punctuality_days/"
+            f"on_time even though the outcome has a measured actual. The delta shape has "
+            f"drifted from db/DELTA_AND_PROVENANCE.md — refusing to silently report an "
+            f"incomplete confirmation gap.")
+    g["currency"] = dl["currency"]
+    g["punctuality_days"] = dl["punctuality_days"]
+    g["on_time"] = dl["on_time"]
 
     g["measurable"] = True
     g["promised_improvement"] = round(promised, 4)

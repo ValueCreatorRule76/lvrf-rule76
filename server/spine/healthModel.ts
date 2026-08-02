@@ -64,15 +64,26 @@ export interface HealthDimensionRow {
   events?: number;
 }
 
+export interface UnmappedHealthEvent {
+  heartbeatId: string;
+  category: string;
+}
+
 export interface HealthResult {
   dimensions: HealthDimensionRow[];
   /** Null only if nothing was measured — no mappable events at all. */
   composite: number | null;
   band: HealthState | null;
-  /** Sum of measured dimension weights, published alongside the composite per AMD-003 III. */
-  coveragePct: number;
-  /** Heartbeat IDs whose category had no dimension — F1, should not occur today. */
-  unmappedEvents: string[];
+  /**
+   * Sum of measured dimension weights, published alongside the composite per
+   * AMD-003 III. Snake_case, matching records/render_record.py's
+   * `h['coverage_pct']` — checked against that file, not guessed.
+   */
+  coverage_pct: number;
+  /** Narrative AMD-003 III requires alongside the composite — render_record.py's `h['basis']`. */
+  basis: string;
+  /** Events whose category had no dimension — db/FINDINGS_MODEL.md's F1, should not occur today. */
+  unmappedEvents: UnmappedHealthEvent[];
 }
 
 function round1(n: number): number {
@@ -81,12 +92,12 @@ function round1(n: number): number {
 
 export function computeHealth(events: HealthEventInput[]): HealthResult {
   const buckets = new Map<string, Array<{ weight: number; score: number }>>();
-  const unmappedEvents: string[] = [];
+  const unmappedEvents: UnmappedHealthEvent[] = [];
 
   for (const e of events) {
     const dimension = CATEGORY_TO_DIMENSION[e.category];
     if (!dimension) {
-      unmappedEvents.push(e.heartbeatId);
+      unmappedEvents.push({ heartbeatId: e.heartbeatId, category: e.category });
       continue;
     }
     const rows = buckets.get(dimension) ?? [];
@@ -127,5 +138,9 @@ export function computeHealth(events: HealthEventInput[]): HealthResult {
               ? 'critical'
               : 'constitutional_failure';
 
-  return { dimensions, composite, band, coveragePct: measuredWeight, unmappedEvents };
+  const basis =
+    `Weighted over ${measuredWeight}% of defined dimension weight. Unmeasured dimensions are ` +
+    'excluded from the denominator rather than assumed compliant.';
+
+  return { dimensions, composite, band, coverage_pct: measuredWeight, basis, unmappedEvents };
 }

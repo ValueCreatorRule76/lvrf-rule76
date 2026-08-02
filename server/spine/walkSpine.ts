@@ -14,6 +14,7 @@ import { seedCustomerZero, type SeedResult } from '../seed/seedCustomerZero.js';
 import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceResult } from './confidenceModel.js';
 import { computeDelta, type DeltaResult } from './deltaEngine.js';
 import { computeHealth, type HealthResult } from './healthModel.js';
+import { computeFindings, type Finding } from './findingsModel.js';
 import { buildHeartbeatPlan, createPlanCursor } from './heartbeatLedger.js';
 
 /**
@@ -111,6 +112,8 @@ export interface EmittedHeartbeat {
   /** db/HEALTH_MODEL.md — dimension and within-dimension weight, from the register. */
   category: string;
   healthWeight: number;
+  /** records/render_record.py's heartbeat ledger table reads this from the register too. */
+  producer: string;
 }
 
 interface EmitContext {
@@ -191,6 +194,7 @@ async function emit(
     contentHash,
     category: reg.category,
     healthWeight: reg.healthWeight,
+    producer: reg.producer,
   };
   ctx.events.push(event);
   return contentHash;
@@ -219,6 +223,7 @@ export interface WalkResult {
   confidence: ConfidenceResult;
   delta: DeltaResult;
   health: HealthResult;
+  findings: Finding[];
   verifyGuard: VerifyGuardResult | null;
   rowsWritten: {
     evidence: number;
@@ -734,11 +739,39 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     // events is UNMEASURED, not zero and not assumed compliant.
     const health = computeHealth(ctx.events);
 
+    // db/FINDINGS_MODEL.md — payload only, empty array when none (never
+    // null, never omitted: a run with no findings is a result, not an
+    // absence of computation).
+    const findings: Finding[] = computeFindings({
+      unmappedEvents: health.unmappedEvents,
+      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      anyActualEvidenceVerified,
+      verifierSynthetic,
+      confidenceBand: confidence.band,
+      confidenceScore: confidence.score,
+    });
+
     const [{ priorRunCount }] = await db
       .select({ priorRunCount: sql<number>`count(*)::int` })
       .from(schema.valueRuns)
       .where(eq(schema.valueRuns.engagementId, seeded.engagement.id));
     const runNumber = priorRunCount + 1;
+
+    // The run self-describes the walk that produced it, independent of who
+    // reads the payload: records/render_record.py's heartbeat ledger table
+    // reads heartbeatId/eventType/valueStage/category/producer/healthState/
+    // contentHash per event — checked against that file's actual usage, not
+    // inferred. `stage` is renamed to `valueStage` for this shape only; the
+    // in-memory EmittedHeartbeat.stage name is unrelated and unchanged.
+    const payloadEvents = ctx.events.map((e) => ({
+      heartbeatId: e.heartbeatId,
+      eventType: e.eventType,
+      valueStage: e.stage,
+      category: e.category,
+      producer: e.producer,
+      healthState: e.healthState,
+      contentHash: e.contentHash,
+    }));
 
     // payloadHash covers everything the run asserts about itself, including
     // its own identity and sequence — but not the hash field, which cannot
@@ -761,6 +794,8 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       confidence,
       delta,
       health,
+      findings,
+      events: payloadEvents,
     };
     const payloadHash = sha256Hex(runPayloadBase);
     const runPayload = { ...runPayloadBase, payloadHash };
@@ -775,7 +810,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       confidenceBand: confidence.band,
       institutionalHealth: health.composite != null ? String(health.composite) : null,
       healthBand: health.band,
-      healthCoveragePct: health.coveragePct,
+      healthCoveragePct: health.coverage_pct,
       sourceFixture,
       payloadHash,
       payload: runPayload,
@@ -801,6 +836,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       confidence,
       delta,
       health,
+      findings,
       verifyGuard,
       rowsWritten,
     };
@@ -829,10 +865,15 @@ async function writeSpineRunArtifact(result: WalkResult): Promise<string> {
   // verifier that wants to check payload_hash parses this file and
   // canonicalises the parsed object itself, the same way stableStringify
   // does — it does not expect the file's own bytes to already be canonical.
+  //
+  // record_hash, not payload_hash: the file's top-level key matches
+  // records/render_record.py's contract (`run['record_hash']`), which
+  // predates this TypeScript pipeline and already has consumers. The
+  // database column stays `payload_hash` — that name is correct and unrelated.
   const fileObject = {
     value_run_id: result.valueRunId,
     run_number: result.runNumber,
-    payload_hash: result.payloadHash,
+    record_hash: result.payloadHash,
     source_fixture: result.sourceFixture,
     ...result.runPayload,
   };

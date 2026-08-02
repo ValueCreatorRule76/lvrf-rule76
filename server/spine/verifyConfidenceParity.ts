@@ -4,15 +4,21 @@ import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type Confide
 import { computeDelta } from './deltaEngine.js';
 import { computeHealth, type HealthEventInput, type HealthState } from './healthModel.js';
 import { buildHeartbeatPlan } from './heartbeatLedger.js';
+import { computeFindings, type Finding } from './findingsModel.js';
 import type { CustomerZeroFixture } from './fixture.js';
 
 /**
- * Three acceptance tests against the retired Python: db/CONFIDENCE_MODEL.md's
- * confidence/gate arithmetic, db/DELTA_AND_PROVENANCE.md's delta engine, and
- * db/HEALTH_MODEL.md's institutional health composite. Reads both fixtures
- * directly — no database, no seeding — because the assertion is about the
- * arithmetic and the gate, not about a full customer_b walk (which nothing
- * in this codebase wires up yet; only customer_zero has a seed/walk path).
+ * Four acceptance tests against the retired Python: db/CONFIDENCE_MODEL.md's
+ * confidence/gate arithmetic, db/DELTA_AND_PROVENANCE.md's delta engine,
+ * db/HEALTH_MODEL.md's institutional health composite, and
+ * db/FINDINGS_MODEL.md's findings. Reads both fixtures directly — no
+ * database, no seeding — because the assertion is about the arithmetic and
+ * the gate, not about a full customer_b walk (which nothing in this
+ * codebase wires up yet; only customer_zero has a seed/walk path).
+ *
+ * Findings asserts codes and severities only, not message text — per
+ * db/FINDINGS_MODEL.md, message text is expected to change; the codes and
+ * severities should not.
  *
  * Health needs the actual ten-event heartbeat ledger a walk would emit, with
  * each event's real health_state. That sequence is buildHeartbeatPlan() —
@@ -58,6 +64,11 @@ interface HealthExpectation {
   coveragePct: number;
 }
 
+interface FindingExpectation {
+  code: string;
+  severity: HealthState;
+}
+
 interface Expectation {
   file: string;
   score: number;
@@ -66,6 +77,7 @@ interface Expectation {
   disclosure: 'internal' | 'customer_shared';
   delta: DeltaExpectation;
   health: HealthExpectation;
+  findings: FindingExpectation[];
 }
 
 // db/DELTA_AND_PROVENANCE.md's acceptance table. Both share values (1.2,
@@ -106,6 +118,13 @@ const EXPECTATIONS: Expectation[] = [
       band: 'watch',
       coveragePct: 90,
     },
+    // db/FINDINGS_MODEL.md — codes and severities only; message text is
+    // expected to change and is not asserted.
+    findings: [
+      { code: 'F2', severity: 'watch' },
+      { code: 'F3', severity: 'warning' },
+      { code: 'F4', severity: 'warning' },
+    ],
   },
   {
     file: '../../records/customer_b.json',
@@ -137,6 +156,7 @@ const EXPECTATIONS: Expectation[] = [
       band: 'healthy',
       coveragePct: 90,
     },
+    findings: [],
   },
 ];
 
@@ -174,12 +194,17 @@ function enrichWithRegister(steps: { heartbeatId: string; healthState: HealthSta
  * evidence item with credit > 0, and a non-synthetic verifier. Disclosure
  * follows realization the same way walkSpine.ts's STAGE 7 does.
  */
-function computeRealization(fixture: CustomerZeroFixture): 'measured' | 'verified' {
+function computeRealization(fixture: CustomerZeroFixture): {
+  realization: 'measured' | 'verified';
+  anyActualEvidenceVerified: boolean;
+  verifierSynthetic: boolean;
+} {
   const actualEvidence = fixture.evidence.filter((e) => e.supports === 'actual');
-  const anyVerified =
+  const anyActualEvidenceVerified =
     actualEvidence.length > 0 && actualEvidence.some((e) => evidenceCredit(fixtureEvidenceToInput(fixture, e)).credit > 0);
   const verifierSynthetic = fixture.persons.verifier.synthetic;
-  return anyVerified && !verifierSynthetic ? 'verified' : 'measured';
+  const realization = anyActualEvidenceVerified && !verifierSynthetic ? 'verified' : 'measured';
+  return { realization, anyActualEvidenceVerified, verifierSynthetic };
 }
 
 async function loadFixtureAt(relativePath: string): Promise<CustomerZeroFixture> {
@@ -207,7 +232,7 @@ async function main() {
       verifierName: fixture.persons.verifier.name,
       assertedConfidence: vo.confidence,
     });
-    const realization = computeRealization(fixture);
+    const { realization, anyActualEvidenceVerified, verifierSynthetic } = computeRealization(fixture);
     const disclosure = realization === 'verified' ? 'customer_shared' : 'internal';
 
     const delta = computeDelta({
@@ -253,15 +278,28 @@ async function main() {
       dimensions: dimensionChecks.every((d) => d.ok),
       composite: health.composite === he.composite,
       band: health.band === he.band,
-      coveragePct: health.coveragePct === he.coveragePct,
+      coveragePct: health.coverage_pct === he.coveragePct,
     };
     const healthOk = Object.values(healthChecks).every(Boolean);
+
+    const findings: Finding[] = computeFindings({
+      unmappedEvents: health.unmappedEvents,
+      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      anyActualEvidenceVerified,
+      verifierSynthetic,
+      confidenceBand: confidence.band,
+      confidenceScore: confidence.score,
+    });
+    const fe = expectation.findings;
+    const findingsOk =
+      findings.length === fe.length &&
+      findings.every((f, i) => f.code === fe[i].code && f.severity === fe[i].severity);
 
     const scoreOk = confidence.score === expectation.score;
     const bandOk = confidence.band === expectation.band;
     const realizationOk = realization === expectation.realization;
     const disclosureOk = disclosure === expectation.disclosure;
-    const ok = scoreOk && bandOk && realizationOk && disclosureOk && deltaOk && healthOk;
+    const ok = scoreOk && bandOk && realizationOk && disclosureOk && deltaOk && healthOk && findingsOk;
     if (!ok) failed = true;
 
     console.log(`${fixture.run.label}`);
@@ -282,7 +320,7 @@ async function main() {
     console.log(`  punctuality ${delta.punctuality_days} day(s), on_time ${delta.on_time}  ` +
       `${deltaChecks.punctualityDays && deltaChecks.onTime ? 'OK' : 'MISMATCH'}`);
     console.log(
-      `  health      composite ${health.composite} [${health.band}], coverage ${health.coveragePct}%  ` +
+      `  health      composite ${health.composite} [${health.band}], coverage ${health.coverage_pct}%  ` +
         `${healthChecks.composite && healthChecks.band && healthChecks.coveragePct ? 'OK' : 'MISMATCH'}`,
     );
     for (const d of dimensionChecks) {
@@ -292,6 +330,10 @@ async function main() {
           `${d.ok ? 'OK' : 'MISMATCH'}`,
       );
     }
+    console.log(
+      `  findings    ${findings.length} (${findings.map((f) => f.code).join(', ') || 'none'})  ` +
+        `(expected ${fe.length} (${fe.map((f) => f.code).join(', ') || 'none'}))  ${findingsOk ? 'OK' : 'MISMATCH'}`,
+    );
     if (!ok) {
       console.log('  factor breakdown:');
       for (const f of confidence.factors) {
@@ -325,7 +367,12 @@ async function main() {
         }
         if (!healthChecks.composite) console.log(`    composite got ${health.composite} expected ${he.composite}`);
         if (!healthChecks.band) console.log(`    band got ${health.band} expected ${he.band}`);
-        if (!healthChecks.coveragePct) console.log(`    coveragePct got ${health.coveragePct} expected ${he.coveragePct}`);
+        if (!healthChecks.coveragePct) console.log(`    coveragePct got ${health.coverage_pct} expected ${he.coveragePct}`);
+      }
+      if (!findingsOk) {
+        console.log('  findings breakdown:');
+        console.log(`    got      ${JSON.stringify(findings.map((f) => ({ code: f.code, severity: f.severity })))}`);
+        console.log(`    expected ${JSON.stringify(fe)}`);
       }
     }
     console.log();

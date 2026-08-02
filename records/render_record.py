@@ -167,9 +167,23 @@ def build(fx, run):
                     f"<td>{score}</td><td class=\"s\">{n or '—'}</td></tr>")
 
     # ---- findings ----
-    f_rows = "".join(
-        f"""<tr><td class="f">{c}</td><td>{tag(s.upper())}</td><td>{m}</td></tr>"""
-        for c, s, m in run["findings"])
+    # db/FINDINGS_MODEL.md ratifies {code, severity, message} objects, not
+    # simulate_spine.py's old positional (code, severity, message) tuples.
+    # Read the keys explicitly and raise on anything else: unpacking a dict
+    # with the wrong shape doesn't error, it silently yields the dict's own
+    # keys as the values, so a findings table that "looks populated" can
+    # actually be printing its own field names — worse than a crash, same
+    # reasoning as the hash-mismatch refusal above.
+    f_rows = ""
+    for finding in run["findings"]:
+        if not isinstance(finding, dict) or not {"code", "severity", "message"} <= finding.keys():
+            raise ValueError(
+                f"Malformed finding: {finding!r}. Expected a dict with 'code', 'severity' "
+                f"and 'message' keys per db/FINDINGS_MODEL.md. Refusing to render a findings "
+                f"table that would silently print its own field names instead.")
+        f_rows += (f"""<tr><td class="f">{finding['code']}</td>"""
+                   f"""<td>{tag(finding['severity'].upper())}</td>"""
+                   f"""<td>{finding['message']}</td></tr>""")
 
     c = run["confidence"]
     c_rows = ""

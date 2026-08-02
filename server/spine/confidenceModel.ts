@@ -71,7 +71,12 @@ export interface ConfidenceResult {
   band: ConfidenceLevel;
   asserted: ConfidenceLevel | null;
   overridesAssertion: boolean;
+  /** records/render_record.py's `c['method']` — checked against that file, not guessed. */
+  method: string;
 }
+
+const CONFIDENCE_METHOD =
+  'Computed from the evidence ledger across six weighted factors. The computed band governs; any asserted value is advisory.';
 
 export interface ConfidenceInput {
   metricDefinitionConfirmed: boolean;
@@ -223,5 +228,6 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     band,
     asserted,
     overridesAssertion: asserted != null && asserted !== band,
+    method: CONFIDENCE_METHOD,
   };
 }
