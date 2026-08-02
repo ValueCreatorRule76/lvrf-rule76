@@ -29,6 +29,13 @@
       "when": 1785610799867,
       "tag": "0003_short_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785634384638,
+      "tag": "0004_mixed_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }
