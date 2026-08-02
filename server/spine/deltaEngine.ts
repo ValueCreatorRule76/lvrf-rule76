@@ -19,20 +19,31 @@ export interface DeltaCurrency {
   claimed: number | null;
   realized: number | null;
   gap: number | null;
-  shareOfClaim: number | null;
+  share_of_claim: number | null;
 }
 
+/**
+ * Output keys match records/simulate_spine.py's Spine.delta() exactly
+ * (snake_case), not this codebase's usual camelCase — deliberately.
+ * records/confirmation_gap.py and records/render_record.py read this object
+ * by literal Python dict key (`dl.get("punctuality_days")`,
+ * `cur["share_of_claim"]`), and a wrong key returns None rather than
+ * raising: the entire currency/punctuality section silently disappeared
+ * from confirmation_gap.py's report the first time this used camelCase,
+ * with no error at all. DeltaInput stays camelCase — it's TS-internal;
+ * only this output crosses into Python.
+ */
 export type DeltaResult =
   | { available: false }
   | {
       available: true;
       raw: number;
       improved: boolean;
-      targetMet: boolean | null;
-      pctOfTarget: number | null;
+      target_met: boolean | null;
+      pct_of_target: number | null;
       currency: DeltaCurrency;
-      punctualityDays: number | null;
-      onTime: boolean | null;
+      punctuality_days: number | null;
+      on_time: boolean | null;
     };
 
 /**
@@ -106,10 +117,10 @@ export function computeDelta(input: DeltaInput): DeltaResult {
     available: true,
     raw,
     improved,
-    targetMet,
-    pctOfTarget,
-    currency: { claimed, realized, gap, shareOfClaim },
-    punctualityDays,
-    onTime,
+    target_met: targetMet,
+    pct_of_target: pctOfTarget,
+    currency: { claimed, realized, gap, share_of_claim: shareOfClaim },
+    punctuality_days: punctualityDays,
+    on_time: onTime,
   };
 }

@@ -1,7 +1,8 @@
 import '../env.js';
 import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { eq, inArray, sql } from 'drizzle-orm';
 import type { PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
@@ -194,7 +195,11 @@ export interface VerifyGuardResult {
 export interface WalkResult {
   seeded: SeedResult;
   valueRunId: string;
+  runNumber: number;
   sourceFixture: string;
+  payloadHash: string;
+  /** Exactly the object payload_hash was computed over, plus payloadHash itself. */
+  runPayload: Record<string, unknown>;
   valueOutcomeId: string;
   recordDocumentId: string;
   stewardshipReturnId: string;
@@ -237,7 +242,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     value_runs: 0,
   };
 
-  return withActorTransaction(pool, seeded.persons.valueEngineer.id, async (db, client: PoolClient) => {
+  const result = await withActorTransaction(pool, seeded.persons.valueEngineer.id, async (db, client: PoolClient) => {
     const register = await loadHeartbeatRegister(db);
     // 0003: identity generated before the walk; the row is still written last.
     const valueRunId = randomUUID();
@@ -732,7 +737,10 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     return {
       seeded,
       valueRunId,
+      runNumber,
       sourceFixture,
+      payloadHash,
+      runPayload,
       valueOutcomeId: valueOutcomeRow.id,
       recordDocumentId: recordDocument.id,
       stewardshipReturnId: stewardshipReturn.id,
@@ -745,6 +753,39 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       rowsWritten,
     };
   });
+
+  // After commit, never inside the transaction — a file written by a rolled
+  // back walk would be a lie. Postgres stays authoritative; this file is a
+  // rendering convenience derived from it, consumed by records/render_record.py
+  // and records/confirmation_gap.py while the Python pipeline still exists.
+  await writeSpineRunArtifact(result);
+
+  return result;
+}
+
+async function writeSpineRunArtifact(result: WalkResult): Promise<string> {
+  const outDir = fileURLToPath(new URL('../../records/out/', import.meta.url));
+  await mkdir(outDir, { recursive: true });
+  const path = `${outDir}spine_run_${result.sourceFixture}.json`;
+
+  // Natural JSON types, not the numbers-as-strings form payload_hash was
+  // computed over — db/CONFIDENCE_MODEL.md's "round-trip depends on
+  // TypeScript being the only writer" section. Numbers-as-strings is a
+  // hashing procedure, not a storage format: render_record.py and
+  // confirmation_gap.py format these fields as numbers (`:,.0f`, `:+`,
+  // `:.1%`), and a pre-stringified "2774880" fails every one of them. A
+  // verifier that wants to check payload_hash parses this file and
+  // canonicalises the parsed object itself, the same way stableStringify
+  // does — it does not expect the file's own bytes to already be canonical.
+  const fileObject = {
+    value_run_id: result.valueRunId,
+    run_number: result.runNumber,
+    payload_hash: result.payloadHash,
+    source_fixture: result.sourceFixture,
+    ...result.runPayload,
+  };
+  await writeFile(path, JSON.stringify(fileObject, null, 2), 'utf-8');
+  return path;
 }
 
 const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;

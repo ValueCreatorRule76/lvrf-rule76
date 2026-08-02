@@ -143,12 +143,12 @@ async function main() {
     const deltaChecks = {
       raw: delta.raw === de.raw,
       improved: delta.improved === de.improved,
-      targetMet: delta.targetMet === de.targetMet,
-      pctOfTarget: delta.pctOfTarget === de.pctOfTarget,
+      targetMet: delta.target_met === de.targetMet,
+      pctOfTarget: delta.pct_of_target === de.pctOfTarget,
       gap: delta.currency.gap === de.gap,
-      shareOfClaim: delta.currency.shareOfClaim === de.shareOfClaim,
-      punctualityDays: delta.punctualityDays === de.punctualityDays,
-      onTime: delta.onTime === de.onTime,
+      shareOfClaim: delta.currency.share_of_claim === de.shareOfClaim,
+      punctualityDays: delta.punctuality_days === de.punctualityDays,
+      onTime: delta.on_time === de.onTime,
     };
     const deltaOk = Object.values(deltaChecks).every(Boolean);
 
@@ -170,11 +170,11 @@ async function main() {
     console.log(
       `  disclosure  ${disclosure}  (expected ${expectation.disclosure})  ${disclosureOk ? 'OK' : 'MISMATCH'}`,
     );
-    console.log(`  delta       raw ${delta.raw}, improved ${delta.improved}, target_met ${delta.targetMet}, ` +
-      `pct_of_target ${delta.pctOfTarget}  ${deltaChecks.raw && deltaChecks.improved && deltaChecks.targetMet && deltaChecks.pctOfTarget ? 'OK' : 'MISMATCH'}`);
-    console.log(`  currency    gap ${delta.currency.gap}, share_of_claim ${delta.currency.shareOfClaim}  ` +
+    console.log(`  delta       raw ${delta.raw}, improved ${delta.improved}, target_met ${delta.target_met}, ` +
+      `pct_of_target ${delta.pct_of_target}  ${deltaChecks.raw && deltaChecks.improved && deltaChecks.targetMet && deltaChecks.pctOfTarget ? 'OK' : 'MISMATCH'}`);
+    console.log(`  currency    gap ${delta.currency.gap}, share_of_claim ${delta.currency.share_of_claim}  ` +
       `${deltaChecks.gap && deltaChecks.shareOfClaim ? 'OK' : 'MISMATCH'}`);
-    console.log(`  punctuality ${delta.punctualityDays} day(s), on_time ${delta.onTime}  ` +
+    console.log(`  punctuality ${delta.punctuality_days} day(s), on_time ${delta.on_time}  ` +
       `${deltaChecks.punctualityDays && deltaChecks.onTime ? 'OK' : 'MISMATCH'}`);
     if (!ok) {
       console.log('  factor breakdown:');
@@ -185,12 +185,12 @@ async function main() {
         const actualByKey: Record<keyof DeltaExpectation, unknown> = {
           raw: delta.raw,
           improved: delta.improved,
-          targetMet: delta.targetMet,
-          pctOfTarget: delta.pctOfTarget,
+          targetMet: delta.target_met,
+          pctOfTarget: delta.pct_of_target,
           gap: delta.currency.gap,
-          shareOfClaim: delta.currency.shareOfClaim,
-          punctualityDays: delta.punctualityDays,
-          onTime: delta.onTime,
+          shareOfClaim: delta.currency.share_of_claim,
+          punctualityDays: delta.punctuality_days,
+          onTime: delta.on_time,
         };
         console.log('  delta breakdown:');
         for (const key of Object.keys(deltaChecks) as (keyof DeltaExpectation)[]) {

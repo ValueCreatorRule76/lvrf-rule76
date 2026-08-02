@@ -30,6 +30,16 @@ const CONFIDENCE_FACTOR_WEIGHTS = {
   human_verifier_of_record: 10,
 } as const;
 
+/** db/CONFIDENCE_MODEL.md's factor table — same text records/simulate_spine.py's CONFIDENCE_FACTORS pairs with each weight. */
+const CONFIDENCE_FACTOR_QUESTIONS = {
+  metric_definition_confirmed: "Is the metric's calculation method known and documented?",
+  baseline_evidence_verified: 'Is the baseline supported by confirmed evidence?',
+  actual_evidence_verified: 'Is the measured actual supported by confirmed evidence?',
+  impact_basis_evidenced: "Is the currency figure's derivation stated and supported?",
+  human_commit_of_record: 'Did a named, non-synthetic person commit to the target?',
+  human_verifier_of_record: 'Did a named, non-synthetic person verify the result?',
+} as const;
+
 type ConfidenceFactor = keyof typeof CONFIDENCE_FACTOR_WEIGHTS;
 
 const CONFIDENCE_BANDS: ReadonlyArray<readonly [number, ConfidenceLevel]> = [
@@ -49,6 +59,7 @@ export interface ConfidenceEvidenceInput {
 
 export interface ConfidenceFactorRow {
   factor: ConfidenceFactor;
+  question: string;
   weight: number;
   earned: number;
   note: string;
@@ -126,7 +137,13 @@ export function evidenceCredit(ev: ConfidenceEvidenceInput): { credit: number; n
 export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   const rows: ConfidenceFactorRow[] = [];
   const award = (factor: ConfidenceFactor, earned: number, note: string) => {
-    rows.push({ factor, weight: CONFIDENCE_FACTOR_WEIGHTS[factor], earned: round1(earned), note });
+    rows.push({
+      factor,
+      question: CONFIDENCE_FACTOR_QUESTIONS[factor],
+      weight: CONFIDENCE_FACTOR_WEIGHTS[factor],
+      earned: round1(earned),
+      note,
+    });
   };
 
   // 1. Metric definition confirmed — full weight or none, no partial credit.

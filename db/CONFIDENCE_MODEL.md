@@ -197,6 +197,18 @@ this hash is for: it attests that a given document came from a given set of inpu
 that a downstream reader can recover an exact IEEE-754 value from it. A stable
 representation serves that guarantee exactly.
 
+### The round-trip depends on TypeScript being the only writer
+
+Storing natural JSON types and canonicalising on parse is safe **only because
+`JSON.stringify` never emits a trailing `.0`.** TypeScript writes `2774880`; Python parses
+that as `int`, whose `str()` matches JS's `String()`, so both canonicalise identically.
+
+If Python ever *writes* one of these files, `2774880.0` parses as `float` and canonicalises
+to `"2774880.0"` — a hash mismatch that reads as tampering.
+
+**TypeScript is the only writer of hashed payloads.** Not a convention; a correctness
+requirement.
+
 ---
 
 ## What must never happen
