@@ -43,6 +43,13 @@
       "when": 1785677093196,
       "tag": "0005_steady_carlie_cooper",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785679816027,
+      "tag": "0006_typical_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

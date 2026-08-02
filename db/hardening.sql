@@ -93,7 +93,7 @@ DECLARE t text;
   governed text[] := ARRAY[
     'tenants', 'institutions', 'persons', 'engagements', 'business_metrics',
     'capabilities', 'assessments', 'evidence', 'reflections',
-    'value_outcomes', 'stewardship_returns', 'heartbeats'
+    'value_outcomes', 'stewardship_returns', 'heartbeats', 'offerings'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -203,11 +203,11 @@ COMMIT;
 -- ------------------------------------------------------------------
 -- Verification
 -- ------------------------------------------------------------------
--- 12 governed tables × 3 (_audit, _touch, _no_delete) = 36, plus the 0002
--- pair (value_outcome_evidence_no_ai_actual, value_runs_locked_immutable)
--- = 38 distinct triggers.
--- Expect 51 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 48;
+-- 13 governed tables (0005 added 'offerings') × 3 (_audit, _touch, _no_delete)
+-- = 39, plus the 0002 pair (value_outcome_evidence_no_ai_actual,
+-- value_runs_locked_immutable) = 41 distinct triggers.
+-- Expect 55 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE (+1).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
