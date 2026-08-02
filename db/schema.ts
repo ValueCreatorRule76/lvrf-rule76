@@ -16,7 +16,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable, pgEnum, uuid, text, numeric, integer, boolean,
-  timestamp, jsonb, bigserial, index, unique, check, primaryKey, foreignKey,
+  timestamp, jsonb, bigserial, index, unique, uniqueIndex, check, primaryKey, foreignKey,
 } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
@@ -774,4 +774,228 @@ export const auditLog = pgTable('audit_log', {
 }, (t) => [
   index('audit_record_idx').on(t.tableName, t.recordId),
   index('audit_at_idx').on(t.at),
+]);
+
+// ------------------------------------------------------------------
+// Enums
+// ------------------------------------------------------------------
+
+/**
+ * The strongest evidence of capability change an offering can actually emit.
+ * NOT what its marketing claims. Ordering is meaningful, weakest first.
+ */
+export const evidenceClass = pgEnum('evidence_class', [
+  'none',         // emits nothing about a learner (authoring/enablement tooling)
+  'consumption',  // proves only that learning was consumed
+  'assessed',     // scored measure of capability against a standard
+  'demonstrated', // observed performance in a simulated or supervised setting
+  'applied',      // capability exercised in the customer's real work system
+]);
+
+/** Who grades the evidence. This is what a CFO actually weighs. */
+export const verificationSource = pgEnum('verification_source', [
+  'none',
+  'vendor_platform',
+  'human_observer',
+  'third_party',
+  'customer_system',
+]);
+
+/**
+ * 0008. Whether it is confirmed that an offering's evidence artifacts can
+ * actually be retrieved for an engagement — distinct from evidence_class,
+ * which is what the offering could emit in principle. Interim
+ * denormalization: see the Learnings ledger entry on the gap engine.
+ */
+export const evidenceAccess = pgEnum('evidence_access', [
+  'unconfirmed', 'confirmed', 'denied',
+]);
+
+export const offeringFamily = pgEnum('offering_family', [
+  'platform', 'assessment', 'practice', 'coaching',
+  'instructor_led', 'program', 'content', 'enabler',
+]);
+
+// ------------------------------------------------------------------
+// offerings — GOVERNED TABLE
+// Add 'offerings' to the governed array in hardening.sql and re-run it.
+// Triggers are NOT declared here: audit fires AFTER, touch fires BEFORE
+// UPDATE, and hardening.sql owns that split (DEFECT-001).
+// ------------------------------------------------------------------
+
+export const offerings = pgTable('offerings', {
+  id:        id(),
+  tenantId:  uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+
+  offeringKey: text('offering_key').notNull(),
+  name:        text('name').notNull(),
+  family:      offeringFamily('family').notNull(),
+  description: text('description').notNull(),
+
+  // The governing fields
+  evidenceClass:      evidenceClass('evidence_class').notNull(),
+  verificationSource: verificationSource('verification_source').notNull(),
+  evidenceArtifacts:  text('evidence_artifacts').array().notNull().default(sql`'{}'::text[]`),
+
+  /**
+   * Deliberately nullable. Nothing public supports a figure (gap G4).
+   * A null here is a recorded absence, not an oversight. Do not backfill
+   * with an estimate.
+   */
+  commercialModel: text('commercial_model'),
+
+  // Provenance
+  sourceRefs:       jsonb('source_refs').notNull(),
+  confirmationGaps: text('confirmation_gaps').array().notNull().default(sql`'{}'::text[]`),
+
+  /**
+   * 0008. NULL means the tenant provides this offering directly. A
+   * non-null value names a third party the tenant resells: the evidence
+   * chain runs through systems the tenant does not own, and the
+   * arrangement can be terminated by a party outside the tenant. Added
+   * after Skillsoft divested Global Knowledge (announced 2026-05-20,
+   * completed 2026-07-06) while continuing to list global_knowledge_ilt
+   * via a reciprocal partnership — the catalog had no way to say that
+   * evidence access for this row now depends on a company Skillsoft does
+   * not own. Distinct from tenant_id, which is only whose catalog the row
+   * appears in. See the COMMENT ON COLUMN in db/drizzle for the full text.
+   */
+  providerOrg: text('provider_org'),
+
+  /**
+   * 0008. Whether it is confirmed that this offering's evidence artifacts
+   * can actually be retrieved for an engagement — exportable, retained, at
+   * usable grain. Distinct from evidence_class, which is what the offering
+   * could emit in principle. Defaults unconfirmed: absence of confirmation
+   * is not confirmation of absence, and neither is a marketing claim. An
+   * interim denormalization of one bit the gate needs — the gap engine
+   * named in AMENDMENT-001 is what makes this derived rather than stored.
+   * See the COMMENT ON COLUMN in db/drizzle for the full text.
+   */
+  evidenceAccess: evidenceAccess('evidence_access').notNull().default('unconfirmed'),
+
+  /**
+   * 0006: renamed from lifecycle_status. That name collided with the
+   * lifecycle_status ENUM TYPE governance().status below is typed with —
+   * two different concepts sharing one name is exactly the trap this rename
+   * removes rather than documents. Values unchanged: proposed/approved/
+   * active/deprecated/retired. Describes the OFFERING's own commercial
+   * status in the vendor's market — see the COMMENT ON COLUMN in db/drizzle
+   * for the full distinction from governance().status.
+   */
+  marketStatus: text('market_status').notNull().default('proposed'),
+
+  /**
+   * 0006: renamed from governance_status. Sitting beside governance().status
+   * with a name that generic, it was the same trap market_status's rename
+   * just removed — and the more dangerous of the two, since a route gating
+   * on ratification could read status='ratified' and let an unaudited
+   * evidentiary claim through. NOT redundant with governance().status:
+   * that field is this catalog ROW's own canonical lifecycle (draft/
+   * ratified/active/superseded/retired), the same field every governed
+   * table has, tracking whether the Cathedral has approved this record's
+   * existence at all. evidenceRatification is narrower and offering-
+   * specific: whether THIS OFFERING'S evidentiary claim (the evidence_class
+   * + verification_source pair) has been independently audited. Critically,
+   * its 'revoked' value has no equivalent in the lifecycle_status enum:
+   * 'superseded' means replaced by a newer version, 'retired'/'archived'
+   * mean ordinary end-of-life, 'rejected' means never approved to begin
+   * with — none of those mean "a prior ratification of this specific
+   * evidentiary claim was withdrawn as incorrect," which is what 'revoked'
+   * exists to say. An offering can be governance().status = 'active' (the
+   * row itself is live) while evidenceRatification = 'unratified' (nobody
+   * has yet audited whether its evidence_class claim is true) — a real,
+   * meaningful, non-redundant combination. 0007: the seeded catalog is NOT
+   * an example of that combination — every seeded row is status='draft',
+   * not 'active' — corrected after the claim was found false in the
+   * COMMENT ON COLUMN. The seeded catalog does illustrate three dimensions
+   * differing simultaneously: status=draft, evidenceRatification=
+   * unratified, marketStatus=active. Kept as its own column rather than
+   * folded into governance().status. See the COMMENT ON COLUMN in
+   * db/drizzle for the full distinction.
+   */
+  evidenceRatification: text('evidence_ratification').notNull().default('unratified'),
+
+  /**
+   * 0006: offerings was hand-rolled with only createdAt/updatedAt instead of
+   * the shared governance() convention every other governed table uses —
+   * which is exactly why deleted_at was missing (lvrf_audit() assumes it on
+   * every governed table). This spread also adds status, version,
+   * supersededById and stewardPersonId.
+   */
+  ...governance(),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'offerings_superseded_by_fk' }).onDelete('restrict'),
+
+  // Soft-delete-safe: a retired (deleted_at set) offering frees its key for
+  // reuse. The other 4 governed tables with a natural unique key (tenants,
+  // institutions, business_metrics, persons) all use a PLAIN unique
+  // constraint with the same latent gap — none exempt soft-deleted rows.
+  // That is a shared pre-existing defect, not a convention to replicate; 0006
+  // fixes it here rather than adding a fifth instance of it.
+  uniqueIndex('offerings_tenant_key_unique').on(t.tenantId, t.offeringKey)
+    .where(sql`${t.deletedAt} IS NULL`),
+
+  index('offerings_tenant_idx').on(t.tenantId),
+  index('offerings_evidence_class_idx').on(t.evidenceClass),
+
+  // An offering that claims to measure capability must name who grades it.
+  check('offerings_evidence_requires_source', sql`
+    ${t.evidenceClass} IN ('none','consumption') OR ${t.verificationSource} <> 'none'
+  `),
+
+  /**
+   * An offering that claims to emit evidence must name the artifact.
+   *
+   * cardinality(), NOT array_length(). array_length('{}',1) returns NULL,
+   * NULL >= 1 evaluates to NULL, and a CHECK PASSES on NULL — so the
+   * array_length form silently accepts the exact row it exists to reject.
+   * Verified empirically on PG 16.14: the array_length form is an inert
+   * constraint. Do not "simplify" this back.
+   */
+  check('offerings_artifacts_nonempty_when_evidential', sql`
+    ${t.evidenceClass} = 'none' OR cardinality(${t.evidenceArtifacts}) >= 1
+  `),
+
+  // Provenance must be a list, so a row can never claim a single
+  // unstructured source string.
+  check('offerings_source_refs_is_array', sql`
+    jsonb_typeof(${t.sourceRefs}) = 'array'
+  `),
+
+  check('offerings_market_status_valid', sql`
+    ${t.marketStatus} IN ('proposed','approved','active','deprecated','retired')
+  `),
+
+  check('offerings_evidence_ratification_valid', sql`
+    ${t.evidenceRatification} IN ('unratified','ratified','revoked')
+  `),
+]);
+
+// ------------------------------------------------------------------
+// offering_capabilities — junction, UNGOVERNED
+// Consistent with person_roles and reflection_evidence.
+//
+// THIS TABLE IS THE CAPABILITY HOP MADE STRUCTURAL. It is the reason an
+// offering cannot be wired straight to a business metric. If anyone proposes
+// an `attachable_metrics` column on `offerings`, this is what they are
+// proposing to bypass.
+// ------------------------------------------------------------------
+
+export const offeringCapabilities = pgTable('offering_capabilities', {
+  offeringId:   uuid('offering_id').notNull()
+                  .references(() => offerings.id, { onDelete: 'cascade' }),
+  capabilityId: uuid('capability_id').notNull()
+                  .references(() => capabilities.id, { onDelete: 'restrict' }),
+  isPrimary:    boolean('is_primary').notNull().default(false),
+}, (t) => [
+  primaryKey({ columns: [t.offeringId, t.capabilityId] }),
+
+  // At most one primary capability per offering.
+  uniqueIndex('offering_capabilities_one_primary')
+    .on(t.offeringId)
+    .where(sql`${t.isPrimary}`),
+
+  index('offering_capabilities_capability_idx').on(t.capabilityId),
 ]);
