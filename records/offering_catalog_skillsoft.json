@@ -1,0 +1,305 @@
+{
+  "$comment": "LVRF Solution Catalog — Skillsoft offerings. PROPOSAL, unratified. Retrieved 2026-08-01 from skillsoft.com / globalknowledge.com. commercial_model is null throughout by design: nothing public supports a figure (gap G4).",
+  "catalog_version": "0.1.0-proposal",
+  "tenant_key": "skillsoft",
+  "retrieved_at": "2026-08-01",
+  "governing_rule": "An offering whose evidence_class is 'none' or 'consumption' may not be the sole evidentiary basis for a value_outcome advanced to 'verified'. Cross-table; enforced in the route, not a CHECK.",
+  "offerings": [
+    {
+      "offering_key": "skillsoft_percipio_platform",
+      "name": "Skillsoft Percipio Platform",
+      "family": "platform",
+      "description": "AI-native skills management platform positioned as the system of engagement for identifying gaps, building skills, deploying talent, and proving impact. Every learning interaction is claimed to generate real-time proficiency data.",
+      "evidence_class": "assessed",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "role-level proficiency scores",
+        "skill gap deltas",
+        "learning path progress",
+        "completion records"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "HIGH. Platform emits consumption data far more readily than capability data. Downgrade to 'consumption' if gap G1 returns thin. Most likely row in the catalog to be wrong.",
+      "confirmation_gaps": ["G1", "G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/meet-skillsoft-percipio", "retrieved_at": "2026-08-01" },
+        { "url": "https://www.skillsoft.com/", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_skill_benchmarks",
+      "name": "Skill Benchmarks & Skills Readiness Assessment",
+      "family": "assessment",
+      "description": "Scored measurement of current capability against a defined standard. The baseline instrument for the LVRF spine — without a scored pre-measure there is no delta to verify at Measure or Verify.",
+      "evidence_class": "assessed",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "pre/post proficiency score against defined standard",
+        "role-level readiness index",
+        "benchmark percentile"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "LOW. Assessment output is the product.",
+      "confirmation_gaps": ["G1", "G6"],
+      "source_refs": [
+        { "url": "https://insight.skillsoft.com/skills-readiness-assessment/p/1", "retrieved_at": "2026-08-01" },
+        { "url": "https://www.skillsoft.com/meet-skillsoft-percipio", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_caisy",
+      "name": "Skillsoft CAISY\u00ae Conversation AI Simulator",
+      "family": "practice",
+      "description": "AI-powered conversation simulator for rehearsing difficult work conversations, with real-time adaptive feedback and a Role Model mode in which the AI demonstrates the conversation. Published scenario families include leadership, first-time managers, first-time managers in tech, agile tech and product teams, compliance, coaching, customer service, sales and marketing, well-being, and procurement. Custom scenarios can be commissioned.",
+      "evidence_class": "demonstrated",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "scored conversation transcript",
+        "adaptive feedback record",
+        "repeat-attempt delta"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "MEDIUM. Classification depends entirely on score retention and export (gap G2). Without retention there is no delta and 'demonstrated' collapses to a claim.",
+      "note": "Strongest native capability-evidence instrument in the portfolio — produces a scored behavioural observation rather than an inference from consumption. Load-bearing for Use A.",
+      "confirmation_gaps": ["G2", "G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/caisy", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "codecademy_enterprise",
+      "name": "Codecademy for Enterprise",
+      "family": "practice",
+      "description": "Hands-on, in-browser technical skill building. Enterprise positioning centres on cybersecurity, cloud computing, and AI.",
+      "evidence_class": "demonstrated",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "completed project artifacts",
+        "in-environment exercise results",
+        "skill path completion with assessment"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "LOW. Learner produces working output in-environment.",
+      "confirmation_gaps": ["G1", "G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/technology-skills/skills-training", "retrieved_at": "2026-08-01" },
+        { "url": "https://www.skillsoft.com/compliance-leaders", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "global_knowledge_ilt",
+      "name": "Instructor-Led Tech Training (Global Knowledge)",
+      "family": "instructor_led",
+      "description": "Live instructor-led technical training delivered by field experts, frequently oriented to vendor certification. Formerly a Skillsoft-owned business unit. Skillsoft divested Global Knowledge to an affiliate of Enduring Ventures — definitive agreement announced 2026-05-20, sale completed 2026-07-06 — and now maintains a reciprocal partnership under which Skillsoft customers retain access to Global Knowledge's instructor-led training and Global Knowledge customers gain access to the Skillsoft platform. That partnership is why this offering still appears on skillsoft.com; Global Knowledge is now a separate company Skillsoft does not own.",
+      "evidence_class": "assessed",
+      "verification_source": "third_party",
+      "evidence_artifacts": [
+        "certification pass/fail from issuing body",
+        "credential ID",
+        "credential expiry date"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "provider_org": "Global Knowledge (Enduring Ventures affiliate)",
+      "classification_risk": "HIGH. Evidence GRADING is unaffected — a third-party credential is graded by the issuing body regardless of who sold the course. Evidence ACCESS is now open (see G7): Skillsoft no longer owns the systems of record for completion and credential data, and depends on the reciprocal partnership to obtain it.",
+      "note": "Only row whose verification is external to both vendor and customer. A third-party credential is the one artifact neither Skillsoft nor the customer can grade. Previously the highest-integrity row for contractually or regulatorily mandated credential coverage; now also the one row whose evidence chain runs through a company Skillsoft does not own (see provider_org and G7).",
+      "confirmation_gaps": ["G7"],
+      "source_refs": [
+        { "url": "https://www.globalknowledge.com/us-en/", "retrieved_at": "2026-08-01" },
+        { "url": "https://investor.skillsoft.com/sec-filings/all-sec-filings/content/0001437749-26-017991/skil20260520_8k.htm", "retrieved_at": "2026-08-02", "note": "8-K, Item 1.01 — definitive agreement to sell Global Knowledge to an Enduring Ventures affiliate (EHJob GP LLC), announced 2026-05-20." },
+        { "url": "https://investor.skillsoft.com/news-events/press-releases/detail/457/skillsoft-completes-sale-of-global-knowledge-business-advancing-focus-on-ai-native-skills-management-platform", "retrieved_at": "2026-08-02", "note": "Completion announcement, 2026-07-06 — confirms the reciprocal partnership and Enduring Ventures as buyer." }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_coaching_1to1",
+      "name": "Skillsoft 1:1 Coaching (incl. Specialized)",
+      "family": "coaching",
+      "description": "Future-focused personalized coaching partnership. ICF/EMCC-credentialed coaches with 10+ years professional experience, stated 98% match success rate, network across 30+ countries and 25+ languages. Specialized 1:1 is a topical variant targeting specific circumstances.",
+      "evidence_class": "demonstrated",
+      "verification_source": "human_observer",
+      "evidence_artifacts": [
+        "coach-attested goal completion",
+        "session record",
+        "coach observation notes"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "MEDIUM. Contingent on gap G3 — self-reported goal completion would not be 'demonstrated'.",
+      "note": "Standard and Specialized folded into one row: a variant earns its own row only when evidence class and verification source differ materially. They do not. Carry specialization as a variant field.",
+      "confirmation_gaps": ["G3", "G4"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/coaching", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_coaching_group",
+      "name": "Skillsoft Group Coaching",
+      "family": "coaching",
+      "description": "Cohort-based coaching developing community, connection, and culture.",
+      "evidence_class": "assessed",
+      "verification_source": "human_observer",
+      "evidence_artifacts": [
+        "cohort progress record",
+        "facilitator assessment",
+        "group goal completion"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "MEDIUM.",
+      "note": "Deliberately classed one rung below 1:1. Cohort delivery weakens individual attribution, and LVRF measures a person's capability. Can support a team-level outcome; should not carry an individual realization record alone.",
+      "confirmation_gaps": ["G3", "G4"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/coaching", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_ai_coach",
+      "name": "Skillsoft AI Coach",
+      "family": "coaching",
+      "description": "ICF-aligned AI coaching delivered to every employee at enterprise scale. Consumes role and proficiency data and translates skills gaps into actionable behaviour change, with reflection and accountability prompts.",
+      "evidence_class": "demonstrated",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "coaching interaction log",
+        "goal-setting and completion record",
+        "reflection prompt and response"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "MEDIUM. Same dependency as G3.",
+      "note": "Same evidence class as human 1:1 but a different verification source, which is why it earns a separate row. A CFO will weight a credentialed human's attestation differently from a model's. LVRF should permit that and should print which one it was.",
+      "confirmation_gaps": ["G3", "G1"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/coaching", "retrieved_at": "2026-08-01" },
+        { "url": "https://s3.us-east-1.amazonaws.com/skillsoft.com/prod/resources/Skillsoft_AI_Coach.pdf", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_leadership_development_program",
+      "name": "Skillsoft Leadership Development Program (SLDP)",
+      "family": "program",
+      "description": "Structured leadership program powered by MIT Sloan Management Review and Business Advance, preparing leaders to drive performance in the digital era across critical leadership and business skills.",
+      "evidence_class": "assessed",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "program completion record",
+        "leadership assessment score",
+        "360 or benchmark result where configured"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "MEDIUM. Depends on whether assessment is embedded or optional.",
+      "confirmation_gaps": ["G1", "G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/leadership-and-business-skills/leadership-development-program", "retrieved_at": "2026-08-01" },
+        { "url": "https://www.skillsoft.com/compliance-leaders", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_compliance_suite",
+      "name": "Skillsoft Compliance Suite",
+      "family": "content",
+      "description": "Risk-based compliance and ethics training spanning legal and ethics, EHS and workplace safety, cybersecurity and data protection, and ESG/CSR. Published customer stories include Sensata Technologies (21,000+ employees, multi-language) and Scotts Miracle-Gro (7,600 associates across 70 locations).",
+      "evidence_class": "assessed",
+      "verification_source": "customer_system",
+      "evidence_artifacts": [
+        "completion attestation",
+        "assessment score",
+        "audit-ready training record"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "LOW.",
+      "note": "Cleanest metric linkage in the catalog and the only row whose verification source is the customer's own system. Incident rates, audit findings, and regulatory penalties are already reported, already audited, and already believed by a CFO. Load-bearing for Use B; best first proof for the whole catalog.",
+      "confirmation_gaps": ["G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/compliance-leaders", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_lx_design_studio",
+      "name": "Skillsoft LX Design Studio",
+      "family": "enabler",
+      "description": "AI-powered authoring for courses, simulations, and assessments, with a stated design cycle of minutes rather than months, and easy update as priorities change.",
+      "evidence_class": "none",
+      "verification_source": "none",
+      "evidence_artifacts": [],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "LOW.",
+      "note": "Produces content, not capability. Can shorten time-to-deploy for an intervention, which is a real operational benefit and not a learning outcome. Barred from carrying a verified value outcome by the governing rule. Catalogued explicitly on the CVAF precedent where Knack CX AMS was carried as an enabler with no value lever — a visible zero beats a hole someone fills with a guess.",
+      "confirmation_gaps": ["G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/meet-skillsoft-percipio", "retrieved_at": "2026-08-01" }
+      ]
+    },
+    {
+      "offering_key": "skillsoft_content_marketplace",
+      "name": "Skillsoft Content Marketplace",
+      "family": "enabler",
+      "description": "Curation and automation of partner content into best-suited learning paths.",
+      "evidence_class": "consumption",
+      "verification_source": "vendor_platform",
+      "evidence_artifacts": [
+        "content launch and completion telemetry"
+      ],
+      "commercial_model": null,
+      "market_status": "active",
+      "evidence_access": "unconfirmed",
+      "classification_risk": "LOW.",
+      "note": "Emits consumption telemetry only; assessment instruments belong to the partner publishers. Barred from sole evidentiary basis by the governing rule.",
+      "confirmation_gaps": ["G6"],
+      "source_refs": [
+        { "url": "https://www.skillsoft.com/content-marketplace", "retrieved_at": "2026-08-01" }
+      ]
+    }
+  ],
+  "confirmation_gaps": {
+    "G1": { "question": "What proficiency and benchmark data does the Percipio API expose — grain, latency, exportable or dashboard-only?", "holder": "Skillsoft product / platform engineering", "blocks": ["skillsoft_percipio_platform classification", "automation of evidence capture"] },
+    "G2": { "question": "Are CAISY simulation scores retained and exportable per learner over time, or ephemeral to the session?", "holder": "Skillsoft product", "blocks": ["skillsoft_caisy classification", "Use A delta measurement"] },
+    "G3": { "question": "Is coaching goal completion coach-attested, learner self-reported, or system-derived?", "holder": "Skillsoft coaching operations", "blocks": ["all three coaching row classifications"] },
+    "G4": { "question": "Commercial model per offering — unit, term, separately licensed or bundled?", "holder": "Skillsoft commercial / deal desk", "blocks": ["commercial_model on all 12 rows"] },
+    "G5": { "question": "Skillsoft's own DRR definition — numerator, denominator, treatment of downsells and multi-year?", "holder": "Skillsoft finance (Ron Kisling)", "blocks": ["Use A verification, permanently, until answered"] },
+    "G6": { "question": "Did the February 2026 rebrand retire, rename, or merge any SKUs? Marketing naming is not always SKU naming.", "holder": "Skillsoft product marketing", "blocks": ["every offering_key in the catalog"], "status": "RESOLVED", "resolved_at": "2026-08-02", "answer": "The February 2026 event was a brand/positioning relaunch (next-generation Skillsoft Percipio Platform, announced 2026-02-03/04), not a SKU retirement, rename, or merge. Verified independently against investor.skillsoft.com press releases and SEC EDGAR for all 12 catalog rows: Percipio, Skill Benchmarks/Skills Readiness Assessment, CAISY, Codecademy for Enterprise, Global Knowledge ILT, 1:1/Group/AI Coaching, SLDP, Compliance Suite, LX Design Studio, and Content Marketplace all remain current under the names used in this catalog. G6 as originally posed (a naming-continuity question) is closed.", "correction_produced": "The verification G6 asked for surfaced a DIFFERENT, more serious fact it was not written to catch: Skillsoft divested Global Knowledge itself (definitive agreement 2026-05-20, completed 2026-07-06, buyer an Enduring Ventures affiliate) — the name didn't change, ownership did. That correction is recorded on the global_knowledge_ilt row (description, provider_org, source_refs) and in new gap G7." },
+    "G7": { "question": "Can Skillsoft access Global Knowledge completion and credential data post-divestiture, under what agreement, and for how long?", "holder": "Skillsoft commercial / partnership", "blocks": ["whether global_knowledge_ilt can carry a verified outcome for a Skillsoft-tenant engagement at all"], "opened_at": "2026-08-02", "opened_by": "G6 resolution — see above" }
+  },
+  "validation_test": {
+    "principle": "The catalog is correct if and only if the two rendered Realization Records re-derive from it at their original confidence scores.",
+    "status": "CORRECTED",
+    "corrected_at": "2026-08-02",
+    "correction": "This principle, and both original_confidence figures below, presupposed that use_a and use_b were each a rendered Realization Record backed by a real value_outcome. Checked directly against the live database: neither capability named below ('run a value-based renewal conversation', 'hazard recognition and safety leadership') has ever been used by any value_outcome — both capability rows were created 2026-08-02, during offerings-catalog seeding, with zero history before that. Rendered documents DO exist in this database (17 of them, record_documents, real rendered_at timestamps, real disclosure states) — but every one belongs to a DIFFERENT pair of capabilities ('Value-based renewal execution' for Skillsoft, 'Switching order verification' for Northgate) from an earlier, unrelated confidence-model test phase of this project. original_confidence 30 and 80 are not read from any value_outcome column — value_outcomes.confidence is categorical (low/medium/high), not numeric — so these two numbers were fixture-level outputs of the confidence engine's own test suite, asserted here as if they were this catalog's re-derivable ground truth. They were not. A wrong assertion acted on for four rounds of work is left in place below, not deleted, as part of the record.",
+    "use_a": {
+      "institution": "Skillsoft (tenant is also institution)",
+      "offerings": ["skillsoft_caisy", "skillsoft_coaching_1to1"],
+      "capability": "run a value-based renewal conversation",
+      "business_metric": "Dollar Retention Rate",
+      "expected_result": "REFUSE verification. Vendor-reported metric with undisclosed definition; customer_system verification unsatisfiable when vendor is the institution. Refusal must be computed and the failing condition printed, not asserted from fixture.",
+      "original_confidence": 30,
+      "actual_state": "No value_outcome for this capability exists. original_confidence 30 was never re-derivable from a real record; there was no record."
+    },
+    "use_b": {
+      "institution": "Northgate Utilities",
+      "offerings": ["skillsoft_compliance_suite", "global_knowledge_ilt"],
+      "capability": "hazard recognition and safety leadership",
+      "business_metric": "TRIR",
+      "expected_result": "PASS gate, reach verified, permit customer_shared. Customer-system verification, externally reported and auditable metric, third-party graded credential leg.",
+      "original_confidence": 80,
+      "actual_state": "No value_outcome for this capability exists. original_confidence 80 was never re-derivable from a real record; there was no record. This entry was not created to check the gate against; the gate was checked against real existing Northgate value_outcomes instead (a different capability, 'Switching order verification') — see docs/README_0005.md for that result."
+    }
+  }
+}
