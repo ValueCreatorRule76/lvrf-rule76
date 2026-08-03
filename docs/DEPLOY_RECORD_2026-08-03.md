@@ -160,7 +160,7 @@ from `at` will get the order wrong.
 
 ## 4. DEFECT-003 — unaudited, undeletable-guarded tables
 
-**Severity: high. Fix: additive, migration 0009. Not urgent — no real data yet.**
+**Severity: high. Fix: additive, via `db/hardening.sql` — no migration number. Not urgent — no real data yet.**
 
 Cross the spine walk's write counts against the `audit_log` breakdown:
 
@@ -187,7 +187,7 @@ changed with no trace. The number a CFO is shown is alterable until lock, and
 nothing records that it changed.
 
 Reclassified from "defensible" to **conditionally defensible: unaudited while
-unlocked**. Folded into migration 0009 scope.
+unlocked**. Folded into the `hardening.sql` amendment scope (see §16).
 
 Absence from the `GROUP BY table_name, operation` breakdown is the proof — no
 inference from the trigger listing required.
@@ -199,6 +199,23 @@ outcome and its proof, the outcome survives looking exactly as verified as
 before, and no audit row records it — because there is no trigger to write one.
 
 That is the one guarantee LVRF exists to make.
+
+### Closure 2026-08-03 (local only — not yet applied to production)
+
+**Closed:** `value_runs` now carries the full triad (`_audit`, `_touch`,
+`_no_delete`). `record_documents` now carries `_audit` and a delete guard with
+its own remedy text (it has no `deleted_at`; its retirement mechanism is
+`document_version`, not soft-delete). See §16 for the mechanism and verification.
+
+**Still open:** `value_outcome_evidence`, plus three tables outside the
+original DEFECT-003 scope — `offering_capabilities`, `person_roles`,
+`reflection_evidence`. All four are composite-key junction tables with no
+`id` column. `lvrf_audit()` writes `NEW.id::text` into `audit_log.record_id`,
+which is `NOT NULL` — unlike the `deleted_at` dependency this work uncovered
+(fixed via `jsonb_exists`, see §16), there is no safe degradation here:
+something must go in `record_id` for a composite-key row, and what that
+should be is an undecided design question, not a defect with an obvious fix.
+Not closed by this change.
 
 ---
 
@@ -412,8 +429,23 @@ exposure was found.
 The two worth keeping above all others are the sequence-gap test (§3) and the
 `tgenabled` check (§10). Neither is obvious enough to re-derive under pressure.
 
+**The sequence-gap test is one-shot per database, not general-purpose.**
+`audit_log`'s id sequence is not transactional — a successful write that is
+later rolled back still permanently consumes its id (`CACHE 1`, confirmed
+2026-08-03). The first time any session does a write-then-rollback against an
+audited table, `span` and `rows` diverge permanently on that database, and the
+test can never pass there again. It remains valid on production **today**,
+because production has no history of rolled-back audited writes yet — but the
+production hardening apply must run this query **before** any audit-fires
+test, not after, or the apply's own verification burns it. It is already
+unavailable on the local development database, burned during this session's
+own Phase 3 testing.
+
 ```sql
 -- Audit ledger integrity: span must equal rows
+-- ONE-SHOT PER DATABASE — ceases to hold after the first rolled-back write to
+-- an audited table. Do not treat a failure here as a defect without first
+-- checking for prior rolled-back audited writes on this database.
 SELECT count(*) AS rows, min(id) AS lo, max(id) AS hi,
        max(id)-min(id)+1 AS span FROM audit_log;
 
@@ -510,19 +542,81 @@ hardening items in §9 — none blocking.
 
 ---
 
-## 16. Migration 0009 scope
+## 16. hardening.sql amendment — value_runs and record_documents governance
+
+This closed via `db/hardening.sql`, not a Drizzle migration. No migration
+number, no `_journal.json` entry — every trigger in this database has always
+come from `hardening.sql` applied by hand (confirmed: no migration file
+contains `CREATE TRIGGER`). `0009` is the evidence-attestation migration
+(`attested_by_person_id`/`attested_at` on `evidence`) and is unrelated to this
+work. `0010` was never created — this scope needed no Drizzle migration at
+all. The section title below was "Migration 0009 scope"; that framing was
+wrong on both counts — wrong migration number and the wrong kind of change.
 
 Derived from §4 and its amendment. Additive only; no data migration.
 
-| Table | Needs | Reason |
+| Table | Got | Reason |
 |---|---|---|
-| `value_outcome_evidence` | `_audit`, `_no_delete`, `_touch` | evidence severable from outcome without trace |
-| `record_documents` | `_audit`, `_no_delete`, `_touch` | the artifact a CFO reads, unguarded |
-| `value_runs` | `_audit` | mutable and unaudited until `locked_at` is set |
+| `value_runs` | `_audit`, `_touch`, `_no_delete` (full triad) | mutable and unaudited until `locked_at` is set; has `id`/`updated_at`/`deleted_at` |
+| `record_documents` | `_audit`, `_no_delete` (table-specific remedy) | the artifact a CFO reads, unguarded; has `id` but no `updated_at`/`deleted_at` — retires by `document_version`, not soft-delete |
 
-Mirrors a pattern the schema already applies to 13 tables. Verify after applying:
+`value_outcome_evidence` — proposed for the same triad in the original scope —
+is deferred, not closed. See §4.
 
-- Distinct trigger count moves from **41** to **48** (7 new)
-- `audit_log` breakdown shows all three tables on write
-- A `DELETE` attempt on each as `lvrf_app` is refused
-- Sequence-gap test still returns `span = rows`
+Trigger arithmetic:
+
+```text
+value_runs:       _audit (2 rows: INSERT, UPDATE) + _touch (1: UPDATE)
+                  + _no_delete (1: DELETE)                = 3 distinct, 4 rows
+record_documents: _audit (2 rows: INSERT, UPDATE)
+                  + _no_delete (1: DELETE)                 = 2 distinct, 3 rows
+                                                    Total:   5 distinct, 7 rows
+
+41 -> 46 distinct triggers
+55 -> 62 rows in information_schema.triggers
+```
+
+Verified locally (**not yet applied to production**):
+
+- Distinct trigger count moved from **41** to **46** (5 new), exactly
+- `information_schema.triggers` row count moved from **55** to **62** (7 new), exactly
+- `hardening.sql` applied twice with identical results — empirically
+  idempotent, not idempotent by inspection alone. Its header no longer claims
+  "Run ONCE."
+- `lvrf_block_delete()` now takes an optional `TG_ARGV[0]` remedy string.
+  Every trigger created before this change passes zero arguments and is
+  provably unaffected — `TG_NARGS > 0` is unreachable for them, confirmed by
+  a byte-identical error message on `heartbeats` before and after.
+- `record_documents` DELETE now shows a table-specific remedy ("...supersede
+  by rendering a new document_version") instead of the generic "Set
+  deleted_at instead," which would have been false — this table has no
+  `deleted_at` and, per its own versioning scheme, never will.
+- A `DELETE` attempt on `value_runs` and `record_documents` as `lvrf_app` is refused
+- `audit_log` breakdown shows both tables on write
+- Locking checked directly, not assumed safe by trigger-name ordering:
+  locking a `value_runs` row still succeeds; a second edit to the now-locked
+  row is still rejected by `locked_immutable`; the rejected edit adds nothing
+  to `audit_log`
+- Sequence-gap test (§12) **not** re-run as part of this verification — see
+  §12's correction. It had already been burned by this same verification
+  process's own rolled-back writes before this change was even applied.
+
+### Lesson — a column check on the trigger's NAME isn't a column check on its BODY
+
+Phase 0 checked whether `value_runs`, `value_outcome_evidence`, and
+`record_documents` had `id`/`updated_at`/`deleted_at` — the columns `_audit`,
+`_touch`, and `_no_delete` sound like they need, going by name. That check
+missed that `lvrf_audit()`'s UPDATE branch also hard-referenced
+`OLD.deleted_at`/`NEW.deleted_at` directly, independent of what the trigger's
+name implies. Attaching it to `record_documents` (no `deleted_at`) compiled
+cleanly and then failed every UPDATE at runtime — caught only because Phase 3
+actually ran an UPDATE against it, not by the Phase 0 column audit.
+
+Fixed by rewriting the classification with `jsonb_exists()` so it degrades to
+`'update'` when `deleted_at` is absent, instead of erroring.
+
+**General rule for next time:** before attaching a trigger function to a new
+table, enumerate every `OLD.`/`NEW.` field reference in the function body —
+not just the columns implied by the trigger's name or by convention. A column
+check scoped to "what the pattern usually needs" is not the same as a column
+check scoped to "what this specific function body reads."
