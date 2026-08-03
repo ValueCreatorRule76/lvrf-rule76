@@ -1,0 +1,18 @@
+[Unit]
+Description=LVRF API
+After=network.target postgresql.service
+Requires=postgresql.service
+[Service]
+Type=simple
+User=brad
+WorkingDirectory=/srv/lvrf
+EnvironmentFile=/srv/lvrf/.env
+ExecStart=/usr/bin/node /srv/lvrf/dist/server/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
