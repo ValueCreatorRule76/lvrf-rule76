@@ -6,5 +6,6 @@ build/
 !.env.example
 records/out/
 *.local
+*.dump
 .DS_Store
 .vscode/settings.json
