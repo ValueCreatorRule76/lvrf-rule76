@@ -8,10 +8,16 @@ import type { PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import { withActorTransaction, type Db } from '../db/withActorTransaction.js';
 import * as schema from '../../db/schema.js';
-import { loadFixture } from './fixture.js';
+import { loadFixture, type EvidenceFixture } from './fixture.js';
 import { sha256Hex } from './hash.js';
 import { seedCustomerZero, type SeedResult } from '../seed/seedCustomerZero.js';
-import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceResult } from './confidenceModel.js';
+import {
+  computeConfidence,
+  evidenceCredit,
+  fixtureEvidenceToInput,
+  type ConfidenceEvidenceInput,
+  type ConfidenceResult,
+} from './confidenceModel.js';
 import { computeDelta, type DeltaResult } from './deltaEngine.js';
 import { computeHealth, type HealthResult } from './healthModel.js';
 import { computeFindings, type Finding } from './findingsModel.js';
@@ -237,6 +243,51 @@ export interface WalkResult {
   };
 }
 
+// Fixture key -> seeded person, for evidence.attested_by_person_id. 0005:
+// attested_by is who vouches for the claim, independent of kind and
+// independent of who captured it. "assessor" in the fixture maps to
+// `coach` in SeedResult; the other four keys are spelled the same,
+// camelCased. "account_executive" is deliberately absent — seedCustomerZero.ts
+// never seeds that person, and no fixture evidence has attested_by:
+// account_executive today; if one ever does, this throws rather than
+// silently miscrediting whoever seeded.persons happens to default to.
+const ATTESTER_PERSON_KEY: Record<string, keyof SeedResult['persons']> = {
+  value_engineer: 'valueEngineer',
+  sponsor: 'sponsor',
+  metric_owner: 'metricOwner',
+  verifier: 'verifier',
+  assessor: 'coach',
+};
+
+interface ResolvedAttestation {
+  attestedByPersonId: string | null;
+  attestedAt: Date | null;
+}
+
+// 0005: attested_by/attested_at are independent of kind and independent of
+// who captured the evidence — capturedByPersonId is always the value
+// engineer (see the insert sites below). Where the fixture has no
+// attested_by, both stay null; evidence_attestation_is_complete enforces
+// that these two travel together.
+function resolveAttestation(seeded: SeedResult, ev: EvidenceFixture): ResolvedAttestation {
+  if (!ev.attested_by) return { attestedByPersonId: null, attestedAt: null };
+  const key = ATTESTER_PERSON_KEY[ev.attested_by];
+  if (!key) {
+    throw new Error(
+      `Evidence item attested_by="${ev.attested_by}" has no entry in ATTESTER_PERSON_KEY. ` +
+        'Add the mapping before using this fixture key — silently dropping it would lose ' +
+        'a real attester.',
+    );
+  }
+  if (!ev.attested_at) {
+    throw new Error(
+      `Evidence item attested_by="${ev.attested_by}" has no attested_at — ` +
+        'evidence_attestation_is_complete would reject this write.',
+    );
+  }
+  return { attestedByPersonId: seeded.persons[key].id, attestedAt: new Date(ev.attested_at) };
+}
+
 export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
   const fixtureFile = opts?.fixtureFile ?? 'customer_zero.json';
   // Stem only, no extension — e.g. 'customer_b'. Stamped on the run so a
@@ -278,22 +329,11 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     const bm = fixture.business_metric;
     const valueOutcomeId = randomUUID();
 
-    // A snapshot, not a live join: evidence mutates after a walk (verification
-    // flips, citations resolve), so payload.evidence must freeze what backed
-    // THIS confidence score, at the moment it was computed. Captured from the
-    // returned row on each insert below — the actual stored values, including
-    // column defaults (ai_sourced/citation_resolved), not the fixture input.
-    const evidenceSnapshot: Array<{
-      kind: string;
-      summary: string;
-      provenance: string;
-      source_reference: string | null;
-      confidence: string;
-      source_verified: boolean;
-      ai_sourced: boolean;
-      citation_resolved: boolean;
-      supports: string;
-    }> = [];
+    // DEFECT-002: no in-memory evidence snapshot is accumulated during the
+    // insert loops below. Both payload.evidence and computeConfidence()'s
+    // input are built from ONE read-back query after every insert — see
+    // just before the computeConfidence() call. A transaction sees its own
+    // writes, so the read is available before commit and costs one query.
 
     // Hoisted from STAGE 6: this is pure (fixture data plus confidenceModel's
     // shared evidenceCredit gate — no DB reads), so it's knowable before the
@@ -353,6 +393,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
 
     const baselineEvidenceIds: string[] = [];
     for (const ev of fixture.evidence.filter((e) => e.supports === 'baseline')) {
+      const attestation = resolveAttestation(seeded, ev);
       const [row] = await db
         .insert(schema.evidence)
         .values({
@@ -364,21 +405,12 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
           confidence: ev.confidence,
           sourceVerified: ev.source_verified,
           capturedByPersonId: seeded.persons.valueEngineer.id,
+          attestedByPersonId: attestation.attestedByPersonId,
+          attestedAt: attestation.attestedAt,
         })
         .returning();
       rowsWritten.evidence += 1;
       baselineEvidenceIds.push(row.id);
-      evidenceSnapshot.push({
-        kind: row.kind,
-        summary: row.summary,
-        provenance: row.provenance,
-        source_reference: row.sourceReference,
-        confidence: row.confidence,
-        source_verified: row.sourceVerified,
-        ai_sourced: row.aiSourced,
-        citation_resolved: row.citationResolved,
-        supports: 'baseline',
-      });
 
       await emit(ctx, 'HB-0009', {
         stage: 'baseline',
@@ -457,6 +489,40 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         impactBasis: vo.impact_basis,
       })
       .where(eq(schema.valueOutcomes.id, valueOutcomeId));
+
+    // Evidence for the currency figure's derivation belongs here, not at
+    // baseline or measure — this is the stage that models the financial
+    // impact. No emit() call, same as the actual-evidence loop in STAGE 5:
+    // HB-0009 ("Evidence Attached") is specific to baseline, and the
+    // heartbeat sequence this walk emits is fixed and cross-checked
+    // elsewhere (verifyConfidenceParity.ts) — adding a heartbeat here would
+    // change a sequence that isn't this fix's to change.
+    for (const ev of fixture.evidence.filter((e) => e.supports === 'impact_basis')) {
+      const attestation = resolveAttestation(seeded, ev);
+      const [row] = await db
+        .insert(schema.evidence)
+        .values({
+          institutionId: seeded.institution.id,
+          kind: ev.kind as (typeof schema.evidenceKind.enumValues)[number],
+          summary: ev.summary,
+          provenance: ev.provenance,
+          sourceReference: ev.source_reference,
+          confidence: ev.confidence,
+          sourceVerified: ev.source_verified,
+          capturedByPersonId: seeded.persons.valueEngineer.id,
+          attestedByPersonId: attestation.attestedByPersonId,
+          attestedAt: attestation.attestedAt,
+        })
+        .returning();
+      rowsWritten.evidence += 1;
+
+      await db.insert(schema.valueOutcomeEvidence).values({
+        valueOutcomeId,
+        evidenceId: row.id,
+        supports: 'impact_basis',
+      });
+      rowsWritten.value_outcome_evidence += 1;
+    }
 
     await db.update(schema.engagements).set({ valueStage: 'model' }).where(eq(schema.engagements.id, seeded.engagement.id));
 
@@ -544,6 +610,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     });
 
     for (const ev of actualEvidence) {
+      const attestation = resolveAttestation(seeded, ev);
       const [row] = await db
         .insert(schema.evidence)
         .values({
@@ -555,7 +622,9 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
           confidence: ev.confidence,
           sourceVerified: ev.source_verified,
           assessmentId: ev.kind === 'assessment_result' ? assessmentRow.id : null,
-          capturedByPersonId: ev.kind === 'assessment_result' ? seeded.persons.coach.id : seeded.persons.metricOwner.id,
+          capturedByPersonId: seeded.persons.valueEngineer.id,
+          attestedByPersonId: attestation.attestedByPersonId,
+          attestedAt: attestation.attestedAt,
         })
         .returning();
       rowsWritten.evidence += 1;
@@ -566,17 +635,6 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         supports: 'actual',
       });
       rowsWritten.value_outcome_evidence += 1;
-      evidenceSnapshot.push({
-        kind: row.kind,
-        summary: row.summary,
-        provenance: row.provenance,
-        source_reference: row.sourceReference,
-        confidence: row.confidence,
-        source_verified: row.sourceVerified,
-        ai_sourced: row.aiSourced,
-        citation_resolved: row.citationResolved,
-        supports: 'actual',
-      });
     }
 
     // realization and actualValue must move in the same UPDATE — schema CHECK
@@ -746,11 +804,58 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     maybeFail(opts, 'return');
 
     // ---- 0003: value_runs -----------------------------------------------------------
+    // DEFECT-002: read evidence back from the database, inside this same
+    // transaction, after every insert above — not from the fixture. A
+    // transaction sees its own writes, so this costs one query before
+    // commit. `supports` comes from value_outcome_evidence (the join), not
+    // whatever the fixture claimed. 0005: the attester's name, tenant and
+    // institution come from `persons` via evidence.attested_by_person_id —
+    // a LEFT JOIN, since attestation is optional per row and independent of
+    // kind (records/simulate_spine.py gates on kind == 'attestation' OR
+    // attested_by; only the second half needs the database now, since kind
+    // is already selected). computeConfidence()'s signature is unchanged;
+    // only what this caller hands it changes — verifyConfidenceParity.ts
+    // still feeds it fixture rows, deliberately (it tests the model against
+    // known inputs; this walk tests the pipeline that produces real ones).
+    const evidenceRows = await db
+      .select({
+        kind: schema.evidence.kind,
+        summary: schema.evidence.summary,
+        provenance: schema.evidence.provenance,
+        sourceReference: schema.evidence.sourceReference,
+        confidenceLevel: schema.evidence.confidence,
+        sourceVerified: schema.evidence.sourceVerified,
+        aiSourced: schema.evidence.aiSourced,
+        citationResolved: schema.evidence.citationResolved,
+        supports: schema.valueOutcomeEvidence.supports,
+        attesterName: schema.persons.fullName,
+        attesterTenantId: schema.persons.tenantId,
+        attesterInstitutionId: schema.persons.institutionId,
+      })
+      .from(schema.valueOutcomeEvidence)
+      .innerJoin(schema.evidence, eq(schema.valueOutcomeEvidence.evidenceId, schema.evidence.id))
+      .leftJoin(schema.persons, eq(schema.evidence.attestedByPersonId, schema.persons.id))
+      .where(eq(schema.valueOutcomeEvidence.valueOutcomeId, valueOutcomeId))
+      .orderBy(schema.evidence.createdAt);
+
+    // No kind-based inference. attested_by_person_id is either populated
+    // (this row was attested — read the joined name/scope directly) or
+    // null (it wasn't, regardless of kind). 0005: kind and attested_by are
+    // independent facts; a coach's own assessment_result can be attested
+    // without becoming an attestation document.
+    const evidenceForConfidence: ConfidenceEvidenceInput[] = evidenceRows.map((r) => ({
+      kind: r.kind,
+      sourceVerified: r.sourceVerified,
+      supports: r.supports as ConfidenceEvidenceInput['supports'],
+      attestedByName: r.attesterName,
+      attestedByScope: r.attesterName != null ? (r.attesterInstitutionId ? 'institution' : 'tenant') : null,
+    }));
+
     // Computed, never asserted or estimated — db/CONFIDENCE_MODEL.md. The
     // computed band governs; value_outcomes.confidence is advisory only.
     const confidence = computeConfidence({
       metricDefinitionConfirmed: bm.calculation_confirmed,
-      evidence: fixture.evidence.map((e) => fixtureEvidenceToInput(fixture, e)),
+      evidence: evidenceForConfidence,
       claimedCurrencyImpact: vo.claimed_currency_impact,
       realizedCurrencyImpact: vo.realized_currency_impact,
       impactBasisStated: Boolean(vo.impact_basis),
@@ -759,6 +864,20 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       verifierName: seeded.persons.verifier.fullName,
       assertedConfidence: vo.confidence,
     });
+
+    // payload.evidence — the same read-back, reshaped for storage rather
+    // than for computeConfidence(). One query, two consumers.
+    const evidenceSnapshot = evidenceRows.map((r) => ({
+      kind: r.kind,
+      summary: r.summary,
+      provenance: r.provenance,
+      source_reference: r.sourceReference,
+      confidence: r.confidenceLevel,
+      source_verified: r.sourceVerified,
+      ai_sourced: r.aiSourced,
+      citation_resolved: r.citationResolved,
+      supports: r.supports,
+    }));
 
     // db/DELTA_AND_PROVENANCE.md Part 1 — the confirmation gap's per-outcome
     // half. Pure computation over already-known fixture values; no new write.
@@ -812,6 +931,22 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       contentHash: e.contentHash,
     }));
 
+    // Every fixture evidence item must reach the database. This walk was
+    // silently dropping every 'impact_basis' item until this fix — the
+    // currency figure on every prior record had declared evidence and
+    // nothing behind it. Rather than trust that this fix (or the next
+    // fixture that introduces a supports value nothing handles yet) covers
+    // everything, fail loud if the counts ever disagree again.
+    if (evidenceSnapshot.length !== fixture.evidence.length) {
+      const missing = fixture.evidence.length - evidenceSnapshot.length;
+      throw new Error(
+        `${missing} fixture.evidence item(s) were never inserted into the database — ` +
+          'a supports value this walk does not handle. This is exactly the impact_basis ' +
+          'defect fixed here: a declared evidence item with nothing behind it. Add handling ' +
+          'for the missing supports value rather than ignoring this.',
+      );
+    }
+
     // payloadHash covers everything the run asserts about itself, including
     // its own identity and sequence — but not the hash field, which cannot
     // hash itself. The stored payload then carries all three so the
@@ -845,11 +980,9 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       findings,
       events: payloadEvents,
       // Snapshot at walk time, not a live join — see the declaration above
-      // for why. Only baseline/actual evidence is captured because only
-      // those two categories are inserted anywhere in this walk today;
-      // fixture.evidence also carries 'impact_basis' items that this walk
-      // has never persisted to the evidence table, a pre-existing gap this
-      // change doesn't extend to.
+      // for why. Covers every supports value this fixture actually uses
+      // (baseline, actual, impact_basis) — enforced by the completeness
+      // check below, not just this comment.
       evidence: evidenceSnapshot,
     };
     const payloadHash = sha256Hex(runPayloadBase);

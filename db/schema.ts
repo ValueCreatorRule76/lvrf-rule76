@@ -326,6 +326,23 @@ export const evidence = pgTable('evidence', {
   capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
 
+  /**
+   * Who puts their name to the claim that this evidence says what it says.
+   *
+   * DISTINCT from capturedByPersonId, which is whoever entered it — normally
+   * the value engineer. Attestation credit (0.6) requires the attester be
+   * institution-scoped and non-synthetic: a vendor capturing a customer's
+   * export is not the customer attesting to it.
+   *
+   * Independent of `kind`. An assessment_result may be attested; a coach
+   * signing that scores are accurate does not make the artifact an
+   * attestation document. simulate_spine.py has always gated on
+   * `kind == 'attestation' OR attested_by`.
+   */
+  attestedByPersonId: uuid('attested_by_person_id')
+    .references(() => persons.id, { onDelete: 'restrict' }),
+  attestedAt: timestamp('attested_at', { withTimezone: true }),
+
   /* ── AMENDMENT-005 · governed research ─────────────────────────── */
   /** Located by a model rather than a person. */
   aiSourced: boolean('ai_sourced').notNull().default(false),
@@ -355,8 +372,13 @@ export const evidence = pgTable('evidence', {
     sql`${t.sourceVerified} = false OR ${t.aiSourced} = false OR ${t.citationResolved} = true`),
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'evidence_superseded_by_fk' }).onDelete('restrict'),
+  /** An attestation with no date, or a date with no attester, is a half-recorded fact. */
+  check('evidence_attestation_is_complete',
+    sql`(${t.attestedByPersonId} IS NULL AND ${t.attestedAt} IS NULL)
+        OR (${t.attestedByPersonId} IS NOT NULL AND ${t.attestedAt} IS NOT NULL)`),
   index('evidence_institution_idx').on(t.institutionId),
   index('evidence_verified_idx').on(t.sourceVerified),
+  index('evidence_attested_idx').on(t.attestedByPersonId),
 ]);
 
 /* ================================================================== */
