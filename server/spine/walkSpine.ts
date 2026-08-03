@@ -974,6 +974,13 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       realizedCurrencyImpact: vo.realized_currency_impact,
       realization,
       disclosure,
+      // records/render_record.py's page-one provenance banner, rendered
+      // above its disclosure-gate banner, and visually distinct from it:
+      // the gate states verification status; this states whether the
+      // engagement itself is real. bannerTitle falls back the same way
+      // the Python renderer does — fx['run'].get('banner_title','PROVENANCE').
+      note: fixture.run.note,
+      bannerTitle: fixture.run.banner_title ?? 'PROVENANCE',
       confidence,
       delta,
       health,

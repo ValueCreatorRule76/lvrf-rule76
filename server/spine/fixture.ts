@@ -45,6 +45,8 @@ export interface CustomerZeroFixture {
     constitutional_authority: string;
     simulation_boundary: string;
     note: string;
+    /** records/render_record.py defaults this to 'PROVENANCE' when absent. */
+    banner_title?: string;
   };
   tenant: { id: string; is_self_measuring: boolean };
   institution: { name: string; industry: string; is_tenant_self: boolean };

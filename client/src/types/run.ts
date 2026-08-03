@@ -122,6 +122,11 @@ export interface RunPayload {
   sourceFixture: string;
   // Absent on runs walked before this field existed.
   evidence?: EvidenceItem[];
+  // Provenance banner — records/render_record.py's page-one banner, states
+  // whether the engagement itself is real, independent of verification
+  // status. Absent on runs walked before this field existed; not back-filled.
+  note?: string;
+  bannerTitle?: string;
 }
 
 export function isEnrichedBusinessMetric(
