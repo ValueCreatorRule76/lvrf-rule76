@@ -168,3 +168,10 @@ hard deletes is the worst version of this failure.
 | `/var/backups/lvrf/*.dump` | database contents |
 
 Confirm `.gitignore` covers `.env` and `*.dump` before committing anything here.
+
+**Expected placeholders, not a leak.** `.env.example` and `LVRF_Local_Setup.md`
+intentionally contain a `DATABASE_URL` built from the local-development password
+(`localdevonly`) and `SESSION_SECRET=replace-me`. Neither is the production
+credential — the real values live only in `/srv/lvrf/.env` on the VPS, never in
+this repo. A secret scan matching these two files on a `postgresql://` or
+`SESSION_SECRET=` pattern is a template, not a finding.
