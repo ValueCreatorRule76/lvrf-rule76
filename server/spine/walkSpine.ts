@@ -278,6 +278,23 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     const bm = fixture.business_metric;
     const valueOutcomeId = randomUUID();
 
+    // A snapshot, not a live join: evidence mutates after a walk (verification
+    // flips, citations resolve), so payload.evidence must freeze what backed
+    // THIS confidence score, at the moment it was computed. Captured from the
+    // returned row on each insert below — the actual stored values, including
+    // column defaults (ai_sourced/citation_resolved), not the fixture input.
+    const evidenceSnapshot: Array<{
+      kind: string;
+      summary: string;
+      provenance: string;
+      source_reference: string | null;
+      confidence: string;
+      source_verified: boolean;
+      ai_sourced: boolean;
+      citation_resolved: boolean;
+      supports: string;
+    }> = [];
+
     // Hoisted from STAGE 6: this is pure (fixture data plus confidenceModel's
     // shared evidenceCredit gate — no DB reads), so it's knowable before the
     // walk begins. STAGE 6 still performs the actual conditional UPDATE and
@@ -351,6 +368,17 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         .returning();
       rowsWritten.evidence += 1;
       baselineEvidenceIds.push(row.id);
+      evidenceSnapshot.push({
+        kind: row.kind,
+        summary: row.summary,
+        provenance: row.provenance,
+        source_reference: row.sourceReference,
+        confidence: row.confidence,
+        source_verified: row.sourceVerified,
+        ai_sourced: row.aiSourced,
+        citation_resolved: row.citationResolved,
+        supports: 'baseline',
+      });
 
       await emit(ctx, 'HB-0009', {
         stage: 'baseline',
@@ -538,6 +566,17 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         supports: 'actual',
       });
       rowsWritten.value_outcome_evidence += 1;
+      evidenceSnapshot.push({
+        kind: row.kind,
+        summary: row.summary,
+        provenance: row.provenance,
+        source_reference: row.sourceReference,
+        confidence: row.confidence,
+        source_verified: row.sourceVerified,
+        ai_sourced: row.aiSourced,
+        citation_resolved: row.citationResolved,
+        supports: 'actual',
+      });
     }
 
     // realization and actualValue must move in the same UPDATE — schema CHECK
@@ -783,7 +822,16 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       sourceFixture,
       engagement: fixture.engagement.name,
       capability: fixture.capability.name,
-      businessMetric: bm.name,
+      // Was bm.name alone: the workbench had no way to know 1.08 means
+      // incidents per 200,000 hours, or that lower is better, without
+      // opening the fixture file separately — which the API deliberately
+      // doesn't do. Now self-describing.
+      businessMetric: {
+        name: bm.name,
+        unit: bm.unit,
+        direction: bm.direction,
+        sourceSystem: bm.source_system,
+      },
       baselineValue: vo.baseline_value,
       targetValue: vo.target_value,
       actualValue: vo.actual_value,
@@ -796,6 +844,13 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       health,
       findings,
       events: payloadEvents,
+      // Snapshot at walk time, not a live join — see the declaration above
+      // for why. Only baseline/actual evidence is captured because only
+      // those two categories are inserted anywhere in this walk today;
+      // fixture.evidence also carries 'impact_basis' items that this walk
+      // has never persisted to the evidence table, a pre-existing gap this
+      // change doesn't extend to.
+      evidence: evidenceSnapshot,
     };
     const payloadHash = sha256Hex(runPayloadBase);
     const runPayload = { ...runPayloadBase, payloadHash };
