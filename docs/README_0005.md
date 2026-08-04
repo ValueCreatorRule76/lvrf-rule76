@@ -2,6 +2,8 @@
 
 Everything here was executed against **Postgres 16.14** (same minor as `srv1862778`) before delivery. Results are at the bottom.
 
+Related proposal: `R76-LVRF-PROP-001` is filed at `docs/proposals/` (HTML + PDF).
+
 ---
 
 ## Files

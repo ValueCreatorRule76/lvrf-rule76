@@ -347,6 +347,9 @@ route ships.
    attestation authority, regulatory overlay) crossed with horizontal packs (role family →
    capability set). Build **one** pack. Six is the thirteen-volumes error in a new costume.
    A pack supplies content, never presentation.
+
+  Proposal filed: `R76-LVRF-PROP-001` in `docs/proposals/` (HTML + PDF, Proposed status,
+  2026-08-03).
 5. **Repo scaffold and first migration.** Nothing is deployed. No API, no UI.
 6. **Portfolio view.** Tier-2 motion needs cross-engagement visibility.
 

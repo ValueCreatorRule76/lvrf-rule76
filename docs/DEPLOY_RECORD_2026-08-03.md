@@ -8,6 +8,8 @@
 **Repo commit at deploy:** `cfe7f7d`
 **Domain:** `lvrf-rule76.com`, `www.lvrf-rule76.com`
 
+Related proposal artifact filing: `R76-LVRF-PROP-001` in `docs/proposals/` (HTML + PDF, Proposed).
+
 Every value below was measured, not inferred. Where a number differs from the
 runbook, the runbook is wrong and the reason is recorded.
 

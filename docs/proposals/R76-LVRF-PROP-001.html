@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LVRF Industry Packs — Architecture and First-Pack Selection</title>
+<style>
+  :root {
+    --ink: #09090A;
+    --gold: #C9A24A;
+    --silver: #C0C0C0;
+    --paper: #FAFAFA;
+    --rule: #D8D8D8;
+    --muted: #5A5A5E;
+  }
+
+  /* ---- page setup ---- */
+  @page {
+    size: Letter;
+    margin: 22mm 20mm 20mm 20mm;
+    background: var(--paper);
+    @bottom-left {
+      content: "Rule76 \00a0·\00a0 LVRF \00a0·\00a0 R76-LVRF-PROP-001";
+      font-family: "Barlow"; font-size: 7.5pt; letter-spacing: .06em;
+      color: var(--muted); padding-bottom: 4mm;
+    }
+    @bottom-right {
+      content: counter(page);
+      font-family: "Bebas Neue"; font-size: 11pt;
+      color: var(--ink); padding-bottom: 3.4mm;
+    }
+  }
+
+  @page cover {
+    margin: 0;
+    background: var(--ink);
+    @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
+    @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; }
+  }
+
+  @page divider {
+    margin: 0;
+    background: var(--ink);
+    @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
+    @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; }
+  }
+
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: "Barlow", sans-serif;
+    font-size: 10pt; line-height: 1.52;
+    color: var(--ink);
+  }
+
+  /* ---- cover ---- */
+  .cover { page: cover; height: 100vh; box-sizing: border-box; padding: 30mm 22mm 20mm 22mm;
+           display: flex; flex-direction: column; justify-content: space-between; color: var(--paper); }
+  .cover-mark { font-family: "Bebas Neue"; font-size: 26pt; letter-spacing: .16em; color: var(--paper); }
+  .cover-mark .bar { color: var(--gold); padding: 0 .18em; }
+  .cover-kicker { font-family: "Barlow"; font-size: 8.5pt; letter-spacing: .30em;
+                  text-transform: uppercase; color: var(--gold); margin-top: 3mm; }
+  .cover-title { font-family: "Bebas Neue"; font-size: 50pt; line-height: .96;
+                 letter-spacing: .012em; color: var(--paper); margin: 0 0 6mm 0; }
+  .cover-sub { font-size: 12pt; line-height: 1.45; color: var(--silver); max-width: 132mm; font-weight: 300; }
+  .cover-rule { height: 2px; background: var(--gold); width: 46mm; margin: 9mm 0; }
+  .cover-meta { display: flex; flex-wrap: wrap; }
+  .cover-meta div { width: 33.33%; margin-bottom: 6mm; }
+  .cover-meta dt { font-size: 7.5pt; letter-spacing: .2em; text-transform: uppercase;
+                   color: var(--gold); margin-bottom: 1.6mm; }
+  .cover-meta dd { margin: 0; font-size: 10pt; color: var(--paper); }
+
+  /* ---- section divider ---- */
+  .divider { page: divider; height: 100vh; box-sizing: border-box; padding: 0 22mm;
+             display: flex; flex-direction: column; justify-content: center; color: var(--paper); }
+  .divider .num { font-family: "Bebas Neue"; font-size: 15pt; letter-spacing: .3em; color: var(--gold); }
+  .divider .name { font-family: "Bebas Neue"; font-size: 42pt; line-height: 1.02; margin-top: 3mm; }
+  .divider .blurb { font-size: 10.5pt; color: var(--silver); max-width: 118mm; margin-top: 6mm; font-weight: 300; }
+
+  /* ---- typography ---- */
+  h1 { font-family: "Bebas Neue"; font-size: 24pt; letter-spacing: .02em;
+       margin: 0 0 1mm 0; line-height: 1.06; }
+  h2 { font-family: "Bebas Neue"; font-size: 16pt; letter-spacing: .04em;
+       margin: 8mm 0 2.5mm 0; line-height: 1.1; border-bottom: 1.5px solid var(--gold);
+       padding-bottom: 1.6mm; }
+  h3 { font-family: "Barlow"; font-size: 10.5pt; font-weight: 600; letter-spacing: .02em;
+       margin: 5.5mm 0 1.5mm 0; }
+  .eyebrow { font-size: 7.5pt; letter-spacing: .24em; text-transform: uppercase;
+             color: var(--gold); font-weight: 600; margin-bottom: 2mm; }
+  p { margin: 0 0 3mm 0; }
+  .lede { font-size: 11pt; line-height: 1.5; color: #2A2A2E; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  ul, ol { margin: 0 0 3.5mm 0; padding-left: 5mm; }
+  li { margin-bottom: 1.6mm; }
+  .tight li { margin-bottom: .9mm; }
+
+  /* ---- tables ---- */
+  table { width: 100%; border-collapse: collapse; margin: 3mm 0 4mm 0;
+          font-size: 8.4pt; line-height: 1.34; }
+  thead { display: table-header-group; }
+  th { text-align: left; font-family: "Barlow"; font-weight: 600; font-size: 7.4pt;
+       letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+       border-bottom: 1.5px solid var(--ink); padding: 0 2.6mm 1.8mm 0; vertical-align: bottom; }
+  td { padding: 2.1mm 2.6mm 2.1mm 0; border-bottom: .6px solid var(--rule); vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  td:last-child, th:last-child { padding-right: 0; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .verdict { font-family: "Barlow"; font-weight: 600; font-size: 7.4pt;
+             letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+  .v-pack { color: #1F6B3A; }
+  .v-elig { color: #7A5C10; }
+  .v-defer { color: var(--muted); }
+  .v-no { color: #8A2A2A; }
+
+  .conf { font-weight: 600; font-size: 8pt; letter-spacing: .06em; white-space: nowrap; }
+  .c-high { color: #1F6B3A; }
+  .c-med { color: #7A5C10; }
+  .c-low { color: #8A2A2A; }
+
+  /* ---- callouts ---- */
+  .callout { border-left: 2.5px solid var(--gold); padding: 3mm 0 3mm 5mm;
+             margin: 4mm 0; page-break-inside: avoid; }
+  .callout .label { font-size: 7.5pt; letter-spacing: .22em; text-transform: uppercase;
+                    color: var(--gold); font-weight: 600; margin-bottom: 1.6mm; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .prohibition { border-left: 2.5px solid #8A2A2A; padding: 3mm 0 3mm 5mm; margin: 4mm 0;
+                 page-break-inside: avoid; }
+  .prohibition .label { font-size: 7.5pt; letter-spacing: .22em; text-transform: uppercase;
+                        color: #8A2A2A; font-weight: 600; margin-bottom: 1.6mm; }
+  .prohibition p:last-child { margin-bottom: 0; }
+
+  .statusbox { background: #F0F0F0; padding: 4mm 5mm; margin: 0 0 5mm 0; page-break-inside: avoid; }
+  .statusbox p { margin-bottom: 0; font-size: 9.5pt; }
+
+  pre { font-family: "DejaVu Sans Mono", monospace; font-size: 7.3pt; line-height: 1.42;
+        background: #F0F0F0; padding: 3.5mm 4mm; margin: 2.5mm 0 4mm 0;
+        white-space: pre-wrap; page-break-inside: avoid; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 8.4pt; }
+
+  .footnote { font-size: 8pt; color: var(--muted); line-height: 1.4; }
+  .avoid { page-break-inside: avoid; }
+  .newpage { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div>
+    <div class="cover-mark">RULE<span class="bar">|</span>76</div>
+    <div class="cover-kicker">Learning Value Realization Framework</div>
+  </div>
+
+  <div>
+    <div class="cover-rule"></div>
+    <h1 class="cover-title">INDUSTRY PACKS<br>ARCHITECTURE AND<br>FIRST-PACK SELECTION</h1>
+    <p class="cover-sub">A governed proposal establishing the two-axis pack contract for LVRF,
+       the admissibility test a vertical pack must pass, and the selection of the first pack
+       to be built.</p>
+  </div>
+
+  <div class="cover-meta">
+    <div><dt>Document</dt><dd>R76-LVRF-PROP-001</dd></div>
+    <div><dt>Status</dt><dd>Proposed — not in force</dd></div>
+    <div><dt>Version</dt><dd>1.0.0</dd></div>
+    <div><dt>Chapel</dt><dd>LVRF</dd></div>
+    <div><dt>Authority</dt><dd>Rule76 Constitution</dd></div>
+    <div><dt>Date</dt><dd>2 August 2026</dd></div>
+  </div>
+</section>
+
+<!-- ============ 1. STATUS AND GROUNDS ============ -->
+<section>
+  <div class="eyebrow">Section One</div>
+  <h1>STATUS AND GROUNDS</h1>
+
+  <div class="statusbox">
+    <p><strong>Proposed.</strong> This instrument is not in force until ratified. It creates no
+    obligation, populates no metric library, and asserts no value. Section Nine states what
+    ratification requires.</p>
+  </div>
+
+  <h2>1.1 &nbsp; Why this proposal exists</h2>
+
+  <p class="lede">LVRF cannot be sold or delivered one-size-fits-all. A record is only producible
+  when the institution already reports the metric and someone inside it holds the authority to
+  attest to that number. Both of those vary by industry. Neither varies by anything else.</p>
+
+  <p>CVAF resolved the same problem with industry packs, and the instinct was to inherit that
+  solution wholesale. Two things prevent it. First, an LVRF pack is not structurally the same
+  object as a CVAF pack — what varies is different, so the admissibility test must be different.
+  Second, the working assumption behind this proposal was that a canonical industry list could be
+  inherited from the vendor whose motion LVRF is being built to serve.</p>
+
+  <p><strong>That list does not exist.</strong> A direct survey of Skillsoft's published surfaces
+  on 2 August 2026 found no industry taxonomy in the go-to-market, no vertical segmentation in the
+  most recent annual filing, and no industry cut on the one solution page where verticalization
+  would be most expected. What exists instead is four fragments, one of them retired.</p>
+
+  <p>This is not an obstacle. It is the finding. It changes what LVRF has to supply, and it changes
+  what LVRF is worth.</p>
+
+  <h2>1.2 &nbsp; What this proposal does not do</h2>
+
+  <ul class="tight">
+    <li>It does not populate any metric library with numbers.</li>
+    <li>It does not assert Skillsoft revenue concentration by industry. That was not obtainable
+        from admissible sources and is recorded as an open gap.</li>
+    <li>It does not build the second pack, or authorise one.</li>
+    <li>It does not replace <code>db/schema.ts</code>. The schema delta in Section Eight is additive
+        and must be reconciled against the repository before it is applied.</li>
+  </ul>
+</section>
+
+<!-- ============ DIVIDER ============ -->
+<section class="divider">
+  <div class="num">SECTION TWO</div>
+  <div class="name">THE EVIDENCE</div>
+  <div class="blurb">Every finding in this proposal traces to a row below. Where a claim is asserted
+  rather than sourced, it is marked as asserted and carries a confidence penalty.</div>
+</section>
+
+<!-- ============ 2. EVIDENCE REGISTER ============ -->
+<section>
+  <div class="eyebrow">Section Two</div>
+  <h1>EVIDENCE REGISTER</h1>
+
+  <p>All rows retrieved 2 August 2026 unless otherwise noted. <em>Basis</em> distinguishes what was
+  directly observed from what was inferred or taken from a secondary index.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:9%">Ref</th>
+        <th style="width:24%">Source</th>
+        <th style="width:44%">What it establishes</th>
+        <th style="width:14%">Basis</th>
+        <th style="width:9%">Conf.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>E-01</strong></td>
+        <td>skillsoft.com global navigation</td>
+        <td>Solutions are organised as Leadership &amp; Business Skills, Compliance &amp; Ethics,
+            Technology Skills, and Support &amp; Services. No Industries menu is present anywhere
+            in the primary navigation.</td>
+        <td>Observed</td>
+        <td class="conf c-high">HIGH</td>
+      </tr>
+      <tr>
+        <td><strong>E-02</strong></td>
+        <td>skillsoft.com footer</td>
+        <td><code>/federal-government</code> is the only industry-specific destination carried in
+            site navigation.</td>
+        <td>Observed</td>
+        <td class="conf c-high">HIGH</td>
+      </tr>
+      <tr>
+        <td><strong>E-03</strong></td>
+        <td>skillsoft.com/for-business <span class="footnote">(retired)</span></td>
+        <td>Case studies were previously grouped under four industries: U.S. Federal Government,
+            Financial Services, Healthcare, Manufacturing. The URL now redirects to the homepage;
+            the grouping was dropped at the February 2026 rebrand.</td>
+        <td>Index snapshot<br>(Jan 2026)</td>
+        <td class="conf c-med">MED</td>
+      </tr>
+      <tr>
+        <td><strong>E-04</strong></td>
+        <td>skillsoft.com/customer-stories</td>
+        <td>A live Industries filter facet exists — the only first-party industry taxonomy still
+            operating. Observed tag values: Consulting; Biotech / Pharmaceutical; Food and Beverage.
+            The full facet list is client-rendered and was <strong>not</strong> enumerated.</td>
+        <td>Partially<br>observed</td>
+        <td class="conf c-med">MED</td>
+      </tr>
+      <tr>
+        <td><strong>E-05</strong></td>
+        <td>skillsoft.com/customer-stories</td>
+        <td>Named reference accounts span airlines, public health, medical devices, IT services,
+            municipal government, insurance services, and print manufacturing: Delta Air Lines,
+            Denver Health, Philips Healthcare, NTT DATA, City &amp; County of Denver, Asurion,
+            Lexmark. Also CGI and Apexon.</td>
+        <td>Observed</td>
+        <td class="conf c-high">HIGH</td>
+      </tr>
+      <tr>
+        <td><strong>E-06</strong></td>
+        <td>skillsoft.com/compliance-leaders</td>
+        <td>The Compliance solution — the one place verticalization would be most expected — is cut
+            by <em>risk theme</em> instead: GenAI ethics, workplace safety, CSR/ESG, cyber defence.
+            Sensata Technologies and Scotts Miracle-Gro appear as named proof.</td>
+        <td>Observed</td>
+        <td class="conf c-high">HIGH</td>
+      </tr>
+      <tr>
+        <td><strong>E-07</strong></td>
+        <td>Skillsoft FY2026 Form 10-K<br><span class="footnote">filed 7 April 2026</span></td>
+        <td>The business is described by segment (Talent Development Solutions, Global Knowledge)
+            and by subject area — leadership and business, technology, compliance. No vertical
+            taxonomy appears. Industries are referenced only in the context of partner-led
+            coverage, and are not enumerated.</td>
+        <td>Observed</td>
+        <td class="conf c-high">HIGH</td>
+      </tr>
+      <tr>
+        <td><strong>E-08</strong></td>
+        <td>Percipio course catalogue</td>
+        <td>Industry-context content exists at course level — e.g. a Financial Services industry
+            overview course. This is content-level, not go-to-market-level, and a single instance
+            is not evidence of a taxonomy.</td>
+        <td>Observed,<br>single instance</td>
+        <td class="conf c-low">LOW</td>
+      </tr>
+      <tr>
+        <td><strong>E-09</strong></td>
+        <td>Third-party technographic aggregators</td>
+        <td>Several vendors publish Skillsoft install-base counts segmented by industry.
+            <strong>Ruled inadmissible.</strong> Methodology is undisclosed, the figures conflict
+            across vendors, and none is verifiable. Recorded here so the decision to exclude is
+            on the record.</td>
+        <td>Excluded</td>
+        <td class="conf c-low">N/A</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="label">Convergence</div>
+    <p>E-01, E-06 and E-07 are three independent surfaces — marketing navigation, solution
+    positioning, and a regulated financial filing. All three organise the business by capability
+    domain and none by industry. Agreement across three surfaces of different provenance is what
+    lifts the central finding to high confidence.</p>
+  </div>
+</section>
+
+<!-- ============ DIVIDER ============ -->
+<section class="divider">
+  <div class="num">SECTION THREE</div>
+  <div class="name">FINDINGS</div>
+  <div class="blurb">Three findings follow from the evidence. The first is a gift. The second is
+  the work. The third is uncomfortable and should not be softened.</div>
+</section>
+
+<!-- ============ 3. FINDINGS ============ -->
+<section>
+  <div class="eyebrow">Section Three</div>
+  <h1>FINDINGS</h1>
+
+  <h2>3.1 &nbsp; Finding I — the horizontal axis is already given</h2>
+
+  <p>Skillsoft's three published solution areas — Leadership &amp; Business, Compliance &amp;
+  Ethics, Technology — are, functionally, a horizontal segmentation of workforce capability. They
+  are stable, they appear identically in the marketing navigation and in the annual filing
+  <span class="footnote">(E-01, E-07)</span>, and they are the vocabulary the buyer already uses.</p>
+
+  <p>LVRF's horizontal pack axis should bind to those three at the top level. Role families sit
+  beneath them. This is alignment obtained at zero cost, and it removes an argument that does not
+  need to be had in a first conversation.</p>
+
+  <h2>3.2 &nbsp; Finding II — the vertical axis is absent, and is therefore the contribution</h2>
+
+  <p>There is no industry taxonomy to inherit. The four fragments that exist are: one true vertical
+  page (Federal), one retired four-industry grouping, one partially-enumerable customer-story facet,
+  and one course-level content tag <span class="footnote">(E-02, E-03, E-04, E-08)</span>.</p>
+
+  <p>This matters more than it first appears. A marketing segmentation is built to route a buyer to
+  a page. It is not built to answer the only question LVRF actually needs answered:</p>
+
+  <div class="callout">
+    <div class="label">The question a vertical pack exists to answer</div>
+    <p><strong>Can this institution produce the number, and is there someone inside it with the
+    standing to attest to it?</strong></p>
+    <p>No published Skillsoft surface answers this, because no published Skillsoft surface was built
+    to. The vertical axis is not a data-entry exercise. It is the contribution.</p>
+  </div>
+
+  <h2>3.3 &nbsp; Finding III — the proof/revenue asymmetry</h2>
+
+  <p>Applying the test in Section Four to the named accounts in E-05 produces an uncomfortable
+  result. Technology and IT services, and professional services and consulting, are heavily
+  represented among Skillsoft's published reference accounts — and they are precisely the two
+  segments where LVRF cannot produce a verified record, because those institutions do not measure
+  workforce consequence in any form a CFO would accept.</p>
+
+  <p>Conversely, the segments where the metric already exists and the attestation authority is
+  named and known — utilities, life sciences, banking, healthcare delivery — exist because a
+  regulator compels them to. The number is free. It is already audited. It cannot be disputed by
+  the customer or fabricated by the vendor.</p>
+
+  <div class="callout">
+    <div class="label">Stated plainly</div>
+    <p>The accounts that are easiest to sell are the hardest to prove. The accounts that are
+    hardest to sell are where proof is free.</p>
+    <p>This is a strategic finding, not a defect in LVRF. It says where a value-engineering function
+    should be pointed first, and it is the kind of thing a revenue leader should want to be told
+    before it is discovered at a renewal.</p>
+  </div>
+
+  <p class="footnote"><strong>Confidence note.</strong> The <em>direction</em> of this asymmetry is
+  well supported by E-05 and E-06. The <em>magnitude</em> — what share of revenue sits in the
+  unprovable segments — is not evidenced, because the admissible sources do not disclose it and the
+  inadmissible ones (E-09) were excluded. Magnitude is a discovery question, not a research question.</p>
+</section>
+
+<!-- ============ 4. THE PACK TEST ============ -->
+<section class="newpage">
+  <div class="eyebrow">Section Four</div>
+  <h1>THE PACK TEST</h1>
+
+  <p class="lede">CVAF's sub-industry rule is: a sub-industry earns its own pack when its stage
+  contract and value model differ materially. That rule is correct for CVAF and wrong for LVRF,
+  because in LVRF the stage contract does not vary. The value spine is the value spine.</p>
+
+  <h2>4.1 &nbsp; The four things that do vary</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:26%">Dimension</th>
+        <th style="width:74%">Why it determines whether a record can be produced at all</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Metric library</strong></td>
+        <td>The business metrics the institution <em>already reports</em>. Not levers on a shared
+            model — different measurements entirely. A utility reports recordable incidents; a bank
+            reports audit findings; a hospital reports credentialing lapses. This is the foundation
+            of every record.</td>
+      </tr>
+      <tr>
+        <td><strong>Attestation authority</strong></td>
+        <td>Who inside the institution can attest to that number. Safety Director, Chief Credit
+            Officer, Head of Quality Assurance. This determines whether <code>commit</code> and
+            <code>verify</code> can complete, and it is the single thing that lifts a record above
+            its unverified confidence ceiling.</td>
+      </tr>
+      <tr>
+        <td><strong>Baseline availability</strong></td>
+        <td>Whether the institution can produce the number at all. Regulated industries measure
+            workforce consequence well because they must. Professional services barely measure it.
+            Encoding this lets an engagement be judged infeasible <em>before</em> it is sold.</td>
+      </tr>
+      <tr>
+        <td><strong>Regulatory overlay</strong></td>
+        <td>Unique to LVRF, with no CVAF analogue. In regulated industries learning carries
+            compliance value with hard-dollar consequence — citations, consent decrees, licence
+            lapses. This is the strongest value case LVRF can make anywhere.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4.2 &nbsp; The rule</h2>
+
+  <div class="callout">
+    <div class="label">LVRF Sub-Industry Rule</div>
+    <p><strong>A vertical earns its own pack when its metric library or its attestation authority
+    differs materially from an existing pack.</strong> Differences in buyer language, deal size,
+    content mix, or sales territory do not qualify.</p>
+  </div>
+
+  <p>Applied concretely:</p>
+
+  <ul class="tight">
+    <li><strong>Biotech and Pharma → one pack.</strong> Same GxP regime, same 483 exposure, same
+        Quality Assurance attestation. Note this diverges from the CVAF treatment, where the two
+        cleared the bar as separate packs. Different test, different answer — correctly.</li>
+    <li><strong>Regulated utilities and midstream oil &amp; gas → two packs.</strong> Different
+        regulator, different mandated metric, different attesting officer.</li>
+    <li><strong>Retail banking and commercial banking → one pack.</strong> Same examination regime,
+        same Chief Compliance Officer standing.</li>
+  </ul>
+</section>
+
+<!-- ============ DIVIDER ============ -->
+<section class="divider">
+  <div class="num">SECTION FIVE</div>
+  <div class="name">THE ROSTER</div>
+  <div class="blurb">Ten candidate verticals, each run against the four dimensions. Metric libraries
+  and attestation titles below are asserted from domain knowledge, not sourced from Skillsoft.
+  They are discovery inputs, not findings.</div>
+</section>
+
+<!-- ============ 5. CANDIDATE ROSTER ============ -->
+<section>
+  <div class="eyebrow">Section Five</div>
+  <h1>CANDIDATE ROSTER</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:17%">Vertical</th>
+        <th style="width:25%">Metric already reported</th>
+        <th style="width:19%">Attestation authority</th>
+        <th style="width:13%">Baseline</th>
+        <th style="width:13%">Overlay</th>
+        <th style="width:13%">Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Regulated Utilities &amp; Energy</strong></td>
+        <td>TRIR, DART, OSHA recordables, NERC findings</td>
+        <td>VP HSE / Director of Safety</td>
+        <td>Mandated</td>
+        <td>Heavy</td>
+        <td class="verdict v-pack">Pack — first</td>
+      </tr>
+      <tr>
+        <td><strong>Life Sciences</strong><br><span class="footnote">Pharma, biotech, device</span></td>
+        <td>GxP deviations, FDA 483 observations, CAPA cycle time, training-record audit failures</td>
+        <td>Head of Quality Assurance</td>
+        <td>Mandated</td>
+        <td>Heavy</td>
+        <td class="verdict v-elig">Eligible</td>
+      </tr>
+      <tr>
+        <td><strong>Banking &amp; Financial Services</strong></td>
+        <td>Audit findings, remediation cycle time, MRAs, AML alert quality</td>
+        <td>Chief Compliance Officer / Chief Credit Officer</td>
+        <td>Mandated</td>
+        <td>Heavy</td>
+        <td class="verdict v-elig">Eligible</td>
+      </tr>
+      <tr>
+        <td><strong>Healthcare Delivery</strong></td>
+        <td>Credentialing lapse rate, accreditation findings, HAI rate, readmission</td>
+        <td>CNO / Chief Compliance Officer</td>
+        <td>Mandated</td>
+        <td>Heavy</td>
+        <td class="verdict v-elig">Eligible</td>
+      </tr>
+      <tr>
+        <td><strong>U.S. Federal &amp; Public Sector</strong></td>
+        <td>IG findings, mandated training currency, mission readiness</td>
+        <td>Agency CHCO</td>
+        <td>Mandated</td>
+        <td>Heavy,<br>procurement-shaped</td>
+        <td class="verdict v-defer">Defer</td>
+      </tr>
+      <tr>
+        <td><strong>Industrial Manufacturing</strong></td>
+        <td>TRIR, scrap and rework rate, first-pass yield, OEE</td>
+        <td>Plant Operations / Corporate EHS</td>
+        <td>Common</td>
+        <td>Moderate</td>
+        <td class="verdict v-elig">Eligible</td>
+      </tr>
+      <tr>
+        <td><strong>Aviation, Transport &amp; Logistics</strong></td>
+        <td>Training currency, safety events, regulator findings</td>
+        <td>Director of Safety</td>
+        <td>Mandated</td>
+        <td>Heavy</td>
+        <td class="verdict v-defer">Defer</td>
+      </tr>
+      <tr>
+        <td><strong>Retail, Consumer &amp; Food/Beverage</strong></td>
+        <td>Shrink, turnover, food-safety citations</td>
+        <td>Operations / Quality Assurance</td>
+        <td>Mixed</td>
+        <td>Moderate</td>
+        <td class="verdict v-defer">Defer</td>
+      </tr>
+      <tr>
+        <td><strong>Technology &amp; IT Services</strong></td>
+        <td>None reported as workforce consequence</td>
+        <td>Undetermined</td>
+        <td>Absent</td>
+        <td>Negligible</td>
+        <td class="verdict v-no">Fails test</td>
+      </tr>
+      <tr>
+        <td><strong>Professional Services &amp; Consulting</strong></td>
+        <td>Utilisation, realisation rate — weak and disputable</td>
+        <td>Practice leadership — no attestation standing</td>
+        <td>Weak</td>
+        <td>Negligible</td>
+        <td class="verdict v-no">Fails test</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Notes on the deferrals</h3>
+
+  <ul class="tight">
+    <li><strong>Federal</strong> passes the test cleanly but is deferred because Skillsoft already
+        fields this vertical directly <span class="footnote">(E-02)</span>. A pack adds the least
+        marginal insight where the vendor already has a dedicated motion.</li>
+    <li><strong>Aviation and transport</strong> passes the test but rests on thin install-base
+        evidence — one named account <span class="footnote">(E-05)</span>. Revisit when the
+        install-base gap is closed.</li>
+    <li><strong>Retail and consumer</strong> is mixed: food and beverage carries a real regulatory
+        overlay and appears in the customer-story facet <span class="footnote">(E-04)</span>, while
+        general retail does not. If it is later built, it should be built as food and beverage only.</li>
+  </ul>
+
+  <div class="prohibition">
+    <div class="label">Marked as asserted</div>
+    <p>Every metric and attestation title in the table above is asserted from domain knowledge. None
+    was sourced from Skillsoft, from a customer, or from a filing. They are the discovery agenda —
+    the questions to confirm with a practitioner — and must not be carried into any customer-facing
+    artefact as though they were established.</p>
+  </div>
+</section>
+
+<!-- ============ 6. RESOLUTION ============ -->
+<section class="newpage">
+  <div class="eyebrow">Section Six</div>
+  <h1>RESOLUTION</h1>
+
+  <h2>6.1 &nbsp; One pack, not six</h2>
+
+  <p>Six packs were approved for CVAF, and that was correct — <em>after</em> Fluor and JE Dunn had
+  proven the model. Opening LVRF with a six-pack roster would be the thirteen-volumes error wearing
+  a new costume. This proposal authorises <strong>one</strong>.</p>
+
+  <h2>6.2 &nbsp; First pack: Regulated Utilities &amp; Energy</h2>
+
+  <p>Designated <code>LVRF-PACK-UTIL-001</code>.</p>
+
+  <p><strong>Grounds.</strong> The pack is already half-built and, more importantly, already proven.
+  The Northgate Utilities record (Use B) reached 80/100 confidence, verified and customer-shareable,
+  against a metric the regulator compels the institution to report. That is not an assertion about
+  what the pack could do. It is a record that exists.</p>
+
+  <h2>6.3 &nbsp; The counter-argument, recorded</h2>
+
+  <p>A serious case exists for opening with <strong>Life Sciences</strong> or
+  <strong>Banking</strong> instead. Both clear the test as cleanly as utilities. Both sit closer to
+  the renewal revenue that a value-engineering function would be hired to defend, and both would
+  therefore move a durable-revenue metric faster. Utilities may simply not be big enough in the
+  book to matter.</p>
+
+  <p><strong>Why it does not carry.</strong> The two options are not symmetric in risk. A second
+  pack built on a proven pattern is cheap. A first pack built on an unproven one is not — and if it
+  fails, the failure is ambiguous between the pack and the mechanism. Utilities first buys a clean
+  attribution. Banking or life sciences second buys the revenue proximity, at a fraction of the cost,
+  once the pattern is known to work.</p>
+
+  <div class="callout">
+    <div class="label">Trigger for the second pack</div>
+    <p>The second pack is not authorised by this instrument. It is authorised when
+    <code>LVRF-PACK-UTIL-001</code> has produced <strong>two verified records at two distinct
+    institutions</strong>. Until then, the pattern is a sample of one.</p>
+  </div>
+</section>
+
+<!-- ============ 7. THE PACK CONTRACT ============ -->
+<section>
+  <div class="eyebrow">Section Seven</div>
+  <h1>THE PACK CONTRACT</h1>
+
+  <h2>7.1 &nbsp; Two axes</h2>
+
+  <p>A pack instantiation is the <em>intersection</em> of a vertical and a horizontal. Neither is
+  usable alone.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:20%">Axis</th>
+        <th style="width:40%">Supplies</th>
+        <th style="width:40%">Binds to</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Vertical</strong><br>(industry)</td>
+        <td>Metric library, attestation authority map, baseline availability declaration,
+            regulatory overlay register</td>
+        <td>Nothing published — supplied by Rule76 <span class="footnote">(Finding II)</span></td>
+      </tr>
+      <tr>
+        <td><strong>Horizontal</strong><br>(role family)</td>
+        <td>Capability set</td>
+        <td>Leadership &amp; Business / Compliance &amp; Ethics / Technology
+            <span class="footnote">(Finding I)</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>7.2 &nbsp; What a pack supplies</h2>
+
+  <p>A pack is the Rule76 definition of what each stage of the spine <em>requires and produces</em>
+  for that intersection. It is not a set of default numbers. This definition is inherited unchanged
+  from the CVAF pack architecture and is the one part of that architecture that transfers cleanly.</p>
+
+  <h2>7.3 &nbsp; Prohibitions</h2>
+
+  <div class="prohibition">
+    <div class="label">A pack may never</div>
+    <ul class="tight" style="margin-bottom:0">
+      <li>Introduce visual language of any kind — no colour, no typography, no document structure,
+          no gold of its own. A pack populates governed templates. The moment a third pack can style
+          itself, the design system has fragmented.</li>
+      <li>Supply a default value, benchmark, or number that has not been sourced and marked.</li>
+      <li>Raise the confidence of a record. Only attestation does that.</li>
+      <li>Carry both axes. A vertical pack holds no capabilities; a horizontal pack holds no metrics
+          and no attestation roles. This is enforced in the schema, not in prose.</li>
+    </ul>
+  </div>
+
+  <h2>7.4 &nbsp; Constitutional note</h2>
+
+  <p>Pack is now the second object both Chapels have independently arrived at, after the realization
+  record. Two Chapels inventing the same structure twice is the signal that <strong>Pack is a
+  Cathedral canonical object</strong> — identity, lifecycle, ownership, ratification, versioning and
+  inheritance belong above both Chapels; only content is Chapel-specific.</p>
+
+  <p>This proposal does not itself elevate Pack to the Cathedral. It supplies the second
+  implementation that would justify doing so, derived rather than declared. If the deferred
+  amendment on Cathedral canonical objects is taken up, this document is its second data point.</p>
+</section>
+
+<!-- ============ 8. SCHEMA DELTA ============ -->
+<section class="newpage">
+  <div class="eyebrow">Section Eight</div>
+  <h1>SCHEMA DELTA — MIGRATION 0004</h1>
+
+  <div class="statusbox">
+    <p><strong>Additive only.</strong> Per Non-negotiable 9, the repository is authoritative for
+    <code>db/schema.ts</code>. Identifiers below must be reconciled against the repository before
+    application. Nothing here replaces an existing definition, and no file is to be written
+    wholesale.</p>
+  </div>
+
+  <p>Five tables. The two-axis contract and the prohibitions in Section 7.3 are expressed as CHECK
+  constraints rather than as documentation, so that a violation fails at write time.</p>
+
+<pre>-- 0004_packs.sql   (proposed; reconcile identifiers before applying)
+
+CREATE TABLE packs (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       uuid NOT NULL REFERENCES tenants(id),
+  axis            text NOT NULL CHECK (axis IN ('vertical','horizontal')),
+  pack_key        text NOT NULL,
+  name            text NOT NULL,
+  version         text NOT NULL DEFAULT '0.1.0',
+  status          text NOT NULL DEFAULT 'proposed'
+                    CHECK (status IN ('proposed','ratified','retired')),
+  ratified_at     timestamptz,
+  deleted_at      timestamptz,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, pack_key, version),
+  -- a pack cannot be ratified without a ratification timestamp
+  CHECK (status &lt;&gt; 'ratified' OR ratified_at IS NOT NULL)
+);
+
+CREATE TABLE pack_metrics (
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  pack_id                uuid NOT NULL REFERENCES packs(id),
+  metric_key             text NOT NULL,
+  name                   text NOT NULL,
+  unit                   text NOT NULL,
+  reporting_basis        text NOT NULL,        -- what compels the institution to report it
+  regulatory_source      text,                 -- null = not regulator-compelled
+  baseline_availability  text NOT NULL
+                           CHECK (baseline_availability IN
+                                  ('mandated','common','rare','absent')),
+  source_verified        boolean NOT NULL DEFAULT false,
+  deleted_at             timestamptz,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (pack_id, metric_key)
+);
+
+CREATE TABLE pack_attestation_roles (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  pack_id          uuid NOT NULL REFERENCES packs(id),
+  role_title       text NOT NULL,
+  authority_scope  text NOT NULL,
+  can_verify       boolean NOT NULL DEFAULT false,
+  deleted_at       timestamptz,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  updated_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (pack_id, role_title)
+);
+
+CREATE TABLE pack_capabilities (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  pack_id         uuid NOT NULL REFERENCES packs(id),
+  capability_key  text NOT NULL,
+  name            text NOT NULL,
+  solution_area   text NOT NULL
+                    CHECK (solution_area IN
+                           ('leadership_business','compliance_ethics','technology')),
+  deleted_at      timestamptz,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (pack_id, capability_key)
+);
+
+CREATE TABLE pack_instantiations (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id           uuid NOT NULL REFERENCES tenants(id),
+  vertical_pack_id    uuid NOT NULL REFERENCES packs(id),
+  horizontal_pack_id  uuid NOT NULL REFERENCES packs(id),
+  deleted_at          timestamptz,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, vertical_pack_id, horizontal_pack_id)
+);</pre>
+
+  <h3>Axis enforcement</h3>
+
+  <p>The prohibition in Section 7.3 — that a vertical pack holds no capabilities and a horizontal
+  pack holds no metrics or attestation roles — cannot be expressed as a table-level CHECK because it
+  spans tables. It is enforced by trigger:</p>
+
+<pre>CREATE OR REPLACE FUNCTION lvrf_enforce_pack_axis() RETURNS trigger AS $$
+DECLARE a text;
+BEGIN
+  SELECT axis INTO a FROM packs WHERE id = NEW.pack_id;
+  IF TG_TABLE_NAME = 'pack_capabilities' AND a &lt;&gt; 'horizontal' THEN
+    RAISE EXCEPTION 'LVRF: capabilities may only attach to a horizontal pack';
+  END IF;
+  IF TG_TABLE_NAME IN ('pack_metrics','pack_attestation_roles') AND a &lt;&gt; 'vertical' THEN
+    RAISE EXCEPTION 'LVRF: % may only attach to a vertical pack', TG_TABLE_NAME;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- and, separately, on pack_instantiations: assert vertical_pack_id.axis = 'vertical'
+--                                          and horizontal_pack_id.axis = 'horizontal'</pre>
+
+  <div class="callout">
+    <div class="label">Trigger timing — carried forward from DEFECT-001</div>
+    <p>All five tables are governed objects. Apply the established pattern: <strong>audit AFTER,
+    touch BEFORE UPDATE</strong>, split. The phantom-row defect came from running both on a BEFORE
+    trigger across an <code>ON CONFLICT</code> path; do not reintroduce it here. Hard
+    <code>DELETE</code> is prohibited on all five — soft-delete via <code>deleted_at</code>, with no
+    UPDATE or DELETE grant to <code>lvrf_app</code> on any append-only companion.</p>
+  </div>
+
+  <h3>Step 0</h3>
+
+  <p>Before applying: prove the axis trigger rejects a cross-axis insert, on a scratch database,
+  with the exception text observed. The 0003 migration established this discipline and it holds
+  here. Execution reveals what specification cannot.</p>
+</section>
+
+<!-- ============ 9. CONFIDENCE AND RATIFICATION ============ -->
+<section class="newpage">
+  <div class="eyebrow">Section Nine</div>
+  <h1>CONFIDENCE LEDGER</h1>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:52%">Claim</th>
+        <th style="width:20%">Basis</th>
+        <th style="width:14%">Evidence</th>
+        <th style="width:14%">Confidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Skillsoft publishes no industry taxonomy in its go-to-market or its annual filing</td>
+        <td>Sourced — three independent surfaces</td>
+        <td>E-01, E-06, E-07</td>
+        <td class="conf c-high tnum">95 / 100</td>
+      </tr>
+      <tr>
+        <td>Skillsoft's three solution areas are stable and canonical</td>
+        <td>Sourced</td>
+        <td>E-01, E-07</td>
+        <td class="conf c-high tnum">90 / 100</td>
+      </tr>
+      <tr>
+        <td>A four-industry grouping existed and was retired at the Feb 2026 rebrand</td>
+        <td>Secondary index; live page redirects</td>
+        <td>E-03</td>
+        <td class="conf c-med tnum">60 / 100</td>
+      </tr>
+      <tr>
+        <td>The customer-story facet is the only live first-party industry taxonomy</td>
+        <td>Partially observed — 3 of N values</td>
+        <td>E-04</td>
+        <td class="conf c-med tnum">55 / 100</td>
+      </tr>
+      <tr>
+        <td>Metric libraries as stated per vertical</td>
+        <td><strong>Asserted</strong> — domain knowledge, not sourced</td>
+        <td>—</td>
+        <td class="conf c-med tnum">65 / 100</td>
+      </tr>
+      <tr>
+        <td>Attestation authority titles as stated per vertical</td>
+        <td><strong>Asserted</strong> — titles vary by institution</td>
+        <td>—</td>
+        <td class="conf c-med tnum">55 / 100</td>
+      </tr>
+      <tr>
+        <td>Skillsoft install-base concentration by industry</td>
+        <td>Inferred from nine named logos; aggregators excluded</td>
+        <td>E-05, E-09</td>
+        <td class="conf c-low tnum">25 / 100</td>
+      </tr>
+      <tr>
+        <td>The proof/revenue asymmetry — direction</td>
+        <td>Sourced, inferential</td>
+        <td>E-05, E-06</td>
+        <td class="conf c-med tnum">70 / 100</td>
+      </tr>
+      <tr>
+        <td>The proof/revenue asymmetry — magnitude</td>
+        <td>Not evidenced</td>
+        <td>—</td>
+        <td class="conf c-low tnum">20 / 100</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>9.1 &nbsp; What ratification requires</h2>
+
+  <ol>
+    <li><strong>Numbering.</strong> This is issued as PROPOSAL-001 rather than an amendment, because
+        the amendment slot reserved for Pack as a Cathedral canonical object was drafted and
+        deferred, and this document should not silently occupy it. Renumber on ratification if that
+        slot is the correct home.</li>
+    <li><strong>First-pack decision.</strong> Accept Regulated Utilities &amp; Energy, or overturn
+        it in favour of Life Sciences or Banking on the revenue-proximity argument in 6.3.</li>
+    <li><strong>Schema reconciliation.</strong> Identifiers in Section Eight checked against
+        <code>db/schema.ts</code> in the repository. Step 0 executed before migration.</li>
+    <li><strong>Facet enumeration.</strong> The full customer-stories industry list requires a
+        rendered browser session; it is not obtainable from a static fetch. Until it is enumerated,
+        E-04 stays at 55.</li>
+    <li><strong>Practitioner confirmation.</strong> The metric library and attestation roles for
+        the first pack confirmed by a person who has held the attesting role — not by a model, and
+        not by this document.</li>
+  </ol>
+
+  <div class="callout">
+    <div class="label">Governing principle</div>
+    <p>AI assists the evidence. It never manufactures the value.</p>
+  </div>
+
+  <h2>9.2 &nbsp; Revision history</h2>
+
+  <table>
+    <thead>
+      <tr><th style="width:14%">Version</th><th style="width:18%">Date</th><th style="width:68%">Change</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1.0.0</td>
+        <td>2 August 2026</td>
+        <td>Established. Survey of Skillsoft published surfaces recorded as E-01 to E-09. Two-axis
+            contract stated. LVRF sub-industry rule distinguished from the CVAF rule. Ten-vertical
+            roster assessed. Regulated Utilities &amp; Energy proposed as first pack, with the
+            counter-argument recorded. Schema delta drafted as migration 0004, additive.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>
