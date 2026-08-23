@@ -49,9 +49,14 @@ export function Rail({ run }: { run: Run }) {
       className="sticky top-0 flex h-screen w-52 flex-none flex-col bg-ink py-5 text-offwhite"
     >
       <div className="px-4 pb-5">
+        <div className="mb-3 flex items-center gap-2 font-display text-[15px] leading-none tracking-[.14em]">
+          <span className="text-offwhite">RULE</span>
+          <span aria-hidden="true" className="h-[1em] w-px bg-gold" />
+          <span className="text-gold">76</span>
+        </div>
         <img
           src="/assets/lvrf-mark.png"
-          alt="LVRF — Learning Value Realization Framework"
+          alt="LVRF — Learning Value Realization Framework, a Rule76 chapel"
           className="block h-auto w-full max-w-[172px]"
         />
         <p className="mt-[9px] text-[8.5px] uppercase tracking-[.2em] text-ink-45">
