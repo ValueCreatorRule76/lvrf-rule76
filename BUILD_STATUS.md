@@ -380,3 +380,60 @@ Three of the four material findings in this program came from **executing**, not
   than asserted
 
 Thirteen specification volumes produced none.
+
+---
+
+## LVRF 1.0 Foundation — complete 23 August 2026
+
+Foundation is the read path: a governed value run, in production, that computes a
+defensible confidence score, discloses its own provenance, and refuses to publish
+what it cannot defend — enforced at the database, not in the application.
+
+Foundation does **not** include the write path. The system can refuse evidence but
+cannot yet accept it. Items below marked deferred are named deliberately, not dropped.
+
+### Complete — verified live, not inferred
+
+- Production at lvrf-rule76.com / srv1862778, Postgres 16.14, migrations 0000-0009
+- 41 non-internal triggers plus five CHECK constraints on `value_outcomes`:
+  `commit_is_complete`, `impact_requires_basis`, `measured_requires_actual`,
+  `realized_requires_measurement`, `verified_requires_human`
+- Customer Zero run 88f6a6e1: 30.0 / low / 88.3 / watch. Production carries one run
+- Skillsoft catalog: 12 offerings, 8/8 constraint proof, 22/22 gate tests
+- DEFECT-005: index route at `/` with `source_fixture` as a PROVENANCE column
+- DEFECT-006: `/assets/*` served without try_files. Verified 200 / 404 / 200
+- DEFECT-004: backup validates via pg_restore --list before atomic publish. 299 TOC entries
+- scripts/lvrf-deploy.sh: client build step, mtime guard, post-deploy API and vhost checks
+- Design system compliant with AMENDMENT-004. Canonical tokens, no hex in components
+- RULE | 76 lockup renders above the LVRF mark — chapel subordination legible
+- Unbuilt actions disclosed as unbuilt rather than styled as live
+
+### Deferred — named, not dropped
+
+- **Write path.** Add evidence and Render record are inert
+- **Verifier attestation.** Nothing can satisfy `verified_requires_human`
+- **Run lineage and compare.** No second run exists; no before-and-after possible
+- **Record document.** Nothing renders a PDF a CFO could hand a lender
+- **DEFECT-E remainder.** The simulation banner is authored prose, not derived
+- **Confidence model.** Six weighted factors; weights not traced to a table, not versioned
+- **DEFECT-003.** Production apply pending; four composite-key tables uncovered
+- **LVRF emblem.** Metallic gradient is off-system. "STUDIO" and the trademark mark
+  appear nowhere in the record
+- Raw ISO timestamp on the index. Asset PNGs outweigh the JS bundle 2.4x
+
+### Register — findings from 22-23 August
+
+- Local and production hold different data. Production was rebuilt from migrations;
+  local carries 2 August seed work including 11 `customer_b` rows. A clean local
+  render proves nothing about production
+- PROVENANCE UNKNOWN (8) and NOT MEASURED (10) are deliberately different sets.
+  Health fields arrived in a later migration than `source_fixture`. Do not reconcile
+- `ops/lvrf-backup.sh` mirrors `/usr/local/bin/lvrf-backup.sh`. Nothing enforces it.
+  Cron runs the latter as root via /etc/cron.d/lvrf-backup
+- `ops/Caddyfile` is a sanitized template, NOT a mirror — it carries a placeholder
+  where the bcrypt hash lives. A drift check against /etc/caddy/ would false-alarm
+- The server deploy key is read-only. Production cannot push, by design
+- lvrf-deploy.sh reports "deploy OK" on a no-op. "No new commits" would be accurate
+- basic_auth credential rotated 23 August 2026 following exposure
+- Root `npm run build` compiles the server only. This is why twenty days of client
+  work sat undeployed. Fixed in the deploy script; the npm script itself is unchanged
