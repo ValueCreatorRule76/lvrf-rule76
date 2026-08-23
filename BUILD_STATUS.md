@@ -437,3 +437,64 @@ cannot yet accept it. Items below marked deferred are named deliberately, not dr
 - basic_auth credential rotated 23 August 2026 following exposure
 - Root `npm run build` compiles the server only. This is why twenty days of client
   work sat undeployed. Fixed in the deploy script; the npm script itself is unchanged
+
+---
+
+## Heartbeat register — verified 23 August 2026
+
+Two findings, and both halves matter.
+
+### The health model is correct and reconciles
+
+`server/spine/healthModel.ts` implements db/HEALTH_MODEL.md — seven dimensions
+weighted to 100, each fed by heartbeat events mapped through
+`CATEGORY_TO_DIMENSION`. A dimension with no events is UNMEASURED: never scored
+zero, never assumed compliant, and excluded from the composite's denominator.
+The exclusion is published as `coverage_pct` alongside the composite.
+
+Reconciled by hand against production, 23 August. Six of seven categories have
+events — operational, governance, integrity, financial, learning, constitutional.
+Only `security` is absent. Measured weight is therefore 25 + 25 + 15 + 10 + 10 + 5
+= 90, and `health_coverage_pct` reads exactly 90. The number falls out of the model
+from real event data, not from a fixture.
+
+Note that `verifyConfidenceParity.ts` hardcodes `coveragePct: 90` as an expected
+value. That is a parity test, not the source of the figure — the arithmetic above
+was derived independently from the events table.
+
+`institutional_health` 88.3 is weighted faithfulness across 90% of defined
+dimension weight, with Security excluded rather than assumed compliant. This is
+defensible arithmetic and the exclusion principle is the same instinct as
+`verified_requires_human`.
+
+### The register is seeded, not live
+
+All ten rows in `heartbeat_events` carry the identical timestamp
+`2026-08-03 04:41:31.405125+00` — written in one transaction during the initial
+spine walk. Nothing has emitted an event since.
+
+Consequences:
+
+- HB-0001 System Initialization declares "every startup". The API has restarted
+  many times since 3 August. Zero events
+- HB-0002 Authentication and HB-0003 Authorization have never fired. This is
+  precisely why the Security dimension is unmeasured — the model is reporting
+  the gap accurately
+- HB-0011 Heartbeat Health Calculated and HB-0012 Institutional Health Published
+  have never fired. The score is published without recording that it was computed
+- HB-0010 Constitution Reviewed, weight 10 severity 5, has never fired across
+  every governed change made this month
+
+The seeded events are honest — HB-0016 Value Verified sits at `warning` severity 5,
+matching the refusal rendered on screen. Nothing is fake-healthy.
+
+But 88.3 describes 3 August, and the interface does not say so. A reader would
+have to inspect `occurred_at` to know.
+
+### Deferred to 2.0 Band A
+
+Runtime heartbeat emission. Every governed action writes an event; health
+recomputes from a live register rather than a snapshot. This is the same tranche
+as the write path — they are one piece of work, not two.
+
+Until then: the model is an instrument, the register is a photograph.
