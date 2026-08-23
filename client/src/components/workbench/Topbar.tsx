@@ -11,13 +11,17 @@ export function Topbar({ run }: { run: Run }) {
       <div className="flex gap-2">
         <button
           type="button"
-          className="border border-ink bg-white px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] text-ink transition-colors hover:bg-ink hover:text-offwhite"
+          disabled
+          title="Not yet implemented"
+          className="border border-silver px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] text-ink-25 cursor-not-allowed"
         >
           Add evidence
         </button>
         <button
           type="button"
-          className="border border-ink bg-ink px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] text-offwhite transition-colors hover:border-gold hover:bg-gold hover:text-ink"
+          disabled
+          title="Not yet implemented"
+          className="border border-silver px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] text-ink-25 cursor-not-allowed"
         >
           Render record
         </button>
