@@ -1,23 +1,23 @@
 lvrf-rule76.com, www.lvrf-rule76.com {
-	encode gzip
-
-	basic_auth {
-		brad PASTE_BCRYPT_HASH_HERE
-	}
-
-	handle /api/* {
-		reverse_proxy 127.0.0.1:3001
-	}
-
-	handle {
-		root * /srv/lvrf/client/dist
-		try_files {path} /index.html
-		file_server
-	}
-
-	header {
-		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy no-referrer
-	}
+        encode gzip
+        basic_auth {
+                brad PASTE_BCRYPT_HASH_HERE
+        }
+        handle /api/* {
+                reverse_proxy 127.0.0.1:3001
+        }
+        handle /assets/* {
+                root * /srv/lvrf/client/dist
+                file_server
+        }
+        handle {
+                root * /srv/lvrf/client/dist
+                try_files {path} /index.html
+                file_server
+        }
+        header {
+                X-Content-Type-Options nosniff
+                X-Frame-Options DENY
+                Referrer-Policy no-referrer
+        }
 }
