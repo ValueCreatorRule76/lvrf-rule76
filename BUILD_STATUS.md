@@ -498,3 +498,68 @@ recomputes from a live register rather than a snapshot. This is the same tranche
 as the write path — they are one piece of work, not two.
 
 Until then: the model is an instrument, the register is a photograph.
+
+---
+
+## Release structure — ratified 23 August 2026
+
+Supersedes the "Deferred to 2.0 Band A" framing used earlier in this file. Those
+items were misfiled: the write path completes Foundation rather than enhancing it.
+Earlier entries stand as written; this section governs.
+
+Three tiers, each with a boundary that can be tested rather than asserted.
+
+### 1.0 Foundation — CLOSED 23 August 2026
+
+The read path. A governed value run, in production, that computes a defensible
+confidence score, discloses its own provenance, and refuses to publish what it
+cannot defend — enforced at the database, not in the application.
+
+Test: a stranger can open the system, see a value run, and determine from the
+interface alone what is evidenced, what is asserted, and what is refused.
+
+Closed. Every item verified live rather than inferred. See the Foundation section
+above for the full inventory.
+
+### 1.2 Complete system — NOT STARTED
+
+The write path, and everything that closes the loop.
+
+- Add evidence writes through the gate. The four CHECK constraints and
+  `lvrf_block_ai_actual` fire on real input, not seeded rows
+- Verifier attestation. Something must be able to satisfy
+  `value_outcomes_verified_requires_human` — named person, timestamp, and what
+  they attested to
+- A second run. Lineage and compare. The before-and-after does not currently exist
+- Record document rendered. `record_documents` is an empty table; the rendered
+  artifact is the actual output of the system
+- Runtime heartbeat emission. Health recomputes from a live register rather than
+  the 3 August snapshot
+- `_no_delete` on `heartbeat_events` and `record_documents`. Both are evidence
+  substrate and both are currently deletable without trace
+
+Test: **a real cohort can be measured end to end by someone other than the author,
+and the output is a document a CFO would carry to a lender.** If that is not true,
+the system is in 1.2 regardless of how many items are ticked.
+
+Sequencing note: 1.2 should not be built speculatively. Every item exists because
+a real engagement needs it. Build the write path against an actual cohort's data,
+not against an assumption about what that cohort will have. Building the wrong loop
+carefully is worse than building nothing.
+
+### 2.0 Enhancements — SCOPED, NOT COMMITTED
+
+Additive. Each assumes 1.2 works.
+
+- Cohort roll-up, with composite confidence derived from the weakest link rather
+  than averaged. Averaging launders the gaps
+- Gap register as a product surface. What each missing input costs to obtain and
+  what it buys in confidence. Turns a diagnosis into a decision
+- Confidence model weights versioned as data, with a changelog, and every run
+  recording which model version scored it. Tuning a weight currently makes every
+  prior score silently incomparable
+- Portfolio learning across engagements
+
+Explicitly out of scope for all three tiers: multi-tenancy, user management,
+dashboards, third-party integrations, industry packs. Named here so they are
+deferred rather than quietly assumed.
