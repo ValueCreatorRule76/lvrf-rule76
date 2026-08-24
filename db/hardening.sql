@@ -333,25 +333,25 @@ BEGIN
   IF assessor_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not be the assessor of record. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF attestor_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not attest to evidence. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF resolver_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not resolve a citation. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF verifier_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not verify a value outcome. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
