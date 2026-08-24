@@ -158,13 +158,40 @@ END $$;
 
 CREATE OR REPLACE FUNCTION lvrf_block_ai_actual() RETURNS trigger
 LANGUAGE plpgsql AS $$
-DECLARE ai boolean;
+DECLARE
+  ai boolean;
+  assisted boolean;
+  sim boolean;
+  vendor boolean;
 BEGIN
   IF NEW.supports <> 'actual' THEN RETURN NEW; END IF;
-  SELECT e.ai_sourced INTO ai FROM evidence e WHERE e.id = NEW.evidence_id;
+  SELECT e.ai_sourced, a.ai_assisted, e.simulated, e.kind = 'vendor_publication'
+    INTO ai, assisted, sim, vendor
+    FROM evidence e
+    LEFT JOIN assessments a ON a.id = e.assessment_id
+    WHERE e.id = NEW.evidence_id;
+
   IF ai THEN
     RAISE EXCEPTION
       'LVRF: AI-sourced evidence may not support a measured actual. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF assisted THEN
+    RAISE EXCEPTION
+      'LVRF: evidence from an AI-assisted assessment may not support a measured actual. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF sim THEN
+    RAISE EXCEPTION
+      'LVRF: simulated evidence may not support a measured actual. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF vendor THEN
+    RAISE EXCEPTION
+      'LVRF: vendor-published evidence may not support a measured actual. '
       'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
       USING ERRCODE = 'check_violation';
   END IF;
