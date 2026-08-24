@@ -936,3 +936,103 @@ And the method note from the trigger-count correction still governs:
   evidence                  4   2 simulated = true
   heartbeat events         10   all timestamped 2026-08-03 04:41:31.405125
   audit_log rows           42+  6 null-actor, all from migrations 0011 and 0012
+
+---
+
+## First account measured end to end — 24 August 2026
+
+The write path ran on a real account for the first time. Every link entered
+through an endpoint, attributed to a real person, with the basis stated at
+capture. Nothing seeded.
+
+### What was built
+
+**server/routes/offeringAttachment.ts** — POST /api/institutions/:id/offerings.
+Attaches a tenant-level offering to an account and creates the account's
+capability. This is the link that makes an account's capabilities exist at all;
+before it, offering_capabilities was empty and capabilities could not be created,
+which is why accountInputs.ts had an unreachable assessments branch.
+
+The stated basis is REQUIRED and is written as an evidence row — kind
+'observation', confidence 'low', source_verified false, provenance naming the
+asserting person. An unexplained link is the authored-prose problem this system
+exists to prevent. The basis is not validated for content: a weak basis is
+visible, a missing one is not. Judging quality is what evidence_ratification is
+for.
+
+**server/routes/institutionInputs.ts** — POST /api/institutions/:id/inputs.
+Adds persons and assessments to an institution that ALREADY EXISTS.
+accountInputs.ts is create-only and 409s on a duplicate name, so there was no way
+to add to an account. This had been worked around by hand twice, putting rows in
+production that no code path could reproduce — the same failure class as the
+offerings seed that lived only on a laptop.
+
+Capabilities are deliberately NOT creatable here. They arrive by attaching an
+offering. ai_assisted is required and never defaulted: a default would have the
+system assert a human scored something when nobody said so.
+
+### Verified on production
+
+  institutions              2   Skillsoft (is_tenant_self), Curia
+  offering_capabilities     1   skillsoft_leadership_development_program ->
+                                "New manager effectiveness", is_primary
+  capabilities              2   1 at Curia, owner named
+  assessments               2   Curia baseline: 2.000 on 0-5, ai_assisted false,
+                                status draft, assessor Brad Piver (unaffiliated),
+                                learner Brad Piver (external analyst of record)
+  evidence                  6   includes the Curia case study as
+                                kind = 'vendor_publication'
+
+### The gate refused, on real data
+
+Attempting to make the Curia case study support a measured actual:
+
+  ERROR: LVRF: vendor-published evidence may not support a measured actual.
+  AMENDMENT-005 Article I. The actual comes from the customer's system of record.
+
+That door was added on 23 August specifically because the Curia study is this
+shape. It now works on the real thing. Note what the refusal does NOT say: it does
+not say no value was created at Curia. It says this evidence cannot support that
+claim. Those are different statements and keeping them apart is the discipline.
+
+### Findings
+
+**A capability owner must be a person at the account.** capabilities.owner_person_id
+is NOT NULL with an FK to persons. Correct for a real engagement — a capability
+owned by the vendor is one the customer never agreed to. But Curia has no people,
+and inventing a synthetic one is refused by both the middleware and
+lvrf_block_simulated_attestor. Resolved by creating a real, non-simulated person
+row named "Brad Piver (external analyst of record)" with the title stating plainly
+that this is not a Curia employee. The name carries the qualifier because
+full_name is what a human reads in a raw query — same reasoning as retaining the
+'[SIM]' prefix beside the simulated column.
+
+This is the system correctly refusing to let a reference example impersonate an
+engagement.
+
+**The create-only pattern appeared three times** — account inputs, adding a
+person, adding an assessment. That was one missing endpoint shape, not three
+gaps. institutionInputs.ts closes it.
+
+**Curia has no value outcome.** value_outcomes holds one row, Skillsoft's. So
+evidence cannot be attached to a Curia claim at all — the gate test above had to
+use a deliberately wrong pairing to fire. business_metrics and value_outcomes
+have no entry point: the middle of the spine (attach, model, commit) exists only
+in walkSpine.ts. This is the next build item and the largest remaining gap.
+
+**Local has diverged further from production.** Local now carries 29 value runs,
+11 customer_b rows, the 12 offerings, and Northgate Utilities fixtures created
+during endpoint testing — a capability, its evidence row, a person, an assessment.
+Governance forbids hard deletes so they persist. Production is clean. A clean
+local render continues to prove nothing about production.
+
+**Local was three migrations behind** (0010-0012 unapplied), which made
+actorContext's own persons.simulated lookup fail and surface as a 500 in the new
+endpoint. Backed up and migrated. Worth checking migration parity before
+attributing a failure to new code.
+
+Provenance of this entry: all production counts and the gate refusal above were
+executed against srv1862778 via psql as postgres and curl against 127.0.0.1:3001,
+24 August 2026, in a session separate from the one that authored this file. The
+authoring session ran only against the local dev database and could not attest to
+the production figures — flagged by that session rather than silently asserted.
