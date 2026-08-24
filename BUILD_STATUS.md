@@ -840,3 +840,99 @@ value_outcomes_verified_requires_human demands verified_by_person_id, verified_a
 AND source_verified = true, together. The columns exist, the pairing is enforced,
 the foreign key resolves to a real person. Attestation is not missing; a caller is.
 That is part of the write path, not separate work.
+
+---
+
+## Corrections and verification discipline — 24 August 2026
+
+### CORRECTION: the catalog was never on production until tonight
+
+The Foundation inventory lists "Skillsoft catalog: 12 offerings, 8/8 constraint
+proof, 22/22 gate tests" as complete and verified. Foundation describes
+PRODUCTION. Production had zero offerings until 24 August.
+
+What was true: migration 0005 creates the offerings table and its constraints,
+and those were applied. The constraint proof is real. What was false: the twelve
+rows. They existed only in the local development database, from a seed that was
+never committed to the repository. `grep -c "INSERT INTO"` on migration 0006
+returns 0 — no migration ever inserted them.
+
+Now resolved. server/seed/seedOfferings.ts commits the catalog, and it has been
+applied to production:
+
+  12 offerings present, 12 audit rows, all attributed to a real person
+  Idempotent — second run reports 0 inserted, 12 already present, audit count
+  unchanged at 12
+  Tenant resolved by name, not by id. Local tenant is
+  e30917e8-6593-45eb-8036-03a62aa6d9e7; production is
+  20b625bc-3c67-4238-9ccd-1e5cafe7f896. A hardcoded id is portable to exactly
+  one database and is a bug in every other
+
+Catalog shape, for the record: evidence_class is 6 assessed, 4 demonstrated,
+1 consumption, 1 none. verification_source is 7 vendor_platform, 2 human_observer,
+1 customer_system, 1 third_party, 1 none. ALL TWELVE carry
+evidence_ratification = 'unratified' — nobody has audited these evidentiary
+claims, and the schema says so.
+
+Open question, not a defect: six offerings claim `assessed` or `demonstrated`
+while verifying through `vendor_platform` — the vendor's own telemetry. Telemetry
+can establish that a capability was delivered. It cannot establish an outcome;
+that comes from the customer's system of record, which is what
+lvrf_block_ai_actual already enforces. The catalog is left as-is deliberately:
+the gate refuses at the point of use, and the refusal is the product. Weakening
+the catalog pre-emptively would hide the question rather than answer it.
+
+`global_knowledge_ilt` remains market_status = 'active' despite the July 2026
+divestiture. Retiring it is a deliberate change, not a seed decision. Per
+migration 0006's own comment: 'retired' means the vendor stopped selling it and
+the fact stays citable; deleted_at means the row was created in error.
+
+### The pattern: four record-versus-reality gaps in one week
+
+1. The client bundle. Twenty days of committed client work undeployed, because
+   the root build script only ever compiled the server
+2. Five triggers. value_runs_audit, value_runs_touch, value_runs_no_delete,
+   record_documents_audit, record_documents_no_delete — declared in
+   hardening.sql, never applied
+3. The trigger count. Recorded as 41, actually 46, and the divergence check that
+   should have caught it reconciled by coincidence
+4. The catalog. Recorded as verified on production, existed only on a laptop
+
+Every one was found by LOOKING, not by reading. Three of the four were repeated
+back as verified fact in working documents, and the catalog claim reached a
+document titled "claims-to-evidence ledger" in a row marked Built.
+
+### VERIFICATION DISCIPLINE — applies to this file from here
+
+This document is authored prose describing a system. That is precisely the
+condition DEFECT-E describes, one level up. The fix is the same one applied to
+evidence: a claim carries its provenance or it is not a claim.
+
+From this entry forward, every assertion in the Foundation inventory or any
+status section must carry:
+
+  - The DATE it was last verified against production
+  - The COMMAND that verified it
+
+An assertion without both is a belief, not a record. Beliefs are fine — they
+just have to be marked as such, the same way `asserted` is a valid data_class.
+
+And the method note from the trigger-count correction still governs:
+
+  A count that reconciles is not proof the right things are present.
+  Compare lists, not totals.
+
+### Verified state, 24 August 2026
+
+  offerings                12   psql -At -c "select count(*) from offerings;"
+  offerings audit rows     12   psql -At -c "select count(*) from audit_log
+                                where table_name='offerings'
+                                and actor_person_id is not null;"
+  non-internal triggers    49   psql -At -c "select tgrelid::regclass, tgname
+                                from pg_trigger where not tgisinternal
+                                order by 1,2;" | wc -l
+  value runs                1   customer_zero, 30.0 / low / 88.3 / watch
+  persons                   5   1 real, 4 simulated = true
+  evidence                  4   2 simulated = true
+  heartbeat events         10   all timestamped 2026-08-03 04:41:31.405125
+  audit_log rows           42+  6 null-actor, all from migrations 0011 and 0012
