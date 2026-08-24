@@ -700,3 +700,143 @@ never a plausible default.
   RETURN. Load-bearing, currently awaiting verification
 - `reflections` — 0 rows, no code path. The only genuinely unused table. Retained:
   `reflection_evidence` holds a foreign key to it and `lvrf_block_delete` guards it
+
+---
+
+## Correction and 1.2 item 1 closed — 24 August 2026
+
+### CORRECTION: the trigger count is 46, not 41
+
+Every prior statement of 41 in this file is wrong, including the Foundation
+inventory and the heartbeat register section. Production was running FIVE FEWER
+triggers than db/hardening.sql declared:
+
+  value_runs_audit
+  value_runs_touch
+  value_runs_no_delete
+  record_documents_audit
+  record_documents_no_delete
+
+They were created for the first time when hardening.sql was applied on 24 August.
+Until that moment:
+
+- `record_documents` — the executive output table, the artifact a CFO would hold —
+  had no audit trail and no delete protection
+- `value_runs` — the table Customer Zero *is* — had no audit trail and no delete
+  protection
+
+Nothing was lost. Four rows exist across both tables and no writes were made
+outside the seed walk. But production held less governance than its own definition
+claimed, for three weeks.
+
+### How the divergence check missed it
+
+On 23 August the check counted 11 literal CREATE TRIGGER statements plus a loop
+over 13 governed tables at 3 triggers each: 11 + 39 = 50, less the 9 explicit
+statements that duplicate loop coverage, reconciling to 41 — which matched the
+database exactly. The conclusion drawn was "no divergence."
+
+The arithmetic reconciled by coincidence. Five explicit CREATE TRIGGER statements
+below the loop had never been applied, and the count still landed on the number
+production happened to hold.
+
+METHOD NOTE, worth more than the corrected number:
+
+  A count that reconciles is not proof the right things are present. Compare
+  lists, not totals. The full trigger list is the only valid check.
+
+The correct form:
+
+  psql -At -c "select tgrelid::regclass, tgname from pg_trigger
+               where not tgisinternal order by 1,2;" > /tmp/db.txt
+  # then diff against the triggers hardening.sql actually declares
+
+### 1.2 item 1 — CLOSED
+
+The gate now covers four doors, verified live on production 24 August.
+
+Delivered in three parts, in order:
+
+1. Backup by hand first — lvrf-20260824-022447.dump, 270404 bytes, 299 TOC
+   entries, validated by the DEFECT-004 fix. First schema change since that
+   fix; it earned its keep.
+
+2. Migrations 0010 and 0011 (commits 1120547, 46d35b1):
+   - `vendor_publication` added to the evidence_kind enum, beside public_filing
+   - `simulated` boolean added to evidence, NOT NULL DEFAULT false
+   - Backfill: simulated = true where provenance LIKE '[SIM]%'. Two rows on
+     production. The '[SIM]' prefix was NOT stripped — the column is what the
+     gate reads, the prefix is what a human reads in a raw query, and editing
+     existing provenance text is not something this system does
+   - Split into two files so the enum add can commit alone. Note recorded in
+     0010: drizzle-kit migrate wraps ALL pending files in one outer transaction
+     (verified against drizzle-orm/pg-core/dialect.js), so the split does not
+     isolate the enum on a combined run. It is safe here only because nothing in
+     0011 references the new value
+
+3. lvrf_block_ai_actual extended (commit eacea23). One function, one LEFT JOIN,
+   four cases, each raising its own message so the reason is named:
+
+     Evidence may not support a measured actual when it is AI-sourced, when it
+     derives from an AI-assisted assessment, when it is simulated, or when its
+     only provenance is vendor publication.
+
+   AMENDMENT-005 Article I on all four. ERRCODE = check_violation. Function and
+   trigger names unchanged.
+
+Verified by rollback test:
+
+  begin; update value_outcome_evidence set supports='actual'
+  where supports='actual'; rollback;
+
+  ERROR: LVRF: evidence from an AI-assisted assessment may not support a
+  measured actual. AMENDMENT-005 Article I.
+
+### Consequence: production holds two rows the rules now forbid
+
+Both value_outcome_evidence rows supporting `actual` are simulated; one is also
+from an AI-assisted assessment (score 3.400 on 0-5, ai_assisted = true, status
+draft). The trigger is BEFORE INSERT OR UPDATE, so existing rows are not
+re-validated and nothing errors at rest.
+
+Nothing false is published: the run is refused at VERIFY, sharing is disabled,
+and the simulation banner discloses the boundary.
+
+RESOLUTION: not surgery. The second run supersedes the first. `value_runs` already
+carries supersedes_run_id and superseded_by_id, and value_runs_immutable protects
+a locked run precisely so supersession is the only available move. Run 1 remains
+an honest record of what the system held before the rule existed. This is roster
+item 6, unchanged.
+
+Supersession of the evidence rows themselves was considered and rejected: there is
+no replacement to supersede them WITH (one row's own provenance states that
+Skillsoft has not reported Q2 FY2027 and the figure does not exist), and
+value_outcome_evidence has no superseded_by_id to use.
+
+### New finding: value_outcome_evidence is ungoverned
+
+It carries the link between evidence and a value claim and holds exactly one
+trigger — the gate. No audit, no delete block, no touch.
+
+It CANNOT be added to the governed array as it stands. It is a bare composite-key
+join: value_outcome_id, evidence_id, supports. No `id`, no `updated_at`. lvrf_audit
+writes NEW.id and lvrf_touch writes NEW.updated_at, so attaching them would error
+on every write to the table — breaking the write path in the change meant to
+protect it.
+
+This is DEFECT-003's territory: four composite-key tables uncovered by governance,
+deferred since July. Governing them requires a schema migration, not a hardening
+edit. The deferral was correct.
+
+### Second new finding: `supports` is free text
+
+value_outcome_evidence.supports is `text`, not an enum, defaulting to 'baseline'.
+The gate compares NEW.supports <> 'actual'. A typo — 'Actual', 'actuals' — skips
+the gate silently. Added to the 1.2 roster.
+
+### Roster item 5 is already built — remove it
+
+value_outcomes_verified_requires_human demands verified_by_person_id, verified_at,
+AND source_verified = true, together. The columns exist, the pairing is enforced,
+the foreign key resolves to a real person. Attestation is not missing; a caller is.
+That is part of the write path, not separate work.
