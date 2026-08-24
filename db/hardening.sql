@@ -276,6 +276,102 @@ CREATE TRIGGER record_documents_no_delete
     'This is an immutable disclosure record with no soft-delete path; supersede by rendering a new document_version.'
   );
 
+-- 5d. A simulated person may not attest, assess, resolve a citation, or
+-- verify a value outcome. AMD-005 Article I, enforced: a synthetic actor is
+-- not the customer's named human, regardless of what a column says it
+-- attests to.
+--
+-- One function across three tables, keyed on TG_TABLE_NAME rather than
+-- three near-identical functions. NEW's columns differ by table, so which
+-- column is read is decided by TG_TABLE_NAME branches BEFORE any column is
+-- referenced — evidence has no assessed_by_person_id, and referencing it
+-- unconditionally would fail at runtime on an evidence row. Exactly one
+-- SELECT resolves every id gathered from those branches against persons in
+-- a single lookup; the four IF blocks after it each raise their own
+-- message so the reason is named, not just that one fired.
+--
+-- CONSEQUENCE: trigger count goes 46 -> 49. Three new triggers —
+-- assessments_no_simulated_attestor, evidence_no_simulated_attestor,
+-- value_outcomes_no_simulated_attestor. Reconciled by LIST below, not by
+-- total: a count that reconciles is not proof the right things are
+-- present; the full trigger list is the only valid check.
+
+CREATE OR REPLACE FUNCTION lvrf_block_simulated_attestor() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  assessor_id  uuid;
+  attestor_id  uuid;
+  resolver_id  uuid;
+  verifier_id  uuid;
+  assessor_sim boolean;
+  attestor_sim boolean;
+  resolver_sim boolean;
+  verifier_sim boolean;
+BEGIN
+  IF TG_TABLE_NAME = 'assessments' THEN
+    assessor_id := NEW.assessed_by_person_id;
+  ELSIF TG_TABLE_NAME = 'evidence' THEN
+    attestor_id := NEW.attested_by_person_id;
+    resolver_id := NEW.citation_resolved_by_person_id;
+  ELSIF TG_TABLE_NAME = 'value_outcomes' THEN
+    verifier_id := NEW.verified_by_person_id;
+  END IF;
+
+  IF assessor_id IS NULL AND attestor_id IS NULL
+     AND resolver_id IS NULL AND verifier_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT pa.simulated, pt.simulated, pr.simulated, pv.simulated
+    INTO assessor_sim, attestor_sim, resolver_sim, verifier_sim
+    FROM (SELECT 1) AS _
+    LEFT JOIN persons pa ON pa.id = assessor_id
+    LEFT JOIN persons pt ON pt.id = attestor_id
+    LEFT JOIN persons pr ON pr.id = resolver_id
+    LEFT JOIN persons pv ON pv.id = verifier_id;
+
+  IF assessor_sim THEN
+    RAISE EXCEPTION
+      'LVRF: a simulated person may not be the assessor of record. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF attestor_sim THEN
+    RAISE EXCEPTION
+      'LVRF: a simulated person may not attest to evidence. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF resolver_sim THEN
+    RAISE EXCEPTION
+      'LVRF: a simulated person may not resolve a citation. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF verifier_sim THEN
+    RAISE EXCEPTION
+      'LVRF: a simulated person may not verify a value outcome. '
+      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS assessments_no_simulated_attestor ON assessments;
+CREATE TRIGGER assessments_no_simulated_attestor
+  BEFORE INSERT OR UPDATE ON assessments
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_simulated_attestor();
+
+DROP TRIGGER IF EXISTS evidence_no_simulated_attestor ON evidence;
+CREATE TRIGGER evidence_no_simulated_attestor
+  BEFORE INSERT OR UPDATE ON evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_simulated_attestor();
+
+DROP TRIGGER IF EXISTS value_outcomes_no_simulated_attestor ON value_outcomes;
+CREATE TRIGGER value_outcomes_no_simulated_attestor
+  BEFORE INSERT OR UPDATE ON value_outcomes
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_simulated_attestor();
+
 -- ------------------------------------------------------------------
 -- Known ungoverned tables — not closed by this change
 -- ------------------------------------------------------------------
@@ -326,16 +422,29 @@ COMMIT;
 -- ------------------------------------------------------------------
 -- Verification
 -- ------------------------------------------------------------------
--- 13 governed tables (0005 added 'offerings') × 3 (_audit, _touch, _no_delete)
--- = 39, plus the 0002 pair (value_outcome_evidence_no_ai_actual,
--- value_runs_locked_immutable) = 41, plus 5c's DEFECT-003 closure
--- (value_runs_audit, value_runs_touch, value_runs_no_delete,
--- record_documents_audit, record_documents_no_delete) = 46 distinct triggers.
--- Expect 62 rows here: information_schema.triggers emits one row per event
+-- A prior version of this comment reconciled 41 by arithmetic and declared
+-- "no divergence" — the arithmetic matched production by coincidence while
+-- five triggers below the loop (value_runs_audit, value_runs_touch,
+-- value_runs_no_delete, record_documents_audit, record_documents_no_delete)
+-- had never actually been applied. A count that reconciles is not proof the
+-- right things are present. Do not re-derive a total here and trust it —
+-- diff the SELECT below against the full list this file declares:
+--
+--   13 governed tables (0005 added 'offerings') × 3 (_audit, _touch,
+--   _no_delete) — 39
+--   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
+--   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
+--   record_documents_audit, record_documents_no_delete — 5
+--   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
+--   value_outcomes_no_simulated_attestor — 3
+--   Total: 49 distinct triggers.
+--
+-- Expect 68 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
--- (+1); value_runs's new triad contributes 4 (2 + 1 + 1); record_documents
--- contributes 3 (2 + 1). 52 + 2 + 1 + 4 + 3 = 62.
+-- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
+-- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6).
+-- 52 + 2 + 1 + 4 + 3 + 6 = 68.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'
