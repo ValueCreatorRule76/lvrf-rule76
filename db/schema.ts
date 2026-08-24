@@ -176,6 +176,14 @@ export const persons = pgTable('persons', {
   fullName: text('full_name').notNull(),
   email: text('email').notNull(),
   title: text('title'),
+  /**
+   * Persons currently disclose synthetic status via a '[SIM]' prefix in
+   * full_name. A prefix convention is not a constraint — nothing enforces
+   * it and no constraint can read it. value_outcomes_verified_requires_human
+   * checks that a verifier is NAMED, not that they are REAL, so a synthetic
+   * actor currently satisfies it.
+   */
+  simulated: boolean('simulated').notNull().default(false),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
