@@ -563,3 +563,140 @@ Additive. Each assumes 1.2 works.
 Explicitly out of scope for all three tiers: multi-tenancy, user management,
 dashboards, third-party integrations, industry packs. Named here so they are
 deferred rather than quietly assumed.
+
+---
+
+## 1.2 roster — ratified 24 August 2026
+
+Supersedes the 1.2 item list in the release structure section above. Every item
+below came from a finding against production, not from an assumption about what
+the system might need. Findings are recorded with each item.
+
+### The governing addition
+
+**A pack is earned, never authored.** A metric enters an industry pack only when
+it has been sourced from a named institution's own system of record, and it
+carries that provenance for as long as it remains canonical. Promotion requires a
+stated threshold set in advance. Demotion must exist — a pack that cannot lose an
+argument accumulates stale truth.
+
+This is Cathedral law, not an LVRF rule. It governs CVAF's industry packs equally,
+and CVAF's EPC pack should be audited against it: was it earned, or authored?
+
+Consequence: benchmarking is not a separate feature. A benchmark is a read of the
+earned pack with the provenance chain attached. Removed from the 2.0 roster.
+
+### 1. Gate coverage — the AI-assisted assessment hole
+
+FINDING, 24 August. `lvrf_block_ai_actual` checks `evidence.ai_sourced`. It does
+not traverse `evidence.assessment_id`. The single assessment on production carries
+`ai_assisted = true`, score 3.400 on a 0-5 scale, and one evidence row references
+it. An AI-assisted capability score can therefore reach a measured actual through
+a path the gate does not inspect.
+
+Not live: the assessment is `status = draft` and the run is refused at VERIFY.
+Nothing false has been published. The wall is real; it has a side door.
+
+Related: no column records vendor publication. Skillsoft's own Curia case study
+reports 102,584 accesses, 8,487 badges, 5,282 learning hours for Jan-Jun 2023 —
+all consumption, all vendor-published, none independently verified. That evidence
+cannot currently be loaded honestly.
+
+Fix — one rule, three doors, AMENDMENT-005 Article I already covers all of them:
+
+  Evidence may not support a measured actual when it is AI-sourced, when it
+  derives from an AI-assisted assessment, or when its only provenance is
+  vendor publication.
+
+Requires: extend the trigger to follow `assessment_id`; add `vendor_published`
+to `evidence`.
+
+NOT a finding — already correct: `evidence_ai_requires_query` forces AI evidence
+to record its query and tool. `evidence_ai_verify_requires_resolution` forbids
+marking AI evidence source-verified until its citation resolves. Deep Research
+governance is already enforced at the schema. Nothing to port from CVAF.
+
+### 2. Account Inputs — the external entry point
+
+There is no way to enter an account. Customer Zero was seeded by `walkSpine.ts`,
+not entered. Without this the external process has no beginning.
+
+Carries: institution, industry, and capability baselines written to `assessments`,
+which is the existing and correct mechanism — `learner_person_id`, `capability_id`,
+bounded score, named assessor, `ai_assisted` flag, and `evidence.assessment_id`
+already links an assessment to a value claim. Maps to Skillsoft Skill Benchmarks.
+
+### 3. capability_metric_links — the missing edge
+
+FINDING. A value lever already exists as a path: `offerings` ->
+`offering_capabilities` -> `capabilities`, and `value_outcomes` links capability
+to `business_metrics`. What is missing is the standalone edge capability ->
+business_metric. Without it the linkage can only be asserted inside a specific
+value outcome; it cannot be queried in reverse to assemble a solution mix.
+
+Do NOT add a lever entity. Add the edge:
+
+  capability_metric_links
+    capability_id, business_metric_id
+    institution_id      -- sourced from whom
+    data_class          -- sourced / derived / asserted
+    source_verified
+    evidence_id         -- what backs it
+    promoted_at         -- null until it earns pack status
+
+`institution_id` set with `promoted_at` null is an account fact. Promotion across
+enough institutions makes it canonical, carrying its sources. The industry pack is
+a view over this table, not separate structure. No pack format is required.
+
+### 4-10. The write path
+
+- Evidence writes through the gate. Constraints and triggers fire on real input
+- Verifier attestation. Something must satisfy `verified_requires_human`
+- Second run and compare. Curia as the worked external example
+- Executive output rendered. `record_documents` exists, is empty, and is the
+  actual deliverable of the system
+- Runtime heartbeat emission. All ten events carry the identical timestamp
+  2026-08-03 04:41:31.405125. The model is an instrument; the register is a
+  photograph
+- `_no_delete` on `heartbeat_events` and `record_documents`. Both are evidence
+  substrate and both are currently deletable without trace
+- Catalog refresh against Skillsoft's current line: Percipio, Skillsoft Coaching,
+  Codecademy for Enterprise, CAISY simulations, ICF-aligned AI Coach, LX Design
+  Studio, Skill Benchmarks, Aspire Journeys, Content Marketplace. Four solution
+  lines. Instructor-led training still appears under Products pointing at Global
+  Knowledge, divested July 2026. Each offering needs an honest `evidence_class` —
+  most learning products can produce consumption evidence only
+
+### Explicitly not in 1.2
+
+Lever entity (the edge suffices). Pack format (a view suffices). Financial
+modelling — LVRF's differentiator is refusing numbers evidence cannot carry, and
+CVAF's financial engine remains unbuilt; if LVRF ever models money the model must
+be gated by confidence and render the refusal below threshold. Benchmarking (now a
+read of the pack). Multiple industries — one only, biotech/pharma CDMO, worked
+through Curia, following CVAF's EPC reference-implementation pattern. Abstraction
+comes after the second industry, not before.
+
+### Studios and Compass OS
+
+Studios are the Chapels. Compass OS is the substrate every Studio runs on, and
+HB-0010's producer is already recorded as Compass while HB-0012 names CVAF, LVRF,
+Compass and the Executive Portal as consumers. The register anticipated this
+architecture and has never fired.
+
+Industry Packs, Deep Research, the benchmarking corpus and any financial model are
+Compass OS concerns inherited by both Studios — not features copied into each. Three
+times this month a repo artifact and a deployed artifact were free to diverge
+silently (client bundle, backup script, Caddyfile). Copying CVAF implementations
+into LVRF would institutionalise that failure. Where LVRF needs a Compass concern
+before Compass exists, it declares the seam and stubs it returning UNMEASURED —
+never a plausible default.
+
+### Unused tables — decided, not abandoned
+
+- `assessments` — 1 row, written by walkSpine.ts:576, emits a heartbeat. This is
+  the capability baseline mechanism. Load-bearing. See item 2
+- `stewardship_returns` — 1 row, written by walkSpine.ts:790. Spine stage 07,
+  RETURN. Load-bearing, currently awaiting verification
+- `reflections` — 0 rows, no code path. The only genuinely unused table. Retained:
+  `reflection_evidence` holds a foreign key to it and `lvrf_block_delete` guards it
