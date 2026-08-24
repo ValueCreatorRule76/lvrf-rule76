@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
+import { isUuid } from '../routes/params.js';
 
 /**
  * hardening.sql's audit trigger reads lvrf.actor_person_id via
@@ -51,13 +52,39 @@ export function actorContext(pool: Pool) {
 
         try {
           await client.query('BEGIN');
+
           const actorPersonId = req.get('x-actor-person-id');
-          if (actorPersonId) {
-            await client.query('SELECT set_config($1, $2, true)', [
-              'lvrf.actor_person_id',
-              actorPersonId,
-            ]);
+          if (!actorPersonId) {
+            res.status(422).json({
+              message: 'X-Actor-Person-Id header is required for mutating requests.',
+            });
+            return;
           }
+          if (!isUuid(actorPersonId)) {
+            res.status(422).json({ message: 'X-Actor-Person-Id is not a valid UUID.' });
+            return;
+          }
+
+          const { rows } = await client.query(
+            'SELECT deleted_at, simulated FROM persons WHERE id = $1',
+            [actorPersonId],
+          );
+          const person = rows[0];
+          if (!person || person.deleted_at !== null) {
+            res.status(422).json({ message: 'Actor is not a person of record.' });
+            return;
+          }
+          if (person.simulated) {
+            res.status(422).json({
+              message: 'A simulated person may not write. Attestation requires a real person of record.',
+            });
+            return;
+          }
+
+          await client.query('SELECT set_config($1, $2, true)', [
+            'lvrf.actor_person_id',
+            actorPersonId,
+          ]);
           req.dbClient = client;
           next();
         } catch (err) {
