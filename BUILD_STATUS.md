@@ -1036,3 +1036,86 @@ executed against srv1862778 via psql as postgres and curl against 127.0.0.1:3001
 24 August 2026, in a session separate from the one that authored this file. The
 authoring session ran only against the local dev database and could not attest to
 the production figures — flagged by that session rather than silently asserted.
+
+---
+
+## Roster cut to four — ratified 25 August 2026
+
+Supersedes the 1.2 roster of 24 August. Nothing below is a reversal of that
+analysis; the scope changed because the destination changed.
+
+### Why the cut
+
+If LVRF is rebuilt on Skillsoft's stack and owned by Skillsoft, then what is
+being built here is a REFERENCE IMPLEMENTATION — a working specification that
+proves the method is real and shows what to rebuild. Not a product.
+
+What transfers: the schema, the constraints, the trigger functions, the
+confidence model, the health model, the evidence taxonomy, the migration
+sequence. All of it expressible as a spec another engineering org implements.
+
+What does not transfer: the React client, the emblem, the visual hierarchy, the
+deploy script, the polish items. Skillsoft has an engineering org and its own
+conventions. Every hour spent there is an hour on something that gets discarded.
+
+THE TEST, from here: build only what proves a claim that would be made out loud.
+If an item does not change what can be demonstrated or handed over, it is
+deferred — named, not dropped.
+
+### The four
+
+**1. Value outcome and business metric entry**
+The middle of the spine — attach, model, commit — exists only inside
+walkSpine.ts. Curia has a capability, a baseline and evidence, and nothing to
+attach a claim to; the gate test on 24 August required a deliberately wrong
+pairing to fire. This is also the industry-to-metric link, which is the entire
+content-to-solutions argument.
+PROVES: that a value claim can be stated and bounded before it is evidenced.
+
+**2. Verifier attestation with a caller**
+value_outcomes_verified_requires_human refuses today and nothing in the system
+can satisfy it. A gate that can only refuse proves half the point. The other
+half is that it opens for a named, real, non-simulated human and for nothing
+else.
+PROVES: that the refusal is a gate rather than a wall.
+
+**3. A second run**
+value_runs already carries supersedes_run_id and superseded_by_id, and
+value_runs_immutable protects a locked run so that supersession is the only
+available move. One run proves the record works. Two prove measurement works,
+and the before-and-after is what is actually being sold.
+PROVES: that change over time can be shown without editing history.
+
+**4. capability_metric_links with promoted_at**
+A metric enters an industry pack only when sourced from a named institution's
+own system of record. institution_id set with promoted_at null is an account
+fact; promotion across enough institutions makes it canonical, carrying its
+sources. The pack is a view over this table, not separate structure.
+PROVES: packs earned, not authored — the claim that separates this from every
+industry pack on the market.
+
+### Deferred — named, not dropped
+
+- Executive output renderer. record_documents exists and is empty
+- Runtime heartbeat emission. All ten events still carry the 3 August timestamp;
+  the model is an instrument, the register is a photograph
+- `_no_delete` on heartbeat_events and record_documents
+- value_outcome_evidence.supports is free text where the gate compares against
+  'actual'. A typo skips the gate silently
+- The LVRF emblem's metallic gradient, off-system. "STUDIO" and the trademark
+  mark still absent from the record
+- Raw ISO timestamp on the index; asset PNGs outweigh the JS bundle
+- DEFECT-003: four composite-key tables ungoverned, including
+  value_outcome_evidence and offering_capabilities
+
+Two of these are answerable in a sentence rather than a build. Runtime heartbeat
+emission and the record document are both "known, deferred, here is the design,"
+which is a sufficient answer from someone who wrote down why.
+
+### The standing constraint on item 1
+
+What a CDMO's money turns on — audit outcomes, batch reliability,
+time-to-productivity — is inference from the industry, not sourced from Curia.
+The endpoint must FORCE that classification rather than permit it. An asserted
+metric is honest. An asserted metric that reads as sourced is the failure the
+whole system exists to prevent.
