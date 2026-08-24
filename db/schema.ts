@@ -62,7 +62,7 @@ export const metricDirection = pgEnum('metric_direction', ['increase', 'decrease
 
 export const evidenceKind = pgEnum('evidence_kind', [
   'assessment_result', 'system_export', 'artifact',
-  'observation', 'attestation', 'public_filing',
+  'observation', 'attestation', 'public_filing', 'vendor_publication',
 ]);
 
 export const returnKind = pgEnum('return_kind', [
@@ -321,6 +321,13 @@ export const evidence = pgTable('evidence', {
   confidence: confidenceLevel('confidence').notNull().default('medium'),
   /** The disclosure gate. False means the record renders as unverified. */
   sourceVerified: boolean('source_verified').notNull().default(false),
+  /**
+   * Simulated evidence is currently disclosed by a '[SIM]' prefix convention
+   * in the free-text provenance column. A convention in prose is not a
+   * constraint — nothing enforces it and nothing can read it. This column
+   * makes the disclosure a stored fact the gate can act on.
+   */
+  simulated: boolean('simulated').notNull().default(false),
 
   assessmentId: uuid('assessment_id').references(() => assessments.id, { onDelete: 'restrict' }),
   capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
