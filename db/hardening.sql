@@ -24,6 +24,14 @@ BEGIN;
 -- The app sets this per transaction:  SET LOCAL lvrf.actor_person_id = '<uuid>';
 -- If unset, the audit row records NULL rather than failing the write —
 -- an unattributed audit row is still better than a lost one.
+--
+-- NULL means a system operation: no HTTP request, no person. audit_log.
+-- actor_person_id is deliberately nullable for exactly this case — the
+-- null-actor rows from migrations 0011 and 0012 are the correct meaning of
+-- NULL, not a gap, and migrations and hardening.sql itself run with the
+-- setting unset, so this path must keep working. A malformed value is a
+-- different thing: not "no actor", but garbage where an actor should be.
+-- That must not audit as NULL — it must fail loudly, below.
 
 CREATE OR REPLACE FUNCTION lvrf_current_actor() RETURNS uuid
 LANGUAGE plpgsql STABLE AS $$
@@ -32,7 +40,12 @@ BEGIN
   v := current_setting('lvrf.actor_person_id', true);
   IF v IS NULL OR v = '' THEN RETURN NULL; END IF;
   RETURN v::uuid;
-EXCEPTION WHEN others THEN RETURN NULL;
+EXCEPTION WHEN invalid_text_representation THEN
+  RAISE EXCEPTION
+    'LVRF: lvrf.actor_person_id is set but is not a valid UUID. '
+    'A write is either attributed to a person or is a system operation. '
+    'It may not be attributed to nothing.'
+    USING ERRCODE = 'check_violation';
 END $$;
 
 -- ------------------------------------------------------------------
