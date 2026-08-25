@@ -1,0 +1,1 @@
+DROP INDEX "business_metrics_institution_name_key";

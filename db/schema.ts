@@ -272,17 +272,23 @@ export const businessMetrics = pgTable('business_metrics', {
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'business_metrics_superseded_by_fk' }).onDelete('restrict'),
-  // Partial, not plain unique — same precedent as offerings_tenant_key_unique
-  // (migration 0006). At most one LIVE, CURRENT metric per name per
-  // institution. Any number of superseded ancestors may share that name —
-  // that chain is the record of what was believed before, and
-  // validateMetric.ts deliberately copies the name onto the successor: a
-  // different name would be a different metric, not a validation of this
-  // one. A plain UNIQUE(institution_id, name) forbids the exact thing
-  // supersession is for. The guarantee that matters is uniqueness among
-  // current rows, not among all rows ever.
-  uniqueIndex('business_metrics_institution_name_key').on(t.institutionId, t.name)
-    .where(sql`${t.deletedAt} IS NULL AND ${t.supersededById} IS NULL`),
+  // No unique index on (institution_id, name) — 0014's partial version
+  // (WHERE deleted_at IS NULL AND superseded_by_id IS NULL) still cannot
+  // hold. validateMetric.ts inserts the successor row BEFORE marking the
+  // ancestor superseded, so for that instant both rows are
+  // superseded_by_id IS NULL and match the same predicate — Postgres
+  // cannot defer a unique INDEX to end-of-statement/transaction the way it
+  // can a deferrable UNIQUE CONSTRAINT, and a deferrable UNIQUE CONSTRAINT
+  // cannot carry a WHERE clause. No index formulation permits the
+  // transient state a two-step supersession requires.
+  //
+  // A metric's identity is its id; name is a label, and a chain of rows
+  // sharing a label is what supersession looks like. Uniqueness among
+  // current (non-superseded, non-deleted) rows is now an application
+  // invariant, not a database one: validateMetric.ts refuses to supersede
+  // an already-superseded metric (409), and every name-based lookup that
+  // resolves "the current metric" must filter superseded_by_id IS NULL
+  // itself — see valueOutcomes.ts's business_metrics lookup.
   index('business_metrics_institution_idx').on(t.institutionId),
   /** A confirmer with no date, or a date with no confirmer, is a half-recorded fact. */
   check('business_metrics_definition_confirmation_is_complete',

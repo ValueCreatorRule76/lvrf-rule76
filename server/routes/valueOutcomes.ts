@@ -257,8 +257,15 @@ export function valueOutcomesRouter(pool: Pool): Router {
         direction: string;
         source_system: string;
       }>(
+        // superseded_by_id IS NULL resolves to the CURRENT metric only.
+        // Without it, once a metric has been superseded (validateMetric.ts),
+        // this lookup matches both the ancestor and the successor — same
+        // institution_id, same name, both deleted_at IS NULL — and returns
+        // whichever one Postgres happens to pick. A new value outcome could
+        // silently attach to a superseded metric with nothing to catch it.
         `SELECT id, unit, direction, source_system FROM business_metrics
-          WHERE institution_id = $1 AND name = $2 AND deleted_at IS NULL`,
+          WHERE institution_id = $1 AND name = $2
+            AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [institutionId, metricName],
       );
       if (existingMetric) {
