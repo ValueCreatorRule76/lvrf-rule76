@@ -1615,3 +1615,10 @@ ns_id_f, dropping the trailing _fk. Second instance — stewardship_returns has 
 same problem from an earlier migration. Harmless until a migration references a
 constraint by its expected name. Left as generated rather than hand-naming a
 one-off, so the convention stays consistent.
+
+Provenance of the entry above: the three run scores and the migration application
+were executed against srv1862778 via curl to 127.0.0.1:3001 and psql as postgres,
+25 August 2026, in a session separate from the one that authored this file. That
+session verified the FK truncation independently from the generated SQL — the
+same fact from two sources — and flagged that it could not attest to the
+production figures.
