@@ -11,6 +11,7 @@ import { accountInputsRouter } from './routes/accountInputs.js';
 import { offeringAttachmentRouter } from './routes/offeringAttachment.js';
 import { institutionInputsRouter } from './routes/institutionInputs.js';
 import { valueOutcomesRouter } from './routes/valueOutcomes.js';
+import { outcomeWalkRouter } from './routes/outcomeWalk.js';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/account-inputs', accountInputsRouter(pool));
 app.use('/api/institutions', offeringAttachmentRouter(pool));
 app.use('/api/institutions', institutionInputsRouter(pool));
 app.use('/api/institutions', valueOutcomesRouter(pool));
+app.use('/api/value-outcomes', outcomeWalkRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 
