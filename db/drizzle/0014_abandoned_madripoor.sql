@@ -1,0 +1,2 @@
+ALTER TABLE "business_metrics" DROP CONSTRAINT "business_metrics_institution_name_key";--> statement-breakpoint
+CREATE UNIQUE INDEX "business_metrics_institution_name_key" ON "business_metrics" USING btree ("institution_id","name") WHERE "business_metrics"."deleted_at" IS NULL AND "business_metrics"."superseded_by_id" IS NULL;

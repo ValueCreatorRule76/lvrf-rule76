@@ -32,6 +32,15 @@ function isCheckViolation(err: unknown): err is { code: '23514'; message: string
   );
 }
 
+function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === '23505'
+  );
+}
+
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new ValidationError(`${path} is required`);
@@ -338,6 +347,14 @@ export function validateMetricRouter(pool: Pool): Router {
       // unchanged, not swallowed into a generic 500.
       if (isCheckViolation(err)) {
         res.status(422).json({ message: err.message });
+        return;
+      }
+      // A unique-constraint collision (ERRCODE unique_violation, SQLSTATE
+      // 23505) — e.g. business_metrics_institution_name_key — is a
+      // conflict with existing state, not a server fault. 409, not 500;
+      // message unchanged, same as the check_violation branch above.
+      if (isUniqueViolation(err)) {
+        res.status(409).json({ message: err.message });
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

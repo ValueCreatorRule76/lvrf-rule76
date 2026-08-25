@@ -272,7 +272,17 @@ export const businessMetrics = pgTable('business_metrics', {
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'business_metrics_superseded_by_fk' }).onDelete('restrict'),
-  unique('business_metrics_institution_name_key').on(t.institutionId, t.name),
+  // Partial, not plain unique — same precedent as offerings_tenant_key_unique
+  // (migration 0006). At most one LIVE, CURRENT metric per name per
+  // institution. Any number of superseded ancestors may share that name —
+  // that chain is the record of what was believed before, and
+  // validateMetric.ts deliberately copies the name onto the successor: a
+  // different name would be a different metric, not a validation of this
+  // one. A plain UNIQUE(institution_id, name) forbids the exact thing
+  // supersession is for. The guarantee that matters is uniqueness among
+  // current rows, not among all rows ever.
+  uniqueIndex('business_metrics_institution_name_key').on(t.institutionId, t.name)
+    .where(sql`${t.deletedAt} IS NULL AND ${t.supersededById} IS NULL`),
   index('business_metrics_institution_idx').on(t.institutionId),
   /** A confirmer with no date, or a date with no confirmer, is a half-recorded fact. */
   check('business_metrics_definition_confirmation_is_complete',
