@@ -13,6 +13,7 @@ import { institutionInputsRouter } from './routes/institutionInputs.js';
 import { valueOutcomesRouter } from './routes/valueOutcomes.js';
 import { outcomeWalkRouter } from './routes/outcomeWalk.js';
 import { produceRunRouter } from './routes/produceRun.js';
+import { validateMetricRouter } from './routes/validateMetric.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/institutions', institutionInputsRouter(pool));
 app.use('/api/institutions', valueOutcomesRouter(pool));
 app.use('/api/value-outcomes', outcomeWalkRouter(pool));
 app.use('/api/engagements', produceRunRouter(pool));
+app.use('/api/business-metrics', validateMetricRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 

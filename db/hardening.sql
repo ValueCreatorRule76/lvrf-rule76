@@ -427,7 +427,7 @@ BEGIN
   END IF;
 
   -- Rules 2 & 4: one lookup for both — the target must exist, must not be
-  -- retired, and must be older than the row superseding it.
+  -- retired, and must be newer than the row it supersedes.
   EXECUTE format('SELECT created_at, deleted_at FROM %I WHERE id = $1', TG_TABLE_NAME)
     INTO target_created_at, target_deleted_at
     USING NEW.superseded_by_id;
@@ -446,9 +446,13 @@ BEGIN
       USING ERRCODE = 'check_violation';
   END IF;
 
-  IF target_created_at >= NEW.created_at THEN
+  -- NEW is the row having ITS OWN superseded_by_id set — the predecessor
+  -- being replaced. target (looked up above) is the successor it points
+  -- at. The successor must be newer than what it replaces; violation is
+  -- target_created_at <= NEW.created_at, not the other way around.
+  IF target_created_at <= NEW.created_at THEN
     RAISE EXCEPTION
-      'LVRF: % %.superseded_by_id (%) is not older than the superseding row (%). '
+      'LVRF: % %.superseded_by_id (%) is not newer than the row it supersedes (%). '
       'A superseding row must be newer than what it replaces, or the chain runs backwards in time.',
       TG_TABLE_NAME, TG_TABLE_NAME, NEW.superseded_by_id, NEW.id
       USING ERRCODE = 'check_violation';
