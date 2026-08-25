@@ -385,6 +385,111 @@ CREATE TRIGGER value_outcomes_no_simulated_attestor
   BEFORE INSERT OR UPDATE ON value_outcomes
   FOR EACH ROW EXECUTE FUNCTION lvrf_block_simulated_attestor();
 
+-- 5e. Supersession chain sanity — fourteen tables carry superseded_by_id,
+-- and until now nothing enforced what supersession MEANS beyond the bare
+-- foreign key. A row could point at itself, supersede an already-superseded
+-- row (two claimants), point backwards in time, or form a cycle. A broken
+-- chain is worse than no chain: the chain is what makes "what did we
+-- believe before" answerable, and it cannot fork or loop.
+--
+-- Mechanical integrity rules, not constitutional ones — no AMENDMENT-005
+-- citation here. These four rules would hold even if AMENDMENT-005 did not
+-- exist; they govern the shape of the supersession graph, not who may
+-- attest to what.
+--
+-- One function across fourteen tables, keyed on TG_TABLE_NAME, the same
+-- pattern as 5d. Two dynamic lookups, not one: the first resolves the
+-- target row's own created_at/deleted_at — rules 2 and 4 together, a
+-- single query, matching 5a/5d's shape — and the second checks whether any
+-- OTHER row already claims the same successor (rule 3), a structurally
+-- different question the first query cannot also answer.
+--
+-- CONSEQUENCE: trigger count goes 49 -> 63. Fourteen new triggers, one per
+-- table in the loop below. Reconciled by LIST in the Verification block,
+-- not by total — a count that reconciles is not proof the right things are
+-- present.
+
+CREATE OR REPLACE FUNCTION lvrf_supersession_is_sane() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  target_created_at timestamptz;
+  target_deleted_at timestamptz;
+  already_claimed boolean;
+BEGIN
+  IF NEW.superseded_by_id IS NULL THEN RETURN NEW; END IF;
+
+  -- Rule 1: not self.
+  IF NEW.superseded_by_id = NEW.id THEN
+    RAISE EXCEPTION
+      'LVRF: % % cannot supersede itself (superseded_by_id = id).',
+      TG_TABLE_NAME, NEW.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Rules 2 & 4: one lookup for both — the target must exist, must not be
+  -- retired, and must be older than the row superseding it.
+  EXECUTE format('SELECT created_at, deleted_at FROM %I WHERE id = $1', TG_TABLE_NAME)
+    INTO target_created_at, target_deleted_at
+    USING NEW.superseded_by_id;
+
+  IF target_created_at IS NULL THEN
+    RAISE EXCEPTION
+      'LVRF: % %.superseded_by_id (%) does not exist.',
+      TG_TABLE_NAME, TG_TABLE_NAME, NEW.superseded_by_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF target_deleted_at IS NOT NULL THEN
+    RAISE EXCEPTION
+      'LVRF: % % cannot supersede %, which is already retired (deleted_at is set).',
+      TG_TABLE_NAME, NEW.id, NEW.superseded_by_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF target_created_at >= NEW.created_at THEN
+    RAISE EXCEPTION
+      'LVRF: % %.superseded_by_id (%) is not older than the superseding row (%). '
+      'A superseding row must be newer than what it replaces, or the chain runs backwards in time.',
+      TG_TABLE_NAME, TG_TABLE_NAME, NEW.superseded_by_id, NEW.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  -- Rule 3: the target may not already be claimed as the successor of a
+  -- DIFFERENT row. Excludes NEW's own id so re-saving an unchanged row does
+  -- not conflict with itself.
+  EXECUTE format(
+    'SELECT EXISTS (SELECT 1 FROM %I WHERE superseded_by_id = $1 AND id <> $2)',
+    TG_TABLE_NAME)
+    INTO already_claimed
+    USING NEW.superseded_by_id, NEW.id;
+
+  IF already_claimed THEN
+    RAISE EXCEPTION
+      'LVRF: % % is already claimed as the successor of a different % row. '
+      'Two rows superseded by the same successor forks the chain.',
+      TG_TABLE_NAME, NEW.superseded_by_id, TG_TABLE_NAME
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DO $$
+DECLARE t text;
+  supersession_governed text[] := ARRAY[
+    'assessments', 'business_metrics', 'capabilities', 'engagements', 'evidence',
+    'heartbeats', 'institutions', 'offerings', 'persons', 'reflections',
+    'stewardship_returns', 'tenants', 'value_outcomes', 'value_runs'
+  ];
+BEGIN
+  FOREACH t IN ARRAY supersession_governed LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_supersession_sane', t);
+    EXECUTE format(
+      'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON %I
+         FOR EACH ROW EXECUTE FUNCTION lvrf_supersession_is_sane()', t || '_supersession_sane', t);
+  END LOOP;
+END $$;
+
 -- ------------------------------------------------------------------
 -- Known ungoverned tables — not closed by this change
 -- ------------------------------------------------------------------
@@ -450,14 +555,19 @@ COMMIT;
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   Total: 49 distinct triggers.
+--   5e: <table>_supersession_sane × 14 (assessments, business_metrics,
+--   capabilities, engagements, evidence, heartbeats, institutions,
+--   offerings, persons, reflections, stewardship_returns, tenants,
+--   value_outcomes, value_runs) — 14
+--   Total: 63 distinct triggers.
 --
--- Expect 68 rows here: information_schema.triggers emits one row per event
+-- Expect 96 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
--- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6).
--- 52 + 2 + 1 + 4 + 3 + 6 = 68.
+-- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
+-- each 5e trigger fires on INSERT and UPDATE, ×14 (+28).
+-- 52 + 2 + 1 + 4 + 3 + 6 + 28 = 96.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'
