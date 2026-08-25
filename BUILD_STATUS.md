@@ -1207,3 +1207,93 @@ Provenance of the entry above: executed against srv1862778 via curl to
 the one that authored this file. The authoring session ran only against local dev
 and flagged that it could not attest to the production figures rather than
 silently asserting them.
+
+---
+
+## Item 2 closed — the walk is enforced — 25 August 2026
+
+**server/routes/outcomeWalk.ts** — two endpoints advancing a value outcome
+through realization_status (claimed | measured | verified | not_realized).
+
+  POST /api/value-outcomes/:id/measure   claimed  -> measured
+  POST /api/value-outcomes/:id/verify    measured -> verified
+
+Before this, value_outcomes_verified_requires_human refused and nothing in the
+system could satisfy it. The gate was a wall. It is now a gate: it opens for a
+named, real, non-simulated person belonging to the institution, and for nothing
+else.
+
+### Two preconditions the schema could not enforce
+
+**1. Measuring requires admissible evidence.**
+value_outcomes_measured_requires_actual demands only that actual_value exists.
+lvrf_block_ai_actual fires on value_outcome_evidence, not on value_outcomes — so
+an actual could be written with no admissible evidence behind it at all. The wall
+would have had a door beside it, the same shape as the AI-assisted assessment
+hole found on 23 August.
+
+/measure now refuses unless at least one value_outcome_evidence row already
+exists for the outcome with supports = 'actual'. Enforced in the application
+because the schema cannot express it.
+
+**2. A verifier must belong to the institution.**
+The constraint requires a named person. It does not require that person to be AT
+the institution — so a vendor could verify its own claim, which is the conflict
+this role exists to remove. /verify refuses a verifier who does not belong to the
+outcome's institution, or who is simulated.
+
+The ACTOR who makes the write and the PERSON who attests are recorded separately:
+actor via the audit trigger, verifier in verified_by_person_id. Different roles,
+possibly different people.
+
+### Verified on production — Curia is correctly stuck
+
+  POST /measure  -> 422
+  "no admissible evidence supports an actual for this outcome. AI-sourced,
+   AI-assisted, simulated and vendor-published evidence are refused by
+   lvrf_block_ai_actual, so an outcome with no admissible evidence cannot be
+   measured."
+
+  POST /verify   -> 409
+  "value outcome bf6f5b2d... is not 'measured' (currently 'claimed');
+   cannot verify"
+
+FOUR independent mechanisms agree, none aware of the others: the evidence
+taxonomy classified the case study as vendor_publication; lvrf_block_ai_actual
+refuses to link it as an actual; the application precondition refuses to measure
+without one; the state guard refuses to verify without a measurement.
+
+Curia is not blocked by a missing feature. It is blocked because the only
+evidence in existence is the vendor's own marketing and nobody at Curia has
+measured anything. Unsticking it requires exactly two things: one figure from
+Curia's HRIS, and one person at Curia willing to put their name to it.
+
+### Finding: `supports` is free text and only three values are understood
+
+value_outcome_evidence.supports is text, defaulting to 'baseline'. The verify
+endpoint writes an attestation evidence row and needed a supports value for it.
+A grep of walkSpine.ts and confidenceModel.ts confirms the consuming code handles
+only 'baseline', 'actual' and 'impact_basis'. Writing 'attestation' would create a
+row the confidence model silently ignores — worse than a slightly wrong label.
+
+The endpoint therefore checks SELECT DISTINCT supports at request time and only
+uses 'attestation' if some other write has already established it; today it always
+resolves to 'impact_basis'.
+
+This compounds the already-logged hole that a typo in `supports` skips the gate
+entirely. The field wants to be an enum. Still deferred, now with a second reason.
+
+### Deliberate no-ops, documented rather than invented
+
+- `note` on /measure is type-validated and not persisted. value_outcomes has no
+  column for it and inventing an evidence row nobody asked for would be worse
+- evidence.attested_by_person_id and attested_at ARE set on the verify evidence
+  row, from the verifier. The columns exist with
+  evidence_attestation_is_complete requiring both together; leaving them null
+  would mean an attestation whose attestor is only discoverable by joining back
+  to value_outcomes
+
+### Cut roster remaining
+
+3. A second run
+4. capability_metric_links with promoted_at
