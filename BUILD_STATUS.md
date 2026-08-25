@@ -1119,3 +1119,85 @@ time-to-productivity — is inference from the industry, not sourced from Curia.
 The endpoint must FORCE that classification rather than permit it. An asserted
 metric is honest. An asserted metric that reads as sourced is the failure the
 whole system exists to prevent.
+
+---
+
+## Item 1 closed — the spine has a middle — 25 August 2026
+
+**server/routes/valueOutcomes.ts** — POST /api/institutions/:id/value-outcomes.
+Creates an engagement, a business metric and a baselined value outcome in one
+transaction. Before this, attach/model/commit existed only inside walkSpine.ts
+and Curia had no claim for evidence to attach to — the 24 August gate test
+required a deliberately wrong pairing to fire.
+
+### Verified on production
+
+  engagement        c47d075f  "Curia — reference example, not an engagement"
+  business metric   e6c42f98  Time to full productivity, newly promoted manager
+                              unit days, direction decrease
+  value outcome     bf6f5b2d  baseline / claimed / low / source_verified false
+                              baseline 180.0000 days, measured 2023-01-01
+
+Nothing targeted, measured or verified. The record says so.
+
+### The gate refused, on the right pairing
+
+Curia's own published case study offered as the actual for Curia's own outcome:
+
+  ERROR: LVRF: vendor-published evidence may not support a measured actual.
+  AMENDMENT-005 Article I. The actual comes from the customer's system of record.
+
+That is the content-to-solutions problem in two commands. The vendor has
+published numbers about this account; the system will not let them stand as the
+outcome. What would stand is a figure from Curia's HRIS — which nobody
+collected, because nobody decided in advance what to measure.
+
+### Finding: silent metric reuse was a provenance hole
+
+business_metrics has a unique constraint on (institution_id, name), so the
+endpoint must find-or-create. The first implementation, per spec, used the found
+row's identity and discarded the rest of the payload silently.
+
+That is a provenance failure hiding in an idempotency decision. A caller posting
+the metric name with source_system "Curia HRIS, extracted 2026-08-25" against a
+stored row reading "ASSERTED — not sourced from any Curia system" would have had
+an outcome created against a metric whose origin is not what they believe it to
+be. No error, no warning. Exactly what the NOT NULL on source_system exists to
+prevent.
+
+Three options, only one safe: updating rewrites provenance, ignoring conceals it,
+refusing preserves it.
+
+Now: on a found metric, unit, direction and source_system are compared
+field-by-field. Any mismatch returns 409 with a mismatches array carrying field,
+existing and submitted, and the request stops — no update, no outcome created.
+Verified live; all three fields reported, count unchanged at 1.
+
+### Schema notes worth keeping
+
+- business_metrics.source_system is NOT NULL. Every metric names its origin
+  before it exists. The endpoint additionally rejects blank or trivially short
+  values: an unstated origin is the failure this system exists to prevent
+- metric_direction is `increase` | `decrease` only. The enum cannot express
+  whether a direction is good — `decrease` on audit findings is good, on
+  retention is not. The metric NAME must carry that meaning
+- value_outcomes requires baseline_value and baseline_measured_at NOT NULL. An
+  outcome cannot be created empty and walked forward. The baseline stage is
+  load-bearing
+- claimed_currency_impact is deliberately not set at creation:
+  impact_requires_basis would demand a basis, and no basis exists at baseline
+- engagements.tenant_id resolves from the institution, never the payload
+
+### Standing caveat on the Curia figures
+
+Baseline 180 days is INFERRED from the published story, not sourced from Curia.
+The source_system field says so in full, names what would replace it (Curia HRIS
+or performance management), and states that Curia has not participated. The
+metric is honest about being asserted. That is the distinction the whole system
+turns on.
+
+### Cut roster remaining
+
+2. Verifier attestation with a caller
+3. A second run
+4. capability_metric_links with promoted_at
