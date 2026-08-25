@@ -6,7 +6,12 @@ export interface RunEvent {
   category: string;
   producer: string;
   eventType: string;
-  valueStage: string;
+  // heartbeat_events.value_stage is nullable by design — a system-level
+  // event (HB-0001 system init, HB-0002 authentication) is not tied to any
+  // spine stage. walkSpine.ts's own emitted events always set one, but
+  // produceRun.ts reads this column unfiltered for any heartbeat_events row
+  // tied to the engagement, so a stored payload can legitimately carry null.
+  valueStage: string | null;
   contentHash: string;
   healthState: string;
   heartbeatId: string;
@@ -21,9 +26,13 @@ export interface HealthDimension {
 }
 
 export interface RunHealth {
-  band: string;
+  // Null when no dimension has a measured event — computeHealth
+  // (server/spine/healthModel.ts) never scores unmeasured as zero and
+  // never assumes compliance. Every reader must render an explicit
+  // unmeasured state, not call a string/number method on these directly.
+  band: string | null;
   basis: string;
-  composite: number;
+  composite: number | null;
   dimensions: HealthDimension[];
   coverage_pct: number;
 }
@@ -55,7 +64,13 @@ export interface RunConfidence {
   band: string;
   method: string;
   factors: ConfidenceFactor[];
-  asserted: string;
+  // Mirrors ConfidenceResult.asserted in confidenceModel.ts, itself typed
+  // nullable to match assertedConfidence's input type. Never actually null
+  // today — value_outcomes.confidence is NOT NULL with a default, so every
+  // live caller supplies one — but the type this is meant to mirror allows
+  // it, and asserting otherwise is exactly how the other three fields in
+  // this file went stale.
+  asserted: string | null;
   overridesAssertion: boolean;
 }
 
@@ -81,23 +96,40 @@ export interface EvidenceItem {
   ai_sourced: boolean;
   citation_resolved: boolean;
   supports: string;
+  // Added 24 August; produceRun.ts writes both into every evidence
+  // snapshot. Without these the evidence ledger cannot disclose that a
+  // row is vendor-published or simulated — the exact fact
+  // lvrf_block_ai_actual refuses an actual on.
+  simulated: boolean;
+  vendor_published: boolean;
 }
 
-export interface RunDelta {
-  raw: number;
-  improved: boolean;
-  available: boolean;
-  target_met: boolean;
-  on_time: boolean;
-  pct_of_target: number;
-  punctuality_days: number;
-  currency: {
-    claimed: number;
-    realized: number;
-    gap: number;
-    share_of_claim: number;
-  };
+export interface RunDeltaCurrency {
+  claimed: number | null;
+  realized: number | null;
+  gap: number | null;
+  share_of_claim: number | null;
 }
+
+// Mirrors server/spine/deltaEngine.ts's DeltaResult exactly, including the
+// discriminated union: computeDelta returns { available: false } with none
+// of the other fields when actualValue is null. The previous flat shape
+// (every field always present) was written from the Customer Zero fixture,
+// where actualValue is always set, rather than from this return type — the
+// same defect class as RunHealth.composite/band and
+// RunPayload.targetValue/actualValue.
+export type RunDelta =
+  | { available: false }
+  | {
+      available: true;
+      raw: number;
+      improved: boolean;
+      target_met: boolean | null;
+      pct_of_target: number | null;
+      currency: RunDeltaCurrency;
+      punctuality_days: number | null;
+      on_time: boolean | null;
+    };
 
 // value_runs.payload, as stored — the same object render_record.py reads.
 export interface RunPayload {
@@ -110,10 +142,16 @@ export interface RunPayload {
   realization: string;
   disclosure: string;
   baselineValue: number;
-  targetValue: number;
-  actualValue: number;
-  claimedCurrencyImpact: number;
-  realizedCurrencyImpact: number;
+  // Null before commit / measure respectively — legitimately absent, not
+  // a zero. Every reader must render an explicit not-yet-reached state.
+  targetValue: number | null;
+  actualValue: number | null;
+  // value_outcomes.claimed_currency_impact / realized_currency_impact are
+  // nullable columns; walkSpine.ts and produceRun.ts both pass them
+  // through unguarded. Null is the common case — no basis exists for a
+  // currency figure at baseline (impact_requires_basis would demand one).
+  claimedCurrencyImpact: number | null;
+  realizedCurrencyImpact: number | null;
   delta: RunDelta;
   health: RunHealth;
   confidence: RunConfidence;

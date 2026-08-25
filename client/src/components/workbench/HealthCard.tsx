@@ -10,7 +10,15 @@ export function HealthCard({ run }: { run: Run }) {
       title="Institutional health"
       badge={
         <Badge tone="watch">
-          {h.composite} · {h.band} · {h.coverage_pct}% coverage
+          {/*
+            h.band null means no dimension has a measured event —
+            computeHealth never scores unmeasured as zero or assumes
+            compliance. React renders null as nothing, so the un-guarded
+            form silently produced a dangling " · · 0% coverage" rather
+            than throwing. coverage_pct is never null (0 when nothing is
+            measured), so it renders unconditionally either way.
+          */}
+          {h.band === null ? 'UNMEASURED' : `${h.composite} · ${h.band}`} · {h.coverage_pct}% coverage
         </Badge>
       }
     >

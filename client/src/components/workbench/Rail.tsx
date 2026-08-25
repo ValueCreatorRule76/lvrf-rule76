@@ -16,9 +16,17 @@ function buildStages(run: Run): Stage[] {
   return [
     { num: '01', name: 'Baseline', note: `${p.baselineValue}` },
     { num: '02', name: 'Attach', note: p.capability },
-    { num: '03', name: 'Model', note: `target ${p.targetValue}` },
+    {
+      num: '03',
+      name: 'Model',
+      note: p.targetValue === null ? 'Target not yet set' : `target ${p.targetValue}`,
+    },
     { num: '04', name: 'Commit', note: '' },
-    { num: '05', name: 'Measure', note: `${p.actualValue}` },
+    {
+      num: '05',
+      name: 'Measure',
+      note: p.actualValue === null ? 'Not yet measured' : `${p.actualValue}`,
+    },
     {
       num: '06',
       name: 'Verify',
@@ -126,7 +134,23 @@ export function Rail({ run }: { run: Run }) {
           Institutional health
         </p>
         <p className="m-0 font-display text-[17px] tracking-[.05em] text-gold">
-          {h.composite} · {h.band.toUpperCase()}
+          {/*
+            computeHealth (server/spine/healthModel.ts) returns composite
+            and band both null when no dimension has a measured event —
+            unmeasured is never scored zero and never assumed compliant.
+            Checking h.band === null (not h.composite) is what lets
+            TypeScript narrow h.band to string for .toUpperCase() below.
+            UNMEASURED renders in the same muted, italic treatment
+            HealthCard.tsx uses for an unmeasured dimension, translated to
+            this rail's dark surface (text-offwhite/40, not text-ink-45,
+            which is only for text on a light surface) — never 0, a dash,
+            or blank, since any of those would read as a score.
+          */}
+          {h.band === null ? (
+            <span className="italic text-offwhite/40">UNMEASURED</span>
+          ) : (
+            `${h.composite} · ${h.band.toUpperCase()}`
+          )}
         </p>
         <p className="m-0 mt-[9px] mb-0.5 text-[10px] uppercase tracking-[.08em] text-offwhite/40">
           Coverage

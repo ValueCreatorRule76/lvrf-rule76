@@ -62,6 +62,25 @@ export function EvidenceCard({ run }: { run: Run }) {
                     <Badge tone="warning">AI-sourced, unresolved</Badge>
                   </>
                 )}
+                {/*
+                  Same tone as "AI-sourced, unresolved" above, same reason:
+                  both are facts lvrf_block_ai_actual refuses an actual on
+                  (AMENDMENT-005 Article I). Disclosing them here is the
+                  point — a vendor-published case study rendering with no
+                  marker is the one fact the gate refused on, invisible.
+                */}
+                {e.vendor_published && (
+                  <>
+                    {' '}
+                    <Badge tone="warning">Vendor-published</Badge>
+                  </>
+                )}
+                {e.simulated && (
+                  <>
+                    {' '}
+                    <Badge tone="warning">Simulated</Badge>
+                  </>
+                )}
               </td>
               <td className="border-b border-rule-soft px-3 py-[9px]">
                 <Badge tone={e.source_verified ? 'healthy' : 'warning'}>
