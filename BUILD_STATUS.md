@@ -1510,3 +1510,108 @@ Seventh instance this week of a record asserting a property the system lacks, an
 the first authored AFTER the verification discipline was adopted three commits
 earlier. The discipline works when something checks; it does not work by being
 written down.
+
+---
+
+## Metric definition confirmation, and the first confidence delta — 25 August 2026
+
+### The problem
+
+confidenceModel.ts scores `metric_definition_confirmed` at 20 of 100 points,
+binary. Its question is "Is the metric's calculation method known and
+DOCUMENTED?" There was no live column for it, so produceRun.ts hardcoded false
+and every real run permanently forfeited a fifth of the available score. Curia
+scored 10 partly because a field that could legitimately be true had nowhere to
+be recorded.
+
+### Migration 0013 — two columns, not a flag
+
+  business_metrics.definition_confirmed_by_person_id  uuid, FK to persons
+  business_metrics.definition_confirmed_at            timestamptz
+  CHECK business_metrics_definition_confirmation_is_complete
+    — both set or neither, mirroring evidence_attestation_is_complete
+
+Deliberately NOT a boolean. A flag someone ticks is an unbacked assertion, which
+is what this system refuses everywhere else. Presence of the pair IS the flag.
+
+No backfill. No existing metric had been confirmed by anyone, and setting one
+would have fabricated the exact fact the factor measures.
+
+### The factor now requires three things
+
+Credit is earned only when ALL of:
+
+  definition_notes is present and not blank
+  the confirmation pair is set
+  the confirming person is NOT simulated
+
+Any one missing earns zero. A confirmation without notes documents nothing. Notes
+without a confirmer are unattested. A simulated confirmer is not a person of
+record — the same rule lvrf_block_simulated_attestor enforces at the database.
+
+And the factor note now says WHICH of the three is missing, rather than only that
+it failed. Observed in production across the three runs below:
+
+  run 1  "Calculation method NOT disclosed by the source. The metric cannot be
+          independently reproduced."
+  run 2  "Calculation method documented, but not confirmed by a named person.
+          Notes without a confirmer are unattested."
+  run 3  "Calculation method documented."   earned 20
+
+A zero reading "not disclosed" when the real problem is "nobody confirmed it"
+sends a reader looking in the wrong place. The note is what someone acts on.
+
+### The first confidence delta — verified on production
+
+Three runs on Curia's engagement c47d075f, same claim, same 180-day inferred
+baseline, no value touched:
+
+  run_number  score  band  what changed
+  1           10.0   low   Outside-In hypothesis as first locked
+  2           10.0   low   migration 0013 applied, columns exist and are unset
+  3           30.0   low   definition confirmed by a named real person
+
+Run 2 is the important one. It proves that adding the columns credited nothing —
+the factor reads live data and correctly earns zero when nothing is confirmed. A
+jump there would have meant the model was crediting the schema rather than the
+fact.
+
+Run 3's twenty points trace to a person, a date, and a documented definition.
+
+BAND STAYS LOW ACROSS ALL THREE. Thirty is still low, and confirming a
+calculation method does not turn an inferred figure into a measured one. The
+model declining to promote the band is it being right.
+
+### Why this matters more than the feature
+
+This is the two-axes distinction demonstrated rather than argued. REALIZATION did
+not move — all three runs are realization 'claimed', terminal stage 'baseline',
+health UNMEASURED at 0% coverage. EVIDENCE moved. The number rose because what is
+known improved, not because a figure was adjusted.
+
+That is the product motion: lock an Outside-In hypothesis, validate it, relock,
+and the delta is HOW MUCH MORE OF THIS CAN BE DEFENDED. Nobody demos a confidence
+delta.
+
+It also means cut-roster item 6 (compare two runs on confidence) now has real data
+to compare rather than needing a synthetic second run. The demo was produced while
+proving a prerequisite.
+
+### Still open from this pair of prerequisites
+
+confidenceModel.ts isSynthetic() still keys off a '[SIM]' name prefix rather than
+the persons.simulated column. Wider than it looks: ConfidenceInput carries
+sponsorName and verifierName as strings, so fixing it properly changes the input
+shape and touches walkSpine.ts — which is the fixture path producing Customer
+Zero's 30, the run currently used for demonstration. Breaking that to fix the
+model would be a worse trade. Bridged defensively in produceRun by presenting a
+simulated person as '[SIM] ...'; the model itself is unfixed.
+
+### Minor, recorded rather than fixed
+
+Drizzle's auto-generated FK name for the new column is 64 bytes and Postgres
+silently truncated it to business_metrics_definition_confirmed_by_person_id_perso
+ns_id_f, dropping the trailing _fk. Second instance — stewardship_returns has the
+same problem from an earlier migration. Harmless until a migration references a
+constraint by its expected name. Left as generated rather than hand-naming a
+one-off, so the convention stays consistent.
