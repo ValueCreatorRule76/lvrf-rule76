@@ -1497,3 +1497,16 @@ discovered later.
 4. capability_metric_links with promoted_at
 5. Validate and supersede
 6. Compare two runs on confidence, not value
+
+### Note on the entry above
+
+It initially claimed the valueStage fallback was complete while
+HeartbeatCard.tsx:47 still rendered bare {e.valueStage}. Caught by the session
+asked to append it, which checked the code against the claim rather than trusting
+the document, and refused to append until they agreed. Fixed and committed
+together in 6177d35, so the claim is true as of the commit that makes it.
+
+Seventh instance this week of a record asserting a property the system lacks, and
+the first authored AFTER the verification discipline was adopted three commits
+earlier. The discipline works when something checks; it does not work by being
+written down.
