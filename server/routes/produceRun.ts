@@ -209,13 +209,28 @@ export function produceRunRouter(pool: Pool): Router {
         'SELECT id, name FROM capabilities WHERE id = $1 AND deleted_at IS NULL',
         [vo.capability_id],
       );
+      // LEFT JOIN persons on definition_confirmed_by_person_id: the
+      // confirmation pair is optional (migration 0013's both-or-neither
+      // CHECK), and when set, its confirmer's simulated status is what
+      // decides whether metric_definition_confirmed may earn credit —
+      // the same rule lvrf_block_simulated_attestor enforces at the
+      // database.
       const { rows: [bm] } = await client.query<{
         name: string;
         unit: string;
         direction: 'increase' | 'decrease';
         source_system: string;
+        definition_notes: string | null;
+        definition_confirmed_by_person_id: string | null;
+        definition_confirmed_at: Date | null;
+        confirmer_simulated: boolean | null;
       }>(
-        'SELECT name, unit, direction, source_system FROM business_metrics WHERE id = $1 AND deleted_at IS NULL',
+        `SELECT bm.name, bm.unit, bm.direction, bm.source_system,
+                bm.definition_notes, bm.definition_confirmed_by_person_id,
+                bm.definition_confirmed_at, p.simulated AS confirmer_simulated
+           FROM business_metrics bm
+           LEFT JOIN persons p ON p.id = bm.definition_confirmed_by_person_id
+          WHERE bm.id = $1 AND bm.deleted_at IS NULL`,
         [vo.business_metric_id],
       );
       if (!capability || !bm) {
@@ -333,14 +348,35 @@ export function produceRunRouter(pool: Pool): Router {
       const claimedCurrencyImpact = toNumber(vo.claimed_currency_impact);
       const realizedCurrencyImpact = toNumber(vo.realized_currency_impact);
 
+      // Credit requires all three: documented, confirmed, and confirmed by
+      // a real person — any one missing earns 0. A confirmation without
+      // notes documents nothing; notes without a confirmer are unattested.
+      // Checked in this order so the gap reported is the first one that
+      // actually blocks credit, matching the order the factor's question
+      // asks them in.
+      const hasDefinitionNotes = Boolean(bm.definition_notes && bm.definition_notes.trim() !== '');
+      const isDefinitionConfirmed =
+        bm.definition_confirmed_by_person_id !== null && bm.definition_confirmed_at !== null;
+      const confirmerSimulated = bm.confirmer_simulated ?? false;
+
+      let metricDefinitionConfirmed: boolean;
+      let metricDefinitionGap: ConfidenceInput['metricDefinitionGap'];
+      if (!hasDefinitionNotes) {
+        metricDefinitionConfirmed = false;
+        metricDefinitionGap = 'no_notes';
+      } else if (!isDefinitionConfirmed) {
+        metricDefinitionConfirmed = false;
+        metricDefinitionGap = 'unconfirmed';
+      } else if (confirmerSimulated) {
+        metricDefinitionConfirmed = false;
+        metricDefinitionGap = 'confirmer_simulated';
+      } else {
+        metricDefinitionConfirmed = true;
+      }
+
       const confidenceInput: ConfidenceInput = {
-        // No live column confirms a metric's calculation method the way
-        // fixture.business_metric.calculation_confirmed does — hardcoded
-        // false rather than inferred from e.g. definition_notes being
-        // non-empty, which would credit a metric for having SOME text, not
-        // for having a CONFIRMED method. Absent a real signal, the
-        // conservative reading is the honest one.
-        metricDefinitionConfirmed: false,
+        metricDefinitionConfirmed,
+        metricDefinitionGap,
         evidence: evidenceForConfidence,
         claimedCurrencyImpact,
         realizedCurrencyImpact,

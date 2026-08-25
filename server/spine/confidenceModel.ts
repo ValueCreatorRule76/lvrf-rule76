@@ -78,8 +78,42 @@ export interface ConfidenceResult {
 const CONFIDENCE_METHOD =
   'Computed from the evidence ledger across six weighted factors. The computed band governs; any asserted value is advisory.';
 
+/**
+ * Why metricDefinitionConfirmed is false, so the factor's note can say
+ * which of the three requirements is missing rather than just that it
+ * failed. business_metrics.definition_confirmed_by_person_id /
+ * definition_confirmed_at (migration 0013) pair by CHECK — a confirmation
+ * without notes documents nothing, notes without a confirmer are
+ * unattested, and a simulated confirmer is not a person of record, the
+ * same rule lvrf_block_simulated_attestor enforces at the database.
+ */
+export type MetricDefinitionGap = 'no_notes' | 'unconfirmed' | 'confirmer_simulated';
+
+const METRIC_DEFINITION_GAP_NOTES: Record<MetricDefinitionGap, string> = {
+  no_notes: 'Calculation method NOT disclosed by the source. The metric cannot be independently reproduced.',
+  unconfirmed:
+    'Calculation method documented, but not confirmed by a named person. Notes without a confirmer are unattested.',
+  confirmer_simulated:
+    'Calculation method documented and confirmation recorded, but the confirming person is simulated — not a person of record.',
+};
+
 export interface ConfidenceInput {
+  /**
+   * Whether the metric's calculation method is documented AND confirmed by
+   * a real, non-simulated person of record. The caller computes this — see
+   * business_metrics.definition_confirmed_by_person_id /
+   * definition_confirmed_at. No partial credit for any one of the three
+   * alone.
+   */
   metricDefinitionConfirmed: boolean;
+  /**
+   * Set only when metricDefinitionConfirmed is false, to select which of
+   * METRIC_DEFINITION_GAP_NOTES applies. Optional and defaults to
+   * 'no_notes': walkSpine.ts's fixture supplies only the boolean, and that
+   * default reproduces the original, single message unchanged — Customer
+   * Zero's score and note text are not affected by this field's addition.
+   */
+  metricDefinitionGap?: MetricDefinitionGap;
   evidence: ConfidenceEvidenceInput[];
   claimedCurrencyImpact: number | null;
   realizedCurrencyImpact: number | null;
@@ -157,7 +191,7 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     input.metricDefinitionConfirmed ? CONFIDENCE_FACTOR_WEIGHTS.metric_definition_confirmed : 0,
     input.metricDefinitionConfirmed
       ? 'Calculation method documented.'
-      : 'Calculation method NOT disclosed by the source. The metric cannot be independently reproduced.',
+      : METRIC_DEFINITION_GAP_NOTES[input.metricDefinitionGap ?? 'no_notes'],
   );
 
   // 2 & 3. Evidence strength by what it supports. Best item, not average.
