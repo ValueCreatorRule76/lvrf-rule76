@@ -1201,3 +1201,9 @@ turns on.
 2. Verifier attestation with a caller
 3. A second run
 4. capability_metric_links with promoted_at
+
+Provenance of the entry above: executed against srv1862778 via curl to
+127.0.0.1:3001 and psql as postgres, 25 August 2026, in a session separate from
+the one that authored this file. The authoring session ran only against local dev
+and flagged that it could not attest to the production figures rather than
+silently asserting them.
