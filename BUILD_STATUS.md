@@ -1297,3 +1297,203 @@ entirely. The field wants to be an enum. Still deferred, now with a second reaso
 
 3. A second run
 4. capability_metric_links with promoted_at
+
+---
+
+## Roster revised — the two axes — 25 August 2026
+
+### The correction
+
+Two independent axes were being collapsed into one.
+
+  REALIZATION — did the value happen?
+    claimed | measured | verified | not_realized
+
+  EVIDENCE — how well do we know?
+    confidence, computed from the ledger across six weighted factors
+
+An Outside-In value hypothesis is `realization = claimed` with `confidence = low`.
+That is a COMPLETE, LOCKABLE, DEFENSIBLE state — not a failed attempt at
+`measured`.
+
+The 25 August conclusion that "Curia is stuck" applied the realization axis to
+something that lives on the evidence axis. Curia does not need to be measured. It
+needs to be locked as a hypothesis and later relocked as validated. Movement along
+the EVIDENCE axis while realization stays put is the actual product motion — and
+it is the motion already proven on the CVAF side across Southern Glazer's,
+Carhartt, OmniOn and MGP, all built from public filings before any customer
+conversation.
+
+### What the schema already supports
+
+More than assumed. Validation is not an update, it is SUPERSESSION:
+
+  business_metrics.superseded_by_id   asserted metric -> sourced metric
+  value_outcomes.superseded_by_id     outcome -> outcome pointing at the new metric
+  value_runs.supersedes_run_id        hypothesis run -> validated run
+  value_runs_immutable                a locked run cannot be edited, so
+                                      supersession is the only available move
+
+Run 1 survives intact as the record of what was believed before the customer said
+otherwise. That is the point.
+
+### Revised items
+
+**3. Lock a run from an engagement**
+The missing entry point. walkSpine.ts produces runs for Customer Zero and nothing
+else can. Confirmed feasible without refactor: computeHealth() in healthModel.ts
+and the confidence model are pure standalone exports taking inputs and returning
+results — no database, no walk. Locking a run is: load the engagement's outcomes
+and evidence, feed the two models, insert a value_runs row.
+A hypothesis run is FIRST-CLASS. terminal_value_stage reflects how far the
+outcomes actually got; source_fixture records the provenance mode; confidence
+comes out low and honest.
+Open decision: does locking at `claimed` require the run to STATE that it is a
+hypothesis, or is low confidence sufficient? Recommendation: require the
+statement. source_system already forces it on the metric.
+
+**4. capability_metric_links with promoted_at**
+Unchanged. Small. Packs earned, not authored.
+
+**5. Validate and supersede**
+Replace an asserted metric with a sourced one, supersede the outcome, keep both.
+This is the customer conversation expressed in software.
+
+**6. Compare two runs on CONFIDENCE, not value**
+Same claim, better evidence. The delta is how much more of this can now be
+defended. Nobody demos a confidence delta.
+Note: CVAF built compare-runs and then deliberately STOPPED persisting the
+result — comparisons between two locked, immutable runs are deterministic and
+reproducible on demand, so persisting them was accumulation with no benefit. That
+reasoning transfers; do not persist.
+
+### Why this is the right direction
+
+The system was never missing the ability to research. It was missing a lawful
+destination for a hypothesis. Outside-In has always been a value hypothesis with a
+locked baseline; LVRF already had data_class, a NOT NULL source_system, computed
+confidence, and supersession. What it lacked was a run that could hold one.
+
+---
+
+## Item 3 delivered, and six client type defects — 25 August 2026
+
+### server/routes/produceRun.ts
+
+POST /api/engagements/:id/produce-run. Produces a value_runs row from live data.
+walkSpine.ts did this for the Customer Zero fixture and nothing else could.
+
+Feasible without refactor because computeHealth(), computeConfidence() and
+computeDelta() are pure standalone exports taking plain data. ConfidenceInput is
+booleans, an evidence array, two nullable numbers and two names — nothing
+fixture-shaped. The payload is a flat snapshot of ONE outcome, reproduced in the
+same field order as walkSpine so payload_hash is comparable.
+
+Named /produce-run, not /lock. locked_at, locked_by_person_id and lock_reason are
+a separate mechanism protected by value_runs_immutable; walkSpine's own insert
+never sets them. Producing a run and locking it are two acts, and collapsing them
+was an error in the original spec.
+
+Deliberately does NOT emit heartbeat events. walkSpine calls buildHeartbeatPlan
+and that sequence is tied to the fixture walk; a guessed or partial sequence would
+corrupt the health register, which is the instrument. Consequence: a produced run
+reports institutional health as UNMEASURED with 0% coverage. That is honest, and
+it is why the Rail crashed — see below.
+
+Conservative defaults where no live column exists:
+  metricDefinitionConfirmed  hardcoded false
+  impactIsInference          hardcoded true
+Absence of proof scores as absence of proof. But this means EVERY live run
+permanently forfeits the 20-point metric_definition_confirmed factor. That is a
+missing business_metrics column, not a scoring decision. ROSTER ITEM.
+
+### Verified on production — Curia's Outside-In hypothesis
+
+  run 1fd8e160, run_number 1, confidence 10.0 / low
+  institutional_health null, health_band null, coverage 0
+  terminal_value_stage 'baseline'
+  banner_title 'OUTSIDE-IN HYPOTHESIS'
+
+Every zero on the factor list explains itself: no evidence on the baseline, no
+evidence on the actual, calculation method not disclosed, sponsor synthetic,
+verifier synthetic. The only credit earned is 10/10 for "no currency figure
+claimed — nothing to substantiate," which is honest rather than generous.
+
+Skillsoft at 30 and Curia at 10, same instrument, both defensible. The
+difference is entirely evidence, not opinion.
+
+### The crash: a governed null reached the client for the first time
+
+Rail.tsx:128 rendered `{h.composite} · {h.band.toUpperCase()}`. computeHealth
+returns null for both when no dimension is measured — by design, because
+unmeasured is never scored zero and never assumed compliant. toUpperCase on null
+threw during render and blanked the entire page.
+
+The health model has always been able to return a null band. Nothing had ever
+produced a run that did.
+
+### ROOT CAUSE: client types were written from the fixture, not the server
+
+client/src/types/run.ts asserted shapes the server does not produce. Six
+instances found:
+
+  1. health.composite / health.band     typed non-null; null when unmeasured
+                                        THIS ONE CRASHED THE PAGE
+  2. targetValue / actualValue          typed non-null; null before commit and
+                                        measure. Rendered the literal "null"
+  3. RunDelta                           typed as a struct; DeltaResult is a
+                                        discriminated union returning
+                                        { available: false }. Rendered blank
+  4. claimedCurrencyImpact /
+     realizedCurrencyImpact             typed non-null; nullable columns, null on
+                                        Curia's live run
+  5. RunEvent.valueStage                typed non-null; nullable by design for
+                                        events outside a walk
+  6. RunConfidence.asserted             typed non-null; ConfidenceResult declares
+                                        ConfidenceLevel | null
+
+Plus a blind spot, not a nullability defect: EvidenceItem did not declare
+`simulated` or `vendor_published`, both of which produceRun writes into every
+snapshot. So the evidence ledger rendered a vendor-published case study without
+disclosing that it was vendor-published — the one fact the gate refused on. Now
+declared and rendered.
+
+### The limitation worth keeping
+
+**A wrong type in this client fails silently unless a method call happens to
+expose it.** The compiler flagged ZERO consumers for four of the six fields —
+all were bare interpolation, which JSX accepts for null. The Rail crash was
+visible only because someone called .toUpperCase().
+
+Three defects were found by rendering, one by a blank page, none by the type
+checker. A type that permits an impossible value is authored prose in the type
+system.
+
+All six now render explicit states: UNMEASURED for health, "Target not yet set",
+"Not yet measured", "No stage" for an unstaged event. Never 0, never a dash,
+never blank, never the literal "null". A zero would assert compliance the model
+refuses to assert.
+
+### Two more roster items from this session
+
+- `confidenceModel.ts` isSynthetic() still keys off a '[SIM]' name prefix rather
+  than the persons.simulated column. Same convention-not-a-constraint gap closed
+  on evidence and persons on 24 August, still live in the confidence model. A
+  person with simulated = true and no prefix would earn full credit for being
+  real. Bridged defensively in produceRun by presenting such a person as
+  '[SIM] ...'; the model itself is unfixed
+- `business_metrics` has no column for whether a metric's calculation method is
+  confirmed. Every live run therefore forfeits 20 points permanently
+
+### The payload holds exactly one outcome
+
+engagement, ONE capability, ONE businessMetric, one baseline. produceRun returns
+422 if an engagement has more or fewer. Fine today; a real cohort will need a
+different payload shape. That is a 2.0 concern, recorded here so it is not
+discovered later.
+
+### Cut roster remaining
+
+4. capability_metric_links with promoted_at
+5. Validate and supersede
+6. Compare two runs on confidence, not value

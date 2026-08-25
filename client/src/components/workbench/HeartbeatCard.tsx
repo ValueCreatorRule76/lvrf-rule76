@@ -44,7 +44,13 @@ export function HeartbeatCard({ run }: { run: Run }) {
               </td>
               <td className="border-b border-rule-soft px-3 py-[9px]">{e.eventType}</td>
               <td className="border-b border-rule-soft px-3 py-[9px] text-[11.5px] text-ink-45">
-                {e.valueStage}
+                {/*
+                  heartbeat_events.value_stage is nullable by design — a
+                  system-level event (HB-0001 system init, HB-0002
+                  authentication) is not tied to any spine stage. A blank
+                  cell would be indistinguishable from not-applicable.
+                */}
+                {e.valueStage === null ? <span className="italic">No stage</span> : e.valueStage}
               </td>
               <td className="border-b border-rule-soft px-3 py-[9px] text-[11.5px] text-ink-45">
                 {e.category}
