@@ -254,12 +254,30 @@ export const businessMetrics = pgTable('business_metrics', {
   ownerPersonId: uuid('owner_person_id').references(() => persons.id, { onDelete: 'restrict' }),
   reportingCadence: text('reporting_cadence'),
   definitionNotes: text('definition_notes'),
+  /**
+   * confidenceModel.ts's metric_definition_confirmed factor (20 of 100
+   * points, binary) is earned only when BOTH are set: definition_notes is
+   * present AND a real, non-simulated person has confirmed it. Neither
+   * column alone is sufficient — a confirmation without notes documents
+   * nothing, and notes without a confirmer are unattested. No boolean
+   * flag: presence of the pair IS the flag, same pattern as
+   * evidence.attested_by_person_id / attested_at. Nullable, and never
+   * backfilled — no existing metric has been confirmed by anyone, and
+   * asserting otherwise would fabricate exactly what this measures.
+   */
+  definitionConfirmedByPersonId: uuid('definition_confirmed_by_person_id')
+    .references(() => persons.id, { onDelete: 'restrict' }),
+  definitionConfirmedAt: timestamp('definition_confirmed_at', { withTimezone: true }),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'business_metrics_superseded_by_fk' }).onDelete('restrict'),
   unique('business_metrics_institution_name_key').on(t.institutionId, t.name),
   index('business_metrics_institution_idx').on(t.institutionId),
+  /** A confirmer with no date, or a date with no confirmer, is a half-recorded fact. */
+  check('business_metrics_definition_confirmation_is_complete',
+    sql`(${t.definitionConfirmedByPersonId} IS NULL AND ${t.definitionConfirmedAt} IS NULL)
+        OR (${t.definitionConfirmedByPersonId} IS NOT NULL AND ${t.definitionConfirmedAt} IS NOT NULL)`),
 ]);
 
 /* ================================================================== */

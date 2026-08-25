@@ -1,0 +1,5 @@
+ALTER TABLE "business_metrics" ADD COLUMN "definition_confirmed_by_person_id" uuid;--> statement-breakpoint
+ALTER TABLE "business_metrics" ADD COLUMN "definition_confirmed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "business_metrics" ADD CONSTRAINT "business_metrics_definition_confirmed_by_person_id_persons_id_fk" FOREIGN KEY ("definition_confirmed_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "business_metrics" ADD CONSTRAINT "business_metrics_definition_confirmation_is_complete" CHECK (("business_metrics"."definition_confirmed_by_person_id" IS NULL AND "business_metrics"."definition_confirmed_at" IS NULL)
+        OR ("business_metrics"."definition_confirmed_by_person_id" IS NOT NULL AND "business_metrics"."definition_confirmed_at" IS NOT NULL));
