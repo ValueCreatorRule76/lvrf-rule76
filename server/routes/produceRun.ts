@@ -185,7 +185,7 @@ export function produceRunRouter(pool: Pool): Router {
                 promised_measured_at, actual_measured_at,
                 realization, confidence, verified_by_person_id
            FROM value_outcomes
-          WHERE engagement_id = $1 AND deleted_at IS NULL`,
+          WHERE engagement_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [engagementId],
       );
       if (outcomes.length === 0) {
