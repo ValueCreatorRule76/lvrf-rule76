@@ -1622,3 +1622,180 @@ were executed against srv1862778 via curl to 127.0.0.1:3001 and psql as postgres
 session verified the FK truncation independently from the generated SQL — the
 same fact from two sources — and flagged that it could not attest to the
 production figures.
+
+---
+
+## Item 5 closed — supersession, and the confidence curve — 26 August 2026
+
+### Delivery A: lvrf_supersession_is_sane
+
+Fourteen tables carry superseded_by_id and nothing enforced what supersession
+MEANS — only a foreign key. A row could point at itself, fork the chain by
+claiming a successor another row already claimed, run backwards in time, or
+cycle. A broken chain is worse than no chain: the chain is what makes "what did
+we believe before" answerable, and it cannot fork or loop.
+
+Four rules, each naming which one fired, applied by loop to all fourteen:
+
+  1. not self
+  2. target exists and deleted_at IS NULL
+  3. target is not already superseding something else — no forked chains
+  4. the target is NEWER than the row it supersedes
+
+AMENDMENT-005 deliberately NOT cited. That amendment governs AI-sourced and
+simulated evidence and who may attest. These rules are about the shape of the
+supersession graph. A citation that does not apply weakens the ones that do.
+
+Trigger count 49 -> 63, reconciled by list.
+
+### Rule 4 was inverted, and my tests confirmed the bug while appearing to confirm the rule
+
+The trigger fires on the row being MODIFIED, which in supersession is the OLD row
+having its pointer set. So NEW is the predecessor and the looked-up target is the
+successor. The original comparison required the successor to be OLDER — the
+opposite of its own stated intent and its own error message. It would have
+rejected every correct supersession.
+
+Caught by the session asked to build the validate endpoint against it, which
+traced what the trigger variables actually refer to rather than trusting the
+comment.
+
+THE TESTING FAILURE MATTERS MORE THAN THE BUG. Two tests were run against the
+inverted trigger. One refused and one passed, and both were read as confirming
+correct behaviour — because both results are equally consistent with a working
+trigger and an inverted one. The pass case chosen was the wrong direction.
+
+  A check that agrees with the expected answer is not proof the check is right.
+
+Same shape as the trigger count reconciling by coincidence on 23 August. The
+correct verification, run after the fix, was that BOTH results reversed — the
+previously-refused case now passes and the previously-passed case now refuses.
+A reversal cannot happen by accident.
+
+### Delivery B: POST /api/business-metrics/:id/validate
+
+Replaces an ASSERTED metric with a SOURCED one and supersedes the outcome that
+used it. Both old rows survive. `name` is not accepted in the payload — it is
+copied, because a different name is a different metric, not a validation of this
+one. A caller sending one gets a 422 rather than having it silently ignored.
+
+### Two structural collisions found by running it
+
+**business_metrics_institution_name_key was UNIQUE (institution_id, name).**
+Supersession requires two rows sharing a name — ancestor and successor. The
+endpoint inserts the successor while the ancestor is still current, so both
+briefly match any "current rows only" predicate. Postgres cannot defer a unique
+INDEX, and a deferrable UNIQUE CONSTRAINT cannot carry a WHERE clause, so no
+index formulation permits the transient state. Migration 0014 tried a partial
+index and still collided; 0015 dropped it.
+
+A metric's identity is its id. Its name is a label, and a chain of rows sharing a
+label is what supersession looks like.
+
+**The unique index had been MASKING a lookup bug.** valueOutcomes.ts:260 resolved
+a metric by (institution_id, name, deleted_at IS NULL) with no superseded_by_id
+filter. One live row per name meant the lookup could not be ambiguous. Remove the
+constraint and it can return either the ancestor or the successor, arbitrarily —
+attaching a new outcome to a superseded metric with nothing to catch it.
+
+That was more serious than the collision that surfaced it.
+
+### Audit: name-based lookups against governed tables
+
+  valueOutcomes.ts:267      business_metrics   FIXED
+  offeringAttachment.ts:129 capabilities       no superseded_by_id filter
+  valueOutcomes.ts:324      capabilities       no superseded_by_id filter
+  institutionInputs.ts:232  capabilities       no superseded_by_id filter
+  accountInputs.ts:202      capabilities       no superseded_by_id filter
+  accountInputs.ts:152      institutions       filters NEITHER deleted_at nor
+                                               superseded_by_id
+
+The four capabilities lookups are latent only because nothing supersedes a
+capability yet — exactly the situation business_metrics was in until it wasn't.
+
+Then a SEVENTH instance the audit missed, because the audit scoped to NAME
+lookups: produceRun.ts resolves value_outcomes by engagement_id and counted a
+superseded row, refusing with "has 2 value outcomes." The real rule is broader:
+
+  ANY query resolving a governed row by something other than its primary key
+  can hit a superseded ancestor.
+
+### Verified on production — the supersession chain
+
+  value_outcomes    180.0000 -> superseded by -> 214.0000
+  business_metrics  "ASSERTED — not sourced from any Curia system"
+                    -> superseded by ->
+                    "Curia HRIS and performance management module"
+
+Nothing overwritten. The Outside-In hypothesis of 180 days is still there, and
+visibly wrong by 34 days. That is the record doing the one thing a record is for.
+
+### THE CONFIDENCE CURVE — five runs, one claim
+
+  run  score  what changed
+  1    10.0   Outside-In hypothesis, first locked
+  2    10.0   migration 0013 applied; confirmation columns exist, unset
+  3    30.0   metric definition confirmed by a named real person
+  4    30.0   metric superseded: source_system now names Curia's HRIS
+  5    45.0   the HRIS extract attached as evidence and attested
+
+TWO PLATEAUS, AND THEY MATTER MORE THAN THE RISES.
+
+Run 2 proved that adding columns credits nothing — the factor reads facts, not
+schema. Run 4 proved that a claim about provenance credits nothing without
+evidence behind it: the confidence model does not score source_system. Replacing
+an asserted origin with a real one changed the honesty of the metric and earned
+zero, because baseline_evidence_verified scores EVIDENCE ATTACHED TO THE OUTCOME.
+
+  Validating a metric's source is not the same as evidencing a baseline.
+
+Run 5 earned 15 of 25, not the full weight. The factor note:
+
+  "1 item(s): 0 independent, 1 attested. Strongest — attested by Brad Piver
+   (external analyst of record)."
+
+Self-reported customer data attested by the consultant who obtained it is better
+than vendor marketing and worse than an audit. The model prices it at 60% and
+names the person. That is a discount a CFO would recognise.
+
+Band stays `low` across all five. Forty-five is still low.
+
+A model that only ever rises when you do work is a scoring tool. One that holds
+flat when you do the WRONG work is an instrument.
+
+### Process note: five misreports in one session
+
+Five separate claims tonight were wrong and caught only by testing:
+
+  - rule 4 inverted, and the tests that "confirmed" it
+  - three applied migrations reported as unapplied
+  - a produceRun.ts fix reported as committed that was never made — the commit
+    hash cited already existed from the previous turn
+
+The last is a different class from the others: not a stale view of production,
+but a claim about actions taken in its own session. The widened audit produced in
+that same turn should be treated as unverified until re-run.
+
+Every one was caught by running something rather than reading something.
+
+### Correction to the process note above
+
+The third bullet claimed a produceRun.ts commit was fabricated or
+pre-existing. Checked against git history and false. a316495 is a
+genuine commit from this session, timestamped 2026-08-25 20:41:27,
+parent 9f25d94, with exactly the reported diff.
+
+What actually happened: the fix was first reported against hash
+9f25d94, which was the previous commit (the name-uniqueness drop).
+grep on production confirmed the filter was absent, correctly showing
+the work had not landed. The conclusion drawn — that a commit had been
+fabricated — did not follow. A misreported hash and work landing a
+turn later than claimed is a bookkeeping error, not an integrity one.
+
+Four misreports that session, not five. The widened audit produced
+alongside it should still be re-run before use, but on ordinary
+caution rather than suspicion.
+
+Caught by the session asked to append this, which checked git history
+rather than trusting the document. Second time in two days that an
+append was refused until the claim and the code agreed.
