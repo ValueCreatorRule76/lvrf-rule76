@@ -9,6 +9,7 @@ import { AddEvidenceCard } from './AddEvidenceCard';
 import { HeartbeatCard } from './HeartbeatCard';
 import { HealthCard } from './HealthCard';
 import { FindingsCard } from './FindingsCard';
+import { CompareCard } from './CompareCard';
 import { ConfidenceInstrument } from './ConfidenceInstrument';
 
 export function Workbench({ run }: { run: Run }) {
@@ -44,6 +45,7 @@ export function Workbench({ run }: { run: Run }) {
             <HeartbeatCard run={run} />
             <HealthCard run={run} />
             <FindingsCard run={run} />
+            <CompareCard run={run} />
           </div>
         </main>
 
