@@ -100,8 +100,12 @@ export function offeringAttachmentRouter(pool: Pool): Router {
         return;
       }
 
+      // Resolving by key, not id — filter the supersession chain or this
+      // can match a superseded ancestor.
       const { rows: [offering] } = await client.query<{ id: string }>(
-        'SELECT id FROM offerings WHERE tenant_id = $1 AND offering_key = $2 AND deleted_at IS NULL',
+        `SELECT id FROM offerings
+          WHERE tenant_id = $1 AND offering_key = $2
+            AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [institution.tenant_id, offeringKey],
       );
       if (!offering) {
@@ -125,8 +129,12 @@ export function offeringAttachmentRouter(pool: Pool): Router {
 
       let capabilityId: string;
       let capabilityCreated: boolean;
+      // Resolving by name, not id — filter the supersession chain or this
+      // can match a superseded ancestor.
       const { rows: [existingCapability] } = await client.query<{ id: string }>(
-        'SELECT id FROM capabilities WHERE institution_id = $1 AND name = $2 AND deleted_at IS NULL',
+        `SELECT id FROM capabilities
+          WHERE institution_id = $1 AND name = $2
+            AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [institutionId, capabilityName],
       );
       if (existingCapability) {

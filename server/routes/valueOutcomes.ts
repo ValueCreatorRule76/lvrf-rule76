@@ -320,8 +320,12 @@ export function valueOutcomesRouter(pool: Pool): Router {
       // Capabilities are not created here — they arrive by attaching an
       // offering. A value outcome against a capability nobody attached is a
       // naming error, not a gap to paper over with an implicit create.
+      // Resolving by name, not id — filter the supersession chain or this
+      // can match a superseded ancestor.
       const { rows: [capability] } = await client.query<{ id: string }>(
-        'SELECT id FROM capabilities WHERE institution_id = $1 AND name = $2 AND deleted_at IS NULL',
+        `SELECT id FROM capabilities
+          WHERE institution_id = $1 AND name = $2
+            AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [institutionId, capabilityName],
       );
       if (!capability) {

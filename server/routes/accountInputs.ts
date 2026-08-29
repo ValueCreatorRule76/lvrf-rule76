@@ -148,10 +148,25 @@ export function accountInputsRouter(pool: Pool): Router {
       );
 
       if (insertedInstitution.length === 0) {
+        // Resolving by name, not id — filter the supersession chain or this
+        // can match a superseded ancestor. institutions_tenant_name_key is
+        // a PLAIN unique constraint (no WHERE), so the conflict above can
+        // be against a retired or superseded row that this filtered SELECT
+        // will not find — a pre-existing gap in the constraint itself
+        // (same shape business_metrics had), not something to paper over
+        // with an empty-array crash.
         const { rows: existing } = await client.query<{ id: string }>(
-          'SELECT id FROM institutions WHERE tenant_id = $1 AND name = $2',
+          `SELECT id FROM institutions
+            WHERE tenant_id = $1 AND name = $2
+              AND deleted_at IS NULL AND superseded_by_id IS NULL`,
           [tenantId, institutionName],
         );
+        if (existing.length === 0) {
+          res.status(409).json({
+            message: `An institution named "${institutionName}" already exists for this tenant, but is retired or superseded and not currently active — the naming conflict cannot be resolved to a current institution.`,
+          });
+          return;
+        }
         res.status(409).json({
           message: `An institution named "${institutionName}" already exists for this tenant.`,
           institution_id: existing[0].id,
@@ -197,9 +212,12 @@ export function accountInputsRouter(pool: Pool): Router {
           return;
         }
 
+        // Resolving by name, not id — filter the supersession chain or this
+        // can match a superseded ancestor.
         const { rows: [capability] } = await client.query<{ id: string }>(
           `SELECT id FROM capabilities
-            WHERE institution_id = $1 AND name = $2 AND deleted_at IS NULL`,
+            WHERE institution_id = $1 AND name = $2
+              AND deleted_at IS NULL AND superseded_by_id IS NULL`,
           [institutionId, capabilityName],
         );
         if (!capability) {
