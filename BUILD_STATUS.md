@@ -1799,3 +1799,64 @@ caution rather than suspicion.
 Caught by the session asked to append this, which checked git history
 rather than trusting the document. Second time in two days that an
 append was refused until the claim and the code agreed.
+
+---
+
+## Supersession filters closed — 26 August 2026
+
+Seven queries resolved governed rows without filtering the supersession chain.
+All fixed, deployed as 0ee7f18 and 257c207, verified by grep on production rather
+than by report.
+
+  accountInputs.ts:152       institutions   added deleted_at AND superseded_by_id
+  accountInputs.ts:201       capabilities
+  institutionInputs.ts:231   capabilities
+  offeringAttachment.ts:104  offerings      NOT in the earlier audit
+  offeringAttachment.ts:129  capabilities
+  valueOutcomes.ts:324       capabilities
+  engagements.ts:20          engagements    list query, zero consumers today
+
+THE RULE, now stated at each site in a comment:
+
+  Any query resolving a governed row by something other than its primary key can
+  hit a superseded ancestor. Resolution by primary key is safe.
+
+The offerings lookup was found only because the audit was re-run. The earlier
+audit scoped to capabilities and institutions and never checked the catalog. Once
+an offering is superseded — a product retired and replaced — attaching by
+offering_key could have resolved to the ancestor.
+
+### FINDING: institutions_tenant_name_key is a plain unique constraint
+
+From migration 0000: CONSTRAINT institutions_tenant_name_key UNIQUE(tenant_id,
+name), declared inline, no WHERE clause, never altered since.
+
+**A soft-deleted or superseded institution permanently occupies its name.** The
+constraint has no concept of deleted_at or superseded_by_id — it blocks an insert
+against a dead row exactly as it would against a live one.
+
+This is the same shape business_metrics had before migration 0015, and it will
+block supersession of institutions in the same way whenever that becomes possible.
+When it does, the fix is the same: drop the constraint, and let the application
+enforce uniqueness among current rows.
+
+Not urgent — no route currently sets deleted_at or superseded_by_id on
+institutions.
+
+Handled correctly in the meantime: adding the filter to accountInputs.ts:152
+created an empty-result case the old code could not produce. The handler now
+checks for it explicitly and returns a 409 stating that the name is held by a
+retired or superseded row, rather than dereferencing an empty array or handing
+back a dead row's id in a 409 that looks identical to a live conflict.
+
+### engagements.ts:20 — filtered, with a note
+
+Added AND e.superseded_by_id IS NULL. The endpoint has ZERO consumers today —
+nothing in client/src references /api/engagements — which made this free to change
+before it acquires callers.
+
+The argument against filtering was real and is recorded here: this list has no
+history or archive view to redirect anyone to, so a row that vanishes on
+supersession has nowhere to be found. Filtering is correct as the house default;
+a ?include_superseded=true parameter or a distinct history endpoint is the right
+answer when someone needs the chain rather than the head.
