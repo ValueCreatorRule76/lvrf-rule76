@@ -5,6 +5,7 @@ import { ProvenanceBanner } from './ProvenanceBanner';
 import { Gate } from './Gate';
 import { MeasurementRow } from './MeasurementRow';
 import { EvidenceCard } from './EvidenceCard';
+import { AddEvidenceCard } from './AddEvidenceCard';
 import { HeartbeatCard } from './HeartbeatCard';
 import { HealthCard } from './HealthCard';
 import { FindingsCard } from './FindingsCard';
@@ -39,6 +40,7 @@ export function Workbench({ run }: { run: Run }) {
 
             <MeasurementRow run={run} />
             <EvidenceCard run={run} />
+            <AddEvidenceCard run={run} />
             <HeartbeatCard run={run} />
             <HealthCard run={run} />
             <FindingsCard run={run} />
