@@ -82,9 +82,24 @@ holds the authoritative texts.
 
 ### Truth and provenance
 
-Every figure carries its origin. `data_class` distinguishes sourced from derived
-from asserted. `business_metrics.source_system` is `NOT NULL` — a metric names
-where it comes from before it exists.
+Every figure carries its origin. There is **no single `data_class` column** —
+provenance is carried by a set of fields, and this document previously claimed
+otherwise (see §18). What actually exists:
+
+| Field | Table | Carries |
+|---|---|---|
+| `kind` | `evidence` | enum: assessment_result, system_export, artifact, observation, attestation, public_filing, vendor_publication |
+| `provenance` | `evidence` | `NOT NULL` free text — where it came from, in prose |
+| `ai_sourced` | `evidence` | boolean, gated by `evidence_ai_requires_query` |
+| `simulated` | `evidence` | boolean, added 24 Aug; replaced a `[SIM]` prefix convention |
+| `source_verified` | `evidence` | boolean |
+| `citation_resolved` | `evidence` | boolean, requires a named human |
+| `source_system` | `business_metrics` | `NOT NULL` — a metric names where it comes from before it exists |
+| `simulated` | `persons` | boolean, added 24 Aug; same reasoning |
+
+The distinction between sourced, derived and asserted is expressed through these
+fields in combination, and in the `source_system` and `provenance` text. It is not
+a single enum.
 
 ### AI assists the evidence, never manufactures the value
 
@@ -410,7 +425,7 @@ capability has someone accountable for it at the account.
 | `confidence_level` | low, medium, high |
 | `heartbeat_category` | constitutional, governance, operational, integrity, security, financial, learning |
 | `audit_operation` | insert, update, soft_delete |
-| `lifecycle_status` | draft, ... *(only `draft` observed; read the enum before relying on others)* |
+| `lifecycle_status` | draft, proposed, rejected, ratified, active, superseded, retired, archived |
 
 `metric_direction` is `increase | decrease` only. **The enum cannot express whether a
 direction is good** — `decrease` on audit findings is good, on retention is not. The
@@ -947,7 +962,7 @@ system.
 > Every assertion about the running system must carry the **date** it was verified
 > and the **command** that verified it. An assertion without both is a belief, not a
 > record. Beliefs are fine — they just have to be marked as such, the same way
-> `asserted` is a valid `data_class`.
+> `asserted` is a valid state for a claim.
 
 Four record-versus-reality gaps were found in a single week — the client bundle, five
 missing triggers, the trigger count, and the offerings catalog. **Every one was found
@@ -1009,3 +1024,46 @@ canonical source.
 
 The supersession filter list in §13 came from an agent session that also misreported
 a commit hash. Re-run that audit before acting on it.
+
+
+---
+
+## 18. Corrections to this document
+
+### `data_class` does not exist — corrected 26 August 2026
+
+§2 previously stated that "`data_class` distinguishes sourced from derived from
+asserted," presented as a fact about the schema. **There is no such column.**
+`grep -rn "data_class" db/schema.ts` returns nothing.
+
+The claim originated in a conversation summary and was never checked against the
+schema before being written into this file. It appeared in a document a new session
+is instructed to read first — the worst possible place for an unverified assertion,
+in a repository whose central discipline is that claims carry their evidence.
+
+What actually carries provenance is listed in §2 and is a set of fields rather than
+one enum: `evidence.kind`, `evidence.provenance`, `ai_sourced`, `simulated`,
+`source_verified`, `citation_resolved`, and `business_metrics.source_system`.
+
+### `lifecycle_status` has eight values, not one — corrected 26 August 2026
+
+§5 previously listed the enum as "draft, ..." with a note that only `draft` had been
+observed. The full set is: `draft, proposed, rejected, ratified, active, superseded,
+retired, archived`.
+
+This matters for design, not just accuracy. A governance vocabulary already exists in
+the schema. Before adding a new mechanism to express approval, promotion or
+retirement, **check whether `lifecycle_status` already says it** — a parallel
+timestamp or boolean that duplicates an existing enum value is the
+`#C8A24A` failure in a different form.
+
+### Why both corrections were found
+
+Recon for a feature that was never built. The check that surfaced them was
+`grep -rn "data_class" db/schema.ts` and `select unnest(enum_range(null::lifecycle_status))`
+— two commands, run because a design decision depended on the answers rather than
+because anything looked wrong.
+
+Nothing in this document should be trusted more than the command that would verify
+it. Where a section makes a claim about the schema and does not name the query that
+produces it, run the query.
