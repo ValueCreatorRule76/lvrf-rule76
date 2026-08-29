@@ -53,6 +53,7 @@ export function engagementsRouter(pool: Pool): Router {
 
       const { rows } = await pool.query(
         `SELECT
+           id,
            run_number,
            terminal_value_stage,
            confidence_score,
@@ -65,6 +66,9 @@ export function engagementsRouter(pool: Pool): Router {
            walked_at
          FROM value_runs
         WHERE engagement_id = $1 AND deleted_at IS NULL
+          -- Governed rows resolved by something other than a primary key must
+          -- filter the supersession chain.
+          AND superseded_by_id IS NULL
         ORDER BY run_number DESC`,
         [req.params.id],
       );
