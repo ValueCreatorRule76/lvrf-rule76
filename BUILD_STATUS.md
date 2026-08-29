@@ -2025,3 +2025,11 @@ Two stray files, `confidence-` and `factors`, were found in /srv/lvrf — shell
 redirect artifacts from an unquoted `jsonb_pretty(payload->'confidence'->'factors')`
 query. Removed. **The deploy script's dirty-tree guard caught them**; without it the
 deploy would have succeeded and they would have sat there indefinitely.
+
+Provenance of the entry above: the six locks, the 409 re-lock refusal, the
+lvrf_locked_run_immutable refusal, the run-1-vs-run-5 comparison and the stray-file
+discovery were all executed on srv1862778 on 29 August 2026 via curl to
+127.0.0.1:3001 and psql as postgres. The session that authored this entry had no
+SSH access and flagged which claims it could and could not attest to — the
+code-level analysis it verified against its own work, the production results it
+did not.
