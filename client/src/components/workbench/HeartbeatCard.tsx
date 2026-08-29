@@ -11,6 +11,23 @@ const HEALTH_TONE: Record<string, 'healthy' | 'watch' | 'warning' | 'critical' |
 
 export function HeartbeatCard({ run }: { run: Run }) {
   const events = run.payload.events;
+
+  if (events.length === 0) {
+    // Zero events is not the same claim as "all healthy" — nothing about
+    // this run's operational health has been established at all. Same
+    // defect class HealthCard already guards against with its own
+    // UNMEASURED badge; match it rather than let an empty table read as a
+    // clean bill of health.
+    return (
+      <Card n="02" title="Heartbeat ledger" badge={<Badge tone="watch">UNMEASURED · 0 events</Badge>}>
+        <p className="m-0 text-[12.5px] text-ink-70">
+          No heartbeat events are attached to this run. Nothing about its operational health has
+          been established — this is not the same as healthy.
+        </p>
+      </Card>
+    );
+  }
+
   const allHealthy = events.every((e) => e.healthState === 'healthy');
 
   return (

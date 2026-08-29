@@ -66,17 +66,45 @@ export function GovernedForm<T>({
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mb-4 border border-rule bg-rule-soft px-3 py-3">
-        <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[.16em] text-gold-ink">
-          Provenance — where this evidence came from
-        </span>
-        {provenance}
-      </div>
+      {/*
+        The same rule as the line by the button below, stated first: a
+        visitor who fills in every field before noticing they cannot submit
+        has already been let down once. This occupies the position the
+        provenance block otherwise would — the first thing read — and the
+        fieldset below disables every field it wraps, not only the button,
+        so the form cannot be filled out before the requirement is met.
+      */}
+      {!actor && (
+        <div className="mb-4 border-l-[3px] border-gold bg-offwhite px-3.5 py-3">
+          <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
+            Actor required
+          </span>
+          <p className="m-0 mt-1 text-[12.5px] text-ink">Select who is acting before writing.</p>
+        </div>
+      )}
 
-      <div className="mb-4">{fields}</div>
+      <fieldset disabled={!actor} className="m-0 min-w-0 border-0 p-0">
+        <div className="mb-4 border border-rule bg-rule-soft px-3 py-3">
+          <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[.16em] text-gold-ink">
+            Provenance — where this evidence came from
+          </span>
+          {provenance}
+        </div>
+
+        <div className="mb-4">{fields}</div>
+      </fieldset>
+
+      {/*
+        Above the button, not below it: on a long form the result is the
+        most important thing on the page when it exists and must not
+        require scrolling past a button that has already been pressed.
+      */}
+      {result && <ResultBlock result={result} renderSuccess={renderSuccess} />}
 
       {!actor && (
-        <p className="m-0 mb-2 text-[11px] text-ink-45">Select who is acting before writing.</p>
+        <p className="m-0 mb-2 mt-4 text-[11px] text-ink-45">
+          Select who is acting before writing.
+        </p>
       )}
 
       <button
@@ -93,8 +121,6 @@ export function GovernedForm<T>({
       >
         {submitLabel}
       </button>
-
-      {result && <ResultBlock result={result} renderSuccess={renderSuccess} />}
     </form>
   );
 }

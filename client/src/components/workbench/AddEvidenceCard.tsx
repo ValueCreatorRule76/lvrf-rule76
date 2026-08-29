@@ -117,9 +117,7 @@ export function AddEvidenceCard({ run }: { run: Run }) {
         provenance={
           <>
             <label className="mb-3 block">
-              <span className={LABEL_CLASS}>
-                Provenance — where this evidence actually came from (required, not optional)
-              </span>
+              <span className={LABEL_CLASS}>Provenance (required)</span>
               <textarea
                 required
                 minLength={12}
