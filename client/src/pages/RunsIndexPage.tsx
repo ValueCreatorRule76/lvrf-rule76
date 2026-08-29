@@ -23,7 +23,12 @@ export function RunsIndexPage() {
   }
 
   return (
-    <div className="px-[30px] pb-14 pt-6">
+    // max-w-5xl (1024px): the runs table's seven columns (including badges
+    // and an unwrapped ISO timestamp) don't wrap below ~700px, so this
+    // leaves roughly 250-300px of headroom above that floor — room to
+    // breathe without the edge-to-edge sprawl a fully unconstrained
+    // container produced.
+    <div className="mx-auto max-w-5xl px-[30px] pb-14 pt-6">
       <header className="mb-[22px]">
         <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
           LVRF
