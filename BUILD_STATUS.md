@@ -1860,3 +1860,10 @@ history or archive view to redirect anyone to, so a row that vanishes on
 supersession has nowhere to be found. Filtering is correct as the house default;
 a ?include_superseded=true parameter or a distinct history endpoint is the right
 answer when someone needs the chain rather than the head.
+
+Provenance of the entry above: 0ee7f18 and 257c207 were deployed via
+scripts/lvrf-deploy.sh on srv1862778 on 26 August 2026, and verified there by
+grep against server/routes and a curl to 127.0.0.1:3001 confirming the 409 path
+resolves to a live institution_id. The session that authored this entry had no
+SSH access to that box and flagged that it could not attest to the production
+claims rather than silently asserting them.
