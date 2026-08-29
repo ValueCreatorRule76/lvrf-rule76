@@ -2156,3 +2156,245 @@ person and a document. Better than the five-run version.
 
 Every governed relationship now has an endpoint. Nothing remains that can only be
 done by hand in psql.
+
+---
+
+## The UI: three surfaces — 29 August 2026
+
+### The reversal
+
+The 25 August roster cut removed all UI work on the reasoning that if LVRF were
+rebuilt on someone else's stack, the client would not transfer. That is reversed.
+LVRF is a Rule76 application in the same sense CVAF is. The UI is a demonstration
+artifact for selling the method — not a throwaway, and not a product either.
+
+The consequence was larger than it sounded. **Five endpoints existed that only curl
+had ever exercised.** The read path had a UI; the write path had none.
+
+Scope was set at three surfaces rather than eight: evidence entry, compare, account
+intake. A demo needs to be complete on the paths people walk, not on every path.
+
+### Before this: no interactive element existed anywhere
+
+`grep -rln "input|button|onChange|onSubmit" client/src/` returned two files, both
+false positives — a type name and the three disabled Topbar buttons. No form, no
+input styling, no focus treatment, no precedent. **Every choice below became one.**
+
+---
+
+## The actor layer
+
+`GET /api/persons` — new. Real and non-simulated by default; `include_simulated`
+must be opted into. A picker listing `[SIM] Finance Verifier` beside real people
+would let someone select one and receive a refusal they cannot interpret. The
+`simulated` field is always returned even when such rows are excluded — never omit
+a field to imply a value.
+
+`ActorContext` + `ActorBar` — session-scoped React state. **No localStorage, no
+sessionStorage, no module constant.** It clears on refresh and that is deliberate: a
+persisted actor becomes a default, and a default becomes an assumption. A hidden
+default actor is the exact hole the server middleware was fixed to close.
+
+The bar is always visible. Ink and loud when no actor is set — *"No actor selected.
+Every write to this system names a person."* — quiet white once answered.
+Attribution is not something a visitor discovers in an audit log afterwards.
+
+---
+
+## GovernedForm — the primitive
+
+**FOUR RESULT STATES, FOUR TREATMENTS.** This is the component's reason to exist:
+
+  refused (422)   INK BLOCK, server message VERBATIM
+  conflict (409)  the same ink treatment, different label
+  error           muted, ordinary, deliberately QUIETER than a refusal
+  ok              caller-supplied content
+
+A governance refusal is the system working. A 500 is the system failing. Rendering
+both the same would undo the argument the database enforces.
+
+**A refusal message is never prefixed, wrapped, appended, or mapped to a friendlier
+string.** Those sentences name amendments. They are the product.
+
+`postGoverned` in `client/src/api/post.ts` returns that union. It refuses to make
+the request at all if the actor id is absent or malformed — failing before the
+network call makes the reason legible instead of arriving as a generic 422.
+
+### No field defaults to a plausible value
+
+Selects start on `— choose —`. Booleans use a **tri-state** `'' | 'true' | 'false'`
+rather than a checkbox — a checkbox physically cannot express "nobody chose," since
+it resolves to false whether or not anyone looked at it. That is the
+no-plausible-defaults rule enforced structurally rather than by convention.
+
+### The actor requirement states itself early
+
+First implementation disabled only the submit button, with the explanation beneath
+it. A person could fill an entire form and discover at the end that they could not
+submit. Now: the requirement renders **above** the fields, and a
+`<fieldset disabled>` cascades to every input — so the form cannot be filled before
+the requirement is met. The line by the button is kept for anyone who scrolls
+straight down.
+
+Ink is **reserved for governance refusals**. The actor requirement uses HealthCard's
+existing gold-left-border callout instead. "You have not chosen who you are" is a
+precondition, not a refusal.
+
+### The result block renders above the submit button
+
+It was below. On a long form the answer appeared off-screen and a visitor would
+assume nothing happened. A refusal is the most important thing on the page when it
+occurs and must not require scrolling to find.
+
+---
+
+## Surface 1 — evidence entry
+
+`POST /api/value-outcomes/:id/evidence`, rendered as card `01A` beneath the evidence
+ledger on the run page.
+
+**Provenance renders FIRST**, in its own block, labelled *where this evidence
+actually came from (required, not optional)*. Not at the bottom, not behind a
+toggle. The honest part is not optional-looking.
+
+Labels teach the constraint rather than naming the field — *confidence (the server
+will not accept a default)*.
+
+### The run payload gained valueOutcomeId
+
+The payload carried no outcome id, so nothing in the client could address the
+endpoint. Added to `produceRun.ts`; typed **optional** in `run.ts` because seven
+production runs predate it. Typing it required would be the 25 August defect
+repeated — a type asserting a shape the server does not produce.
+
+Runs without it render no form, and a Card explaining that the run predates the
+field. Same honest degradation `EvidenceCard` already uses for runs walked before
+evidence was captured.
+
+Adding the field changes `payloadHash` for runs produced afterwards. Correct and
+expected — a payload with more in it is a different payload — noted in a comment so
+nobody reads a hash mismatch against an older run as corruption.
+
+### The success state explains a constraint rather than showing a result
+
+  *"Evidence recorded. This ledger is a snapshot taken when this run was produced
+  and will not change. Produce a new run to see this evidence scored."*
+
+`EvidenceCard`'s own comment is the reason: a live join would show current evidence
+beside a score computed from evidence as it stood at walk time — coherent-looking
+and wrong.
+
+### Verified on production
+
+The refusal reached a browser from a visitor's own action, verbatim:
+
+```
+WRITE REFUSED
+LVRF: vendor-published evidence may not support a measured actual.
+AMENDMENT-005 Article I. The actual comes from the customer's system of record.
+```
+
+Postgres trigger → API unwrapped → ink block. Nothing written.
+
+---
+
+## Surface 2 — compare to predecessor
+
+Card `05` on the run page. Compares this run to the highest-numbered **locked**
+earlier run on the same engagement. Unlocked runs are skipped, never offered — the
+endpoint refuses them with a 409 and offering one would produce a refusal the reader
+cannot act on.
+
+Three pre-comparison states, each explicit, never a blank: first run on its
+engagement, this run not locked, no earlier locked run exists.
+
+**A ZERO DELTA IS NOT NOTHING.** Where delta is 0 but the notes differ, the row is
+tinted gold and badged *"Evidence changed, score held"*, with both notes rendered.
+That is the single most important thing this card can show, and a diff rendering it
+as an unremarkable flat row would bury it.
+
+Verified on run 5 → run 6: delta 0, band held at LOW, baseline factor tinted with
+*1 item(s)* → *2 item(s)*. Run 7 → run 6: all six flat, no tint. The tint appears
+when something happened and stays absent when nothing did.
+
+Factors render as their **questions**, not snake_case keys — legible to someone who
+has never seen the schema.
+
+**No interpretation.** The endpoint computes no narrative and the card adds none.
+
+### Two server fixes this required
+
+`GET /api/engagements/:id/runs` **did not select `id`**. It returned run numbers,
+scores, stages and lock state — everything except the primary key. A client could
+see a run existed and could not address it. Zero consumers, which is why nobody had
+hit it.
+
+Same query filtered `deleted_at` but not `superseded_by_id` — **an eighth
+supersession site**. The earlier audit greps searched `FROM capabilities`,
+`FROM institutions`, `FROM business_metrics` and `FROM value_outcomes`. Nobody
+searched `FROM value_runs` — the table holding the artifact being demonstrated.
+
+---
+
+## Surface 3 — account intake
+
+Card `00` above the runs table on the index. Uses `GovernedForm` unchanged.
+
+**Industry is the provenance field**, and its help text is the clearest copy in the
+interface:
+
+  *"Industry determines which business measures carry money for an account. It is
+  asserted by whoever enters it, not sourced. Leave it empty if unknown — an empty
+  industry is honest, a guessed one is not."*
+
+### The primitive leaked domain copy, and a second consumer exposed it
+
+`GovernedForm` hardcoded *"Provenance — where this evidence came from"*. Invisible
+until a second consumer existed, then rendered verbatim on a form submitting no
+evidence. Now `provenanceLabel?: string`, defaulting to the original so
+`AddEvidenceCard` is unaffected.
+
+**Caught by the session building the second consumer, which flagged it rather than
+patching the primitive outside its stated scope.**
+
+### Verified: the 409 needed no special-casing
+
+Submitting `Curia` produced *WRITE CONFLICT* in ink with the server's message
+verbatim — with nothing conflict-specific in `CreateAccountCard`. That is the only
+real test of an abstraction: whether the second consumer needed to reach into it.
+
+---
+
+## Two things the page was asserting untruthfully
+
+**`0 EVENTS · ALL HEALTHY`** on the heartbeat card. Zero events is not all healthy —
+it is UNMEASURED, and the badge asserted compliance where none was established. Same
+class as rendering 0 for an absent value. Now: *"No heartbeat events are attached to
+this run. Nothing about its operational health has been established — this is not
+the same as healthy."* Matches HealthCard directly beneath it.
+
+**Index page overflow.** First fix used `calc(100vw − 544px)`, mirroring the run
+page's rail and confidence panel widths — on a page that contains neither. A
+coincidence of appearance, not a shared constraint, and stale the moment either
+sidebar changed. Replaced with `max-w-5xl` centred, chosen against the table's
+measured min-content floor of ~700px.
+
+---
+
+## Deferred, named
+
+- Narrow-viewport overflow: the runs table's min-content floor exceeds its box below
+  a certain width, on both pages. Pre-existing, not a regression
+- `stage`, `claim` and `notes` are returned by the compare endpoint and rendered
+  nowhere
+- Card numbering: the evidence form is `01A` because renumbering 02–04 would have
+  exceeded scope. Settle it deliberately
+- The form card and runs table do not align on the left edge
+
+## Still open from earlier
+
+- Runtime heartbeat emission — the register remains a photograph of 3 August
+- Executive output renderer — `record_documents` is still empty
+- `supports` as an enum
+- `confidenceModel.isSynthetic()` reads a `[SIM]` prefix, not `persons.simulated`
+- Item 4, `capability_metric_links` — parked with three reasons
