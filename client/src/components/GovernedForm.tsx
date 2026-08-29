@@ -31,6 +31,8 @@ export interface GovernedFormProps<T> {
   path: string;
   /** Rendered first, in its own labeled block, above `fields`. */
   provenance: ReactNode;
+  /** Label for the provenance block. Defaults to AddEvidenceCard's original wording. */
+  provenanceLabel?: string;
   fields: ReactNode;
   /** Called only once the actor is known and the caller has already confirmed canSubmit. */
   buildBody: () => unknown;
@@ -43,6 +45,7 @@ export interface GovernedFormProps<T> {
 export function GovernedForm<T>({
   path,
   provenance,
+  provenanceLabel = 'Provenance — where this evidence came from',
   fields,
   buildBody,
   canSubmit,
@@ -86,7 +89,7 @@ export function GovernedForm<T>({
       <fieldset disabled={!actor} className="m-0 min-w-0 border-0 p-0">
         <div className="mb-4 border border-rule bg-rule-soft px-3 py-3">
           <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[.16em] text-gold-ink">
-            Provenance — where this evidence came from
+            {provenanceLabel}
           </span>
           {provenance}
         </div>
