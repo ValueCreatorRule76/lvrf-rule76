@@ -15,6 +15,7 @@ import { outcomeWalkRouter } from './routes/outcomeWalk.js';
 import { produceRunRouter } from './routes/produceRun.js';
 import { validateMetricRouter } from './routes/validateMetric.js';
 import { lockRunRouter } from './routes/lockRun.js';
+import { compareRunsRouter } from './routes/compareRuns.js';
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use('/api/value-outcomes', outcomeWalkRouter(pool));
 app.use('/api/engagements', produceRunRouter(pool));
 app.use('/api/business-metrics', validateMetricRouter(pool));
 app.use('/api/value-runs', lockRunRouter(pool));
+app.use('/api/value-runs', compareRunsRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 
