@@ -158,6 +158,12 @@ export interface RunPayload {
   findings: Finding[];
   events: RunEvent[];
   sourceFixture: string;
+  // The outcome this run snapshots. Absent on every run walked before this
+  // field existed — seven runs on production predate it, all from
+  // walkSpine.ts, which this does not touch. OPTIONAL, not required: typing
+  // this as required would be the exact defect corrected on 25 August — a
+  // type asserting a shape the server does not actually produce.
+  valueOutcomeId?: string;
   // Absent on runs walked before this field existed.
   evidence?: EvidenceItem[];
   // Provenance banner — records/render_record.py's page-one banner, states

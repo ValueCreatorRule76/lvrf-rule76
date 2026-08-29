@@ -484,12 +484,23 @@ export function produceRunRouter(pool: Pool): Router {
       // payloadHash covers everything the run asserts about itself,
       // including its own identity and sequence — but not the hash field,
       // which cannot hash itself. Same order as walkSpine.
+      //
+      // valueOutcomeId is now one of the fields it covers, so a run produced
+      // from now on hashes differently than one produced before this change.
+      // That is correct — a payload with more in it is a different payload —
+      // not a sign that an older run's stored hash has been corrupted.
       const runPayloadBase = {
         valueRunId,
         runNumber,
         sourceFixture,
         engagement: engagement.name,
         capability: capability.name,
+        // The outcome this run snapshots. `vo` was already loaded above to
+        // build confidence/delta inputs — reused here, not re-queried. Added
+        // so the client can link a run back to
+        // POST /api/value-outcomes/:outcomeId/evidence, which nothing in the
+        // payload previously carried.
+        valueOutcomeId: vo.id,
         businessMetric: {
           name: bm.name,
           unit: bm.unit,
