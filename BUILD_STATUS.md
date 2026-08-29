@@ -1867,3 +1867,161 @@ grep against server/routes and a curl to 127.0.0.1:3001 confirming the 409 path
 resolves to a live institution_id. The session that authored this entry had no
 SSH access to that box and flagged that it could not attest to the production
 claims rather than silently asserting them.
+
+---
+
+## Lock endpoint, and the runs that were never immutable — 29 August 2026
+
+### The gap
+
+`value_runs` carries `locked_at`, `locked_by_person_id` and `lock_reason`, and
+`lvrf_locked_run_immutable` has existed since early hardening. **Nothing in the
+system ever set them.** Every run produced to date was editable, including the
+Customer Zero record shown externally since the first screenshot, and the five-run
+Curia sequence being used to demonstrate the confidence curve.
+
+The trigger had never fired.
+
+Found during item 6 recon, checking whether the "comparisons between locked
+immutable runs are deterministic, so do not persist them" argument actually held.
+It did not — because nothing was locked.
+
+### server/routes/lockRun.ts
+
+`POST /api/value-runs/:runId/lock`. Sets the three fields; `locked_by_person_id`
+comes from the actor header, never the payload. 404 if missing, 409 if already
+locked with the existing locker named.
+
+**The trigger permits its own first write.** `lvrf_locked_run_immutable` opens with
+`IF OLD.locked_at IS NULL THEN RETURN NEW` — it keys on the row's PRIOR state, so
+locking passes and every subsequent update is caught. Locking is a one-way door
+that closes behind itself. This was checked before the handler was written; had it
+guarded on `NEW.locked_at`, the endpoint would have refused its own first write.
+
+**Race guard added beyond spec.** The `UPDATE` carries
+`WHERE ... AND locked_at IS NULL` with its own 409 on zero rows. Without it, two
+concurrent lock requests could interleave between the `SELECT` check and the
+`UPDATE`; whether the trigger caught the second depends on transaction
+serialisation. A conditional update is atomic. "Might, depending on ordering" is
+not a guarantee.
+
+### Verified on production
+
+Six runs locked — Customer Zero and the five Curia runs. Re-lock refused with 409.
+Then the trigger, firing for the first time since it was written:
+
+```
+update value_runs set confidence_score = 99 where id = '48b8a997...';
+
+ERROR:  LVRF: value_run 48b8a997-592c-460b-8b05-6089e64fc34b is locked and
+        immutable. Relock by creating a new run that supersedes it — do not
+        edit history.
+```
+
+---
+
+## Item 6 closed — compare two runs on confidence — 29 August 2026
+
+### server/routes/compareRuns.ts
+
+`GET /api/value-runs/:baselineRunId/compare/:comparisonRunId`.
+
+**It persists nothing, and now has grounds to.** Both runs must be locked;
+`lvrf_locked_run_immutable` makes a locked run unchangeable; a comparison between
+two immutable rows is deterministic and reproducible on demand. Storing it would be
+accumulation with no benefit. CVAF built a persisted compare and deliberately
+reversed it for this reason — that reasoning transfers, and as of the lock endpoint
+above it rests on the actual state of the data rather than on intent.
+
+Refuses rather than compares: 404 on a missing run, **409 if either run is
+unlocked** — a comparison against a mutable row is a snapshot of something that can
+still change — 422 on the same id twice, 422 across engagements. That last one
+matters: two runs on different engagements are two different claims, not one claim
+at two moments.
+
+Returns confidence delta with bands, a factor-by-factor diff joined on the `factor`
+key ordered by delta then weight, health with UNMEASURED where null, terminal stage,
+the claim's metric and baseline from each side, and each run's own note and banner.
+
+**No narrative, no recommendation.** Why a score moved is a human judgement and the
+endpoint has no basis for one. It reports the diff.
+
+### Verified on production — run 1 against run 5
+
+```
+confidence  10 -> 45, delta 35, band low -> low, unchanged
+
+metric_definition_confirmed  0 -> 20  (+20)
+  from: "Calculation method NOT disclosed by the source. The metric cannot be
+         independently reproduced."
+  to:   "Calculation method documented."
+
+baseline_evidence_verified   0 -> 15  (+15)
+  from: "No evidence attached to the baseline."
+  to:   "1 item(s): 0 independent, 1 attested. Strongest — attested by
+         Brad Piver (external analyst of record)."
+
+actual_evidence_verified     0 -> 0   flat, identical notes both sides
+impact_basis_evidenced      10 -> 10  flat
+human_commit_of_record       0 -> 0   flat
+human_verifier_of_record     0 -> 0   flat
+```
+
+Same-run and cross-engagement both refused with 422.
+
+**The flat rows are the useful part.** Identical notes from and to is the system
+stating what is still missing and that it has not changed. A diff that showed only
+what moved would hide the four things that did not.
+
+### Judgment calls worth keeping
+
+- Added/removed factors sort LAST. A null delta has not moved; placing it above a
+  factor that gained 20 points would bury the finding
+- `payload.businessMetric` has a legacy bare-string shape from before it was
+  enriched with unit and direction. The endpoint unwraps defensively, matching what
+  `client/src/types/run.ts` already documents. Reading `.name` off a string returns
+  undefined rather than throwing, so this would have surfaced as a blank field
+- Read routes must use the **pool**, not `req.dbClient`. `actorContext` returns
+  early for non-mutating methods, so `req.dbClient` is undefined on a GET. First GET
+  route added since that middleware existed
+
+---
+
+## Item 4 — parked, with three reasons — 29 August 2026
+
+`capability_metric_links` with `promoted_at` was next on the roster. Recon found
+three problems, and it is now a design question rather than a scheduled build.
+
+**1. `promoted_at` probably duplicates `lifecycle_status`.** That enum has eight
+values — `draft, proposed, rejected, ratified, active, superseded, retired,
+archived` — not the single `draft` previously assumed. A link promoted to canonical
+is `ratified`; one that is not is `proposed`. The transition is already dated via
+`updated_at` and attributed via `audit_log`. A parallel timestamp meaning the same
+thing is the `#C8A24A` failure in another form.
+
+**2. The provenance columns cannot reuse `data_class`, because it does not exist.**
+See the corrections section of DESIGN_SPEC.md. The link table's provenance needs
+designing from what `evidence` actually carries.
+
+**3. It cannot be demonstrated.** Two institutions hold one capability each —
+"Value-based renewal execution" at Skillsoft and "New manager effectiveness" at
+Curia. Unrelated. Promotion requires the same capability across institutions, so
+there is nothing to promote and no way to test that promotion works. Creating a
+fictional third institution to make the demo run is the thing this system refuses
+everywhere else.
+
+Build it when a second real account has an overlapping capability.
+
+---
+
+## Operational note
+
+The production box reports `*** System restart required ***` at login — a pending
+kernel or libc update. Postgres, Caddy and lvrf-api are all `systemctl enable`d so
+they should return cleanly, but the reboot should be taken deliberately rather than
+discovered during a demonstration.
+
+Two stray files, `confidence-` and `factors`, were found in /srv/lvrf — shell
+redirect artifacts from an unquoted `jsonb_pretty(payload->'confidence'->'factors')`
+query. Removed. **The deploy script's dirty-tree guard caught them**; without it the
+deploy would have succeeded and they would have sat there indefinitely.
