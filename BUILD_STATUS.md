@@ -2033,3 +2033,126 @@ discovery were all executed on srv1862778 on 29 August 2026 via curl to
 SSH access and flagged which claims it could and could not attest to — the
 code-level analysis it verified against its own work, the production results it
 did not.
+
+---
+
+## Evidence endpoint — the write path is closed — 29 August 2026
+
+### server/routes/outcomeEvidence.ts
+
+`POST /api/value-outcomes/:outcomeId/evidence`. Creates an evidence row and links
+it to a value outcome in ONE transaction.
+
+This was the last governed relationship with no endpoint. Every evidence link on
+production had been written by hand in psql — including both links that moved the
+demonstrated confidence sequence. **Nothing in the application could reproduce
+them.**
+
+Creation and linking are one transaction because separating them permits an
+orphaned evidence row.
+
+**`supports` is restricted to three values in the application.** The column is free
+text with a `'baseline'` default, and only `baseline`, `actual` and `impact_basis`
+are understood by `walkSpine.ts` and `confidenceModel.ts`. A typo would silently
+skip `lvrf_block_ai_actual`. Production holds exactly those three values today —
+1 impact_basis, 2 baseline, 2 actual — so restricting codifies the actual state
+rather than narrowing it. The application enforces what the schema does not.
+
+**`confidence` is required, not defaulted.** The column defaults to `'medium'`. A
+confidence level arriving by default is a plausible value nobody stated, which is
+the class this system refuses everywhere else.
+
+`ai_sourced: true` requires `research_query` and `research_tool` up front, so a
+clear 422 arrives before `evidence_ai_requires_query` produces a constraint
+violation. Attestation is enforced both-or-neither in the handler, and the attestor
+is checked against the outcome's institution and `simulated = false`.
+
+`institution_id` comes from the outcome, never the payload.
+`captured_by_person_id` is the actor header.
+
+**Recorded in a file comment:** `value_outcome_evidence` is a bare composite-key
+join with no `id` and no `updated_at`, so it carries no audit trigger. The evidence
+row is audited; **the link is not.** This endpoint cannot fix that — DEFECT-003
+territory, requiring a schema migration.
+
+### The refusal reached a caller for the first time
+
+Every prior firing of `lvrf_block_ai_actual` had been in a psql session. Offered
+through the API, with the message passed through completely unwrapped:
+
+```
+POST /api/value-outcomes/e3fb0061.../evidence
+  { kind: "vendor_publication", supports: "actual", ... }
+
+HTTP/1.1 422 Unprocessable Entity
+{"message":"LVRF: vendor-published evidence may not support a measured actual.
+ AMENDMENT-005 Article I. The actual comes from the customer's system of record."}
+```
+
+The transaction rolled back cleanly — evidence count 9 before, 9 after the refusal,
+10 after the accepted write. **No orphan.**
+
+That sentence reaching a browser verbatim is the reason the message must not be
+wrapped, prefixed, or mapped to a friendlier string. It is the product.
+
+### Run 6 — the score held, and this is the best result in the set
+
+A second baseline evidence item was added through the API: a public filing with
+honest provenance, neither independent nor attested. Run 6 produced:
+
+  **45.0 — unchanged from run 5.**
+
+`evidenceCredit()` takes the **strongest** item, not a sum. A public filing that is
+neither independent nor attested does not beat an attested HR extract, so the credit
+stays at 15 of 25. The factor note:
+
+```
+run 5:  1 item(s): 0 independent, 1 attested. Strongest — attested by Brad Piver
+run 6:  2 item(s): 0 independent, 1 attested. Strongest — attested by Brad Piver
+```
+
+**The count moved. The credit did not.** If evidence summed, full credit could be
+reached by attaching enough mediocre sources — which is exactly the fabrication
+route this system exists to close.
+
+### The compare that demonstrates it
+
+`GET /api/value-runs/{run5}/compare/{run6}`:
+
+```
+confidence  45 -> 45, delta 0, band low -> low
+
+baseline_evidence_verified  15 -> 15  delta 0
+  note_from: "1 item(s): 0 independent, 1 attested. Strongest — ..."
+  note_to:   "2 item(s): 0 independent, 1 attested. Strongest — ..."
+```
+
+**The evidence changed. The score did not. The record shows both.**
+
+A rise is easy to demonstrate and easy to dismiss as a tool rewarding activity. A
+diff where genuine work was done through the API and the number stayed still, with
+the system explaining that the strongest item did not improve, is considerably
+harder to argue with. Sorting placed it first — zero delta, but the only factor
+whose state changed.
+
+### The sequence is now six runs, all locked
+
+```
+run  score  what changed
+1    10.0   Outside-In hypothesis locked from published material
+2    10.0   HELD — schema gained confirmation columns; nothing confirmed
+3    30.0   +20  calculation method documented and confirmed by a named person
+4    30.0   HELD — metric superseded, source_system names an HR extract.
+             The model does not score claims about provenance
+5    45.0   +15 of 25  source document attached and attested
+6    45.0   HELD — a second, weaker source added. Strongest, not sum
+```
+
+**Three plateaus, each for a different reason:** a capability added, a claim about
+provenance, and a weaker additional source. Two rises, both traceable to a named
+person and a document. Better than the five-run version.
+
+### The write path is closed
+
+Every governed relationship now has an endpoint. Nothing remains that can only be
+done by hand in psql.
