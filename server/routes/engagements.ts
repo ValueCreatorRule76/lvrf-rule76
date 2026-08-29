@@ -21,7 +21,10 @@ export function engagementsRouter(pool: Pool): Router {
         JOIN institutions i ON i.id = e.institution_id AND i.deleted_at IS NULL
         JOIN tenants t ON t.id = e.tenant_id AND t.deleted_at IS NULL
         LEFT JOIN value_runs vr ON vr.engagement_id = e.id AND vr.deleted_at IS NULL
-        WHERE e.deleted_at IS NULL
+        -- Current rows only is the house default; a superseded engagement is an
+        -- ancestor, and showing it here would duplicate the row with a split
+        -- run_count. History gets a separate mechanism when someone needs it.
+        WHERE e.deleted_at IS NULL AND e.superseded_by_id IS NULL
         GROUP BY e.id, e.name, i.name, t.name, e.value_stage, e.renewal_date
         ORDER BY most_recent_run_at DESC NULLS LAST
       `);
