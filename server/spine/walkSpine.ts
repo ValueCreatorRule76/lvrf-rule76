@@ -907,6 +907,11 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       committerSynthetic: fixture.persons.sponsor.synthetic,
       anyActualEvidenceVerified,
       verifierSynthetic,
+      // No drift instrument wired in yet — false, not a placeholder true.
+      // This run genuinely has not had its governance checked; D0 saying
+      // so is the honest state until step 2 makes it a real check.
+      driftChecksRan: false,
+      driftFindings: [],
       confidenceBand: confidence.band,
       confidenceScore: confidence.score,
     });

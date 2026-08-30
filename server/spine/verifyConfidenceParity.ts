@@ -289,6 +289,10 @@ async function main() {
       committerSynthetic: fixture.persons.sponsor.synthetic,
       anyActualEvidenceVerified,
       verifierSynthetic,
+      // Fixtures assert no drift — this reproduces today's F1-F4 findings
+      // exactly, with no D0.
+      driftChecksRan: true,
+      driftFindings: [],
       confidenceBand: confidence.band,
       confidenceScore: confidence.score,
     });

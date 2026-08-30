@@ -41,6 +41,11 @@ export interface Finding {
   code: string;
   message: string;
   severity: string;
+  // 'outcome' (F1-F4): a customer-facing condition about the measured
+  // engagement, closeable by that engagement. 'instrument' (D0, D1, ...):
+  // a fact about the drift-detection machinery itself, not closeable by
+  // any single engagement. See server/spine/findingsModel.ts.
+  subject: 'outcome' | 'instrument';
 }
 
 export type ConfidenceFactorKey =
