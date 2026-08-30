@@ -2398,3 +2398,172 @@ measured min-content floor of ~700px.
 - `supports` as an enum
 - `confidenceModel.isSynthetic()` reads a `[SIM]` prefix, not `persons.simulated`
 - Item 4, `capability_metric_links` — parked with three reasons
+
+---
+
+## The record document — 1.2 closes against its own test — 30 August 2026
+
+1.2's stated success criterion was: *a real cohort can be measured end to end by
+someone other than the author, and the output is a document a CFO would carry to a
+lender.* The first half became true when the UI landed. The second half needed
+this.
+
+### CORRECTION: record_documents was never empty
+
+This file has said repeatedly that `record_documents` is empty and that nothing
+renders it. **Both were wrong.** The table has held a row since 3 August —
+`8b0a3330`, version 1, disclosure `internal` — written by `walkSpine.ts:753` during
+the Customer Zero seed walk.
+
+`records/render_record.py` also already exists, referenced by four files as the
+thing that reads `value_runs.payload`. The claim came from a conversation summary
+and was repeated without checking. Found by running `\d record_documents`.
+
+### What render_record.py actually is
+
+A **fixture-driven CLI**, not a service. `main()` takes a fixture filename as
+`argv[1]`, reads `out/spine_run_{stem}.json` from disk, and writes HTML and a PDF
+to `out/`. It is not database-aware. It is mature — WeasyPrint, letter size, page
+counters in the footer, Bebas and Barlow, design tokens cited from CLAUDE.md rather
+than reinvented, a `.banner.gate` treatment for the disclosure gate, a `.tag.sim`
+class marking simulated evidence, and a comment recording that CSS Grid is
+unreliable in WeasyPrint so it uses flexbox and tables only.
+
+**WeasyPrint is not installed on the production box.** `which weasyprint` returns
+nothing. That script has never run there; the PDF in `out/` was produced on a Mac
+and committed.
+
+### The design decision
+
+Three options were weighed: port the renderer to Node, shell out to Python from
+Express, or separate the record from the rendering.
+
+The third was taken. **The row IS the document of record; a PDF is a rendering of
+it.** `file_path` is nullable precisely because the schema anticipated this.
+Making the Node service depend on a Python environment with WeasyPrint, on the box
+that serves the application, is a real operational commitment for one endpoint and
+was not taken.
+
+### POST /api/value-runs/:runId/record-document
+
+Creates a `record_documents` row from a **locked** run.
+
+  404  run missing, soft-deleted or superseded
+  409  run not locked — a document rendered from a mutable run could disagree
+       with the run it claims to represent
+  422  payload has no valueOutcomeId — seven runs predate the field and cannot
+       produce a record document
+
+`content_hash` is **recomputed**, not copied from `value_runs.payload_hash`, which
+holds the identical value. An endpoint that trusts another code path's value proves
+nothing about its own. The computation strips the payload's own `payloadHash` key
+before hashing — the stored payload has its hash folded in, so hashing it whole
+would produce something that never matches. `stableStringify` sorts keys
+recursively, so a JSONB round-trip cannot change the answer.
+
+Verified: `rd.content_hash = vr.payload_hash` returns `t`.
+
+`disclosure` passes through from the run, already `internal` or `customer_shared`.
+Never recomputed, never defaulted to `draft`.
+
+`document_version` is `MAX(...)+1` per outcome, with the unique constraint on
+`(value_outcome_id, document_version)` as the actual concurrency guard, surfacing
+as `23505` → 409 on a race.
+
+### FINDING: record_documents carries NO governance columns
+
+```
+select column_name from information_schema.columns
+where table_name='record_documents'
+  and column_name in ('superseded_by_id','deleted_at','status','version');
+-- empty
+```
+
+**None of the four.** No `superseded_by_id`, no `deleted_at`, no `status`, no
+`version`. This is the only governed table carrying none of the standard columns,
+and it is governed by a different and simpler rule: **insert-only, versioned, never
+retired.**
+
+`document_version` is genuinely the only retirement mechanism, which makes the
+custom message on `lvrf_block_delete` accurate rather than partial:
+
+  *"This is an immutable disclosure record with no soft-delete path; supersede by
+  rendering a new document_version."*
+
+The only bespoke trigger message in the system, and it earns it. Verified live —
+`delete from record_documents` refuses with that sentence.
+
+This corrects a looser claim made earlier that the table was governed in the same
+sense as the others. It is not.
+
+### GET /api/value-outcomes/:outcomeId/record-documents
+
+Scoped by **outcome, not run** — `document_version` is unique per outcome, so the
+outcome is the grain the data uses. Returns newest version first. Does not return
+`payload`: it duplicates what the client already has.
+
+**LEFT JOIN to value_runs, never INNER.** Customer Zero's 3 August document has
+`value_run_id` null — `walkSpine.ts` wrote it before the run row existed. An inner
+join would silently drop it. `run_number` returns null for such a row, never 0, and
+the field is never omitted.
+
+404 on a missing, soft-deleted or superseded outcome. An empty array for a
+nonexistent outcome is indistinguishable from an empty array for a real one with no
+documents.
+
+### DEFECT: the router was mounted at one prefix and served two grains
+
+`recordDocuments.ts` declared a run-scoped POST and an outcome-scoped GET, and
+`index.ts` mounted the router once, under `/api/value-runs`.
+
+So the GET resolved at `/api/value-runs/:id/record-documents` and queried by outcome
+id against a path parameter that was actually a run id. **Wrong address, wrong
+identifier — and it would have returned an empty array for every run rather than
+erroring.** A silent wrong answer, not a crash.
+
+Fixed by splitting into `recordDocumentsWriteRouter` and
+`recordDocumentsReadRouter`, mounted separately. NOT by mounting one router twice:
+both paths would then serve both routes, and the POST would accept an outcome id
+where it expects a run id.
+
+  **A router mounted at a prefix should contain only routes belonging to that
+  prefix.**
+
+### METHOD NOTE: a full-file reorder defeats git diff
+
+The split produced 108 insertions and 89 deletions for what was described as
+boundary-only changes. Git diffs by contiguous block and cannot represent "this
+block moved" at zero cost, so reordering shows as delete-here/insert-there for
+every line between the moved boundaries — even where content is byte-identical.
+
+The claim that no handler logic changed was reasoned, not checked. The check:
+
+```
+git stash && git show HEAD:path > /tmp/before && git stash pop \
+  && diff <(grep -v "^\s*$" /tmp/before | sort) \
+          <(grep -v "^\s*$" path | sort)
+```
+
+Sorting removes ordering entirely, so a pure reorder produces only genuinely added
+lines. It did: two export signatures, two braces, one `void pool;`, and the comment
+block. Nothing removed but the old signature and the old comment.
+
+**Thirty seconds converts a reasoned claim into a checked one.** Worth doing every
+time a diff is large for a change described as small.
+
+### State
+
+  record_documents  2 rows
+    8b0a3330  Skillsoft outcome, v1, internal, value_run_id NULL, 3 Aug seed walk
+    c2e00632  Curia outcome,     v1, internal, run 7,             30 Aug
+
+Both `file_path` null. Both retrievable. The hash on the Curia document matches its
+run's stored `payload_hash`.
+
+### Remaining, in order
+
+1. A UI surface. *Render record* sits disabled on the Topbar and now has an
+   endpoint behind it, so the interface currently understates what the system does
+2. `render_record.py` reading from the API rather than `out/spine_run_*.json`.
+   That is a change to a Python script on a Mac, not to the service, and bytes only
+   matter when someone asks for a PDF
