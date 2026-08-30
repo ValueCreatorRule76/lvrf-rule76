@@ -3395,10 +3395,10 @@ over the model's own constants: `CONFIDENCE_FACTOR_WEIGHTS`,
 `CONFIDENCE_FACTOR_QUESTIONS`, `CONFIDENCE_BANDS`, `ATTESTATION_CREDIT`. Currently
 `d4cf8f31472a`.
 
-Why both: **a hand-maintained version string is a convention**, and this codebase
-has now found five conventions that were not constraints. A fingerprint cannot be
-forgotten. But a fingerprint is not readable, so a human needs the declared version
-too.
+Why both: a hand-maintained version string is a convention, and this codebase has
+found four instances of a text prefix standing in for a column — the same shape,
+one category wider. A fingerprint cannot be forgotten. But a fingerprint is not
+readable, so a human needs the declared version too.
 
 **If they ever disagree — same declared version, different fingerprint — THAT IS THE
 FINDING.** Someone changed a constant without amending. `ATTESTATION_CREDIT`'s own
