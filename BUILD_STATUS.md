@@ -2762,3 +2762,161 @@ multi-tenancy, something other than basic_auth.
 
 **Order: runtime heartbeat emission, then 2.0.** Building platform features on an
 inert third of the instrument would be composing from a photograph.
+
+---
+
+## The register beats — runtime heartbeat emission — 30 August 2026
+
+Every heartbeat event carried the identical 3 August timestamp. Institutional
+health reported UNMEASURED at 0% coverage on every Curia run. A third of the
+instrument was inert. It is not any more.
+
+### server/spine/emitHeartbeat.ts
+
+One emitter, called per event, writing in the caller's transaction via
+`req.dbClient`. **A heartbeat for a write that rolled back is a lie**, so the event
+and the thing it records commit together or neither does.
+
+**Everything comes from the register row, never the call site:** `event_type` from
+`heartbeats.name`, `producer` from `heartbeats.producer`,
+`constitutional_authority` from the register, default `severity` from
+`failure_severity`. `contract_version` uses the column default and is never passed.
+An unregistered `heartbeat_id` throws — a heartbeat for an id the register does not
+know is not a heartbeat.
+
+`content_hash` is `sha256Hex` over the same field set `walkSpine.ts`'s `emit()`
+hashes: `heartbeatId, eventType, producer, valueStage, subjectTable, subjectId,
+actorPersonId, payload`. Scoping fields are plain columns and were never in the
+hashed body.
+
+### THE BOUNDARY, held
+
+`heartbeatLedger.ts`'s `buildHeartbeatPlan` is deliberately the single
+implementation of the walk's ten-event sequence. Its own comment warns that a
+second hand-synchronised copy is *"exactly the shape of the ANY/EVERY divergence
+db/CONFIDENCE_MODEL.md records: two implementations of one rule, drifting silently,
+with a passing test in between."*
+
+`emitHeartbeat` is **per-event**. It imports nothing from `heartbeatLedger.ts`,
+defines no ordering, and no call site references the plan. If a future change makes
+it aware of sequence, that is the divergence arriving.
+
+### Six call sites built, four proven on production
+
+```
+HB-0006  Object Locked                lockRun          governance  PROVEN
+HB-0008  Snapshot Created             produceRun       integrity   PROVEN
+HB-0009  Evidence Attached            outcomeEvidence  integrity   PROVEN
+HB-0017  Realization Record Published recordDocuments  integrity   PROVEN
+HB-0013  Value Baseline Established   valueOutcomes    financial   built, unfired
+HB-0018  Capability Change Evidenced  institutionInputs learning   built, unfired
+```
+
+The five unconditional ones were built in one pass **only because they are
+unconditional** — `healthState` is `healthy` when the write succeeds, because the
+thing the heartbeat records is the thing that just happened. No call site carries
+conditional logic.
+
+HB-0018 fires **per assessment, inside the loop** — three assessments in one
+request emit three events, one per subject. One event per request would undercount
+the learning dimension in a way nothing would surface.
+
+### Verified on production — the register widening
+
+```
+run 9   coverage 25%   governance only          (HB-0006)
+run 11  coverage 35%   governance + integrity   (HB-0008 added)
+run 12  coverage 35%   integrity deepened       (HB-0009, HB-0017 — no new dimension)
+```
+
+Governance weight 25 plus integrity weight 10 is exactly 35. The health model doing
+arithmetic on real events for the first time since it was written.
+
+Run 12 is the instructive one: **two more events, no wider coverage.** Depth in a
+dimension already measured is a different improvement from breadth, and the model
+distinguishes them.
+
+**HEALTH LAGS ONE RUN.** A run computes health from events existing *before* it,
+then emits its own. Run 10 could not see its own HB-0008; run 11 could. That
+ordering is correct — a run scoring itself on an event it has not written yet would
+be circular — but it means the number is always one run behind the register.
+
+### A badge that outran its data, again
+
+The index rendered `HEALTHY` on run 9 with no coverage figure: one heartbeat, one
+of seven dimensions, 25% coverage. A reader scanning that column saw Curia's health
+improve from unmeasured to healthy. What actually happened is that a quarter of the
+dimension weight became measurable and scored well.
+
+Third instance of this class, after `0 events · all healthy` and rendering 0 for an
+absent value. Fixed — the badge now carries its coverage, `HEALTHY · 25%`, matching
+`HealthCard`'s existing wording.
+
+`health_coverage_pct` was already in the client type. **A rendering gap, not a
+missing-type finding** — checked before assuming.
+
+---
+
+## FINDING: the commit stage has no endpoint
+
+`grep -n "committed_at\|committed_by" server/routes/*.ts` returns **nothing.**
+
+`value_stage` runs `baseline → attach → model → commit → measure → verify →
+return`. Every stage is reachable except `commit`. Nothing in the API sets
+`committed_at`, `committed_by_person_id`, or `target_value`.
+
+This has been visible on every Curia run as `TARGET · NOT YET SET` — read for days
+as "nobody has set a target," when the truth is **no code path exists to set one.**
+
+`outcomeWalk.ts` implements measure and verify. The stage between baseline and
+measure was never built, and the file has been described as "the walk" throughout
+without anyone noticing it skips a step.
+
+### What it costs
+
+- **10 confidence points are permanently unreachable.** `human_commit_of_record`
+  asks whether a named, non-synthetic person committed to the target. It reads
+  *"Sponsor of record is synthetic"* on every run — but even a real sponsor could
+  not be recorded, because nothing can name one
+- **`value_outcomes_commit_is_complete` is unenforceable in practice.** It requires
+  `committed_at` to imply a target and a committer. No application path can produce
+  a row that tests it
+- **HB-0014 Value Target Committed has nowhere to fire.** It is not deferred for
+  lack of time; it has no call site
+- The `commit` value stage cannot be reached
+
+### Why HB-0016 is unconditional at its call site
+
+`buildHeartbeatPlan` scores HB-0016 `warning` unless realization is `verified`. At
+the `/verify` endpoint it is always `healthy`, because that endpoint only succeeds
+when realization becomes verified — the `warning` case is the walk recording a
+*refused* verification, which the API expresses as a 409 or 422 rather than a write.
+
+Same judgement, different expression. Worth stating so nobody later "fixes" the
+call site to match the plan's literal branch.
+
+### Consequence for the roster
+
+The commit endpoint is not a heartbeat task. It is a missing stage in the value
+spine, and HB-0014 comes with it rather than being deferred separately.
+
+That makes it the next item, ahead of the remaining conditional emitters.
+
+---
+
+## FINDING: local believes it is migrated and is not
+
+`produceRun.ts` fails locally with `column bm.definition_confirmed_by_person_id
+does not exist`. `information_schema.columns` confirms the column is genuinely
+absent — **while Drizzle's migration-tracking table records migration 0013, which
+adds it, as applied.**
+
+`drizzle-kit migrate` will therefore skip 0013 forever. The drift is permanent
+until someone intervenes.
+
+This is a second class of local/production divergence. The first was different
+data. This is a local database that **believes it is current and is not**, and the
+tracker will not correct itself.
+
+Production is correct. Two of the six call sites could not be exercised locally as
+a result, and were verified on production instead.
