@@ -3038,3 +3038,147 @@ Two now, both the same convention-not-constraint shape:
 Correctly out of scope for the change that created them, and they belong together
 with `confidenceModel.isSynthetic()`'s `[SIM]` prefix check — three stale
 conventions in one model file.
+
+---
+
+## The last two emitters, and the [SIM] prefix removed — 30 August 2026
+
+### HB-0015 and HB-0016 — all eight LVRF-owned emitters wired
+
+Both in `outcomeWalk.ts`, following the HB-0014 pattern the commit endpoint
+established.
+
+**HB-0015 Value Realized** fires in `/measure`, category financial.
+`healthState` is `watch` when any evidence supporting the actual is simulated, else
+`healthy` — derived from the same evidence rows the admissibility check already
+reads. The `EXISTS` was widened to return `evidence.simulated` per row, so no
+second query and no plan import.
+
+`lvrf_block_ai_actual` makes the `watch` branch unreachable in practice, since
+simulated evidence cannot support an actual at all. **It is computed honestly
+anyway rather than hardcoded** — if the gate ever changes, the emitter still tells
+the truth. That was the agent's call and it is better than the instruction it was
+given.
+
+**HB-0016 Value Verified** fires in `/verify`, category **constitutional** — the
+seventh and last dimension LVRF can measure. `healthState` is always `healthy`:
+`buildHeartbeatPlan`'s `warning` branch is unreachable here, because `/verify` only
+succeeds when realization becomes verified. A refused verification is a 409 or 422,
+never a write.
+
+### Neither can fire on Curia, and that is the honest state
+
+`/measure` returned 422 on production: no admissible evidence supports an actual.
+The only candidate is vendor-published and the gate refuses it. `/verify` needs a
+measurement.
+
+The chain has been blocked at this exact point since 25 August. It is not a build
+gap. **No heartbeat was written for a write that never happened** — the transaction
+never committed.
+
+### The coverage ceiling depends on verification
+
+```
+governance      25   HB-0006, HB-0014        measured
+integrity       10   HB-0008, 0009, 0017     measured
+financial        9   HB-0013                 wired, unfired
+learning         7   HB-0018                 wired, unfired
+constitutional  25   HB-0016                 unfirable — needs a verified outcome
+operational     15   HB-0001                 Runtime, not LVRF's
+security        10   HB-0002, HB-0003        needs authentication
+```
+
+Coverage sits at 35%. Constitutional is worth 25 of it, and HB-0016 is the only
+event that can measure it — so **the ceiling depends on whether an outcome can ever
+be verified**, which needs admissible evidence from a customer's system.
+
+That is the ninety-day proof, not a build item.
+
+---
+
+## The [SIM] prefix removed from the confidence model, in three forms
+
+Four instances of the same shape, found and closed in one morning.
+
+### 1. The wire format
+
+`produceRun` read three booleans from the database — `committer.simulated`,
+`verifier.simulated`, `attester_simulated` — encoded each into a `'[SIM] '` string
+prefix via `creditName()`, and `confidenceModel` decoded all three by calling
+`isSynthetic()` on the string. **Three columns, three encodings, three decodings,
+with a text prefix acting as the wire format between them.**
+
+`walkSpine` held the same booleans and also passed only names. Both callers had the
+truth and discarded it at the interface.
+
+`ConfidenceInput` now carries `committerSimulated` and `verifierSimulated` as
+booleans; `ConfidenceEvidenceInput` carries `attesterSimulated`. **`isSynthetic` is
+deleted.** `creditName` is deleted — its only remaining job was passthrough.
+
+Names remain for **display**. Only the synthetic decision stopped depending on the
+string.
+
+**Parity held: 30.0/low and 80.0/high, findings identical.** Four synthetic
+decisions changed source and none disagreed with the prefix. The convention was
+correct everywhere; it simply was not enforceable. A latent hazard, not an active
+bug — which is exactly why it was worth removing before anything came to depend on
+it.
+
+### 2. The dangling role noun
+
+With the label changed from `'Sponsor'` to a name, the note template rendered:
+
+  *"Brad Piver (external analyst of record) of record."*
+
+The suffix had read naturally when the label was a role. Fixed to name the action:
+*"Committed by <name>."*
+
+### 3. The manufactured placeholder — and the finding underneath it
+
+`creditNameForMissing('verifier')` produced `'[SIM] (no verifier of record)'`, and
+the note rendered:
+
+  *"Verified by [SIM] (no verifier of record) — a simulated identity, not a person
+  of record."*
+
+**Nobody had been named. Nothing was verified.** And the prefix that had just been
+removed as a wire format survived here as display text describing an absence.
+
+> **A SIMULATED PERSON AND NO PERSON ARE DIFFERENT FACTS.**
+> A simulated verifier is someone pretending. No verifier is nobody at all. A note
+> that conflates them is asserting a person exists in order to say they are not
+> real.
+
+`committerName` and `verifierName` are now `string | null`. Three states, three
+notes:
+
+```
+absent     "No verifier of record has been named."
+simulated  "Verified by [SIM] Customer Sponsor — a simulated identity, not a
+            person of record."
+real       "Committed by Brad Piver (external analyst of record)."
+```
+
+`creditNameForMissing` is deleted. **A name for a nonexistent person is the thing
+this system refuses everywhere else.**
+
+The nullable-name shape was chosen over a fourth boolean because two fields could
+then disagree about presence, and a null name cannot. Same reasoning as the forms'
+tri-state booleans: **make the invalid state unrepresentable rather than guarding
+against it.**
+
+### Verified on production
+
+Run 14: 55 medium, unchanged after the wire-format refactor — the model reads
+columns instead of parsing strings and reaches the same conclusion.
+
+Run 16: 55 medium, notes reading *"Committed by Brad Piver (external analyst of
+record)."* and *"No verifier of record has been named."* — the truth about Curia
+stated precisely. Someone committed. Nobody verified.
+
+Sixteen runs, all locked.
+
+### Roster cleared
+
+The three stale conventions in `confidenceModel` are gone. Nothing in that file
+decides anything by inspecting a string.
