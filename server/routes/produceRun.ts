@@ -13,6 +13,7 @@ import {
 import { computeDelta, type DeltaInput } from '../spine/deltaEngine.js';
 import { computeHealth, type HealthEventInput } from '../spine/healthModel.js';
 import { computeFindings, type Finding } from '../spine/findingsModel.js';
+import { runDriftChecks } from '../spine/driftChecks.js';
 import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -427,16 +428,38 @@ export function produceRunRouter(pool: Pool): Router {
         contentHash: r.content_hash,
       }));
 
+      // A failed check is an unrun check, not a failed run: producing the
+      // record is more important than checking it, and computeFindings'
+      // own D0 already says the record is unverified when driftChecksRan is
+      // false. So runDriftChecks' own errors are caught here, not left to
+      // the handler's outer catch (which would turn a checker fault into a
+      // 500 or a refusal — this is neither).
+      //
+      // SAVEPOINT, same pattern as walkSpine.ts's verify_guard: a SQL error
+      // inside runDriftChecks aborts this transaction at the server —
+      // catching the JS rejection alone would still leave every later query
+      // on `client` (including the value_runs INSERT below) failing with
+      // "current transaction is aborted." Rolling back to the savepoint
+      // clears that so the run can still be produced.
+      let driftChecksRan: boolean;
+      let driftFindings: Finding[];
+      await client.query('SAVEPOINT drift_checks');
+      try {
+        driftFindings = await runDriftChecks(client);
+        driftChecksRan = true;
+      } catch {
+        await client.query('ROLLBACK TO SAVEPOINT drift_checks');
+        driftChecksRan = false;
+        driftFindings = [];
+      }
+
       const findings: Finding[] = computeFindings({
         unmappedEvents: health.unmappedEvents,
         committerSynthetic,
         anyActualEvidenceVerified,
         verifierSynthetic,
-        // No drift instrument wired in yet — false, not a placeholder true.
-        // This run genuinely has not had its governance checked; D0 saying
-        // so is the honest state until step 2 makes it a real check.
-        driftChecksRan: false,
-        driftFindings: [],
+        driftChecksRan,
+        driftFindings,
         confidenceBand: confidence.band,
         confidenceScore: confidence.score,
       });
