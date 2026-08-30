@@ -284,7 +284,7 @@ async function main() {
 
     const findings: Finding[] = computeFindings({
       unmappedEvents: health.unmappedEvents,
-      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      committerSynthetic: fixture.persons.sponsor.synthetic,
       anyActualEvidenceVerified,
       verifierSynthetic,
       confidenceBand: confidence.band,

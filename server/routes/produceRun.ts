@@ -100,7 +100,7 @@ function toIso(v: Date | null): string | null {
  * confidenceModel.ts's isSynthetic() still gates on a '[SIM]' name-prefix
  * convention, not the real `persons.simulated` column added since — a
  * documented weakness (0003) in that file, which this route does not touch.
- * A live sponsor/verifier/attester is bridged through the model's existing
+ * A live committer/verifier/attester is bridged through the model's existing
  * contract here: a person the database marks simulated is presented with
  * the same prefix the model already recognizes, so a genuinely simulated
  * actor cannot earn credit merely because a caller didn't also spell their
@@ -110,7 +110,7 @@ function creditName(fullName: string, simulated: boolean): string {
   return simulated && !fullName.startsWith('[SIM]') ? `[SIM] ${fullName}` : fullName;
 }
 
-/** Absence is not neutral: no sponsor or verifier of record scores the same as a synthetic one. */
+/** Absence is not neutral: no committer or verifier of record scores the same as a synthetic one. */
 function creditNameForMissing(role: string): string {
   return `[SIM] (no ${role} of record)`;
 }
@@ -149,9 +149,8 @@ export function produceRunRouter(pool: Pool): Router {
         tenant_id: string;
         institution_id: string;
         name: string;
-        sponsor_person_id: string | null;
       }>(
-        `SELECT id, tenant_id, institution_id, name, sponsor_person_id
+        `SELECT id, tenant_id, institution_id, name
            FROM engagements WHERE id = $1 AND deleted_at IS NULL`,
         [engagementId],
       );
@@ -178,13 +177,14 @@ export function produceRunRouter(pool: Pool): Router {
         actual_measured_at: Date | null;
         realization: string;
         confidence: 'low' | 'medium' | 'high';
+        committed_by_person_id: string | null;
         verified_by_person_id: string | null;
       }>(
         `SELECT id, capability_id, business_metric_id, value_stage,
                 baseline_value, target_value, actual_value,
                 claimed_currency_impact, realized_currency_impact, impact_basis,
                 promised_measured_at, actual_measured_at,
-                realization, confidence, verified_by_person_id
+                realization, confidence, committed_by_person_id, verified_by_person_id
            FROM value_outcomes
           WHERE engagement_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [engagementId],
@@ -318,18 +318,36 @@ export function produceRunRouter(pool: Pool): Router {
       const anyActualEvidenceVerified =
         actualEvidence.length > 0 && actualEvidence.some((e) => evidenceCredit(e).credit > 0);
 
-      let sponsorSynthetic: boolean;
-      let sponsorName: string;
-      if (engagement.sponsor_person_id) {
-        const { rows: [sponsor] } = await client.query<{ full_name: string; simulated: boolean }>(
+      // human_commit_of_record asks "did a named, non-synthetic person
+      // commit to THE TARGET?" — answered by the outcome's own committer
+      // (vo.committed_by_person_id), not by whoever sponsors the engagement
+      // relationship. Mirrors the verifier block directly beneath it, which
+      // already reads vo.verified_by_person_id the same way.
+      //
+      // Safe to change now, not later: no LOCKED run — the only kind whose
+      // stored score is actually immutable — has ever earned credit on this
+      // factor (verified locally: zero of the locked runs in this database
+      // even carry a human_commit_of_record entry in their payload, let
+      // alone one with earned > 0), so no stored score's VALUE changes. But
+      // the argument is general, not particular to this factor: a change to
+      // what a factor READS changes what every prior score MEANT, and
+      // nothing today records which model version scored a given run. That
+      // gap is the concrete case for versioned model weights (BUILD_STATUS.md,
+      // 2.0 scope) — this edit is safe only because it happens to land before
+      // anything depended on the old meaning, not because the system would
+      // have caught it if something had.
+      let committerSynthetic: boolean;
+      let committerName: string;
+      if (vo.committed_by_person_id) {
+        const { rows: [committer] } = await client.query<{ full_name: string; simulated: boolean }>(
           'SELECT full_name, simulated FROM persons WHERE id = $1 AND deleted_at IS NULL',
-          [engagement.sponsor_person_id],
+          [vo.committed_by_person_id],
         );
-        sponsorSynthetic = !sponsor || sponsor.simulated;
-        sponsorName = sponsor ? creditName(sponsor.full_name, sponsor.simulated) : creditNameForMissing('sponsor');
+        committerSynthetic = !committer || committer.simulated;
+        committerName = committer ? creditName(committer.full_name, committer.simulated) : creditNameForMissing('committer');
       } else {
-        sponsorSynthetic = true;
-        sponsorName = creditNameForMissing('sponsor');
+        committerSynthetic = true;
+        committerName = creditNameForMissing('committer');
       }
 
       let verifierSynthetic: boolean;
@@ -389,7 +407,9 @@ export function produceRunRouter(pool: Pool): Router {
         // scores low because it IS one, not because anyone chose to
         // penalize it.
         impactIsInference: true,
-        sponsorName,
+        // ConfidenceInput's field is still named sponsorName — confidenceModel.ts
+        // is out of scope for this change; only what feeds it changed.
+        sponsorName: committerName,
         verifierName,
         assertedConfidence: vo.confidence,
       };
@@ -455,7 +475,7 @@ export function produceRunRouter(pool: Pool): Router {
 
       const findings: Finding[] = computeFindings({
         unmappedEvents: health.unmappedEvents,
-        sponsorSynthetic,
+        committerSynthetic,
         anyActualEvidenceVerified,
         verifierSynthetic,
         confidenceBand: confidence.band,

@@ -902,7 +902,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
     // absence of computation).
     const findings: Finding[] = computeFindings({
       unmappedEvents: health.unmappedEvents,
-      sponsorSynthetic: fixture.persons.sponsor.synthetic,
+      committerSynthetic: fixture.persons.sponsor.synthetic,
       anyActualEvidenceVerified,
       verifierSynthetic,
       confidenceBand: confidence.band,

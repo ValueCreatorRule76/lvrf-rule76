@@ -32,7 +32,7 @@ export interface FindingsInput {
   /** F1 — cannot fire today; AMENDMENT-003 made the mapping total. */
   unmappedEvents: UnmappedHealthEvent[];
   /** F2 */
-  sponsorSynthetic: boolean;
+  committerSynthetic: boolean;
   /** F3 — the two conditions the ANY/EVERY gate can independently refuse on. */
   anyActualEvidenceVerified: boolean;
   verifierSynthetic: boolean;
@@ -61,14 +61,15 @@ export function computeFindings(input: FindingsInput): Finding[] {
     });
   }
 
-  // F2 — synthetic sponsor committed.
-  if (input.sponsorSynthetic) {
+  // F2 — synthetic committer.
+  if (input.committerSynthetic) {
     findings.push({
       code: 'F2',
       severity: 'watch',
       message:
-        'HB-0014 committed by a synthetic sponsor. A real commitment requires a named customer ' +
-        'sponsor; this event is simulated and the outcome may not be published externally.',
+        'HB-0014 committed by a synthetic committer. A real commitment requires a named, ' +
+        'non-simulated person at the account who committed to this target; this event is ' +
+        'simulated and the outcome may not be published externally.',
     });
   }
 
