@@ -19,7 +19,19 @@ interface CompareFactor {
   status: 'present' | 'added' | 'removed';
 }
 
+// version/fingerprint are string | null, never optional — the endpoint
+// always returns the model block, and null means "this run predates model
+// versioning," a fact this card must render, not silently drop by treating
+// the field as absent.
 interface CompareResponse {
+  model: {
+    version_from: string | null;
+    version_to: string | null;
+    fingerprint_from: string | null;
+    fingerprint_to: string | null;
+    comparable: boolean;
+    note: string;
+  };
   confidence: {
     score_from: number;
     score_to: number;
@@ -141,6 +153,44 @@ export function CompareCard({ run }: { run: Run }) {
   return <CompareBody run={run} predecessor={predecessor} />;
 }
 
+// Three weights, not one: quiet when the ruler held, HealthCard's
+// gold-left-border callout when a run predates versioning and the model is
+// simply unknown (a limitation of the record, not a refusal), and the
+// ink-block governance-refusal treatment (Gate.tsx) when two different,
+// known models scored the two runs — every delta below is suspect in a
+// specific way and that earns the strongest statement this card can make.
+function ModelQualification({ model }: { model: CompareResponse['model'] }) {
+  if (model.comparable) {
+    return (
+      <p className="m-0 mb-4 text-[11.5px] text-ink-45">
+        {model.note} Fingerprint <span className="font-mono">{model.fingerprint_to}</span>.
+      </p>
+    );
+  }
+
+  const bothKnown = model.fingerprint_from !== null && model.fingerprint_to !== null;
+
+  if (!bothKnown) {
+    return (
+      <div className="mb-4 border-l-[3px] border-gold bg-offwhite px-3.5 py-3">
+        <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
+          Model unknown
+        </span>
+        <p className="m-0 mt-1 text-[12.5px] text-ink">{model.note}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 border-l-[3px] border-ink bg-ink px-3.5 py-3 text-offwhite">
+      <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-offwhite/70">
+        Different models
+      </span>
+      <p className="m-0 mt-1 text-[12.5px]">{model.note}</p>
+    </div>
+  );
+}
+
 function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRun }) {
   const [result, setResult] = useState<CompareFetchResult | null>(null);
 
@@ -183,6 +233,10 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
         </Badge>
       }
     >
+      {/* The ruler qualification comes first — a reader must know whether the
+          model changed before reading any delta below, not after. */}
+      <ModelQualification model={c.model} />
+
       {/* A band that did not move is information, not an absence of one — never omitted. */}
       <p className="m-0 mb-4 text-[12.5px] text-ink-70">
         Run {predecessor.run_number} to run {run.payload.runNumber}: confidence{' '}
