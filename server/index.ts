@@ -17,7 +17,7 @@ import { outcomeEvidenceRouter } from './routes/outcomeEvidence.js';
 import { produceRunRouter } from './routes/produceRun.js';
 import { validateMetricRouter } from './routes/validateMetric.js';
 import { lockRunRouter } from './routes/lockRun.js';
-import { recordDocumentsRouter } from './routes/recordDocuments.js';
+import { recordDocumentsWriteRouter, recordDocumentsReadRouter } from './routes/recordDocuments.js';
 import { compareRunsRouter } from './routes/compareRuns.js';
 
 const app = express();
@@ -38,8 +38,9 @@ app.use('/api/value-outcomes', outcomeEvidenceRouter(pool));
 app.use('/api/engagements', produceRunRouter(pool));
 app.use('/api/business-metrics', validateMetricRouter(pool));
 app.use('/api/value-runs', lockRunRouter(pool));
-app.use('/api/value-runs', recordDocumentsRouter(pool));
+app.use('/api/value-runs', recordDocumentsWriteRouter(pool));
 app.use('/api/value-runs', compareRunsRouter(pool));
+app.use('/api/value-outcomes', recordDocumentsReadRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 

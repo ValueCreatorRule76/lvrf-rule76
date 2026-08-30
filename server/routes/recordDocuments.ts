@@ -4,6 +4,36 @@ import { isUuid } from './params.js';
 import { sha256Hex } from '../spine/hash.js';
 
 /**
+ * Two routers, not one: the POST is run-scoped
+ * (/api/value-runs/:runId/record-document) and the GET is outcome-scoped
+ * (/api/value-outcomes/:outcomeId/record-documents). A router mounted at a
+ * prefix should contain only routes belonging to that prefix — mounting one
+ * router under both prefixes previously made the GET resolve at
+ * /api/value-runs/:id/record-documents, querying by outcome id against a
+ * path parameter that was actually a run id: wrong address, wrong
+ * identifier, silently returning an empty array for every run instead of
+ * erroring.
+ */
+
+function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === '23514'
+  );
+}
+
+function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code: unknown }).code === '23505'
+  );
+}
+
+/**
  * All writes here go through req.dbClient, never the pool. actorContext has
  * already opened the transaction and set lvrf.actor_person_id on this
  * client before next() was called — pool.query() would run on a different
@@ -33,97 +63,13 @@ import { sha256Hex } from '../spine/hash.js';
  * constraint). This endpoint therefore never issues an UPDATE; it only
  * ever inserts a new version.
  */
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
-
-function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23505'
-  );
-}
-
-// POST /api/value-runs/:runId/record-document — creates a record_documents
-// row from a locked run, in the same transaction, in one insert.
-export function recordDocumentsRouter(pool: Pool): Router {
+export function recordDocumentsWriteRouter(pool: Pool): Router {
+  void pool;
   const router = Router();
 
-  // GET /api/value-outcomes/:outcomeId/record-documents — every record
-  // document for one outcome, newest version first. This is a read:
-  // actorContext returns early on GET and never sets req.dbClient, so this
-  // queries the pool directly, same as runsIndex.ts.
-  //
-  // Scoped by OUTCOME, not by run: document_version is unique per
-  // (value_outcome_id, document_version), so the outcome is the grain the
-  // data actually uses.
-  //
-  // record_documents carries neither deleted_at nor superseded_by_id —
-  // checked against db/schema.ts, not assumed. It does not use the shared
-  // governance() column set at all; document_version is this table's own
-  // retirement mechanism, so there is nothing here to filter on.
-  router.get('/:outcomeId/record-documents', async (req, res) => {
-    const outcomeId = req.params.outcomeId;
-    if (!isUuid(outcomeId)) {
-      res.status(400).json({ message: `invalid value outcome id: ${outcomeId}` });
-      return;
-    }
-
-    try {
-      // Without this, an empty array for a nonexistent outcome is
-      // indistinguishable from an empty array for a real one with no
-      // documents yet. Same 404 pattern as GET /api/engagements/:id/runs.
-      // Governed rows resolved by something other than a primary key must
-      // filter the supersession chain — but value_outcomes has one and
-      // record_documents does not; only value_outcomes needs the filter here.
-      const { rows: [outcome] } = await pool.query(
-        `SELECT id FROM value_outcomes
-          WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
-        [outcomeId],
-      );
-      if (!outcome) {
-        res.status(404).json({ message: `value outcome ${outcomeId} not found` });
-        return;
-      }
-
-      // value_run_id is nullable — one production row (Customer Zero's
-      // document, written by walkSpine.ts before value_runs existed) has
-      // it null. LEFT JOIN, never INNER: an inner join would silently drop
-      // that row from the result instead of returning it with a null
-      // run_number.
-      const { rows } = await pool.query(
-        `SELECT
-           rd.id,
-           rd.document_version,
-           rd.disclosure,
-           rd.content_hash,
-           rd.value_run_id,
-           vr.run_number,
-           rd.rendered_at,
-           rd.rendered_by_person_id,
-           p.full_name AS rendered_by_name,
-           rd.file_path
-         FROM record_documents rd
-         LEFT JOIN value_runs vr ON vr.id = rd.value_run_id
-         LEFT JOIN persons p ON p.id = rd.rendered_by_person_id
-         WHERE rd.value_outcome_id = $1
-         ORDER BY rd.document_version DESC`,
-        [outcomeId],
-      );
-      res.json(rows);
-    } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
-    }
-  });
-
+  // POST /api/value-runs/:runId/record-document — creates a
+  // record_documents row from a locked run, in the same transaction, in
+  // one insert.
   router.post('/:runId/record-document', async (req, res) => {
     // actorContext (mounted ahead of every router) always sets this before
     // calling next() on a mutating request, and never calls next() otherwise.
@@ -256,6 +202,79 @@ export function recordDocumentsRouter(pool: Pool): Router {
         res.status(409).json({ message: err.message });
         return;
       }
+      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+    }
+  });
+
+  return router;
+}
+
+export function recordDocumentsReadRouter(pool: Pool): Router {
+  const router = Router();
+
+  // GET /api/value-outcomes/:outcomeId/record-documents — every record
+  // document for one outcome, newest version first. This is a read:
+  // actorContext returns early on GET and never sets req.dbClient, so this
+  // queries the pool directly, same as runsIndex.ts.
+  //
+  // Scoped by OUTCOME, not by run: document_version is unique per
+  // (value_outcome_id, document_version), so the outcome is the grain the
+  // data actually uses.
+  //
+  // record_documents carries neither deleted_at nor superseded_by_id —
+  // checked against db/schema.ts, not assumed. It does not use the shared
+  // governance() column set at all; document_version is this table's own
+  // retirement mechanism, so there is nothing here to filter on.
+  router.get('/:outcomeId/record-documents', async (req, res) => {
+    const outcomeId = req.params.outcomeId;
+    if (!isUuid(outcomeId)) {
+      res.status(400).json({ message: `invalid value outcome id: ${outcomeId}` });
+      return;
+    }
+
+    try {
+      // Without this, an empty array for a nonexistent outcome is
+      // indistinguishable from an empty array for a real one with no
+      // documents yet. Same 404 pattern as GET /api/engagements/:id/runs.
+      // Governed rows resolved by something other than a primary key must
+      // filter the supersession chain — but value_outcomes has one and
+      // record_documents does not; only value_outcomes needs the filter here.
+      const { rows: [outcome] } = await pool.query(
+        `SELECT id FROM value_outcomes
+          WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+        [outcomeId],
+      );
+      if (!outcome) {
+        res.status(404).json({ message: `value outcome ${outcomeId} not found` });
+        return;
+      }
+
+      // value_run_id is nullable — one production row (Customer Zero's
+      // document, written by walkSpine.ts before value_runs existed) has
+      // it null. LEFT JOIN, never INNER: an inner join would silently drop
+      // that row from the result instead of returning it with a null
+      // run_number.
+      const { rows } = await pool.query(
+        `SELECT
+           rd.id,
+           rd.document_version,
+           rd.disclosure,
+           rd.content_hash,
+           rd.value_run_id,
+           vr.run_number,
+           rd.rendered_at,
+           rd.rendered_by_person_id,
+           p.full_name AS rendered_by_name,
+           rd.file_path
+         FROM record_documents rd
+         LEFT JOIN value_runs vr ON vr.id = rd.value_run_id
+         LEFT JOIN persons p ON p.id = rd.rendered_by_person_id
+         WHERE rd.value_outcome_id = $1
+         ORDER BY rd.document_version DESC`,
+        [outcomeId],
+      );
+      res.json(rows);
+    } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
     }
   });
