@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { CustomerZeroFixture, EvidenceFixture } from './fixture.js';
 
 /**
@@ -48,6 +49,55 @@ const CONFIDENCE_BANDS: ReadonlyArray<readonly [number, ConfidenceLevel]> = [
   [0, 'low'],
 ];
 
+/**
+ * Two identifiers, not one, because they answer different questions and
+ * neither can stand in for the other.
+ *
+ * MODEL_VERSION is a hand-declared string, for people — bumped deliberately
+ * when the model changes. But a hand-maintained string is a CONVENTION, and
+ * this codebase has already found four conventions (see CLAUDE.md's
+ * amendments) that were not honoured as constraints. Nothing stops this
+ * constant from going stale.
+ *
+ * MODEL_FINGERPRINT is computed, not written, over the model's own constants
+ * — CONFIDENCE_FACTOR_WEIGHTS, CONFIDENCE_FACTOR_QUESTIONS, CONFIDENCE_BANDS,
+ * ATTESTATION_CREDIT — at module load. It cannot be forgotten the way a
+ * version bump can. It covers the QUESTIONS as well as the weights
+ * deliberately: changing what a factor asks changes what a score means even
+ * at an unchanged weight, which is exactly what happened on 30 August, when
+ * human_commit_of_record's meaning moved from engagements.sponsor_person_id
+ * to value_outcomes.committed_by_person_id in the same deploy as a commit
+ * being recorded. But a fingerprint is not readable, so a human still needs
+ * the declared version alongside it.
+ *
+ * If the two ever disagree — same declared MODEL_VERSION, different
+ * MODEL_FINGERPRINT — THAT IS THE FINDING: someone changed a weight or a
+ * question without amending the version. ATTESTATION_CREDIT's own comment
+ * already says changing it "requires an amendment"; the fingerprint is what
+ * makes that detectable rather than merely stated.
+ *
+ * Limitation, stated plainly: the fingerprint covers the model's constants.
+ * It does NOT cover the DERIVATION — which column a caller reads to populate
+ * an input. The 30 August change altered produceRun's derivation and one
+ * question string; the question change would have been caught here, but a
+ * pure derivation change (same question, same weight, different source
+ * column) would not be. This is a partial detector, and knowing its edge
+ * matters more than the coverage it does give.
+ */
+export const MODEL_VERSION = '1.0.0';
+
+export const MODEL_FINGERPRINT = createHash('sha256')
+  .update(
+    JSON.stringify({
+      weights: CONFIDENCE_FACTOR_WEIGHTS,
+      questions: CONFIDENCE_FACTOR_QUESTIONS,
+      bands: CONFIDENCE_BANDS,
+      attestationCredit: ATTESTATION_CREDIT,
+    }),
+  )
+  .digest('hex')
+  .slice(0, 12);
+
 export interface ConfidenceEvidenceInput {
   kind: string;
   sourceVerified: boolean;
@@ -75,6 +125,10 @@ export interface ConfidenceResult {
   overridesAssertion: boolean;
   /** records/render_record.py's `c['method']` — checked against that file, not guessed. */
   method: string;
+  /** See MODEL_VERSION above. Hand-declared; not present on runs scored before this existed. */
+  modelVersion: string;
+  /** See MODEL_FINGERPRINT above. Computed; not present on runs scored before this existed. */
+  modelFingerprint: string;
 }
 
 const CONFIDENCE_METHOD =
@@ -272,5 +326,7 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     asserted,
     overridesAssertion: asserted != null && asserted !== band,
     method: CONFIDENCE_METHOD,
+    modelVersion: MODEL_VERSION,
+    modelFingerprint: MODEL_FINGERPRINT,
   };
 }
