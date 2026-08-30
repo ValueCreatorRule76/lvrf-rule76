@@ -3497,3 +3497,158 @@ reacted to the commit endpoint without anyone touching it.
 The confidence panel label still reads *Named human sponsor of record* while its
 note reads *Committed by...*. The question text was updated; the label above it was
 not. Smallest of the family and the last one left in that file.
+
+---
+
+## Refusals are recorded — 30 August 2026
+
+2.0 item 2, parts A and B. The gap register (part C) reads this.
+
+### The asymmetry that existed until today
+
+`audit_log` captures every successful write. `heartbeat_events` records what the
+institution owes itself. `record_documents` are immutable. **The system is built to
+remember.**
+
+And a refusal — arguably the most informative event it produces — left nothing. The
+transaction rolled back and the attempt was forgotten.
+
+Someone offered vendor-published evidence as a measured actual on 25 August. The
+gate refused, correctly, and the system then behaved as though the offer had never
+been made. **That is the record forgetting something true.**
+
+There is a governance argument too. A refusal is the system **exercising
+authority**, and authority exercised without record is what constitutions exist to
+prevent. `lvrf_block_ai_actual` could refuse a hundred times and nobody could audit
+whether it refused correctly — or notice that someone tried a hundred times.
+
+### Why not audit_log
+
+`audit_log` records state **changes**. It carries `old_row` and `new_row`, and a
+refusal has neither — there is no old row and no new row, only an attempt and a
+reason.
+
+**An audit log containing things that did not happen stops being an audit log.** Its
+guarantee today is that every row is a change that occurred. A `refused` operation
+would break that, and anyone querying *what happened to this outcome* would get
+answers that didn't.
+
+### The refusals table
+
+`endpoint, sqlstate, constraint_name, subject_table, subject_id, actor_person_id,
+tenant_id, institution_id, message, attempted_payload, refused_at`.
+
+`message` is **verbatim** — never truncated, rewritten or summarised. That sentence
+is the product.
+
+`attempted_payload` is `req.body` unsanitised. **What was offered is the point.**
+
+`constraint_name` is nullable and is null in practice for trigger-raised refusals:
+`lvrf_block_ai_actual` uses `RAISE EXCEPTION ... USING ERRCODE`, and Postgres
+supplies no constraint name for that. Only a real CHECK violation populates it.
+
+**No `deleted_at`, no `superseded_by_id`, no `status`, no `version`.** Same shape as
+`record_documents`. A refusal is a **fact**, not a claim — it cannot be retired,
+superseded or corrected. Nothing supersedes something that happened.
+
+Triggers: `refusals_no_delete` only. No `_audit` — a refusals row is not a governed
+claim. No `_touch` — there is no `updated_at`, because the row never changes.
+Trigger count 63 → 64, and the hardening file's verification arithmetic was updated
+in the same change, unprompted. Third time an agent has done that.
+
+### THE CRITICAL MECHANISM — do not "fix" this
+
+**The refusal is written on a separate connection from the pool, never
+`req.dbClient`.**
+
+`actorContext` rolls back `req.dbClient`'s transaction on any status ≥ 400. A
+refusal record written on that client **would be rolled back with the thing it
+records — the record would erase itself.**
+
+This is the only write in this codebase that deliberately commits outside the
+request's transaction, and it is correct: **the refusal happened regardless of what
+the transaction did.**
+
+Someone will eventually change it to `req.dbClient` for consistency with every other
+route. That would silently delete every refusal record, and nothing would fail
+loudly. The reasoning is stated at length at the write site for that reason.
+
+`actor_person_id` comes from the `x-actor-person-id` header, not from the
+rolled-back transaction's setting.
+
+**If the refusal write itself fails, it is logged and the 422 or 409 is still
+returned.** A failure to record must never turn a governance refusal into a 500. The
+caller's answer does not depend on our bookkeeping.
+
+### Ten duplicated predicates removed
+
+`isCheckViolation` was defined independently in **ten route files**, byte-identical
+each time. Every new route copied it. Sixth instance of a convention that was not a
+constraint.
+
+`server/lib/refusal.ts` now holds `handleGovernanceError`, and the ten local copies
+are gone.
+
+**A dormant widening, flagged rather than slipped through:** four call sites handled
+both 23514 and 23505; the other six handled only 23514, so a unique violation there
+fell through to a **500**. Centralising means those routes now return 409 and record
+the refusal.
+
+That is the correct behaviour — a unique violation *is* a conflict with existing
+state in every route, regardless of whether that route bothered to say so.
+Returning 500 was the defect, and ten copies of a predicate is exactly how six
+routes end up disagreeing with four. No exercised unique constraint sits on those
+paths today, so this is a dormant-path correction, not an observed change.
+
+### Verified on production
+
+```
+POST /api/value-outcomes/:outcomeId/evidence   422
+```
+
+```
+endpoint      POST /api/value-outcomes/:outcomeId/evidence
+sqlstate      23514
+subject_table evidence
+message       LVRF: vendor-published evidence may not support a measured actual...
+actor         b6da352c  (from the header, not the rolled-back transaction)
+tenant        Skillsoft      institution  Curia
+payload       the full body verbatim, five fields
+```
+
+The evidence row created moments before the gate refused the link was rolled back
+with the transaction. **The refusal record survived it.**
+
+Then, with a row present for the first time:
+
+```
+delete from refusals;
+
+ERROR:  LVRF: refusals is a governed object; hard DELETE is prohibited. This is an
+        immutable record of an attempt that was refused; it cannot be deleted,
+        because the attempt happened.
+```
+
+### Note: the trigger was untested when first applied
+
+`begin; delete from refusals; rollback;` on the empty table returned `DELETE 0`, not
+a refusal — a `BEFORE DELETE ... FOR EACH ROW` trigger only fires per row.
+
+Correct behaviour, but worth naming: **every other `_no_delete` in this system was
+proven against a real row, and this one could not be until a refusal existed.**
+Given how many things in this codebase turned out to be declared and not applied, an
+untested guard is worth flagging rather than assuming. It is now proven.
+
+### What this makes answerable
+
+`refusals` is queryable. *How often did the gate refuse, on what, offered by whom,
+and with what payload* now has an answer. That is the audit of authority that was
+missing.
+
+### The limitation, stated
+
+**This records refusals arriving through an endpoint.** A refusal raised in a `psql`
+session — as every gate test in this project's history has been — leaves nothing.
+The trigger raises and no application is listening.
+
+Do not describe this as complete coverage.
