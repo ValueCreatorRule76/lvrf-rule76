@@ -121,9 +121,19 @@ export interface ConfidenceInput {
   realizedCurrencyImpact: number | null;
   impactBasisStated: boolean;
   impactIsInference: boolean;
-  committerName: string;
+  /**
+   * null when no person has been named at all — a distinct fact from
+   * `committerSimulated`, which only means the named person is not a
+   * person of record. Conflating the two used to manufacture a placeholder
+   * name for a person who does not exist (creditNameForMissing, since
+   * deleted from produceRun.ts); a nullable name says "absent" without
+   * inventing a name to say it with, the same way every other field here
+   * represents "nothing claimed" as null rather than a sentinel string.
+   */
+  committerName: string | null;
   committerSimulated: boolean;
-  verifierName: string;
+  /** See committerName — same absent/simulated/real distinction, same reason. */
+  verifierName: string | null;
   verifierSimulated: boolean;
   assertedConfidence: ConfidenceLevel | null;
 }
@@ -233,16 +243,18 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     }
   }
 
-  // 5 & 6. Human actors of record. The note names the ACTION (committed /
-  // verified), never a role noun — "Sponsor"/"Committer" read fine as a
-  // label for a role, but this factor scores a specific person, and "<name>
-  // of record." is nonsense once <name> is a person rather than a role.
-  for (const [factor, verb, name, simulated] of [
-    ['human_commit_of_record', 'Committed by', input.committerName, input.committerSimulated],
-    ['human_verifier_of_record', 'Verified by', input.verifierName, input.verifierSimulated],
+  // 5 & 6. Human actors of record. Three distinct facts, three distinct
+  // notes — no person named, a named-but-simulated person, and a named real
+  // person — rather than collapsing "absent" into "simulated" the way a
+  // manufactured placeholder name used to.
+  for (const [factor, verb, roleNoun, name, simulated] of [
+    ['human_commit_of_record', 'Committed by', 'committer', input.committerName, input.committerSimulated],
+    ['human_verifier_of_record', 'Verified by', 'verifier', input.verifierName, input.verifierSimulated],
   ] as const) {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
-    if (simulated) {
+    if (name == null) {
+      award(factor, 0, `No ${roleNoun} of record has been named.`);
+    } else if (simulated) {
       award(factor, 0, `${verb} ${name} — a simulated identity, not a person of record.`);
     } else {
       award(factor, weight, `${verb} ${name}.`);

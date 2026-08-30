@@ -96,11 +96,6 @@ function toIso(v: Date | null): string | null {
   return v === null ? null : v.toISOString();
 }
 
-/** Absence is not neutral: no committer or verifier of record scores the same as a synthetic one. */
-function creditNameForMissing(role: string): string {
-  return `[SIM] (no ${role} of record)`;
-}
-
 export function produceRunRouter(pool: Pool): Router {
   void pool;
   const router = Router();
@@ -323,31 +318,31 @@ export function produceRunRouter(pool: Pool): Router {
       // anything depended on the old meaning, not because the system would
       // have caught it if something had.
       let committerSynthetic: boolean;
-      let committerName: string;
+      let committerName: string | null;
       if (vo.committed_by_person_id) {
         const { rows: [committer] } = await client.query<{ full_name: string; simulated: boolean }>(
           'SELECT full_name, simulated FROM persons WHERE id = $1 AND deleted_at IS NULL',
           [vo.committed_by_person_id],
         );
         committerSynthetic = !committer || committer.simulated;
-        committerName = committer ? committer.full_name : creditNameForMissing('committer');
+        committerName = committer ? committer.full_name : null;
       } else {
         committerSynthetic = true;
-        committerName = creditNameForMissing('committer');
+        committerName = null;
       }
 
       let verifierSynthetic: boolean;
-      let verifierName: string;
+      let verifierName: string | null;
       if (vo.verified_by_person_id) {
         const { rows: [verifier] } = await client.query<{ full_name: string; simulated: boolean }>(
           'SELECT full_name, simulated FROM persons WHERE id = $1 AND deleted_at IS NULL',
           [vo.verified_by_person_id],
         );
         verifierSynthetic = !verifier || verifier.simulated;
-        verifierName = verifier ? verifier.full_name : creditNameForMissing('verifier');
+        verifierName = verifier ? verifier.full_name : null;
       } else {
         verifierSynthetic = true;
-        verifierName = creditNameForMissing('verifier');
+        verifierName = null;
       }
 
       const claimedCurrencyImpact = toNumber(vo.claimed_currency_impact);
