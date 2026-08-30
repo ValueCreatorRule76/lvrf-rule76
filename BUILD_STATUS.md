@@ -3658,3 +3658,216 @@ on srv1862778 on 30 August 2026, and both results — the recorded refusal and t
 blocked DELETE — were produced there via curl to 127.0.0.1:3001 and psql as
 postgres. The session that authored this entry generated the migration locally and
 did not run it, and flagged that it could not attest to the production claims.
+
+---
+
+## 2.0 item 2 closed — the gap register — 30 August 2026
+
+`GET /api/value-outcomes/:outcomeId/gaps`. One entry per unearned or
+partially-earned confidence factor: what would close it, what kind of ask it is,
+what it earns, whether an attempt has already been refused, and whether the path
+itself is viable.
+
+### It is not "priced", and the word was dropped
+
+Attaching a cost would mean the system estimating an engagement, and it has no
+basis for one. **Inventing a figure is what this instrument refuses.** The price
+IS the requirement, stated precisely — derivable rather than asserted.
+
+### It is a current view, not part of the record
+
+A run's payload holds the factors as they stood when it was produced. The register
+says what would close them **now**. Rendering it beside a locked score would create
+the incoherence `EvidenceCard`'s comment warns about — a fresh plan next to a
+frozen number.
+
+It recomputes confidence from live state and never reads a stored payload.
+
+### Step 1: the reason as data, not prose
+
+`ConfidenceFactorRow` carried a note explaining *why* a factor was unearned, as
+prose. The register needed that as data — and re-deriving the conditions would have
+been a second implementation of one rule, the divergence shape `heartbeatLedger.ts`
+warns about.
+
+`metricDefinitionGap` already did this correctly for one factor. The pattern was
+extended rather than replaced: every row now carries `gap`, computed at the same
+place the note is computed.
+
+Discriminants found by reading the branches, not by assuming:
+
+```
+metric_definition_confirmed   no_notes, unconfirmed, confirmer_simulated
+baseline/actual_evidence      none_attached, evidence_unqualified, attested_only
+impact_basis_evidenced        unsubstantiated, self_declared_inference
+human_commit/verifier         absent, simulated
+```
+
+**`evidence_unqualified` was not in the spec** — evidence attached but none of it
+earning credit, distinct from none attached. In a customer conversation it is the
+*more* actionable of the two: something was supplied and it did not qualify.
+
+It was deliberately not split four ways (unverified source, unnamed attester,
+synthetic attester, vendor-side attester) because the outer loop only reports the
+strongest item's note. **A discriminant the model cannot determine would be
+inventing precision.**
+
+`gap` is null only when earned equals weight. A partially-earned factor still has a
+gap: baseline at 15/25 is not closed.
+
+**The fingerprint held at `d4cf8f31472a`** across this change — the versioning built
+an hour earlier proving the change stayed in scope, rather than us asserting it did.
+First real use.
+
+### Ask types, because the register must work in a room
+
+```
+definition   no_notes, unconfirmed, confirmer_simulated,
+             unsubstantiated, self_declared_inference
+document     none_attached, evidence_unqualified, attested_only
+person       absent, simulated
+```
+
+*"We need an extract from your HRIS"* and *"we need someone at your company to put
+their name on this figure"* are entirely different asks. The first goes to an
+analyst and takes a week. The second needs someone with authority accepting
+accountability — **a decision, not a task.** Conflating them makes the register read
+as a checklist when half of it is a negotiation.
+
+Ordered **definition → document → person**. Nobody signs their name to a figure
+whose definition was not agreed, and no extract can be gathered until both sides
+agree what the number counts. **That ordering is the register's real output — a
+sequence a conversation can follow, not a list.**
+
+### Person asks name the requirement, never the person
+
+`persons_on_record` returns who is real and non-simulated at the institution. It
+does not nominate anyone.
+
+The system knows who is in `persons` — a data artifact, not a judgement about who
+has authority to stand behind a figure. Nominating from that list would infer a fact
+nobody stated. And in the room, *"needs a named verifier at Curia"* invites the
+customer to choose; *"ask your VP of HR"* has made an organisational assumption in
+front of them.
+
+At Curia the list holds one entry — the external analyst — which tells the customer
+plainly that **nobody from their side is on record yet.**
+
+---
+
+## DEFECT IN THE ORIGINAL SPEC: state and path were never one axis
+
+The register was specified with three mutually exclusive states: `open`, `refused`,
+`structurally_unobtainable`. **They are not mutually exclusive.**
+
+Curia's `actual_evidence_verified` returned `gap: none_attached`, `state: refused`,
+and a requirement reading *"Evidence supporting the actual value must be attached."*
+All three true, and together they mislead — the requirement says attach evidence,
+the refusal beneath says why that will not work, and nothing says whether the source
+can ever work.
+
+Split into two independent axes:
+
+```
+state   open | refused        a fact about HISTORY: has an attempt been rejected
+path    viable | blocked      a fact about the PRESENT: would effort on the current
+                              source ever close this
+```
+
+Four combinations, all meaningful:
+
+```
+open    + viable    nobody has tried; effort will close it
+refused + viable    someone tried and was rejected; a corrected attempt could work
+open    + blocked   nobody has tried, and the only source that exists cannot qualify
+refused + blocked   tried, rejected, and the source can never qualify — STOP
+```
+
+**"Try again with a different source" and "this source will never work" are
+different instructions.** A register that cannot distinguish them sends someone down
+a road with no end — the exact failure it exists to prevent.
+
+### FINDING: `blocked` is currently unreachable, and that is correct
+
+For `path: blocked` to fire on `actual_evidence_verified`, inadmissible evidence
+would have to be successfully **linked** as an actual — and `lvrf_block_ai_actual`
+prevents precisely that. **The gate makes the state it guards against
+unobservable.**
+
+Curia has four evidence links and none supports the actual, because every attempt
+was refused and rolled back. So `refused + viable` is honest: the source chosen was
+unusable; the path is not. A figure from Curia's HRIS would qualify.
+
+The detection stays as a defensive check — it would fire if the doors changed, or
+for a kind inadmissible under some future rule.
+
+### The requirement now reflects what was refused
+
+```
+"Evidence supporting the actual value of ... must be attached. An earlier attempt
+ to satisfy this was already refused — see refusal_message for why — so the next
+ attempt needs to address that reason, not repeat it."
+```
+
+It **points at** the message rather than duplicating it. One copy, no drift.
+
+---
+
+## DEFECT: refusals cannot identify their outcome
+
+`findEvidenceRefusal` only claims `refused` when the institution has exactly one
+live outcome — a guard against misattribution that is **actively protecting against
+a real ambiguity today**, since both seeded institutions carry many outcomes.
+
+The cause is mine. A refusal row carries no outcome id: the evidence row it names
+rolls back, and the request body has no outcome id in it. But **the URL does** —
+`POST /api/value-outcomes/:outcomeId/evidence` — and `handleGovernanceError`
+receives a `context` with `subjectId`. The id was available and the wrong field was
+specified for it.
+
+The fix is to record the outcome, not to guess it. Not done in this change.
+
+## FINDING: `refused` is nearly unreachable for four of six factors
+
+Only `POST /api/value-outcomes/:outcomeId/evidence` routes violations through
+`handleGovernanceError` into `refusals`. Everywhere else:
+
+- `validateMetric`'s confirmer-simulated check and `outcomeWalk`'s committer and
+  verifier checks are plain `res.status(422)` **before** the write — the database is
+  never reached, so nothing is recorded
+- no route writes `claimed_currency_impact`, `realized_currency_impact` or
+  `impact_basis`, so `value_outcomes_impact_requires_basis` cannot fire through any
+  live endpoint
+
+So `state` can only be `refused` for the two document-type factors. Everything else
+reports `open` even when a rejection genuinely just happened at the application
+layer.
+
+**Whether that should change is a real question, not an oversight.** An application
+precondition refusing early is different from the constitution refusing — but "we
+checked and stopped you" is still an attempt that happened, and the register cannot
+currently say so.
+
+Documented in the file rather than wiring a query that would silently never match,
+or worse, misattribute an unrelated refusal.
+
+---
+
+## buildConfidenceInput extracted, not duplicated
+
+The register needed `produceRun`'s derivation from live rows to `ConfidenceInput`.
+Rather than copy it — two implementations of one rule — it was extracted into
+`confidenceModel.ts` alongside `fixtureEvidenceToInput`. `produceRun` now calls it
+and is 26 lines shorter.
+
+Parity held: 30.0/low and 80.0/high, findings unchanged.
+
+## Local migration drift resolved
+
+Local was missing 0013–0016 while the journal claimed 0013 applied. Backed up,
+migrated, then **verified against `information_schema` rather than the journal** —
+the journal is what lied in the first place. Both confirmation columns and the
+`refusals` table now exist, and the migration table matches `_journal.json` with no
+drift.
+
+Local can now reach states production is in daily.
