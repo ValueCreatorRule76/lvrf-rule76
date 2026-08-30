@@ -905,6 +905,50 @@ export const refusals = pgTable('refusals', {
   index('refusals_refused_at_idx').on(t.refusedAt),
 ]);
 
+/* ================================================================== */
+/* Hardening Manifest — what hardening.sql applied, as of its last run */
+/* ================================================================== */
+
+/**
+ * 2.0 item 4. On 23 August five triggers sat DECLARED in hardening.sql and
+ * ABSENT from the database for weeks, while the trigger count reconciled by
+ * coincidence (see the Verification block at the end of hardening.sql). The
+ * lesson was: compare lists, not totals. This table is what makes that
+ * comparison possible from SQL.
+ *
+ * The expected list could have been a constant in the checking code. That
+ * would be a SECOND declaration of what hardening.sql already declares — two
+ * lists, hand-synchronised, drifting silently. A drift detector that drifts
+ * is the most embarrassing possible failure of this feature.
+ *
+ * The manifest is written BY hardening.sql as it runs, derived from the same
+ * arrays and loops that create the triggers — never hand-enumerated. One
+ * declaration.
+ *
+ * SHAPE: insert-only, same as refusals and record_documents — no deletedAt,
+ * no supersededById, no status, no version. What hardening.sql applied at a
+ * moment is a fact.
+ *
+ * NO TRIGGERS on this table (no _audit, no _touch, no _no_delete):
+ * hardening.sql truncates and repopulates it on every run (see below), so a
+ * _no_delete guard would prevent hardening.sql from working.
+ *
+ * WHAT THIS CANNOT CATCH: the manifest records what hardening.sql DECLARED.
+ * A trigger it never declared is invisible to both the file and any check
+ * built on this table — so the comparison this enables catches
+ * DECLARED-BUT-NOT-APPLIED, not APPLIED-BUT-NOT-DECLARED. That is the
+ * direction the 23 August gap actually ran, so it is the right coverage —
+ * but it is not complete coverage, and nothing here should imply otherwise.
+ */
+export const hardeningManifest = pgTable('hardening_manifest', {
+  id: id(),
+  appliedAt: timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+  triggerName: text('trigger_name').notNull(),
+  tableName: text('table_name').notNull(),
+}, (t) => [
+  unique('hardening_manifest_trigger_table_key').on(t.triggerName, t.tableName),
+]);
+
 // ------------------------------------------------------------------
 // Enums
 // ------------------------------------------------------------------

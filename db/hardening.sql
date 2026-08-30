@@ -506,6 +506,12 @@ END $$;
 -- or a schema change adding a surrogate id to each table. That decision has
 -- not been made; do not close it by adding these tables to the governed
 -- array in section 4 unmodified.
+--
+-- hardening_manifest is a fifth ungoverned table, deliberately, for a
+-- different reason: see section 9. It is TRUNCATEd and repopulated by this
+-- file on every run, so a _no_delete guard on it would make hardening.sql
+-- fail against its own manifest, and _audit/_touch are meaningless on a
+-- table with no UPDATEs. Do not add it to the governed array.
 
 -- ------------------------------------------------------------------
 -- 6. Append-only privileges
@@ -569,6 +575,50 @@ CREATE TRIGGER refusals_no_delete
     'This is an immutable record of an attempt that was refused; it cannot be deleted, because the attempt happened.'
   );
 
+-- ------------------------------------------------------------------
+-- 9. 2.0 item 4 — hardening manifest: what THIS run applied
+-- ------------------------------------------------------------------
+-- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
+-- database for weeks, while the trigger count reconciled by coincidence
+-- (see Verification below). The lesson was: compare lists, not totals.
+-- hardening_manifest (db/schema.ts) is what makes that comparison possible
+-- from SQL, going forward.
+--
+-- DERIVED, NOT ENUMERATED: this does not repeat any trigger name that was
+-- already typed in a CREATE TRIGGER statement above, whether from the
+-- `governed` loop, the `supersession_governed` loop, or one of the
+-- individually-declared triggers in sections 5a/5b/5c/5d/8. It reads back
+-- from information_schema.triggers — the same catalog the Verification
+-- block below already treats as ground truth for the trigger count — which
+-- by now, inside this same transaction, reflects every CREATE TRIGGER this
+-- run just executed. A hand-maintained list here, or in a future checking
+-- script, would be exactly the second, driftable declaration this feature
+-- exists to prevent. DISTINCT collapses the per-event-manipulation rows
+-- information_schema.triggers emits (see Verification below) down to one
+-- row per (trigger, table), matching the manifest's unique constraint.
+--
+-- TRUNCATE, not append — the one exception to "no hard deletes on governed
+-- objects" (CLAUDE.md rule 2) in this entire system, and it needs its
+-- reason stated because every other table here forbids exactly this.
+-- hardening_manifest's contract is "what hardening.sql applied, as of its
+-- last run" — not history. A row surviving from a previous run, for a
+-- trigger this file no longer declares, would be a false claim about the
+-- present: that the database still needs to satisfy something it no longer
+-- must. The manifest describes now, not a history of every run there ever
+-- was, so it is truncated before every repopulation.
+TRUNCATE hardening_manifest;
+
+INSERT INTO hardening_manifest (trigger_name, table_name)
+SELECT DISTINCT trigger_name, event_object_table
+FROM information_schema.triggers
+WHERE trigger_schema = 'public';
+
+-- CONSEQUENCE: trigger count is unaffected by this section — stays 64.
+-- hardening_manifest carries no triggers of its own (see the
+-- "Known ungoverned tables" note above: no _audit, no _touch, no
+-- _no_delete), so this section adds rows to a table, not triggers to the
+-- count the Verification block checks below.
+
 COMMIT;
 
 -- ------------------------------------------------------------------
@@ -595,6 +645,12 @@ COMMIT;
 --   value_outcomes, value_runs) — 14
 --   8: refusals_no_delete — 1
 --   Total: 64 distinct triggers.
+--
+-- 9's hardening_manifest table adds no entry to this arithmetic: it is a
+-- new table, not a new trigger, and it deliberately carries none of its
+-- own (see "Known ungoverned tables" above) — a _no_delete guard on the
+-- table this file truncates and repopulates every run would make the
+-- TRUNCATE in section 9 fail. Total stays 64.
 --
 -- Expect 97 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
