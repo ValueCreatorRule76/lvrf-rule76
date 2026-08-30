@@ -651,6 +651,10 @@ COMMIT or ROLLBACK.
 | POST | `/api/value-outcomes/:id/verify` | measured → verified |
 | POST | `/api/business-metrics/:id/validate` | Supersede an asserted metric with a sourced one |
 | POST | `/api/engagements/:id/produce-run` | Produce a `value_runs` row from live data |
+| POST | `/api/value-runs/:id/lock` | Set `locked_at`; a one-way door |
+| GET | `/api/value-runs/:a/compare/:b` | Factor-by-factor diff. Both runs must be locked. Persists nothing |
+| POST | `/api/value-outcomes/:id/evidence` | Create evidence and link it, one transaction |
+| GET | `/api/persons` | Actor and attestor selection. Real, non-simulated by default |
 
 ### Error handling convention
 
@@ -680,54 +684,121 @@ COMMIT or ROLLBACK.
 React 19.2 · react-router-dom 7.18 · Vite 8.2 · Tailwind (no compiler; core
 utilities only).
 
+Until 29 August this was a read-only client — **no input, no onChange, no
+onSubmit, no focus styling anywhere.** Three write surfaces were then built, and
+every choice made in them became the precedent for the next form.
+
 ### Routes
 
 ```
-/                                        RunsIndexPage  — the run index
-/runs/:id                                RunPage        — the workbench
+/            RunsIndexPage   create-account form, then the run index
+/runs/:id    RunPage         the workbench
 ```
 
 ### Structure
 
 ```
 client/src/
-  App.tsx                       route declarations
+  App.tsx                       routes, wrapped in ActorProvider
   types/run.ts                  payload types — SEE WARNING BELOW
-  api/                          fetch wrappers
-  pages/                        RunsIndexPage, RunPage
+  api/
+    runs.ts, runsIndex.ts       GET wrappers, discriminated unions
+    engagementRuns.ts           sibling runs, for finding a predecessor
+    persons.ts                  actor and attestor lists
+    post.ts                     postGoverned — the only write helper
+  actor/
+    ActorContext.tsx            session-scoped, React state only
+    ActorBar.tsx                always visible; ink when unset
+  components/
+    GovernedForm.tsx            the form primitive
+    CreateAccountCard.tsx       surface 3
   components/workbench/
-    Rail.tsx                    left rail: lockup, spine, health
-    Topbar.tsx                  Add evidence, Render record, Share with customer
-    Card.tsx                    numbered section shell
-    MeasurementRow.tsx          baseline / target / measured / delta tiles
-    EvidenceCard.tsx            the evidence ledger
-    HeartbeatCard.tsx           heartbeat events
-    HealthCard.tsx              institutional health
-    FindingsCard.tsx            the system's findings against itself
-    ConfidenceInstrument.tsx    earned/outstanding bar
+    Rail.tsx                    lockup, spine, health
+    Topbar.tsx                  three actions, all disabled
+    Card.tsx                    Card + Badge, seven tones
+    MeasurementRow.tsx          baseline / target / measured / delta
+    EvidenceCard.tsx            the ledger — a walk-time snapshot
+    AddEvidenceCard.tsx         surface 1
+    CompareCard.tsx             surface 2
+    HeartbeatCard.tsx, HealthCard.tsx, FindingsCard.tsx
+    ConfidenceInstrument.tsx    earned / outstanding bar
 ```
+
+### The actor layer
+
+`ActorContext` holds `{ id, full_name, institution_name } | null` in **React state
+only**. No localStorage, no sessionStorage, no module-level variable. It clears on
+refresh, deliberately: a persisted actor becomes a default, and a default becomes
+an assumption. A hidden default actor is the exact hole the server middleware was
+fixed to close.
+
+`ActorBar` is always visible. Ink and loud when unset — *"No actor selected. Every
+write to this system names a person."* — quiet white once answered. Attribution is
+not something a visitor discovers in an audit log afterwards.
+
+### GovernedForm — four result states, four treatments
+
+This is the component's reason to exist:
+
+| State | HTTP | Treatment |
+|---|---|---|
+| `refused` | 422 | **Ink block**, server message verbatim |
+| `conflict` | 409 | The same ink treatment, different label |
+| `error` | network, 5xx | Muted, ordinary — deliberately *quieter* than a refusal |
+| `ok` | 2xx | Caller-supplied content |
+
+**A governance refusal is the system working. A 500 is the system failing.**
+Rendering both the same would undo the argument the database enforces.
+
+A refusal message is never prefixed, wrapped, appended, or mapped to a friendlier
+string. Those sentences name amendments. They are the product.
+
+Ink is **reserved for refusals and conflicts**. The actor requirement uses
+HealthCard's gold-left-border callout instead — "you have not chosen who you are"
+is a precondition, not a refusal.
+
+### Rules every form inherits
+
+- **No field defaults to a plausible value.** Selects start on `— choose —`.
+  Booleans use a tri-state `'' | 'true' | 'false'`, because a checkbox physically
+  cannot express "nobody chose" — it resolves to false whether or not anyone
+  looked at it
+- **Provenance renders first**, in its own block above the other fields. Not at
+  the bottom, not behind a toggle. The honest part is not optional-looking. The
+  block label is `provenanceLabel?: string`, per consumer — it once hardcoded
+  evidence-specific copy and a second consumer exposed it
+- **The actor requirement states itself above the fields**, and a
+  `<fieldset disabled>` cascades to every input, so a form cannot be filled before
+  the requirement is met
+- **The result block renders above the submit button.** Below it, a refusal
+  appears off-screen on a long form and a visitor assumes nothing happened
+- Labels teach the constraint rather than naming the field — *confidence (the
+  server will not accept a default)*
 
 ### WARNING: `types/run.ts` was written from the fixture, not the server
 
 Seven defects of this class have been found and fixed. **Assume more exist.** The
 type checker cannot catch them — bare JSX interpolation accepts `null`, so a wrong
 type fails silently unless a method call happens to expose it. One crash was found
-by users; three blank tiles were found by rendering; none by the compiler.
+by users; three blank tiles by rendering; none by the compiler.
 
-Before adding a field, read the server's actual return type. Do not infer it from a
-Customer Zero payload.
+Before adding a field, read the server's actual return type. Do not infer it from
+a Customer Zero payload. `valueOutcomeId` is typed **optional** for exactly this
+reason — seven production runs predate it.
 
 ### Rendering rules
 
 - Never render `0`, a dash, an empty string, or the literal `"null"` for an absent
   value. Render an explicit state: `UNMEASURED`, `Target not yet set`, `Not yet
   measured`, `No stage`, `PROVENANCE UNKNOWN`
-- **A zero asserts compliance the model refuses to assert**
-- An unbuilt action is `disabled` with `title="Not yet implemented"`. An action
-  blocked by a gate is `disabled` with the gate's reason. These are different states
-  and the interface must distinguish them
-
----
+- **A zero asserts compliance the model refuses to assert.** The heartbeat card
+  read `0 events · all healthy` for weeks; zero events is UNMEASURED, and *not the
+  same as healthy*
+- **A zero delta is not nothing.** On the compare card, a factor whose delta is 0
+  but whose notes differ is tinted gold and badged *evidence changed, score held* —
+  the single most important thing that card can show
+- An unbuilt action is `disabled` with *not yet implemented*. An action blocked by
+  a gate is `disabled` with the gate's reason. Different states, distinguished
 
 ## 10. Brand and design system
 
@@ -847,15 +918,31 @@ interface alone what is evidenced, what is asserted, and what is refused.*
 | 1 | Value outcome and business metric entry | **Done** |
 | 2 | Verifier attestation with a caller | **Done** |
 | 3 | Produce a run from an engagement | **Done** |
-| 4 | `capability_metric_links` with `promoted_at` | Open |
+| 4 | `capability_metric_links` with `promoted_at` | **Parked** — three reasons, see §13 |
 | 5 | Validate and supersede | **Done** |
-| 6 | Compare two runs on confidence, not value | Open |
+| 6 | Compare two runs on confidence, not value | **Done** |
+
+Also delivered, not on the original roster: seven supersession filters, the run
+lock endpoint, the outcome-evidence endpoint that closed the last psql-only write
+path, `GET /api/persons`, and three UI surfaces.
 
 *Test: a real cohort can be measured end to end by someone other than the author,
 and the output is a document a CFO would carry to a lender.*
 
 **Sequencing note:** 1.2 should not be built speculatively. Build against an actual
 engagement's data, not against an assumption about what that engagement will have.
+
+### The roster cut of 25 August is REVERSED
+
+That cut removed all UI work, reasoning that a client rebuilt on someone else's
+stack would not transfer. **LVRF is a Rule76 application in the same sense CVAF
+is.** The UI is a demonstration artifact for selling the method — not a throwaway,
+and not a product either.
+
+Scope was deliberately set at three surfaces rather than eight: evidence entry,
+compare, account intake. A demo must be complete on the paths people walk, not on
+every path. The measure and verify walk remains curl-only — nobody demonstrates a
+state transition.
 
 ### 2.0 Enhancements — SCOPED, NOT COMMITTED
 
@@ -899,6 +986,10 @@ stubs it returning UNMEASURED** — never a plausible default.
 | `confidenceModel.isSynthetic()` | Reads a `[SIM]` prefix, not `persons.simulated` |
 | `business_metrics` calculation-confirmed | Now exists as a column pair; the model reads it |
 | Raw ISO timestamp on the index | Machine format in a human column |
+| Measure and verify walk | No UI. Curl only, deliberately |
+| Card numbering | The evidence form is `01A`; renumbering 02–04 was out of scope |
+| Narrow-viewport overflow | The runs table's min-content floor exceeds its box on both pages. Pre-existing |
+| `stage`, `claim`, `notes` | Returned by the compare endpoint, rendered nowhere |
 | Asset PNGs outweigh the JS bundle | ~2.4x |
 
 ### Supersession filters — OPEN, and the highest-value cleanup
@@ -951,6 +1042,17 @@ a scratch database before you ever need one in anger.**
   state — which is why name uniqueness and supersession are incompatible.
 - **`ON CONFLICT` cannot infer a partial unique index without its `WHERE` clause.**
   Omitting it silently duplicates rather than erroring.
+- **An audit is only as wide as its search.** Seven supersession filters were found
+  by grepping `FROM capabilities`, `FROM institutions`, `FROM business_metrics` and
+  `FROM value_outcomes`. An eighth sat in `FROM value_runs` — the table holding the
+  artifact being demonstrated — and was found weeks later only because a client
+  feature needed that query.
+- **A query can fail to return its own primary key.**
+  `GET /api/engagements/:id/runs` returned run numbers, scores, stages and lock
+  state, and no `id`. Zero consumers, so nobody had hit it.
+- **A shared primitive leaks domain copy until a second consumer exists.**
+  `GovernedForm` hardcoded evidence-specific wording. Invisible until an account
+  form rendered it verbatim.
 
 ---
 
@@ -1067,3 +1169,14 @@ because anything looked wrong.
 Nothing in this document should be trusted more than the command that would verify
 it. Where a section makes a claim about the schema and does not name the query that
 produces it, run the query.
+
+
+### The UI section was added 29 August 2026 — corrected 30 August
+
+§9 previously described a read-only client and §12 recorded the UI as cut. Both
+were true when written and were superseded the same week: the roster cut was
+reversed, three write surfaces were built, and four new endpoints landed.
+
+The version of record for what exists is always `BUILD_STATUS.md`, read after this
+file. Where the two disagree, the more recent entry there governs — this document
+describes the system's shape, not its running state.
