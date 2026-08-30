@@ -136,10 +136,59 @@ export function compareRunsRouter(pool: Pool): Router {
 
       const bp = baseline.payload;
       const cp = comparison.payload;
-      const bConfidence = bp.confidence as { score: number; band: string; factors: PayloadFactor[] };
-      const cConfidence = cp.confidence as { score: number; band: string; factors: PayloadFactor[] };
+      const bConfidence = bp.confidence as {
+        score: number;
+        band: string;
+        factors: PayloadFactor[];
+        modelVersion?: string;
+        modelFingerprint?: string;
+      };
+      const cConfidence = cp.confidence as {
+        score: number;
+        band: string;
+        factors: PayloadFactor[];
+        modelVersion?: string;
+        modelFingerprint?: string;
+      };
       const bHealth = bp.health as { composite: number | null; coverage_pct: number };
       const cHealth = cp.health as { composite: number | null; coverage_pct: number };
+
+      // Neither field back-fills — a run scored before confidenceModel.ts
+      // computed them stays absent, honestly, rather than defaulting to
+      // "comparable". See confidenceModel.ts's MODEL_VERSION/MODEL_FINGERPRINT
+      // comment: the fingerprint is what makes a same-version, different-
+      // constant change (an unamended amendment) detectable rather than
+      // merely stated, and this endpoint is where that detection surfaces.
+      const bVersion = bConfidence.modelVersion ?? null;
+      const cVersion = cConfidence.modelVersion ?? null;
+      const bFingerprint = bConfidence.modelFingerprint ?? null;
+      const cFingerprint = cConfidence.modelFingerprint ?? null;
+
+      let modelComparable: boolean;
+      let modelNote: string;
+      if (bFingerprint === null || cFingerprint === null) {
+        // At least one run predates model versioning. The model that scored
+        // it is unknown — not "assumed same" — so the comparison cannot be
+        // qualified. This is the state all sixteen existing production runs
+        // are in; it is not an error case.
+        modelComparable = false;
+        if (bFingerprint === null && cFingerprint === null) {
+          modelNote = `Both runs (${baselineRunId} and ${comparisonRunId}) predate model versioning — the model that scored each is unknown, so the comparison cannot be qualified.`;
+        } else if (bFingerprint === null) {
+          modelNote = `Run ${baselineRunId} predates model versioning — the model that scored it is unknown, so the comparison cannot be qualified.`;
+        } else {
+          modelNote = `Run ${comparisonRunId} predates model versioning — the model that scored it is unknown, so the comparison cannot be qualified.`;
+        }
+      } else if (bFingerprint === cFingerprint) {
+        modelComparable = true;
+        modelNote = 'Both runs were scored by the same model.';
+      } else {
+        modelComparable = false;
+        modelNote = `Runs were scored by different models — fingerprint ${bFingerprint} vs ${cFingerprint}. A factor delta may reflect a change in the model rather than a change in the evidence.`;
+        if (bVersion !== null && cVersion !== null && bVersion === cVersion) {
+          modelNote += ` Declared model version is the same (${bVersion}) on both runs despite the differing fingerprint — a model constant changed without the version being amended.`;
+        }
+      }
 
       // Join on `factor`. A factor present in one run and not the other is
       // 'added' or 'removed' — never a fabricated zero, so delta is null
@@ -212,6 +261,14 @@ export function compareRunsRouter(pool: Pool): Router {
         baseline_run_id: baselineRunId,
         comparison_run_id: comparisonRunId,
         engagement_id: baseline.engagement_id,
+        model: {
+          version_from: bVersion,
+          version_to: cVersion,
+          fingerprint_from: bFingerprint,
+          fingerprint_to: cFingerprint,
+          comparable: modelComparable,
+          note: modelNote,
+        },
         confidence: {
           score_from: bConfidence.score,
           score_to: cConfidence.score,
