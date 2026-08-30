@@ -539,6 +539,36 @@ ALTER TABLE heartbeat_events
   ON DELETE RESTRICT
   DEFERRABLE INITIALLY DEFERRED;
 
+-- ------------------------------------------------------------------
+-- 8. 2.0 item 2, part A — refusals: an immutable record of authority
+--    exercised
+-- ------------------------------------------------------------------
+-- A refusal is a FACT, not a governed claim (db/schema.ts) — no
+-- deleted_at, no status, no version, nothing that ever changes. It gets a
+-- delete guard only:
+--   no _audit — audit_log's contract is old_row/new_row, a CHANGE; a
+--   refusal has neither, so there is nothing for lvrf_audit() to record
+--   no _touch — there is no updated_at; the row never changes
+-- Same shape as 5c's record_documents_no_delete: its own remedy text,
+-- because the generic "Set deleted_at instead" is permanently false here,
+-- not just false until a later migration.
+--
+-- LIMITATION, restated at the point of enforcement: this trigger protects
+-- a refusals ROW once one exists. It does not create one. This records
+-- refusals arriving through an ENDPOINT — a gate refusal raised directly
+-- in a psql session, which is every gate test to date, still leaves
+-- nothing, because the trigger raises and no application is listening.
+-- No writer exists yet; do not describe this as complete coverage.
+--
+-- CONSEQUENCE: trigger count goes 63 -> 64.
+
+DROP TRIGGER IF EXISTS refusals_no_delete ON refusals;
+CREATE TRIGGER refusals_no_delete
+  BEFORE DELETE ON refusals
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'This is an immutable record of an attempt that was refused; it cannot be deleted, because the attempt happened.'
+  );
+
 COMMIT;
 
 -- ------------------------------------------------------------------
@@ -563,15 +593,17 @@ COMMIT;
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
 --   value_outcomes, value_runs) — 14
---   Total: 63 distinct triggers.
+--   8: refusals_no_delete — 1
+--   Total: 64 distinct triggers.
 --
--- Expect 96 rows here: information_schema.triggers emits one row per event
+-- Expect 97 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
--- each 5e trigger fires on INSERT and UPDATE, ×14 (+28).
--- 52 + 2 + 1 + 4 + 3 + 6 + 28 = 96.
+-- each 5e trigger fires on INSERT and UPDATE, ×14 (+28); refusals_no_delete
+-- fires on DELETE only (+1).
+-- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 = 97.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

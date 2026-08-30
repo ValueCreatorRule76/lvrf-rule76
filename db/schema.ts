@@ -847,6 +847,64 @@ export const auditLog = pgTable('audit_log', {
   index('audit_at_idx').on(t.at),
 ]);
 
+/* ================================================================== */
+/* Refusal — the record of authority exercised                        */
+/* ================================================================== */
+
+/**
+ * 2.0 item 2. A refusal is the system exercising authority, and authority
+ * exercised without record is what constitutions exist to prevent.
+ * audit_log captures every successful write; heartbeat_events records what
+ * the institution owes itself; record_documents are immutable. A refusal —
+ * arguably the most informative event this system produces — currently
+ * leaves nothing: the transaction rolls back and the attempt is forgotten.
+ *
+ * Someone offered vendor-published evidence as a measured actual on 25
+ * August. The gate refused, correctly, and the system then behaved as
+ * though the offer had never been made. That is the record forgetting
+ * something true.
+ *
+ * NOT audit_log: audit_log records state CHANGES — it carries old_row and
+ * new_row, and a refusal has neither. An audit log containing things that
+ * did not happen stops being an audit log. Its guarantee today is that
+ * every row is a change that occurred.
+ *
+ * Same shape as record_documents: no deletedAt, no supersededById, no
+ * status, no version. A refusal is a FACT, not a claim — it cannot be
+ * retired, superseded or corrected. Nothing supersedes something that
+ * happened.
+ *
+ * LIMITATION: this records refusals arriving through an ENDPOINT. A
+ * refusal raised in a psql session — as every gate test to date has been —
+ * leaves nothing; the trigger raises and no application is listening. Do
+ * not describe this as complete coverage.
+ */
+export const refusals = pgTable('refusals', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
+  /** A refusal always has an actor — actorContext refuses the request otherwise. */
+  actorPersonId: uuid('actor_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  /** Method and path pattern, e.g. 'POST /api/value-outcomes/:id/evidence'. */
+  endpoint: text('endpoint').notNull(),
+  subjectTable: text('subject_table').notNull(),
+  /** The subject may not exist yet. */
+  subjectId: text('subject_id'),
+  /** Postgres SQLSTATE, e.g. '23514', '23505'. */
+  sqlstate: text('sqlstate').notNull(),
+  /** Postgres does not always supply one. */
+  constraintName: text('constraint_name'),
+  /** VERBATIM. Never truncated, rewritten or summarised. That sentence is the product. */
+  message: text('message').notNull(),
+  /** What was offered. */
+  attemptedPayload: jsonb('attempted_payload').notNull(),
+  refusedAt: timestamp('refused_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('refusals_tenant_idx').on(t.tenantId),
+  index('refusals_subject_idx').on(t.subjectTable, t.subjectId),
+  index('refusals_refused_at_idx').on(t.refusedAt),
+]);
+
 // ------------------------------------------------------------------
 // Enums
 // ------------------------------------------------------------------
