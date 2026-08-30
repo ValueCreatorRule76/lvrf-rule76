@@ -101,8 +101,7 @@ function buildPlainTextHeader(run: Run, gaps: GapEntry[]): string[] {
   const f4 = run.payload.findings.find((f) => f.code === 'F4');
 
   const lines: string[] = [];
-  lines.push(`${run.payload.engagement} — ${businessMetricName(run.payload.businessMetric)}`);
-  lines.push('Value record.');
+  lines.push(`Value record for ${run.payload.engagement} — ${businessMetricName(run.payload.businessMetric)}.`);
   lines.push(`Computed confidence: ${score}/100 (${band.toUpperCase()}).`);
   if (f4) lines.push(f4.message);
 
