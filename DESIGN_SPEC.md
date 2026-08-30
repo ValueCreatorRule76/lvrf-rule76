@@ -443,8 +443,19 @@ Most governed tables carry: `id`, `status`, `version`, `superseded_by_id`,
   `NEW.updated_at`, so attaching them would error on every write.
 - `offering_capabilities` is the same shape: `offering_id`, `capability_id`,
   `is_primary`.
-- `record_documents` has no `deleted_at`; `lvrf_audit` special-cases it via
-  `jsonb_exists`.
+- `record_documents` carries **none** of the seven `governance()` columns —
+  no `status`, `version`, `superseded_by_id`, `steward_person_id`,
+  `created_at`, `updated_at`, or `deleted_at`. Verified 30 August 2026:
+  `select column_name from information_schema.columns where
+  table_name='record_documents' and column_name in
+  ('superseded_by_id','deleted_at','status','version')` returns nothing.
+  Unlike `value_outcome_evidence` and `offering_capabilities` above, it still
+  has its own `id` and is not one of DEFECT-003's four ungoverned junction
+  tables — it is governed by a simpler rule instead: insert-only, versioned,
+  never retired. `document_version` is the sole retirement mechanism, which
+  is why `lvrf_block_delete` carries the only bespoke remedy message in the
+  system (`hardening.sql`'s `record_documents_no_delete`) rather than the
+  generic "Set deleted_at instead."
 
 This is DEFECT-003's territory: composite-key tables uncovered by governance.
 Governing them requires a schema migration, not a hardening edit.
@@ -655,6 +666,8 @@ COMMIT or ROLLBACK.
 | GET | `/api/value-runs/:a/compare/:b` | Factor-by-factor diff. Both runs must be locked. Persists nothing |
 | POST | `/api/value-outcomes/:id/evidence` | Create evidence and link it, one transaction |
 | GET | `/api/persons` | Actor and attestor selection. Real, non-simulated by default |
+| POST | `/api/value-runs/:id/record-document` | Create a record_documents row from a locked run. Refuses an unlocked one, 409 |
+| GET | `/api/value-outcomes/:id/record-documents` | Every record document for one outcome, newest version first |
 
 ### Error handling convention
 
@@ -977,9 +990,10 @@ stubs it returning UNMEASURED** — never a plausible default.
 
 | Item | Note |
 |---|---|
-| Executive output renderer | `record_documents` exists and is empty. This is the artifact a CFO would hold |
+| Executive output — no UI surface | The row is now created (`POST /api/value-runs/:id/record-document`) and listed (`GET /api/value-outcomes/:id/record-documents`). "Render record" still sits disabled on the Topbar — an endpoint now exists behind it, but nothing calls it |
+| Executive output — no rendered bytes | `records/render_record.py` is a fixture-driven CLI reading `out/spine_run_*.json` off disk; it is not database-aware, and WeasyPrint is not installed on the production box |
 | Runtime heartbeat emission | All heartbeat events carry the identical 3 August timestamp. **The model is an instrument; the register is a photograph** |
-| `_no_delete` on `heartbeat_events`, `record_documents` | Both are evidence substrate and currently deletable without trace |
+| `_no_delete` on `heartbeat_events` | Not in the governed trigger array and has no bespoke trigger of its own — protected only by `REVOKE DELETE ... FROM lvrf_app` (`hardening.sql` ~518), not by an audited block. `record_documents` is not in this state: `record_documents_no_delete` exists (~285-290) with its own bespoke remedy message |
 | `supports` as an enum | Free text; a typo skips the gate, and consuming code understands three values |
 | LVRF emblem | Metallic gradient is off-system. "STUDIO" and the trademark mark are not in the record |
 | DEFECT-003 | Four composite-key tables ungoverned |
@@ -1180,3 +1194,46 @@ reversed, three write surfaces were built, and four new endpoints landed.
 The version of record for what exists is always `BUILD_STATUS.md`, read after this
 file. Where the two disagree, the more recent entry there governs — this document
 describes the system's shape, not its running state.
+
+### `record_documents`'s governance columns were understated — corrected 30 August 2026
+
+§5 previously said `record_documents` "has no `deleted_at`; `lvrf_audit`
+special-cases it via `jsonb_exists`." That is true as far as it goes and
+understates the shape of the table. Verified 30 August 2026:
+
+```
+select column_name from information_schema.columns
+where table_name='record_documents'
+  and column_name in ('superseded_by_id','deleted_at','status','version');
+-- returns nothing
+```
+
+`record_documents` carries none of the seven `governance()` columns, not only
+`deleted_at`. It is the only table with an `id` and an active
+`lvrf_block_delete` trigger that is in this position — DEFECT-003's four
+composite-key junction tables lack these columns too, but they also lack an
+`id` and any delete-block trigger at all; `record_documents` is deliberately
+governed by a simpler, narrower rule instead: insert-only, versioned by
+`document_version`, never retired. That is also why `hardening.sql`'s
+`record_documents_no_delete` is the only `lvrf_block_delete` invocation in the
+system that passes a custom remedy message — every other governed table,
+`value_runs` included, uses the function's generic "Set deleted_at instead."
+
+### The executive output renderer deferral was one claim doing the work of two — corrected 30 August 2026
+
+§13 previously listed a single deferred item, "Executive output renderer:
+`record_documents` exists and is empty." Neither half of that is still true.
+The table is no longer empty and the gap is no longer one thing:
+
+- `POST /api/value-runs/:id/record-document` and
+  `GET /api/value-outcomes/:id/record-documents` exist and are listed in §8.
+  A locked run can now produce a record document, and a client can list every
+  document an outcome has.
+- What remains deferred is narrower: no UI surface calls either endpoint yet
+  ("Render record" still sits disabled on the Topbar), and no rendered bytes
+  are produced at all — `records/render_record.py` is a fixture-driven CLI
+  reading `out/spine_run_*.json` from disk, not database-aware, and
+  WeasyPrint is not installed on the production box.
+
+§13 now carries both of these as separate rows rather than one row that would
+have gone stale in a different way than the first correction did.
