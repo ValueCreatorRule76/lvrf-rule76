@@ -211,8 +211,12 @@ async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Pro
   return rows.every((r) => r.ai_sourced || Boolean(r.ai_assisted) || r.simulated || r.kind === 'vendor_publication');
 }
 
-const STRUCTURAL_ACTUAL_REQUIREMENT = (metricName: string): string =>
-  `Every item currently attached to the actual value of "${metricName}" is inadmissible under ` +
+// No metric name: every /gaps response is scoped to the one outcome (and
+// therefore the one business metric) in the URL, so naming it again here
+// repeats what the caller's own header already establishes — see the
+// buildRequirement comment below for the same reasoning applied throughout.
+const STRUCTURAL_ACTUAL_REQUIREMENT: string =
+  'Every item currently attached to the actual value is inadmissible under ' +
   "AMENDMENT-005 Article I (AI-sourced, from an AI-assisted assessment, simulated, or vendor-published). " +
   'No amount of further attestation or verification on these items closes this — the actual must come ' +
   "from a different source: an export from the customer's own system of record.";
@@ -228,32 +232,50 @@ const STRUCTURAL_ACTUAL_REQUIREMENT = (metricName: string): string =>
 const ALREADY_REFUSED_SUFFIX =
   ' An earlier attempt to satisfy this was already refused — the reason is below.';
 
-function buildRequirement(factor: string, gap: string, metricName: string): string {
+/**
+ * NO METRIC NAME IN ANY BRANCH BELOW, DELIBERATELY. A /gaps response is
+ * scoped to one outcome — one business metric — for its entire lifetime; the
+ * caller already knows which metric this is from the URL, and a rendering of
+ * this list (GapListCard.tsx's card and its pasted-text form alike) states
+ * it once, up top. Naming it again on every item is the specific repetition
+ * a reader notices in an email: the same three words on every line.
+ *
+ * Each string was checked against the opposite failure — collapsing to
+ * something so generic it can't stand on its own if an entry is read in
+ * isolation (this is an API response; a consumer may render one entry with
+ * no header at all). "The value must be attached" would fail that test.
+ * "Evidence supporting the baseline must be attached" does not: it still
+ * names the factor, just not the metric.
+ */
+function buildRequirement(factor: string, gap: string): string {
   switch (factor) {
     case 'metric_definition_confirmed':
       switch (gap) {
         case 'no_notes':
-          return `The calculation method for "${metricName}" must be documented — how it is computed and from what source.`;
+          return 'The calculation method must be documented — how it is computed and from what source.';
         case 'unconfirmed':
-          return `The documented calculation method for "${metricName}" must be confirmed by a named, non-simulated person of record.`;
+          return 'The documented calculation method must be confirmed by a named, non-simulated person of record.';
         case 'confirmer_simulated':
-          return `"${metricName}"'s calculation method must be confirmed by a real person of record — the current confirmation names a simulated identity.`;
+          return 'The calculation method must be confirmed by a real person of record — the current confirmation names a simulated identity.';
       }
       break;
     case 'baseline_evidence_verified':
     case 'actual_evidence_verified': {
-      const supports = factor === 'baseline_evidence_verified' ? 'baseline' : 'actual';
+      // "the baseline" / "the actual value" — the same two phrases
+      // CONFIDENCE_FACTOR_QUESTIONS uses in confidenceModel.ts, not a new
+      // pair invented for this file.
+      const subject = factor === 'baseline_evidence_verified' ? 'the baseline' : 'the actual value';
       switch (gap) {
         case 'none_attached':
-          return `Evidence supporting the ${supports} value of "${metricName}" must be attached.`;
+          return `Evidence supporting ${subject} must be attached.`;
         case 'evidence_unqualified':
           return (
-            `The evidence attached to the ${supports} of "${metricName}" must be independently source-verified, ` +
+            `The evidence attached to ${subject} must be independently source-verified, ` +
             'or attested by a named, institution-scoped, non-simulated person — none currently qualifies.'
           );
         case 'attested_only':
           return (
-            `An independently source-verified extract for the ${supports} of "${metricName}" is needed for full ` +
+            `An independently source-verified extract for ${subject} is needed for full ` +
             'credit — the current evidence is attestation-only.'
           );
       }
@@ -321,16 +343,16 @@ export function gapRegisterRouter(pool: Pool): Router {
         return;
       }
 
-      // Same shape as produceRun.ts's bm query, plus bm.name — needed here
-      // to state a requirement precisely, not to score anything.
+      // Same shape as produceRun.ts's bm query. bm.name is not selected:
+      // buildRequirement's own comment explains why no requirement text
+      // names the metric.
       const { rows: [bm] } = await pool.query<{
-        name: string;
         definition_notes: string | null;
         definition_confirmed_by_person_id: string | null;
         definition_confirmed_at: Date | null;
         confirmer_simulated: boolean | null;
       }>(
-        `SELECT bm.name, bm.definition_notes, bm.definition_confirmed_by_person_id,
+        `SELECT bm.definition_notes, bm.definition_confirmed_by_person_id,
                 bm.definition_confirmed_at, p.simulated AS confirmer_simulated
            FROM business_metrics bm
            LEFT JOIN persons p ON p.id = bm.definition_confirmed_by_person_id
@@ -444,7 +466,7 @@ export function gapRegisterRouter(pool: Pool): Router {
             throw new GapRegisterError(`no ask_type mapped for gap discriminant "${gap}" (factor ${f.factor})`);
           }
 
-          let requirement = buildRequirement(f.factor, gap, bm.name);
+          let requirement = buildRequirement(f.factor, gap);
           let state: { state: GapState; refusalMessage: string | null; refusedAt: string | null };
 
           // STATE — a fact about history: has an attempt on this factor been
@@ -480,7 +502,7 @@ export function gapRegisterRouter(pool: Pool): Router {
           let path: GapPath = 'viable';
           if (f.factor === 'actual_evidence_verified' && (await isActualEvidenceAllInadmissible())) {
             path = 'blocked';
-            requirement = STRUCTURAL_ACTUAL_REQUIREMENT(bm.name);
+            requirement = STRUCTURAL_ACTUAL_REQUIREMENT;
           } else if (state.state === 'refused') {
             // refused + viable: the source tried was rejected, but the path
             // is not closed — say what's needed AND that it's not the first
