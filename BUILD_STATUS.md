@@ -3182,3 +3182,195 @@ Sixteen runs, all locked.
 
 The three stale conventions in `confidenceModel` are gone. Nothing in that file
 decides anything by inspecting a string.
+
+---
+
+## LVRF 2.0 — scoped 30 August 2026
+
+Supersedes the 2.0 sketch of 25 August. That version assumed a demonstration
+instrument. LVRF is a Rule76 Studio running real engagements, and the roster
+changes accordingly.
+
+---
+
+## DEFECT, found while scoping: run 13's +10 is a conflated delta
+
+Two things changed in the same deploy. A committer was named, **and**
+`human_commit_of_record` started reading `value_outcomes.committed_by_person_id`
+instead of `engagements.sponsor_person_id`.
+
+Had only the commit happened, run 13 would still score 0 — the engagement's sponsor
+is still null. So the compare card reports `0 → 10` and a reader infers *someone
+committed*, when what actually happened is that someone committed **and the question
+changed**.
+
+**Nothing in run 13's payload records which model version scored it.** `compareRuns`
+joins two runs factor-by-factor and reports deltas. It cannot distinguish a change
+in the world from a change in the ruler.
+
+This was safe to do once, because no run had ever earned that factor. **Runs 13
+through 16 now have.** The next change to any factor's reading produces a genuinely
+false delta across sixteen locked, immutable runs, and nothing detects it.
+
+Versioned model weights are therefore not a 2.0 enhancement. They are the
+prerequisite, and every other item depends on them.
+
+---
+
+## The roster
+
+### 1. Model versioning — PREREQUISITE
+
+Every run records the model version that scored it. Weights and factor definitions
+become **data, not constants**. `compareRuns` refuses, or loudly flags, a
+comparison across versions.
+
+Without this, every subsequent item builds on scores that may not be comparable.
+
+### 2. The gap register, priced
+
+The confidence panel already says *the missing 55 points are a work list*. What is
+missing is what each gap **costs to close** and what it **buys in confidence**.
+
+Applying the absent-versus-simulated lesson, the register must distinguish three
+states, not two:
+
+```
+not yet obtained          effort will close it
+obtained and refused      the gate rejected it; a different source is needed
+structurally unobtainable  no effort on this path will ever close it
+```
+
+Curia's `actual_evidence_verified` is the third kind. Vendor-published evidence is
+refused by design, so work on that path buys nothing, ever. **A register showing it
+as merely missing would send someone down a road with no end.**
+
+### 3. Cohort roll-up, weakest link
+
+Composite confidence across accounts derived from the **weakest** contributor, never
+averaged. Averaging launders the gaps.
+
+*Unmeasured is not compliant* applies at cohort level too: one account at 0%
+coverage must not average into something respectable. Depends on item 1.
+
+### 4. Self-drift detection — NEW, and the strongest idea here
+
+LVRF measures whether other institutions' claims are evidenced. **It has never
+measured whether its own record is accurate.**
+
+Every record-versus-reality gap this month was found by a human looking:
+
+```
+the client bundle undeployed for twenty days
+five triggers declared and never applied
+a trigger count that reconciled by coincidence
+the offerings catalog that existed only on a laptop
+eight supersession sites, the eighth in the table holding the demo artifact
+a migration journal that claims 0013 is applied when the column is absent
+seven client types written from a fixture, not the server
+```
+
+All of them are mechanically checkable. A trigger list compared **by list, not
+count**. A migration journal compared to `information_schema`. Client types compared
+to server returns. `ops/` files compared to their deployed counterparts.
+
+Institutional health already carries a **Data Integrity** dimension, weight 10,
+currently fed only by walk events. Feeding drift detection into it closes the loop:
+**the instrument scores its own record by the standard it applies to everyone
+else's.**
+
+### 5. Deep Research inputs — governance already exists
+
+The schema already enforces this and nothing produces it:
+
+```
+evidence_ai_requires_query            ai_sourced requires query and tool
+evidence_ai_verify_requires_resolution  source_verified refused until the citation
+                                        resolves
+evidence_resolution_requires_human    resolution requires a named person
+lvrf_block_ai_actual                  AI-sourced may never support a measured actual
+```
+
+**Research produces candidate evidence; a person resolves each citation.** It does
+not reduce human effort — it redirects it from *finding* to *checking*.
+
+**Parsing is the dangerous part.** An extract from a filing is a **derivation**, and
+the system has no `derived` class — evidence is sourced or asserted. A parsed figure
+attributed to a 10-K *looks* sourced and is not, until someone resolves it.
+Parsed-and-unresolved is a third state, and conflating it with sourced would be the
+worst instance yet of the absent-versus-simulated failure.
+
+**OPEN: where does research run?** Compass OS's boundary already claims Deep
+Research as substrate — HB-0010's producer is *Compass*. LVRF building its own is
+the three-copies-diverge failure the Studios architecture exists to prevent. Decide
+before building.
+
+### 6. Draft-and-refuse — build first among the automations
+
+The system already knows why a score is low, and the notes name the missing
+condition precisely. It can draft **the request that would close each gap**: the
+message asking a named person to confirm a figure, the specific extract needed, who
+must attest.
+
+**The system knows what is missing better than the person does, because it computed
+it.** Drafting the ask is automation that never touches the score.
+
+This is the one that makes a refusal **actionable** rather than merely honest —
+which is the difference between an instrument and an obstacle.
+
+---
+
+## Further candidates, not yet committed
+
+**Provenance decay.** Evidence carries `captured_at` and nothing ages. The Curia
+case study reports January–June 2023 figures on a page live in 2026, and the system
+treats that evidence identically at capture and three years later. A metric with a
+stated `reporting_cadence` whose newest evidence predates it is **stale**, and
+confidence should say so. Nothing currently notices a number has gone off.
+
+**Constraint-derived documentation.** `CONFIDENCE_MODEL.md` and `HEALTH_MODEL.md`
+are hand-maintained descriptions of code — the authored-prose problem one level up.
+Weights, CHECK constraints and trigger messages could generate their own reference.
+Every drift found this month was a document disagreeing with the system.
+
+**Contradiction detection.** Two evidence rows can assert incompatible things — 180
+days and 214 days for the same metric — and nothing notices. Supersession handles
+the case where someone *knows* one replaced the other. It does not handle the case
+where nobody noticed.
+
+---
+
+## RULED OUT — automation that manufactures confidence
+
+The test for any automation: **does it reduce work, or does it manufacture
+confidence?** Anything that raises a score without a person behind it is the failure
+this system exists to prevent.
+
+Excluded on that basis: AI suggesting a data class, inferring an industry,
+proposing a confidence level, or drafting a commitment note someone signs without
+reading. Each looks like automation and is the model deciding something a person
+must own.
+
+Also out of 2.0: portfolio learning (meaningless with two institutions),
+authentication (**the trigger is a person needing to see a record, not a date**),
+multi-tenancy.
+
+---
+
+## Method, carried forward from this month
+
+**Make invalid states unrepresentable rather than guarded.** The forms' tri-state
+booleans and the nullable committer name both came from this, and both were better
+than the instruction that produced them.
+
+**Build against one call site before eleven.** The heartbeat work stayed clean only
+because HB-0006 was proven alone first.
+
+**Findings come from building, not from rosters.** The unreachable commit stage, the
+`[SIM]` wire format, and the conflated delta above were each found by trying to
+build the next thing and noticing the ground was not there. **Keep 2.0 short and
+discover the rest.**
+
+**Fix local parity first.** The migration tracker claims 0013 is applied and the
+column is absent, so `drizzle-kit migrate` will skip it forever. Local cannot reach
+states production is in daily. This is already costing verification coverage.
