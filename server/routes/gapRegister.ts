@@ -181,6 +181,22 @@ interface RawActualEvidenceDoor {
  * whether a refusal has actually happened yet is a separate question,
  * answered by findEvidenceRefusal. An empty set is not this case; see the
  * 'viable' default at the call site.
+ *
+ * FINDING — path: 'blocked' IS CURRENTLY UNREACHABLE FOR actual_evidence_verified,
+ * AND THAT IS CORRECT, NOT A DEFECT. For this to return true, inadmissible
+ * evidence would have to be successfully LINKED as an actual — and
+ * lvrf_block_ai_actual exists precisely to prevent that link from ever
+ * succeeding. The gate makes the state it guards against impossible to
+ * observe here. A refused attempt leaves no row at all (the transaction
+ * rolls back — see findEvidenceRefusal's comment), so every actual link that
+ * does exist already cleared the four doors, and `rows.every(...)` above can
+ * never be true today. This check is kept anyway as a defensive read of the
+ * doors themselves: it would start firing if the doors changed, or for an
+ * evidence kind inadmissible under some future rule not yet enforced at the
+ * gate. Until then, a refused attempt on actual_evidence_verified resolves as
+ * 'refused' + 'viable' — the source tried was rejected, but the path is not
+ * closed. See the requirement-building code below for how that combination
+ * is surfaced.
  */
 async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Promise<boolean> {
   const { rows } = await pool.query<RawActualEvidenceDoor>(
@@ -200,6 +216,15 @@ const STRUCTURAL_ACTUAL_REQUIREMENT = (metricName: string): string =>
   "AMENDMENT-005 Article I (AI-sourced, from an AI-assisted assessment, simulated, or vendor-published). " +
   'No amount of further attestation or verification on these items closes this — the actual must come ' +
   "from a different source: an export from the customer's own system of record.";
+
+// Appended to the base requirement when state is 'refused' and path is
+// 'viable' — a reader should not have to join requirement and
+// refusal_message to learn the obvious source was already tried. The
+// refusal_message field carries the verbatim reason; this only points at it,
+// so the two never drift out of sync.
+const ALREADY_REFUSED_SUFFIX =
+  ' An earlier attempt to satisfy this was already refused — see refusal_message for why — so the next attempt ' +
+  'needs to address that reason, not repeat it.';
 
 function buildRequirement(factor: string, gap: string, metricName: string): string {
   switch (factor) {
@@ -454,6 +479,12 @@ export function gapRegisterRouter(pool: Pool): Router {
           if (f.factor === 'actual_evidence_verified' && (await isActualEvidenceAllInadmissible())) {
             path = 'blocked';
             requirement = STRUCTURAL_ACTUAL_REQUIREMENT(bm.name);
+          } else if (state.state === 'refused') {
+            // refused + viable: the source tried was rejected, but the path
+            // is not closed — say what's needed AND that it's not the first
+            // attempt, so the reader doesn't have to join two fields to
+            // learn the obvious source already failed.
+            requirement += ALREADY_REFUSED_SUFFIX;
           }
 
           const resolved: ResolvedGap = { ...state, path };
