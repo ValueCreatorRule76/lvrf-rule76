@@ -6,6 +6,7 @@ import { Gate } from './Gate';
 import { MeasurementRow } from './MeasurementRow';
 import { EvidenceCard } from './EvidenceCard';
 import { AddEvidenceCard } from './AddEvidenceCard';
+import { GapListCard } from './GapListCard';
 import { HeartbeatCard } from './HeartbeatCard';
 import { HealthCard } from './HealthCard';
 import { FindingsCard } from './FindingsCard';
@@ -42,6 +43,7 @@ export function Workbench({ run }: { run: Run }) {
             <MeasurementRow run={run} />
             <EvidenceCard run={run} />
             <AddEvidenceCard run={run} />
+            <GapListCard run={run} />
             <HeartbeatCard run={run} />
             <HealthCard run={run} />
             <FindingsCard run={run} />
