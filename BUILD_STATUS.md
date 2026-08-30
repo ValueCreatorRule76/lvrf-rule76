@@ -3374,3 +3374,126 @@ discover the rest.**
 **Fix local parity first.** The migration tracker claims 0013 is applied and the
 column is absent, so `drizzle-kit migrate` will skip it forever. Local cannot reach
 states production is in daily. This is already costing verification coverage.
+
+---
+
+## 2.0 item 1 — model versioning — closed 30 August 2026
+
+The defect: `human_commit_of_record` changed what it reads in the same deploy as a
+commit being recorded. Run 13 shows that factor going 0 → 10, and a reader infers
+*someone committed*. What happened is that someone committed **and the question
+changed**. Nothing recorded which model scored the run, and `compareRuns` could not
+distinguish a change in the world from a change in the ruler.
+
+### TWO IDENTIFIERS, NOT ONE
+
+**`MODEL_VERSION = '1.0.0'`** — a declared semantic string. For people. Bumped
+deliberately.
+
+**`MODEL_FINGERPRINT`** — `sha256Hex` truncated to 12 chars, computed at module load
+over the model's own constants: `CONFIDENCE_FACTOR_WEIGHTS`,
+`CONFIDENCE_FACTOR_QUESTIONS`, `CONFIDENCE_BANDS`, `ATTESTATION_CREDIT`. Currently
+`d4cf8f31472a`.
+
+Why both: **a hand-maintained version string is a convention**, and this codebase
+has now found five conventions that were not constraints. A fingerprint cannot be
+forgotten. But a fingerprint is not readable, so a human needs the declared version
+too.
+
+**If they ever disagree — same declared version, different fingerprint — THAT IS THE
+FINDING.** Someone changed a constant without amending. `ATTESTATION_CREDIT`'s own
+comment already said changing it *"requires an amendment"*; the fingerprint is what
+makes that detectable rather than merely stated.
+
+The fingerprint covers the **questions** as well as the weights. Changing what a
+factor asks changes what a score means at identical weight — which is exactly what
+happened on 30 August.
+
+### THE LIMITATION, stated rather than glossed
+
+The fingerprint covers the model's constants. **It does not cover the derivation** —
+which column a caller reads to populate an input.
+
+The 30 August change altered `produceRun`'s derivation *and* one question string.
+The question change would now be caught. **A pure derivation change would not.**
+
+A version that people believe covers derivation changes, when it only covers
+constants, is worse than none — it manufactures confidence in exactly the way this
+system refuses everywhere else. It is a partial detector, and knowing its edge
+matters more than the coverage it gives.
+
+### No back-fill
+
+Existing runs carry neither field, and must not be given one. **A run given a
+version it never had is a falsified snapshot.** Client types mark both optional for
+the same reason: sixteen production runs predate them.
+
+`value_runs.version` was not repurposed — that is the governance row-version.
+Both identifiers ride in `payload.confidence`, alongside the `method` string that
+was already stored per-run. **No migration was needed.**
+
+### compareRuns qualifies rather than refuses
+
+A top-level `model` block: versions, fingerprints, `comparable`, and a note.
+
+```
+both present, equal      comparable true   "Both runs were scored by the same model."
+both present, different  comparable FALSE  names both fingerprints; if the declared
+                                           VERSIONS match while fingerprints differ,
+                                           says so explicitly — a constant changed
+                                           without amendment
+either absent            comparable FALSE  names which run predates versioning
+```
+
+**An unknown model is not the same as a matching one.** Defaulting the absent case
+to comparable would be the plausible-default failure this system refuses.
+
+**It does not refuse the comparison.** The diff is still useful and a reader may know
+perfectly well what changed. A 409 would make the endpoint useless for the sixteen
+runs that already exist. Report the fact, attach the qualification, let the reader
+judge. No interpretation, no guessing which factors a model change would have
+affected.
+
+### Three weights on the card, deliberately
+
+Rendered **above** the factor table — a reader must know whether the ruler moved
+*before* reading the deltas.
+
+```
+same model        one quiet muted line. This is the normal case and must not shout;
+                  a line that draws the eye every time becomes noise the reader
+                  learns to skip, which would defeat it when the ink case fires
+model unknown     the gold callout — a limitation of the record, not a fault
+different models  THE INK BLOCK, same treatment as a governance refusal. Every
+                  number below it is suspect in a specific way, and that earns ink
+```
+
+### Verified on production
+
+```
+run 17  first run carrying 1.0.0 / d4cf8f31472a
+run 18  second run under the same model
+
+run 16 → 17   MODEL UNKNOWN, gold callout, names the run that predates versioning
+run 17 → 18   "Both runs were scored by the same model. Fingerprint d4cf8f31472a."
+```
+
+The fingerprint computed identically on the Mac and on production — deterministic
+across machines. Parity held at 30.0/low and 80.0/high; the fingerprint does not
+touch scoring.
+
+**Case 2 cannot be demonstrated without changing a weight**, which was not done to
+exercise a feature. It fires the first time a constant moves, and that is exactly
+when it matters.
+
+### Side effect worth noting
+
+Run 17's findings dropped from three to one. **F2 — *committed by a synthetic
+sponsor* — no longer applies**, because a real person committed. The findings model
+reacted to the commit endpoint without anyone touching it.
+
+### Remaining stale name
+
+The confidence panel label still reads *Named human sponsor of record* while its
+note reads *Committed by...*. The question text was updated; the label above it was
+not. Smallest of the family and the last one left in that file.
