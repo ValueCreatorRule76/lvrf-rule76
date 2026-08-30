@@ -33,7 +33,24 @@ import {
 class GapRegisterError extends Error {}
 
 type AskType = 'definition' | 'document' | 'person';
-type GapState = 'open' | 'refused' | 'structurally_unobtainable';
+
+/**
+ * STATE AND PATH ARE INDEPENDENT AXES — they used to be one three-value field
+ * and that was wrong. 'structurally_unobtainable' collapsed two different
+ * facts into one: whether an attempt was made and rejected (a fact about
+ * HISTORY), and whether the current source could ever satisfy the factor (a
+ * fact about the PRESENT). A refusal is often the evidence that a path is
+ * blocked, but the two do not imply each other — someone can be refused on a
+ * source that a corrected attempt could still fix (refused + viable), and
+ * nobody may have tried yet against a source that was never going to qualify
+ * (open + blocked). Splitting them makes all four combinations representable
+ * and, critically, lets refused+blocked say the one thing the old scheme
+ * could not: stop trying this source. "Try again differently" and "this will
+ * never work" are different instructions, and a register that cannot tell
+ * them apart sends someone down a road with no end.
+ */
+type GapState = 'open' | 'refused';
+type GapPath = 'viable' | 'blocked';
 
 const ASK_TYPE_BY_GAP: Record<string, AskType> = {
   no_notes: 'definition',
@@ -97,6 +114,13 @@ function alwaysOpen(): { state: GapState; refusalMessage: string | null; refused
   return { state: 'open', refusalMessage: null, refusedAt: null };
 }
 
+interface ResolvedGap {
+  state: GapState;
+  path: GapPath;
+  refusalMessage: string | null;
+  refusedAt: string | null;
+}
+
 interface RefusalRow {
   message: string;
   refused_at: Date;
@@ -153,8 +177,10 @@ interface RawActualEvidenceDoor {
  * assessment_id join the trigger uses. If evidence exists and every row
  * fails at least one door, no amount of further attestation or
  * source-verification work on THESE ROWS closes actual_evidence_verified —
- * a genuinely different source is required. An empty set is not this case;
- * see the 'open' comment at the call site.
+ * a genuinely different source is required. This decides PATH, not state:
+ * whether a refusal has actually happened yet is a separate question,
+ * answered by findEvidenceRefusal. An empty set is not this case; see the
+ * 'viable' default at the call site.
  */
 async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Promise<boolean> {
   const { rows } = await pool.query<RawActualEvidenceDoor>(
@@ -165,7 +191,7 @@ async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Pro
       WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual'`,
     [outcomeId],
   );
-  if (rows.length === 0) return false; // nobody has tried — that's 'open', not unobtainable.
+  if (rows.length === 0) return false; // nobody has attached anything — path is 'viable' by default.
   return rows.every((r) => r.ai_sourced || Boolean(r.ai_assisted) || r.simulated || r.kind === 'vendor_publication');
 }
 
@@ -392,30 +418,45 @@ export function gapRegisterRouter(pool: Pool): Router {
           }
 
           let requirement = buildRequirement(f.factor, gap, bm.name);
-          let resolved: { state: GapState; refusalMessage: string | null; refusedAt: string | null };
+          let state: { state: GapState; refusalMessage: string | null; refusedAt: string | null };
 
-          if (f.factor === 'actual_evidence_verified' && (await isActualEvidenceAllInadmissible())) {
-            requirement = STRUCTURAL_ACTUAL_REQUIREMENT(bm.name);
-            resolved = { state: 'structurally_unobtainable', refusalMessage: null, refusedAt: null };
-          } else if (f.factor === 'baseline_evidence_verified' || f.factor === 'actual_evidence_verified') {
+          // STATE — a fact about history: has an attempt on this factor been
+          // made and rejected? Independent of whether the source could ever
+          // work; see the GapPath comment above the type definitions.
+          if (f.factor === 'baseline_evidence_verified' || f.factor === 'actual_evidence_verified') {
             const supports = f.factor === 'baseline_evidence_verified' ? 'baseline' : 'actual';
             if (await isSingleOutcomeAtInstitution()) {
               const refusal = await findEvidenceRefusal(pool, vo.institution_id, supports);
-              resolved = refusal
+              state = refusal
                 ? { state: 'refused', refusalMessage: refusal.message, refusedAt: refusal.refused_at.toISOString() }
                 : alwaysOpen();
             } else {
               // More than one live outcome at this institution — a
               // refusal on this endpoint cannot be attributed to THIS
               // outcome without guessing. See findEvidenceRefusal's comment.
-              resolved = alwaysOpen();
+              state = alwaysOpen();
             }
           } else {
             // metric_definition_confirmed's three gaps, both
             // impact_basis_evidenced gaps, and both person asks — see the
             // "WHY REFUSED IS OPEN" comment above this router.
-            resolved = alwaysOpen();
+            state = alwaysOpen();
           }
+
+          // PATH — a fact about the present: would further effort on the
+          // CURRENT source ever close this factor? Only actual_evidence_verified
+          // has a live derivation for this today (lvrf_block_ai_actual's four
+          // doors, checked by isActualEvidenceAllInadmissible). Every other
+          // factor's only source is a person or a definition, neither of
+          // which this codebase can yet say is permanently disqualified, so
+          // they default to 'viable'.
+          let path: GapPath = 'viable';
+          if (f.factor === 'actual_evidence_verified' && (await isActualEvidenceAllInadmissible())) {
+            path = 'blocked';
+            requirement = STRUCTURAL_ACTUAL_REQUIREMENT(bm.name);
+          }
+
+          const resolved: ResolvedGap = { ...state, path };
 
           const personsOnRecordPromise =
             askType === 'person'
@@ -439,6 +480,7 @@ export function gapRegisterRouter(pool: Pool): Router {
             requirement,
             earns: Math.round((f.weight - f.earned) * 10) / 10,
             state: resolved.state,
+            path: resolved.path,
             refusal_message: resolved.refusalMessage,
             refused_at: resolved.refusedAt,
             ...(personsOnRecord !== null
