@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -83,11 +84,16 @@ export function lockRunRouter(pool: Pool): Router {
 
       const { rows: [run] } = await client.query<{
         id: string;
+        tenant_id: string;
+        engagement_id: string;
+        institution_id: string;
         locked_at: Date | null;
         locked_by_full_name: string | null;
       }>(
-        `SELECT vr.id, vr.locked_at, p.full_name AS locked_by_full_name
+        `SELECT vr.id, vr.tenant_id, vr.engagement_id, e.institution_id,
+                vr.locked_at, p.full_name AS locked_by_full_name
            FROM value_runs vr
+           JOIN engagements e ON e.id = vr.engagement_id AND e.deleted_at IS NULL
            LEFT JOIN persons p ON p.id = vr.locked_by_person_id
           WHERE vr.id = $1 AND vr.deleted_at IS NULL`,
         [runId],
@@ -136,6 +142,28 @@ export function lockRunRouter(pool: Pool): Router {
         });
         return;
       }
+
+      // HB-0006 Object Locked. Same transaction as the UPDATE above: if this
+      // throws, the whole transaction rolls back, the lock included. That is
+      // correct — a lock with no heartbeat recording it is a governed action
+      // with no record of it, which is worse than no lock at all.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0006',
+        tenantId: run.tenant_id,
+        institutionId: run.institution_id,
+        engagementId: run.engagement_id,
+        valueRunId: runId,
+        subjectTable: 'value_runs',
+        subjectId: runId,
+        actorPersonId,
+        // A run being locked is the governance mechanism working, not a
+        // failure of anything — 'healthy', not a state carrying severity.
+        healthState: 'healthy',
+        payload: {
+          lock_reason: lockReason,
+          locked_value_run_id: runId,
+        },
+      });
 
       res.status(200).json({
         run_id: runId,
