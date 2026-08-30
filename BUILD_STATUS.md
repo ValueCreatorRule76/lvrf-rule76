@@ -2567,3 +2567,198 @@ run's stored `payload_hash`.
 2. `render_record.py` reading from the API rather than `out/spine_run_*.json`.
    That is a change to a Python script on a Mac, not to the service, and bytes only
    matter when someone asks for a PDF
+
+---
+
+## Topbar wired, and the heartbeat recon — 30 August 2026
+
+### GovernedAction, and two buttons that were misstating things
+
+`GovernedForm`'s result block was extracted as `ResultBlock` and is now shared by a
+new `GovernedAction` — for a governed write with **no input to collect**, where
+everything comes from context the caller already has. The four treatments are not
+reimplemented anywhere.
+
+Result placement is **inverted** from GovernedForm: below the button rather than
+above, because the Topbar sits at the top of a long page and there is nothing to
+scroll past. Noted in a comment so the divergence reads as deliberate.
+
+**Two of three Topbar buttons were saying false things.**
+
+*Render record* said "not yet implemented" and had an endpoint. Now wired, and it
+refuses **locally** before posting when the run is unlocked or its payload has no
+`valueOutcomeId` — the endpoint would 409 or 422, and saying so up front beats a
+round trip.
+
+*Add evidence* also said "not yet implemented" and that was false: evidence entry
+exists as card `01A` on the same page. It is not unbuilt, it is **unwired**. Title
+corrected. Scrolling to the card would need an anchor id on a file outside the
+change's scope, so it stays disabled with honest wording.
+
+*Share with customer* unchanged — gate-blocked is a third state and it was already
+correct.
+
+Three buttons now express three different things: **live, gate-blocked, and
+built-but-unwired.**
+
+### Verified on production — deterministic hashing
+
+Record document v2 created through the UI on run 7, where v1 had been created by
+curl forty minutes earlier:
+
+```
+ document_version |       hash       |          rendered_at
+                1 | 8b47c1e065398334 | 2026-08-30 01:08:06.911187+00
+                2 | 8b47c1e065398334 | 2026-08-30 01:50:40.322239+00
+```
+
+**Identical hashes, two call paths, forty minutes apart.** That is the property
+that makes `content_hash` worth storing: a recipient can check a copy against it,
+and two documents claiming the same content provably have it.
+
+Run 1 degrades correctly on both fronts — *Render record* disabled with the reason,
+card `01A` reading UNAVAILABLE ON THIS RUN.
+
+### FINDING: local cannot reach a state production is in daily
+
+The UI success path could not be exercised locally. Local holds **14 live outcomes
+per engagement**; production holds one. `produceRun.ts` refuses an engagement with
+more than one outcome, so no fresh locked run carrying `valueOutcomeId` can be
+produced locally at all.
+
+The local/production divergence is no longer only a data-freshness caveat — **it
+blocks a class of testing.** Some paths are only exercisable on production.
+
+---
+
+## Heartbeat recon — runtime emission scoped, not built
+
+Every heartbeat event still carries the identical 3 August timestamp. Institutional
+health reports UNMEASURED at 0% coverage on every Curia run. A third of the
+instrument is inert, and this is what it would take to light it.
+
+### The register splits three ways
+
+**ELEVEN are event-driven and their endpoints already exist.** Every one runs in a
+transaction with an actor. These are LVRF's to emit:
+
+```
+HB-0004  Canonical Object Created      per creation
+HB-0005  Canonical Object Updated      per modification
+HB-0006  Object Locked                 per lock        -> lockRun
+HB-0008  Snapshot Created              per snapshot    -> produceRun
+HB-0009  Evidence Attached             per attachment  -> outcomeEvidence
+HB-0013  Value Baseline Established    per baseline    -> valueOutcomes
+HB-0014  Value Target Committed        per commitment
+HB-0015  Value Realized                per measurement -> outcomeWalk /measure
+HB-0016  Value Verified                per verification-> outcomeWalk /verify
+HB-0017  Realization Record Published  per publication -> recordDocuments
+HB-0018  Capability Change Evidenced   per assessment  -> institutionInputs
+```
+
+**THREE are infrastructure LVRF does not own:**
+
+```
+HB-0001  System Initialization   Runtime               every startup
+HB-0002  Authentication          Identity Provider     every login
+HB-0003  Authorization           Authorization Engine  every request
+```
+
+HB-0002 and HB-0003 **are the entire Security dimension, weight 10.** It is
+permanently unmeasured until authentication exists — which is the same trigger
+named below.
+
+**FOUR are Compass OS:**
+
+```
+HB-0007  Governance Override            Governance Engine  as required
+HB-0010  Constitution Reviewed          Compass            before every governed change
+HB-0011  Heartbeat Health Calculated    Heartbeat Engine   scheduled and event-driven
+HB-0012  Institutional Health Published Heartbeat Engine   after every recalculation
+```
+
+HB-0010's producer is literally *Compass*. HB-0011 and HB-0012 are the Heartbeat
+Engine — the thing that computes and publishes health. LVRF computes health today
+via `computeHealth()` but emits no event saying it did.
+
+**So: emit the eleven, declare the seven with their producers.** Health stops being
+a photograph without pretending the whole register is live.
+
+### What an emitter needs
+
+`heartbeat_events` requires: `heartbeat_id`, `tenant_id`, `event_type`, `producer`,
+`severity`, `health_state`, `constitutional_authority`, `content_hash`,
+`subject_table`, `subject_id`. Nullable: `institution_id`, `engagement_id`,
+`value_stage`, `learning_stage`, `actor_person_id`, `value_run_id`.
+
+`event_type`, `producer`, `severity`, `category` and `health_weight` come from the
+**register row**, not the call site — `walkSpine.ts` loads it via
+`loadHeartbeatRegister()` into a Map.
+
+`content_hash` is `sha256Hex(body)` over a structured object — the same
+`stableStringify` used for payload hashes, cited to §12 as *cryptographically
+hashed, tamper-evident*.
+
+### THE BOUNDARY THAT MUST NOT BE CROSSED
+
+`buildHeartbeatPlan` in `heartbeatLedger.ts` is deliberately **the single
+implementation** of the ten-event walk sequence. Its own comment:
+
+> *A second, hand-synchronised copy of this sequence is exactly the shape of the
+> ANY/EVERY divergence db/CONFIDENCE_MODEL.md records: two implementations of one
+> rule, drifting silently, with a passing test in between.*
+
+`createPlanCursor` throws on any plan/emit mismatch — a loud crash instead of a
+silently wrong health score.
+
+**Runtime emission is per-event, not a planned sequence.** It is a different
+concern and must not become that second copy. A shared low-level emitter is fine;
+a second sequence definition is not. State this in whatever gets built.
+
+### Scope, when it is built
+
+A shared emitter plus eleven call sites. It touches **every write endpoint**, and a
+mistake corrupts the health register rather than failing visibly. Larger than
+anything attempted in one sitting so far, and worth its own session.
+
+---
+
+## The trigger for authentication, named precisely
+
+Auth was ruled out of every tier, correctly, for a reference implementation. The
+trigger for revisiting it is not a date and not "if hired."
+
+**It is the first time someone who is not the author needs to see a record** — a
+services consultant, or a customer contact confirming their own figure.
+
+`value_outcomes_verified_requires_human` demands a real, non-simulated person **at
+the institution**. Today that person cannot log in. So the constraint the whole
+system rests on has no route to being satisfied by the person it is meant to name.
+
+That is the last unwired end of the governance model, and it is also what would
+light HB-0002 and HB-0003 and the Security dimension with them.
+
+---
+
+## 2.0, scoped for a platform
+
+LVRF is a Rule76 Studio running real engagements, not a demonstration instrument.
+That changes what belongs in 2.0:
+
+- **Cohort roll-up**, with composite confidence from the **weakest link**, never
+  averaged. Averaging launders the gaps. Assumes health means something, which is
+  why runtime emission comes first
+- **The earned pack** — brings item 4's `capability_metric_links` edge back, but
+  designed against `lifecycle_status` (`proposed` / `ratified`) rather than a
+  duplicate `promoted_at`
+- **Versioned model weights.** A nicety at one engagement; necessary the moment two
+  are scored months apart, because tuning a weight silently makes every prior score
+  incomparable
+- **The priced gap register** — what each missing input costs to obtain and what it
+  buys in confidence. The commercial surface
+
+Not on any roster and eventually unavoidable for a platform: authentication,
+multi-tenancy, something other than basic_auth.
+
+**Order: runtime heartbeat emission, then 2.0.** Building platform features on an
+inert third of the instrument would be composing from a photograph.
