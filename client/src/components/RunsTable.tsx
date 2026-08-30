@@ -26,11 +26,25 @@ function ProvenanceCell({ sourceFixture }: { sourceFixture: string | null }) {
   return <Badge tone="neutral">{sourceFixture}</Badge>;
 }
 
-function HealthBandCell({ healthBand }: { healthBand: string | null }) {
+function HealthBandCell({
+  healthBand,
+  healthCoveragePct,
+}: {
+  healthBand: string | null;
+  healthCoveragePct: number | null;
+}) {
   if (healthBand === null) {
     return <Badge tone="neutral">Not measured</Badge>;
   }
-  return <Badge tone={HEALTH_TONE[healthBand] ?? 'neutral'}>{healthBand}</Badge>;
+  // Coverage IN the badge, not beside it — same wording as HealthCard.tsx's
+  // own health badge. A band with no coverage figure reads as "healthy" when
+  // the honest reading of e.g. 25% coverage is a quarter of the dimension
+  // weight measured and scored well, not the whole picture.
+  return (
+    <Badge tone={HEALTH_TONE[healthBand] ?? 'neutral'}>
+      {healthBand} · {healthCoveragePct}%
+    </Badge>
+  );
 }
 
 // run_number repeats across institutions (it's scoped to the engagement, not
@@ -83,7 +97,10 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                   </Badge>
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">
-                  <HealthBandCell healthBand={r.health_band} />
+                  <HealthBandCell
+                    healthBand={r.health_band}
+                    healthCoveragePct={r.health_coverage_pct}
+                  />
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">{r.walked_at}</td>
               </tr>
