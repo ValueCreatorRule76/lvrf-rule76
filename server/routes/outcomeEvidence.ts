@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -203,9 +204,19 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
 
       // 404, not 422: a missing, soft-deleted or superseded outcome is not
       // something this call can attach evidence to at all.
-      const { rows: [outcome] } = await client.query<{ id: string; institution_id: string }>(
-        `SELECT id, institution_id FROM value_outcomes
-          WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+      // Widened to carry engagement_id and (via institutions) tenant_id —
+      // both needed to scope HB-0009 below. heartbeat_events.tenant_id is
+      // NOT NULL, unlike engagement_id, so it cannot be left unresolved.
+      const { rows: [outcome] } = await client.query<{
+        id: string;
+        institution_id: string;
+        engagement_id: string;
+        tenant_id: string;
+      }>(
+        `SELECT vo.id, vo.institution_id, vo.engagement_id, i.tenant_id
+           FROM value_outcomes vo
+           JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+          WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
       if (!outcome) {
@@ -287,6 +298,24 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
          VALUES ($1, $2, $3)`,
         [outcomeId, evidence.id, supports],
       );
+
+      // HB-0009 Evidence Attached — after BOTH inserts above: this records
+      // evidence ATTACHED to an outcome, not evidence merely created. Same
+      // transaction; a throw here rolls both inserts back with it.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0009',
+        tenantId: outcome.tenant_id,
+        institutionId: outcome.institution_id,
+        engagementId: outcome.engagement_id,
+        subjectTable: 'evidence',
+        subjectId: evidence.id,
+        actorPersonId,
+        healthState: 'healthy',
+        payload: {
+          supports,
+          kind,
+        },
+      });
 
       res.status(201).json({
         evidence_id: evidence.id,

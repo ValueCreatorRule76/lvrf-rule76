@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -354,6 +355,24 @@ export function valueOutcomesRouter(pool: Pool): Router {
           baselineValue, baselineMeasuredAt, targetValue,
         ],
       );
+
+      // HB-0013 Value Baseline Established. Same transaction as the insert
+      // above; a throw here rolls the baseline back with it.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0013',
+        tenantId: institution.tenant_id,
+        institutionId,
+        engagementId: engagementIdResolved,
+        subjectTable: 'value_outcomes',
+        subjectId: valueOutcome.id,
+        actorPersonId,
+        healthState: 'healthy',
+        payload: {
+          baseline_value: baselineValue,
+          metric_name: metricName,
+          metric_unit: metricUnit,
+        },
+      });
 
       res.status(201).json({
         engagement_id: engagementIdResolved,

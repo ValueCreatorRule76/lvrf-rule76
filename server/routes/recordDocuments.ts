@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { sha256Hex } from '../spine/hash.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * Two routers, not one: the POST is run-scoped
@@ -176,6 +177,26 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
           actorPersonId,
         ],
       );
+
+      // HB-0017 Realization Record Published. Same transaction as the
+      // insert above; a throw here rolls the document back with it.
+      // institutionId is left null: value_runs carries no institution_id
+      // column, and resolving one would mean joining to engagements, which
+      // this handler does not already do.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0017',
+        tenantId: run.tenant_id,
+        engagementId: run.engagement_id,
+        valueRunId: run.id,
+        subjectTable: 'record_documents',
+        subjectId: recordDocument.id,
+        actorPersonId,
+        healthState: 'healthy',
+        payload: {
+          document_version: recordDocument.document_version,
+          disclosure: recordDocument.disclosure,
+        },
+      });
 
       res.status(201).json({
         record_document_id: recordDocument.id,

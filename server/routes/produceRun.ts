@@ -12,6 +12,7 @@ import { computeDelta, type DeltaInput } from '../spine/deltaEngine.js';
 import { computeHealth, type HealthEventInput } from '../spine/healthModel.js';
 import { computeFindings, type Finding } from '../spine/findingsModel.js';
 import { sha256Hex } from '../spine/hash.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -545,6 +546,25 @@ export function produceRunRouter(pool: Pool): Router {
           health.coverage_pct, sourceFixture, payloadHash, runPayload, actorPersonId,
         ],
       );
+
+      // HB-0008 Snapshot Created. Same transaction as the insert above — if
+      // this throws, the whole transaction rolls back, the run included. A
+      // governed write with no record of it is worse than no write.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0008',
+        tenantId: engagement.tenant_id,
+        institutionId: engagement.institution_id,
+        engagementId,
+        valueRunId: valueRun.id,
+        subjectTable: 'value_runs',
+        subjectId: valueRun.id,
+        actorPersonId,
+        healthState: 'healthy',
+        payload: {
+          run_number: runNumber,
+          source_fixture: sourceFixture,
+        },
+      });
 
       res.status(201).json({
         value_run_id: valueRun.id,

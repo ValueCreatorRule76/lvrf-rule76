@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -172,8 +173,11 @@ export function institutionInputsRouter(pool: Pool): Router {
         throw new Error('x-actor-person-id missing on a request past actorContext');
       }
 
-      const { rows: [institution] } = await client.query<{ id: string }>(
-        'SELECT id FROM institutions WHERE id = $1 AND deleted_at IS NULL',
+      // Widened to include tenant_id — needed to scope HB-0018 below.
+      // heartbeat_events.tenant_id is NOT NULL, unlike engagement_id, which
+      // this handler has no notion of at all and leaves null.
+      const { rows: [institution] } = await client.query<{ id: string; tenant_id: string }>(
+        'SELECT id, tenant_id FROM institutions WHERE id = $1 AND deleted_at IS NULL',
         [institutionId],
       );
       if (!institution) {
@@ -259,6 +263,24 @@ export function institutionInputsRouter(pool: Pool): Router {
           ],
         );
         assessmentIds.push(assessment.id);
+
+        // HB-0018 Capability Change Evidenced — per assessment, inside this
+        // loop: a payload creating three assessments fires three events, not
+        // one for the request. Same transaction as the insert just above.
+        await emitHeartbeat(client, {
+          heartbeatId: 'HB-0018',
+          tenantId: institution.tenant_id,
+          institutionId,
+          subjectTable: 'assessments',
+          subjectId: assessment.id,
+          actorPersonId,
+          healthState: 'healthy',
+          payload: {
+            capability_name: capabilityName,
+            score,
+            ai_assisted: aiAssisted,
+          },
+        });
       }
 
       res.status(201).json({
