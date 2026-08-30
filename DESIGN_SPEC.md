@@ -47,6 +47,137 @@ Read those before making a decision they might govern.
 
 ---
 
+
+---
+
+## 0b. Working context — read this before doing anything
+
+§0 tells you what to read. This tells you how work actually happens on this
+project. It exists because sessions kept re-deriving it: one searched the entire
+filesystem for a file whose path is below, another asked whether pushing to `main`
+was acceptable.
+
+### Where things are
+
+```
+Repo (Mac)        ~/Development/Rule76/lvrf-rule76
+Production box    brad@72.60.69.221   /srv/lvrf   host srv1862778
+GitHub            github.com:ValueCreatorRule76/lvrf-rule76
+Live site         https://lvrf-rule76.com   (Caddy basic_auth)
+```
+
+**A different VPS, `srv1792997`, runs CVAF.** Same `brad` user, IP one digit
+different. Commands intended for one have landed on the other more than once. **Read
+the shell prompt before every paste.**
+
+### You cannot reach the VPS
+
+Claude Code runs on the Mac. Every deploy and every production query is run **by
+hand over SSH** by Brad, who pastes the output back.
+
+**Give commands to run. Never report that you have verified something on
+production.** Sessions have claimed production verification they could not have
+performed; the correct behaviour is to say which claims you can attest to and which
+you cannot.
+
+### The loop
+
+```
+Claude Code edits and commits on the Mac
+Brad pushes
+Brad, on the box:  cd /srv/lvrf && ./scripts/lvrf-deploy.sh
+```
+
+**Push straight to `main`.** One developer, one branch, and the deploy script pulls
+from `main`. A PR to yourself adds a step and no review. Do not ask.
+
+**A push that isn't deployed is not a fix**, and a commit that isn't pushed isn't a
+change. Both have cost real time. The deploy script's HEAD comparison catches the
+second — if `old HEAD` and `new HEAD` match, nothing was pulled.
+
+### Commands that differ by machine
+
+```
+Mac        psql -d lvrf                     works — OS user
+Box        sudo -u postgres psql -d lvrf    required — there is no brad role
+```
+
+`psql -d lvrf` on the box fails with `role "brad" does not exist`, which reads like
+a configuration fault and is actually being on the wrong machine.
+
+```
+Deploy      cd /srv/lvrf && ./scripts/lvrf-deploy.sh
+Migrate     npx drizzle-kit migrate            (from /srv/lvrf)
+Hardening   sudo -u postgres psql -d lvrf -f db/hardening.sql
+Backup      sudo /usr/local/bin/lvrf-backup.sh
+```
+
+**Backup before any schema change.** Order is always: backup → migrate → hardening
+→ test.
+
+### The component library — do not invent a second one
+
+Any new UI uses these. A session that builds its own form language creates a second
+visual system nobody maintains.
+
+```
+GovernedForm     the form primitive: provenance block first, four result
+                 treatments, actor gating, disabled fieldset
+GovernedAction   a governed write with no input to collect
+ResultBlock      the four result states, shared by both
+Card, Badge      the container idiom, seven badge tones
+FOCUS_RING       the shared focus treatment, gold on ink
+ActorContext     useActor(); session-scoped, React state only
+postGoverned     the only write helper; returns a four-state union
+```
+
+**Four result states, four treatments.** `refused` (422) and `conflict` (409) get
+the ink block with the server's message **verbatim**. `error` is muted and
+deliberately quieter. **A governance refusal is the system working; a 500 is the
+system failing.** Rendering both the same undoes the argument the database enforces.
+
+**Ink is reserved for refusals and conflicts.** Preconditions use the gold
+left-border callout.
+
+### Local and production are not the same, permanently
+
+Local carries seed data, `customer_b` fixtures and test rows; production was rebuilt
+from migrations. Governance forbids hard deletes, so local junk persists.
+
+**Local has also been found several migrations behind while the journal claimed
+otherwise** — `drizzle-kit migrate` skips a migration it believes is applied, so the
+drift is permanent until someone checks `information_schema` directly. Resolved on
+30 August; check parity before attributing a failure to new code.
+
+Some paths are **only testable on production** — local has 14 outcomes per
+engagement where production has one, so `produceRun`'s single-outcome guard blocks
+locally.
+
+> A clean local render proves nothing about production. Verify against production or
+> say that you didn't.
+
+### How to work here
+
+**Report what you cannot verify.** Sessions that flagged "I have no record of
+connecting to production" were right to, every time. A claim you can check against
+your own work is different from one relayed to you.
+
+**Stop when a spec conflicts with itself.** More than one instruction has been
+contradictory — a rename that broke a file marked do-not-touch, a three-state design
+that should have been two axes. **Flagging beat guessing every time.**
+
+**Read the code before writing to it.** Confirm a field exists before rendering it;
+confirm a column exists before selecting it. Types written from a description rather
+than from the server is the defect this client produced seven times.
+
+**A large diff for a small change needs proof, not explanation.** A full-file
+reorder defeats `git diff`. Sort both versions and compare — thirty seconds converts
+a reasoned claim into a checked one.
+
+**Never fabricate a value to satisfy a schema.** Null, an explicit absence state, or
+a refusal. Never a plausible default — and a default in a shared interface is an
+assertion made on behalf of every caller.
+
 ## 1. Mission and premise
 
 LVRF records what a learning investment was expected to change, what it actually
