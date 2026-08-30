@@ -96,20 +96,6 @@ function toIso(v: Date | null): string | null {
   return v === null ? null : v.toISOString();
 }
 
-/**
- * confidenceModel.ts's isSynthetic() still gates on a '[SIM]' name-prefix
- * convention, not the real `persons.simulated` column added since — a
- * documented weakness (0003) in that file, which this route does not touch.
- * A live committer/verifier/attester is bridged through the model's existing
- * contract here: a person the database marks simulated is presented with
- * the same prefix the model already recognizes, so a genuinely simulated
- * actor cannot earn credit merely because a caller didn't also spell their
- * name with the legacy prefix.
- */
-function creditName(fullName: string, simulated: boolean): string {
-  return simulated && !fullName.startsWith('[SIM]') ? `[SIM] ${fullName}` : fullName;
-}
-
 /** Absence is not neutral: no committer or verifier of record scores the same as a synthetic one. */
 function creditNameForMissing(role: string): string {
   return `[SIM] (no ${role} of record)`;
@@ -285,9 +271,9 @@ export function produceRunRouter(pool: Pool): Router {
         kind: r.kind,
         sourceVerified: r.source_verified,
         supports: r.supports as ConfidenceEvidenceInput['supports'],
-        attestedByName:
-          r.attester_name != null ? creditName(r.attester_name, r.attester_simulated ?? false) : null,
+        attestedByName: r.attester_name,
         attestedByScope: r.attester_name != null ? (r.attester_institution_id ? 'institution' : 'tenant') : null,
+        attesterSimulated: r.attester_simulated ?? false,
       }));
 
       // evidenceSnapshot per walkSpine.ts:870, plus `simulated` (a real
@@ -344,7 +330,7 @@ export function produceRunRouter(pool: Pool): Router {
           [vo.committed_by_person_id],
         );
         committerSynthetic = !committer || committer.simulated;
-        committerName = committer ? creditName(committer.full_name, committer.simulated) : creditNameForMissing('committer');
+        committerName = committer ? committer.full_name : creditNameForMissing('committer');
       } else {
         committerSynthetic = true;
         committerName = creditNameForMissing('committer');
@@ -358,7 +344,7 @@ export function produceRunRouter(pool: Pool): Router {
           [vo.verified_by_person_id],
         );
         verifierSynthetic = !verifier || verifier.simulated;
-        verifierName = verifier ? creditName(verifier.full_name, verifier.simulated) : creditNameForMissing('verifier');
+        verifierName = verifier ? verifier.full_name : creditNameForMissing('verifier');
       } else {
         verifierSynthetic = true;
         verifierName = creditNameForMissing('verifier');
@@ -407,10 +393,10 @@ export function produceRunRouter(pool: Pool): Router {
         // scores low because it IS one, not because anyone chose to
         // penalize it.
         impactIsInference: true,
-        // ConfidenceInput's field is still named sponsorName — confidenceModel.ts
-        // is out of scope for this change; only what feeds it changed.
-        sponsorName: committerName,
+        committerName,
+        committerSimulated: committerSynthetic,
         verifierName,
+        verifierSimulated: verifierSynthetic,
         assertedConfidence: vo.confidence,
       };
       const confidence = computeConfidence(confidenceInput);

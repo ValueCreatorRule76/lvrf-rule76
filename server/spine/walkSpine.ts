@@ -860,8 +860,10 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       realizedCurrencyImpact: vo.realized_currency_impact,
       impactBasisStated: Boolean(vo.impact_basis),
       impactIsInference: vo.impact_is_inference,
-      sponsorName: seeded.persons.sponsor.fullName,
+      committerName: seeded.persons.sponsor.fullName,
+      committerSimulated: fixture.persons.sponsor.synthetic,
       verifierName: seeded.persons.verifier.fullName,
+      verifierSimulated: verifierSynthetic,
       assertedConfidence: vo.confidence,
     });
 

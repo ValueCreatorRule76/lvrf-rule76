@@ -228,8 +228,10 @@ async function main() {
       realizedCurrencyImpact: vo.realized_currency_impact,
       impactBasisStated: Boolean(vo.impact_basis),
       impactIsInference: vo.impact_is_inference,
-      sponsorName: fixture.persons.sponsor.name,
+      committerName: fixture.persons.sponsor.name,
+      committerSimulated: fixture.persons.sponsor.synthetic,
       verifierName: fixture.persons.verifier.name,
+      verifierSimulated: fixture.persons.verifier.synthetic,
       assertedConfidence: vo.confidence,
     });
     const { realization, anyActualEvidenceVerified, verifierSynthetic } = computeRealization(fixture);

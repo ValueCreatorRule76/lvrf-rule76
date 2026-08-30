@@ -36,7 +36,7 @@ const CONFIDENCE_FACTOR_QUESTIONS = {
   baseline_evidence_verified: 'Is the baseline supported by confirmed evidence?',
   actual_evidence_verified: 'Is the measured actual supported by confirmed evidence?',
   impact_basis_evidenced: "Is the currency figure's derivation stated and supported?",
-  human_commit_of_record: 'Did a named, non-synthetic person commit to the target?',
+  human_commit_of_record: 'Did a named, non-simulated person commit to this target?',
   human_verifier_of_record: 'Did a named, non-synthetic person verify the result?',
 } as const;
 
@@ -55,6 +55,8 @@ export interface ConfidenceEvidenceInput {
   /** Name of the attester, if this evidence is an attestation. */
   attestedByName?: string | null;
   attestedByScope?: 'tenant' | 'institution' | null;
+  /** Whether the named attester is a simulated identity, not a person of record. */
+  attesterSimulated?: boolean;
 }
 
 export interface ConfidenceFactorRow {
@@ -119,20 +121,11 @@ export interface ConfidenceInput {
   realizedCurrencyImpact: number | null;
   impactBasisStated: boolean;
   impactIsInference: boolean;
-  sponsorName: string;
+  committerName: string;
+  committerSimulated: boolean;
   verifierName: string;
+  verifierSimulated: boolean;
   assertedConfidence: ConfidenceLevel | null;
-}
-
-/**
- * Known weakness (0003): `persons` has no `is_synthetic` column, so a demo
- * identity is detected by a "[SIM]" name prefix — reproducing the fixtures'
- * current behaviour rather than a real database column. Fragile on a display
- * name; `persons.is_synthetic boolean NOT NULL DEFAULT false` belongs in
- * 0004, with this check replaced by the column.
- */
-function isSynthetic(name: string): boolean {
-  return name.startsWith('[SIM]');
 }
 
 function round1(n: number): number {
@@ -154,6 +147,7 @@ export function fixtureEvidenceToInput(fixture: CustomerZeroFixture, ev: Evidenc
     supports: ev.supports,
     attestedByName: attester?.name ?? null,
     attestedByScope: attester?.scope ?? null,
+    attesterSimulated: attester?.synthetic ?? false,
   };
 }
 
@@ -163,7 +157,7 @@ export function evidenceCredit(ev: ConfidenceEvidenceInput): { credit: number; n
   if (ev.kind === 'attestation' || ev.attestedByName) {
     const name = ev.attestedByName;
     if (!name) return { credit: 0, note: 'attestation with no named attester' };
-    if (isSynthetic(name)) return { credit: 0, note: `attester synthetic (${name})` };
+    if (ev.attesterSimulated) return { credit: 0, note: `attester synthetic (${name})` };
     if (ev.attestedByScope !== 'institution') {
       return { credit: 0, note: `attester is vendor-side (${name}) — not an authority on the customer's metric` };
     }
@@ -240,12 +234,12 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   }
 
   // 5 & 6. Human actors of record.
-  for (const [factor, label, name] of [
-    ['human_commit_of_record', 'Sponsor', input.sponsorName],
-    ['human_verifier_of_record', 'Verifier', input.verifierName],
+  for (const [factor, label, name, simulated] of [
+    ['human_commit_of_record', 'Committer', input.committerName, input.committerSimulated],
+    ['human_verifier_of_record', 'Verifier', input.verifierName, input.verifierSimulated],
   ] as const) {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
-    if (isSynthetic(name)) {
+    if (simulated) {
       award(factor, 0, `${label} of record is synthetic (${name}).`);
     } else {
       award(factor, weight, `${name} of record.`);
