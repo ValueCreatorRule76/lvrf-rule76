@@ -223,6 +223,103 @@ export function fixtureEvidenceToInput(fixture: CustomerZeroFixture, ev: Evidenc
   };
 }
 
+/** One evidence row's live-DB facts, ahead of fixtureEvidenceToInput-style shaping. */
+export interface RawEvidenceForConfidence {
+  kind: string;
+  sourceVerified: boolean;
+  supports: ConfidenceEvidenceInput['supports'];
+  attesterName: string | null;
+  attesterInstitutionId: string | null;
+  attesterSimulated: boolean | null;
+}
+
+/**
+ * The live-DB facts needed to score one outcome, ahead of shaping into
+ * ConfidenceInput. Mirrors ConfidenceInput's own field names wherever a
+ * field passes through unchanged (committerName, verifierName, ...); the
+ * fields that don't (metricDefinitionNotes, evidence) are the raw columns
+ * buildConfidenceInput's logic actually branches on.
+ */
+export interface ConfidenceDerivationFacts {
+  metricDefinitionNotes: string | null;
+  metricDefinitionConfirmedByPersonId: string | null;
+  metricDefinitionConfirmedAt: Date | null;
+  metricDefinitionConfirmerSimulated: boolean | null;
+  evidence: RawEvidenceForConfidence[];
+  claimedCurrencyImpact: number | null;
+  realizedCurrencyImpact: number | null;
+  impactBasisStated: boolean;
+  committerName: string | null;
+  committerSimulated: boolean;
+  verifierName: string | null;
+  verifierSimulated: boolean;
+  assertedConfidence: ConfidenceLevel | null;
+}
+
+/**
+ * Adapts a live outcome's DB facts into a ConfidenceInput — the ONE
+ * derivation server/routes/produceRun.ts uses to score a value_outcomes row,
+ * and server/routes/gapRegister.ts reuses UNCHANGED to recompute the same
+ * thing for the current moment (a run's stored payload is a photograph; the
+ * register is not). Two implementations of this derivation, one in each
+ * route, is exactly the divergence this file's MODEL_FINGERPRINT comment
+ * warns about — reached for real once already, on human_commit_of_record's
+ * source column. This is the one.
+ *
+ * The metricDefinitionGap branch order matters: checked notes, then
+ * confirmation, then confirmer identity, so the gap reported is the first
+ * one that actually blocks credit — same order the factor's question asks
+ * them in. impactIsInference is hardcoded true because no live column says
+ * a stated currency impact was measured rather than inferred; every live
+ * impact is treated as an inference until something proves otherwise, which
+ * scores a hypothesis run low because it IS one, not as a penalty.
+ */
+export function buildConfidenceInput(facts: ConfidenceDerivationFacts): ConfidenceInput {
+  const hasDefinitionNotes = Boolean(facts.metricDefinitionNotes && facts.metricDefinitionNotes.trim() !== '');
+  const isDefinitionConfirmed =
+    facts.metricDefinitionConfirmedByPersonId !== null && facts.metricDefinitionConfirmedAt !== null;
+  const confirmerSimulated = facts.metricDefinitionConfirmerSimulated ?? false;
+
+  let metricDefinitionConfirmed: boolean;
+  let metricDefinitionGap: ConfidenceInput['metricDefinitionGap'];
+  if (!hasDefinitionNotes) {
+    metricDefinitionConfirmed = false;
+    metricDefinitionGap = 'no_notes';
+  } else if (!isDefinitionConfirmed) {
+    metricDefinitionConfirmed = false;
+    metricDefinitionGap = 'unconfirmed';
+  } else if (confirmerSimulated) {
+    metricDefinitionConfirmed = false;
+    metricDefinitionGap = 'confirmer_simulated';
+  } else {
+    metricDefinitionConfirmed = true;
+  }
+
+  const evidence: ConfidenceEvidenceInput[] = facts.evidence.map((e) => ({
+    kind: e.kind,
+    sourceVerified: e.sourceVerified,
+    supports: e.supports,
+    attestedByName: e.attesterName,
+    attestedByScope: e.attesterName != null ? (e.attesterInstitutionId ? 'institution' : 'tenant') : null,
+    attesterSimulated: e.attesterSimulated ?? false,
+  }));
+
+  return {
+    metricDefinitionConfirmed,
+    metricDefinitionGap,
+    evidence,
+    claimedCurrencyImpact: facts.claimedCurrencyImpact,
+    realizedCurrencyImpact: facts.realizedCurrencyImpact,
+    impactBasisStated: facts.impactBasisStated,
+    impactIsInference: true,
+    committerName: facts.committerName,
+    committerSimulated: facts.committerSimulated,
+    verifierName: facts.verifierName,
+    verifierSimulated: facts.verifierSimulated,
+    assertedConfidence: facts.assertedConfidence,
+  };
+}
+
 export function evidenceCredit(ev: ConfidenceEvidenceInput): { credit: number; note: string } {
   if (!ev.sourceVerified) return { credit: 0, note: 'unverified' };
 

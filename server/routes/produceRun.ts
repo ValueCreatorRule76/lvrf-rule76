@@ -5,8 +5,10 @@ import { isUuid } from './params.js';
 import {
   computeConfidence,
   evidenceCredit,
+  buildConfidenceInput,
   type ConfidenceEvidenceInput,
   type ConfidenceInput,
+  type RawEvidenceForConfidence,
 } from '../spine/confidenceModel.js';
 import { computeDelta, type DeltaInput } from '../spine/deltaEngine.js';
 import { computeHealth, type HealthEventInput } from '../spine/healthModel.js';
@@ -259,13 +261,13 @@ export function produceRunRouter(pool: Pool): Router {
         [vo.id],
       );
 
-      const evidenceForConfidence: ConfidenceEvidenceInput[] = evidenceRows.map((r) => ({
+      const rawEvidenceForConfidence: RawEvidenceForConfidence[] = evidenceRows.map((r) => ({
         kind: r.kind,
         sourceVerified: r.source_verified,
         supports: r.supports as ConfidenceEvidenceInput['supports'],
-        attestedByName: r.attester_name,
-        attestedByScope: r.attester_name != null ? (r.attester_institution_id ? 'institution' : 'tenant') : null,
-        attesterSimulated: r.attester_simulated ?? false,
+        attesterName: r.attester_name,
+        attesterInstitutionId: r.attester_institution_id,
+        attesterSimulated: r.attester_simulated,
       }));
 
       // evidenceSnapshot per walkSpine.ts:870, plus `simulated` (a real
@@ -287,14 +289,6 @@ export function produceRunRouter(pool: Pool): Router {
         simulated: r.simulated,
         vendor_published: r.kind === 'vendor_publication',
       }));
-
-      // ANY, not EVERY — db/CONFIDENCE_MODEL.md's verification gate, ported
-      // from walkSpine.ts exactly: one item clearing (independently
-      // verified, or attested by a named, institution-scoped, non-synthetic
-      // authority) is enough.
-      const actualEvidence = evidenceForConfidence.filter((e) => e.supports === 'actual');
-      const anyActualEvidenceVerified =
-        actualEvidence.length > 0 && actualEvidence.some((e) => evidenceCredit(e).credit > 0);
 
       // human_commit_of_record asks "did a named, non-synthetic person
       // commit to THE TARGET?" — answered by the outcome's own committer
@@ -345,53 +339,35 @@ export function produceRunRouter(pool: Pool): Router {
       const claimedCurrencyImpact = toNumber(vo.claimed_currency_impact);
       const realizedCurrencyImpact = toNumber(vo.realized_currency_impact);
 
-      // Credit requires all three: documented, confirmed, and confirmed by
-      // a real person — any one missing earns 0. A confirmation without
-      // notes documents nothing; notes without a confirmer are unattested.
-      // Checked in this order so the gap reported is the first one that
-      // actually blocks credit, matching the order the factor's question
-      // asks them in.
-      const hasDefinitionNotes = Boolean(bm.definition_notes && bm.definition_notes.trim() !== '');
-      const isDefinitionConfirmed =
-        bm.definition_confirmed_by_person_id !== null && bm.definition_confirmed_at !== null;
-      const confirmerSimulated = bm.confirmer_simulated ?? false;
-
-      let metricDefinitionConfirmed: boolean;
-      let metricDefinitionGap: ConfidenceInput['metricDefinitionGap'];
-      if (!hasDefinitionNotes) {
-        metricDefinitionConfirmed = false;
-        metricDefinitionGap = 'no_notes';
-      } else if (!isDefinitionConfirmed) {
-        metricDefinitionConfirmed = false;
-        metricDefinitionGap = 'unconfirmed';
-      } else if (confirmerSimulated) {
-        metricDefinitionConfirmed = false;
-        metricDefinitionGap = 'confirmer_simulated';
-      } else {
-        metricDefinitionConfirmed = true;
-      }
-
-      const confidenceInput: ConfidenceInput = {
-        metricDefinitionConfirmed,
-        metricDefinitionGap,
-        evidence: evidenceForConfidence,
+      // buildConfidenceInput (confidenceModel.ts) is the one derivation from
+      // live DB facts to ConfidenceInput — server/routes/gapRegister.ts
+      // reuses it unchanged. Do not re-derive metricDefinitionGap,
+      // evidence shaping, or the impactIsInference rationale here; see that
+      // function's own comment.
+      const confidenceInput: ConfidenceInput = buildConfidenceInput({
+        metricDefinitionNotes: bm.definition_notes,
+        metricDefinitionConfirmedByPersonId: bm.definition_confirmed_by_person_id,
+        metricDefinitionConfirmedAt: bm.definition_confirmed_at,
+        metricDefinitionConfirmerSimulated: bm.confirmer_simulated,
+        evidence: rawEvidenceForConfidence,
         claimedCurrencyImpact,
         realizedCurrencyImpact,
         impactBasisStated: Boolean(vo.impact_basis),
-        // Same reasoning: no live column says a stated currency impact was
-        // measured rather than inferred. The model already scores an
-        // inference at half credit — treating every live impact as an
-        // inference until something proves otherwise means a hypothesis run
-        // scores low because it IS one, not because anyone chose to
-        // penalize it.
-        impactIsInference: true,
         committerName,
         committerSimulated: committerSynthetic,
         verifierName,
         verifierSimulated: verifierSynthetic,
         assertedConfidence: vo.confidence,
-      };
+      });
       const confidence = computeConfidence(confidenceInput);
+
+      // ANY, not EVERY — db/CONFIDENCE_MODEL.md's verification gate, ported
+      // from walkSpine.ts exactly: one item clearing (independently
+      // verified, or attested by a named, institution-scoped, non-synthetic
+      // authority) is enough.
+      const actualEvidence = confidenceInput.evidence.filter((e) => e.supports === 'actual');
+      const anyActualEvidenceVerified =
+        actualEvidence.length > 0 && actualEvidence.some((e) => evidenceCredit(e).credit > 0);
 
       const deltaInput: DeltaInput = {
         baselineValue: Number(vo.baseline_value),

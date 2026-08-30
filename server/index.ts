@@ -19,6 +19,7 @@ import { validateMetricRouter } from './routes/validateMetric.js';
 import { lockRunRouter } from './routes/lockRun.js';
 import { recordDocumentsWriteRouter, recordDocumentsReadRouter } from './routes/recordDocuments.js';
 import { compareRunsRouter } from './routes/compareRuns.js';
+import { gapRegisterRouter } from './routes/gapRegister.js';
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/value-runs', lockRunRouter(pool));
 app.use('/api/value-runs', recordDocumentsWriteRouter(pool));
 app.use('/api/value-runs', compareRunsRouter(pool));
 app.use('/api/value-outcomes', recordDocumentsReadRouter(pool));
+app.use('/api/value-outcomes', gapRegisterRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 
