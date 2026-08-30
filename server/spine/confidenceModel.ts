@@ -115,6 +115,14 @@ export interface ConfidenceFactorRow {
   weight: number;
   earned: number;
   note: string;
+  /**
+   * Discriminant naming WHY this factor is unearned, computed at the same
+   * branch as `note` — never re-derived from inputs. Null only when earned
+   * equals weight; a partially earned factor (e.g. baseline at 15/25) still
+   * carries a gap. See computeConfidence for the branch each value comes
+   * from.
+   */
+  gap: string | null;
 }
 
 export interface ConfidenceResult {
@@ -233,13 +241,14 @@ export function evidenceCredit(ev: ConfidenceEvidenceInput): { credit: number; n
 
 export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   const rows: ConfidenceFactorRow[] = [];
-  const award = (factor: ConfidenceFactor, earned: number, note: string) => {
+  const award = (factor: ConfidenceFactor, earned: number, note: string, gap: string | null) => {
     rows.push({
       factor,
       question: CONFIDENCE_FACTOR_QUESTIONS[factor],
       weight: CONFIDENCE_FACTOR_WEIGHTS[factor],
       earned: round1(earned),
       note,
+      gap,
     });
   };
 
@@ -250,6 +259,7 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     input.metricDefinitionConfirmed
       ? 'Calculation method documented.'
       : METRIC_DEFINITION_GAP_NOTES[input.metricDefinitionGap ?? 'no_notes'],
+    input.metricDefinitionConfirmed ? null : (input.metricDefinitionGap ?? 'no_notes'),
   );
 
   // 2 & 3. Evidence strength by what it supports. Best item, not average.
@@ -260,7 +270,7 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
     const rel = input.evidence.filter((e) => e.supports === supports);
     if (rel.length === 0) {
-      award(factor, 0, `No evidence attached to the ${supports}.`);
+      award(factor, 0, `No evidence attached to the ${supports}.`, 'none_attached');
       continue;
     }
     const graded = rel.map(evidenceCredit);
@@ -268,32 +278,37 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     const note = graded.find((g) => g.credit === best)!.note;
     const nAttested = graded.filter((g) => g.credit > 0 && g.credit < 1).length;
     const nIndependent = graded.filter((g) => g.credit >= 1).length;
+    // best is one of evidenceCredit's three return values (0, ATTESTATION_CREDIT,
+    // or 1) — the same distinction that function already makes, not a new one.
+    const gap = best >= 1 ? null : best === ATTESTATION_CREDIT ? 'attested_only' : 'evidence_unqualified';
     award(
       factor,
       weight * best,
       `${rel.length} item(s): ${nIndependent} independent, ${nAttested} attested. Strongest — ${note}.`,
+      gap,
     );
   }
 
   // 4. Impact basis.
   const impactWeight = CONFIDENCE_FACTOR_WEIGHTS.impact_basis_evidenced;
   if (input.claimedCurrencyImpact == null && input.realizedCurrencyImpact == null) {
-    award('impact_basis_evidenced', impactWeight, 'No currency figure claimed — nothing to substantiate.');
+    award('impact_basis_evidenced', impactWeight, 'No currency figure claimed — nothing to substantiate.', null);
   } else {
     const basisEvidence = input.evidence.filter((e) => e.supports === 'impact_basis');
     const graded = basisEvidence.map(evidenceCredit);
     const best = graded.length > 0 ? Math.max(...graded.map((g) => g.credit)) : 0;
     if (input.impactBasisStated && best > 0 && !input.impactIsInference) {
       const note = graded.find((g) => g.credit === best)!.note;
-      award('impact_basis_evidenced', impactWeight, `Basis stated and evidenced — ${note}.`);
+      award('impact_basis_evidenced', impactWeight, `Basis stated and evidenced — ${note}.`, null);
     } else if (input.impactBasisStated && best > 0) {
       award(
         'impact_basis_evidenced',
         impactWeight * 0.5,
         'Basis stated and evidenced, but self-declared as inference. Half credit.',
+        'self_declared_inference',
       );
     } else {
-      award('impact_basis_evidenced', 0, 'Currency claimed without stated, evidenced basis.');
+      award('impact_basis_evidenced', 0, 'Currency claimed without stated, evidenced basis.', 'unsubstantiated');
     }
   }
 
@@ -307,11 +322,11 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   ] as const) {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
     if (name == null) {
-      award(factor, 0, `No ${roleNoun} of record has been named.`);
+      award(factor, 0, `No ${roleNoun} of record has been named.`, 'absent');
     } else if (simulated) {
-      award(factor, 0, `${verb} ${name} — a simulated identity, not a person of record.`);
+      award(factor, 0, `${verb} ${name} — a simulated identity, not a person of record.`, 'simulated');
     } else {
-      award(factor, weight, `${verb} ${name}.`);
+      award(factor, weight, `${verb} ${name}.`, null);
     }
   }
 
