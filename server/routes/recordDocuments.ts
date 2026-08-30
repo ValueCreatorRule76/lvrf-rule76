@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * Two routers, not one: the POST is run-scoped
@@ -15,24 +16,6 @@ import { emitHeartbeat } from '../spine/emitHeartbeat.js';
  * identifier, silently returning an empty array for every run instead of
  * erroring.
  */
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
-
-function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23505'
-  );
-}
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -65,7 +48,6 @@ function isUniqueViolation(err: unknown): err is { code: '23505'; message: strin
  * ever inserts a new version.
  */
 export function recordDocumentsWriteRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   // POST /api/value-runs/:runId/record-document — creates a
@@ -81,6 +63,10 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid value run id: ${runId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record.
+    let refusalTenantId: string | null = null;
+    let refusalValueOutcomeId: string | null = null;
 
     try {
       const actorPersonId = req.get('x-actor-person-id');
@@ -107,6 +93,7 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
         res.status(404).json({ message: `value run ${runId} not found` });
         return;
       }
+      refusalTenantId = run.tenant_id;
 
       // A document rendered from a mutable run could disagree with the run
       // it claims to represent the moment that run changes again.
@@ -128,6 +115,7 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
         });
         return;
       }
+      refusalValueOutcomeId = valueOutcomeId;
 
       // Already computed by produceRun.ts/walkSpine.ts as the disclosure
       // this run's realization warrants — 'internal' or 'customer_shared',
@@ -206,21 +194,24 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
       });
     } catch (err) {
       // A CHECK-constraint refusal (ERRCODE check_violation, SQLSTATE 23514)
-      // is the governance gate doing its job, not a server fault. Its
-      // message names the amendment and the reason — that message IS the
-      // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
-        return;
-      }
-      // A unique-constraint collision (ERRCODE unique_violation, SQLSTATE
-      // 23505) — record_documents_outcome_version_key, most likely a
-      // concurrent request that computed the same next document_version —
-      // is a conflict with existing state, not a server fault. 409, not
-      // 500; message unchanged, same as the check_violation branch above.
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ message: err.message });
+      // — or a unique-constraint collision (ERRCODE unique_violation,
+      // SQLSTATE 23505, e.g. record_documents_outcome_version_key, most
+      // likely a concurrent request that computed the same next
+      // document_version) — is the governance gate doing its job, not a
+      // server fault. Its message names the reason, so it goes to the
+      // caller unchanged, not swallowed into a generic 500.
+      // handleGovernanceError also records the attempt — see
+      // server/lib/refusal.ts. institutionId is left null, same as the
+      // HB-0017 emit above: value_runs carries no institution_id column,
+      // and resolving one would mean a join this handler does not already do.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/value-runs/:runId/record-document',
+        subjectTable: 'record_documents',
+        subjectId: refusalValueOutcomeId,
+        tenantId: refusalTenantId,
+        institutionId: null,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

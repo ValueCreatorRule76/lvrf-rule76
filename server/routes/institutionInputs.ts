@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -27,15 +28,6 @@ import { emitHeartbeat } from '../spine/emitHeartbeat.js';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -129,7 +121,6 @@ function optionalArray(obj: Record<string, unknown>, field: string, path: string
 // capability assessments to an institution that already exists. Every
 // section of the payload is optional, but at least one must be present.
 export function institutionInputsRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   router.post('/:institutionId/inputs', async (req, res) => {
@@ -142,6 +133,13 @@ export function institutionInputsRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid institution id: ${institutionId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record. refusalSubjectTable
+    // tracks which of the two loops below is currently writing — set at the
+    // top of each loop body, predictively, so a violation on the write it
+    // introduces is attributed to the table it targets, not the other one.
+    let refusalTenantId: string | null = null;
+    let refusalSubjectTable = 'persons';
 
     try {
       const body = requireObject(req.body, 'body');
@@ -184,6 +182,7 @@ export function institutionInputsRouter(pool: Pool): Router {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }
+      refusalTenantId = institution.tenant_id;
 
       // Persons are created before assessments are resolved, so a payload
       // can add a roster and score against it in the same call.
@@ -204,6 +203,7 @@ export function institutionInputsRouter(pool: Pool): Router {
         personIds.push(person.id);
       }
 
+      refusalSubjectTable = 'assessments';
       const assessmentIds: string[] = [];
       for (const [i, assessmentInput] of assessmentInputs.entries()) {
         const path = `assessments[${i}]`;
@@ -298,8 +298,16 @@ export function institutionInputsRouter(pool: Pool): Router {
       // when assessed_by_person_id names a simulated person (AMENDMENT-005
       // Article I). Its message names the amendment and the reason, so it
       // goes to the caller unchanged, not swallowed into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // handleGovernanceError also records the attempt — see
+      // server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/institutions/:institutionId/inputs',
+        subjectTable: refusalSubjectTable,
+        subjectId: null,
+        tenantId: refusalTenantId,
+        institutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

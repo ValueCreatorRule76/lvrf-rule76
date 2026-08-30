@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -22,15 +23,6 @@ import { emitHeartbeat } from '../spine/emitHeartbeat.js';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -136,7 +128,6 @@ function requireTimestamp(obj: Record<string, unknown>, field: string, path: str
 // not already exist, and a value outcome linking a capability to that metric
 // with a baseline. The middle of the value spine: baseline, attach, model.
 export function valueOutcomesRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   router.post('/:institutionId/value-outcomes', async (req, res) => {
@@ -149,6 +140,11 @@ export function valueOutcomesRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid institution id: ${institutionId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record — set as soon as
+    // known, so a violation raised by any write below can still be
+    // attributed to the tenant it was attempted against.
+    let refusalTenantId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -191,6 +187,7 @@ export function valueOutcomesRouter(pool: Pool): Router {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }
+      refusalTenantId = institution.tenant_id;
 
       // Read from the database rather than hardcoding the enum's members —
       // a future migration that adds or renames a direction should not
@@ -390,9 +387,16 @@ export function valueOutcomesRouter(pool: Pool): Router {
       // is the governance gate doing its job, not a server fault. Its
       // message names the amendment and the reason — that message IS the
       // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // into a generic 500. handleGovernanceError also records the attempt
+      // — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/institutions/:institutionId/value-outcomes',
+        subjectTable: 'value_outcomes',
+        subjectId: null,
+        tenantId: refusalTenantId,
+        institutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

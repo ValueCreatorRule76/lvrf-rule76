@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -22,24 +23,6 @@ import { isUuid } from './params.js';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
-
-function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23505'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -129,7 +112,6 @@ function requireTimestamp(obj: Record<string, unknown>, field: string, path: str
 // metric with a SOURCED one and supersedes every value outcome that used
 // it. Cut-roster item 5: "validate and supersede."
 export function validateMetricRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   router.post('/:metricId/validate', async (req, res) => {
@@ -142,6 +124,13 @@ export function validateMetricRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid business metric id: ${metricId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record, not for this
+    // handler's own logic — set as soon as each becomes known, so a
+    // violation raised by any write below this point can still be
+    // attributed to the tenant/institution it was attempted against.
+    let refusalTenantId: string | null = null;
+    let refusalInstitutionId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -178,16 +167,22 @@ export function validateMetricRouter(pool: Pool): Router {
       const { rows: [oldMetric] } = await client.query<{
         id: string;
         institution_id: string;
+        tenant_id: string;
         name: string;
         superseded_by_id: string | null;
       }>(
-        'SELECT id, institution_id, name, superseded_by_id FROM business_metrics WHERE id = $1 AND deleted_at IS NULL',
+        `SELECT bm.id, bm.institution_id, i.tenant_id, bm.name, bm.superseded_by_id
+           FROM business_metrics bm
+           JOIN institutions i ON i.id = bm.institution_id
+          WHERE bm.id = $1 AND bm.deleted_at IS NULL`,
         [metricId],
       );
       if (!oldMetric) {
         res.status(404).json({ message: `business metric ${metricId} not found` });
         return;
       }
+      refusalTenantId = oldMetric.tenant_id;
+      refusalInstitutionId = oldMetric.institution_id;
 
       // lvrf_supersession_is_sane's rule 3 would catch this as a forked
       // chain, but a clear 409 naming the existing successor beats a
@@ -341,20 +336,21 @@ export function validateMetricRouter(pool: Pool): Router {
         return;
       }
       // A CHECK-constraint refusal (ERRCODE check_violation, SQLSTATE 23514)
-      // is the governance gate doing its job, not a server fault — including
-      // lvrf_supersession_is_sane, whose messages name which rule fired.
-      // That message IS the product here, so it goes to the caller
-      // unchanged, not swallowed into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
-        return;
-      }
-      // A unique-constraint collision (ERRCODE unique_violation, SQLSTATE
-      // 23505) — e.g. business_metrics_institution_name_key — is a
-      // conflict with existing state, not a server fault. 409, not 500;
-      // message unchanged, same as the check_violation branch above.
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ message: err.message });
+      // — including lvrf_supersession_is_sane, whose messages name which
+      // rule fired — or a unique-constraint collision (ERRCODE
+      // unique_violation, SQLSTATE 23505, e.g.
+      // business_metrics_institution_name_key) is the governance gate doing
+      // its job, not a server fault. handleGovernanceError returns the same
+      // 422/409 with err.message unchanged either way, and now also records
+      // the attempt — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/business-metrics/:metricId/validate',
+        subjectTable: 'business_metrics',
+        subjectId: metricId,
+        tenantId: refusalTenantId,
+        institutionId: refusalInstitutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

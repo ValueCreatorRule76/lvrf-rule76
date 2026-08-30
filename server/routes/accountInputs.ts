@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -12,15 +13,6 @@ import type { Pool } from 'pg';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -93,18 +85,25 @@ function optionalArray(obj: Record<string, unknown>, field: string, path: string
 // entry point. There is no update path here and no implicit creation of
 // capabilities — a capability must already exist for the institution
 // before an assessment can baseline against it.
-// pool is unused here on purpose — kept only so this factory's signature
-// matches the house pattern for mounting symmetry with every other router.
-// Every actual query in this file runs on req.dbClient, inside
-// actorContext's transaction, never on pool.
+// Every actual query in this handler's happy path runs on req.dbClient,
+// inside actorContext's transaction, never on pool — pool is used only by
+// handleGovernanceError, on its own separate connection (see
+// server/lib/refusal.ts for why).
 export function accountInputsRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   router.post('/', async (req, res) => {
     // actorContext (mounted ahead of every router) always sets this before
     // calling next() on a mutating request, and never calls next() otherwise.
     const client = req.dbClient!;
+
+    // Captured for handleGovernanceError's refusal record.
+    // refusalSubjectTable tracks which write is currently in flight —
+    // 'institutions' until the institution insert succeeds, then updated
+    // predictively at the top of each of the two loops below.
+    let refusalTenantId: string | null = null;
+    let refusalInstitutionId: string | null = null;
+    let refusalSubjectTable = 'institutions';
 
     try {
       const body = requireObject(req.body, 'body');
@@ -138,6 +137,7 @@ export function accountInputsRouter(pool: Pool): Router {
         return;
       }
       const tenantId = tenantRows[0].id;
+      refusalTenantId = tenantId;
 
       const { rows: insertedInstitution } = await client.query<{ id: string }>(
         `INSERT INTO institutions (tenant_id, name, industry)
@@ -174,6 +174,8 @@ export function accountInputsRouter(pool: Pool): Router {
         return;
       }
       const institutionId = insertedInstitution[0].id;
+      refusalInstitutionId = institutionId;
+      refusalSubjectTable = 'persons';
 
       const personIds: string[] = [];
       const personIdByEmail = new Map<string, string>();
@@ -193,6 +195,7 @@ export function accountInputsRouter(pool: Pool): Router {
         personIdByEmail.set(email, person.id);
       }
 
+      refusalSubjectTable = 'assessments';
       const assessmentIds: string[] = [];
       for (const [i, assessmentInput] of assessmentInputs.entries()) {
         const path = `assessments[${i}]`;
@@ -258,9 +261,16 @@ export function accountInputsRouter(pool: Pool): Router {
       // is the governance gate doing its job, not a server fault. Its
       // message names the amendment and the reason — that message IS the
       // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // into a generic 500. handleGovernanceError also records the attempt
+      // — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/account-inputs',
+        subjectTable: refusalSubjectTable,
+        subjectId: null,
+        tenantId: refusalTenantId,
+        institutionId: refusalInstitutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

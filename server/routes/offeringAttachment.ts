@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -13,15 +14,6 @@ import { isUuid } from './params.js';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -61,7 +53,6 @@ function requireBoolean(obj: Record<string, unknown>, field: string, path: strin
 // comment: an unexplained link is the authored-prose problem this system
 // exists to prevent.
 export function offeringAttachmentRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   router.post('/:institutionId/offerings', async (req, res) => {
@@ -74,6 +65,9 @@ export function offeringAttachmentRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid institution id: ${institutionId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record.
+    let refusalTenantId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -99,6 +93,7 @@ export function offeringAttachmentRouter(pool: Pool): Router {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }
+      refusalTenantId = institution.tenant_id;
 
       // Resolving by key, not id — filter the supersession chain or this
       // can match a superseded ancestor.
@@ -228,9 +223,16 @@ export function offeringAttachmentRouter(pool: Pool): Router {
       // is the governance gate doing its job, not a server fault. Its
       // message names the amendment and the reason — that message IS the
       // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // into a generic 500. handleGovernanceError also records the attempt
+      // — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/institutions/:institutionId/offerings',
+        subjectTable: 'offering_capabilities',
+        subjectId: null,
+        tenantId: refusalTenantId,
+        institutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

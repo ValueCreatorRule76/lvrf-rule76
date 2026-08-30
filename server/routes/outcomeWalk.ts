@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
+import { handleGovernanceError } from '../lib/refusal.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -23,24 +24,6 @@ import { emitHeartbeat } from '../spine/emitHeartbeat.js';
  */
 
 class ValidationError extends Error {}
-
-function isCheckViolation(err: unknown): err is { code: '23514'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23514'
-  );
-}
-
-function isUniqueViolation(err: unknown): err is { code: '23505'; message: string } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    (err as { code: unknown }).code === '23505'
-  );
-}
 
 function requireObject(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -99,7 +82,6 @@ function requireTimestamp(obj: Record<string, unknown>, field: string, path: str
 }
 
 export function outcomeWalkRouter(pool: Pool): Router {
-  void pool;
   const router = Router();
 
   // POST /api/value-outcomes/:outcomeId/commit — the customer agrees the
@@ -116,6 +98,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid value outcome id: ${outcomeId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record.
+    let refusalTenantId: string | null = null;
+    let refusalInstitutionId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -157,6 +143,8 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
+      refusalTenantId = outcome.tenant_id;
+      refusalInstitutionId = outcome.institution_id;
 
       // A commitment is not amended — a second commit attempt supersedes
       // the outcome, it does not overwrite this one's target or committer.
@@ -280,19 +268,20 @@ export function outcomeWalkRouter(pool: Pool): Router {
         return;
       }
       // A CHECK-constraint refusal (ERRCODE check_violation, SQLSTATE 23514)
-      // is the governance gate doing its job, not a server fault. Its
-      // message names the amendment and the reason — that message IS the
-      // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
-        return;
-      }
-      // A unique-constraint collision (ERRCODE unique_violation, SQLSTATE
-      // 23505) is a conflict with existing state, not a server fault. 409,
-      // not 500; message unchanged, same as the check_violation branch above.
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ message: err.message });
+      // — or a unique-constraint collision (ERRCODE unique_violation,
+      // SQLSTATE 23505) — is the governance gate doing its job, not a
+      // server fault. Its message names the amendment and the reason — that
+      // message IS the product here, so it goes to the caller unchanged,
+      // not swallowed into a generic 500. handleGovernanceError also
+      // records the attempt — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/value-outcomes/:outcomeId/commit',
+        subjectTable: 'value_outcomes',
+        subjectId: outcomeId,
+        tenantId: refusalTenantId,
+        institutionId: refusalInstitutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
@@ -310,6 +299,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid value outcome id: ${outcomeId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record.
+    let refusalTenantId: string | null = null;
+    let refusalInstitutionId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -345,6 +338,8 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
+      refusalTenantId = outcome.tenant_id;
+      refusalInstitutionId = outcome.institution_id;
       if (outcome.realization !== 'claimed') {
         res.status(409).json({
           message: `value outcome ${outcomeId} is not 'claimed' (currently '${outcome.realization}'); cannot measure`,
@@ -431,9 +426,16 @@ export function outcomeWalkRouter(pool: Pool): Router {
       // is the governance gate doing its job, not a server fault. Its
       // message names the amendment and the reason — that message IS the
       // product here, so it goes to the caller unchanged, not swallowed
-      // into a generic 500.
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // into a generic 500. handleGovernanceError also records the attempt
+      // — see server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/value-outcomes/:outcomeId/measure',
+        subjectTable: 'value_outcomes',
+        subjectId: outcomeId,
+        tenantId: refusalTenantId,
+        institutionId: refusalInstitutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
@@ -449,6 +451,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
       res.status(400).json({ message: `invalid value outcome id: ${outcomeId}` });
       return;
     }
+
+    // Captured for handleGovernanceError's refusal record.
+    let refusalTenantId: string | null = null;
+    let refusalInstitutionId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -478,6 +484,8 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
+      refusalTenantId = outcome.tenant_id;
+      refusalInstitutionId = outcome.institution_id;
       if (outcome.realization !== 'measured') {
         // value_outcomes_verified_requires_human would reject this write
         // anyway once realization flips to 'verified' without the rest of
@@ -599,8 +607,16 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(422).json({ message: err.message });
         return;
       }
-      if (isCheckViolation(err)) {
-        res.status(422).json({ message: err.message });
+      // handleGovernanceError also records the attempt — see
+      // server/lib/refusal.ts.
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/value-outcomes/:outcomeId/verify',
+        subjectTable: 'value_outcomes',
+        subjectId: outcomeId,
+        tenantId: refusalTenantId,
+        institutionId: refusalInstitutionId,
+        attemptedPayload: req.body,
+      })) {
         return;
       }
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
