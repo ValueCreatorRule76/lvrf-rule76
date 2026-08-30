@@ -128,7 +128,12 @@ export function GovernedForm<T>({
   );
 }
 
-function ResultBlock<T>({
+/**
+ * The four PostResult treatments, extracted so every governed write in this
+ * client renders them identically rather than each reimplementing its own.
+ * GovernedForm uses this unchanged; GovernedAction.tsx is the other caller.
+ */
+export function ResultBlock<T>({
   result,
   renderSuccess,
 }: {
