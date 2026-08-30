@@ -3871,3 +3871,155 @@ the journal is what lied in the first place. Both confirmation columns and the
 drift.
 
 Local can now reach states production is in daily.
+
+---
+
+## 2.0 item 6 closed — the shopping list — 30 August 2026
+
+Card `01B` on the run page, rendered entirely from the gap register response. **No
+endpoint, no model call, no generation.** Every word comes from the register or is
+fixed template text, and that is structurally true rather than a matter of
+discipline — there is no other source of data available to the component.
+
+### Why a shopping list, not a brief
+
+A shopping list is complete, ordered, and unglamorous. You do not hand someone a
+persuasive essay about milk.
+
+It is also the right register for a customer conversation: *here is what we need
+from you, here is why each item matters, here is what it unlocks.* No argument, no
+pressure — just the things.
+
+### Three verbs, because the asks are genuinely different
+
+```
+AGREE     definition   what a measure means, before anything is gathered
+OBTAIN    document     a thing someone produces
+CONFIRM   person       someone accepts accountability for a figure
+```
+
+Ordered as the endpoint returns them. Nobody confirms a figure whose definition was
+never agreed.
+
+### THE FINDING: the card and the paste are different artifacts
+
+This came from reading the output as an email rather than as a feature.
+
+**On screen**, context surrounds the list — the metric, the score, the refusal
+banner, the spine. The list is the last thing you need because everything else is
+visible.
+
+**In an email it arrives alone.** And what was missing was not decoration, it was
+the recipe: *you know what a shopping list is for because you know what you are
+cooking.* The paste said "get these things" without saying what is being built,
+where it stands, or what completing it achieves.
+
+So the text form — and only the text form — gained a header:
+
+```
+Value record for {engagement} — {metric}.
+Computed confidence: 55/100 (MEDIUM).
+Closing the 3 items below adds 45 points.
+Once closed, the outcome can be verified and the record shared with the customer.
+```
+
+Every value computed. The sum of `earns` is an exact sum, not an estimate.
+
+### F4's absence is information
+
+The header was specified to carry finding F4's own wording — *"the record is not
+defensible to a finance function in this state"* — **where it applies.** It did not
+appear, and that was correct rather than a gap.
+
+F4 fires only when the band is `low`. Run 19 is `medium`, so the record has moved
+past the state F4 describes.
+
+**Filling that silence with a softer sentence would have been marketing copy in a
+governed artifact.** A medium record is not indefensible, and the system declining
+to say so is the honest outcome. The absence carries meaning.
+
+### The today's-list caveat, unconditionally
+
+Rendered at the top of the card and in the paste, always:
+
+> This is today's register, computed from the outcome as it stands now — not from
+> this run's payload. On a locked run the confidence score above is a photograph;
+> this list is not.
+
+This is the one way the card could mislead. A shopping list beside a frozen score
+looks like it belongs to it — the incoherence `EvidenceCard`'s comment warns about.
+
+### Two wording fixes found by reading the output
+
+**A field name leaked into customer-facing copy.** The refused requirement read
+*"see refusal_message for why"* — a JSON field name, in text that gets pasted into
+emails. Now it says the reason is below, and the message renders beneath it. One
+copy, no drift.
+
+**The metric was named three times** — opener and both OBTAIN items. Requirements
+now read *"the baseline"* and *"the actual value"*; the subject is established by
+the record they belong to.
+
+The standalone test applied to each string: the register is an API response and a
+consumer may render one entry without the header, so every requirement must still
+name a concrete action in isolation. *"An independently source-verified extract for
+the baseline is needed for full credit"* passes. *"The value must be attached"*
+would not.
+
+`metric_definition_confirmed`'s three strings had the same repetition and were fixed
+too — `confirmer_simulated` needed restructuring, since the metric name was the
+sentence's possessive subject rather than an aside and could not be dropped
+mechanically.
+
+**Consequence, taken deliberately:** removing every use made `metricName` genuinely
+dead on `buildRequirement` and the structural override. A parameter that is accepted
+and silently ignored tells the next reader something is used when it is not — the
+same class as a stale name, and this codebase has found six of those. Removed,
+along with `bm.name` from the query and one stale comment.
+
+### Also fixed: a column with no information
+
+`HeartbeatCard`'s Stage column read *No stage* on every row. Runtime emitters do not
+set `value_stage` — correct, a lock is not a spine stage — so the column was width
+with nothing in it. It now renders only when at least one event in the set has a
+stage, and the per-row fallback survives for the mixed case.
+
+### Roster: the payload carries no institution name
+
+`produceRun` fetches `institution_id` and never joins for the name, so anything
+rendering from a payload can identify the **engagement** but not the **account**.
+
+Found because the paste's opener uses the engagement name, which at Curia reads
+*"Curia — reference example, not an engagement"* — a label doing duty as a noun
+phrase. The template is right and the data is unusual; that is the correct order of
+things. A real engagement name reads cleanly.
+
+Will matter for the record document renderer.
+
+### Verified on production
+
+```
+Value record for Curia — reference example, not an engagement — Time to full
+productivity, newly promoted manager.
+Computed confidence: 55/100 (MEDIUM).
+Closing the 3 items below adds 45 points.
+Once closed, the outcome can be verified and the record shared with the customer.
+[today's-list caveat]
+
+OBTAIN — a thing someone produces
+  An independently source-verified extract for the baseline is needed for full
+  credit — the current evidence is attestation-only. (+10 of 25)
+  Evidence supporting the actual value must be attached. An earlier attempt to
+  satisfy this was already refused — the reason is below. (+25 of 25)
+    Already refused: LVRF: vendor-published evidence may not support a measured
+    actual. AMENDMENT-005 Article I. The actual comes from the customer's system
+    of record.
+
+CONFIRM — someone accepts accountability for a figure
+  A named, non-simulated person of record must verify this outcome's result.
+  (+10 of 10)
+    On record: Brad Piver (external analyst of record)
+```
+
+**This is the first output of the system that could be sent to a customer as-is.**
+Every claim in it was computed; nothing was written to persuade.
