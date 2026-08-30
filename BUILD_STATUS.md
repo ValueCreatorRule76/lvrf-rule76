@@ -4023,3 +4023,169 @@ CONFIRM — someone accepts accountability for a figure
 
 **This is the first output of the system that could be sent to a customer as-is.**
 Every claim in it was computed; nothing was written to persuade.
+
+---
+
+## 2.0 item 4 — self-drift detection — 30 August 2026
+
+The instrument now checks whether its own record is accurate, and reports what it
+finds by the same standard it applies to everyone else's claims.
+
+### Drift is a finding, not a health signal
+
+Health measures **faithfulness to a process** — did the institution do the things it
+owes itself. A dimension at 25% coverage is not wrong, it is unmeasured, and the
+model is careful never to conflate those.
+
+**Drift is not unmeasured. Drift is a false statement sitting in the record.**
+Reporting it as a coverage gap would be the softest possible way to say so.
+
+So it joins F1–F4 as a finding: something wrong that demands treatment.
+
+### Two addressees on one card
+
+`Finding` gained `subject: 'outcome' | 'instrument'`, and drift uses a separate
+**D-series**.
+
+F3 means *get a verifier* — a customer can close it. D1 meaning *a declared trigger
+is missing* is not a customer's problem and no engagement can close it. Same card,
+different addressee, and the reader must be able to tell who has to act.
+
+**A field, not a naming convention.** A code prefix is a convention; this codebase
+has found six conventions that were not constraints.
+
+Severity for a drift finding is `warning` or `critical`, **never `watch`**. Watch
+means keep an eye on this. A false statement in the record is not something to watch
+— it is wrong, and wrong needs treating.
+
+### D0 — the ambiguity that had existed for twenty runs
+
+A drift check that passes produces nothing. So an empty findings list means either
+*the checks ran and found nothing* or *the checks did not run* — different facts,
+and the record could not say which.
+
+**Twenty runs carried an implicit claim they never earned.** The findings card
+looked clean, and clean meant nothing about whether the instrument had checked
+itself.
+
+D0 fires when `driftChecksRan` is false: *the drift instrument's self-checks did not
+run for this record.* Run 20 was the first run to say so.
+
+`driftChecksRan` and `driftFindings` are **required, not optional**. Any default is
+itself an assertion — `true` would be the plausible-default failure, and `false`
+would assert a governance fact by omission on every existing caller. Required means
+TypeScript forces each call site to decide. Three callers broke on compile, which
+was correct.
+
+### D1 — declared triggers still present
+
+Compares `hardening_manifest` against `pg_trigger` **by name and table**.
+
+> **Lists, never counts.** On 23 August a count of 41 reconciled by coincidence
+> while five declared triggers had never been applied. That coincidence is why this
+> check exists.
+
+```
+in manifest, absent from pg_trigger   CRITICAL, names every one
+manifest empty                        WARNING — hardening has not run; NOT a pass
+manifest stale                        WARNING
+otherwise                             silence
+```
+
+### The manifest, and why it is not a constant
+
+The expected trigger list could have lived in the checking code. That would be a
+**second declaration** of what `hardening.sql` already declares — two lists,
+hand-synchronised, drifting silently.
+
+**A drift detector that drifts is the most embarrassing possible failure of this
+feature.**
+
+`hardening.sql` writes the manifest at the end of every run, **derived by reading
+back `information_schema.triggers`** rather than enumerating from its own arrays.
+That was the agent's call and it is better than the specification: a tenth
+individually-declared trigger added later is captured automatically, because there
+are no paired inserts to forget. It also records what was *actually created* rather
+than what the file *intended* to create.
+
+The manifest is truncated and repopulated each run — **the one place truncation is
+correct in this system**, because it records what THIS run applied, not history. A
+stale entry would be a false claim about the present. It carries no triggers of its
+own; a `_no_delete` would prevent `hardening.sql` from working.
+
+Trigger count stays 64, and the verification arithmetic says why the new table adds
+none.
+
+### What D1 cannot catch, stated rather than implied
+
+**The manifest is derived from the same catalog the check reads.** So D1 detects
+drift occurring AFTER a hardening run — a trigger dropped since. It cannot detect a
+trigger that failed to create DURING the run, because the manifest would simply not
+list it.
+
+**The manifest records what `hardening.sql` declared.** A trigger it never declared
+is invisible to both. This catches *declared-but-missing*, not
+*applied-but-undeclared*.
+
+That is the direction the 23 August gap ran, so it is the right coverage. The record
+must not imply more.
+
+### SQL only, deliberately
+
+A check that reads files can fail for boring reasons — a permission error, a moved
+file — and would emit a drift finding about the **checker** rather than the system.
+A finding must mean something is wrong with the record.
+
+Filesystem-level drift (client types versus server returns, `ops/` files versus
+deployed ones) belongs in a lint or a build step. It lives on a developer's machine
+at authoring time and no runtime check will ever catch it.
+
+### A hole in the spec, caught by the agent
+
+`runDriftChecks` runs inside `req.dbClient`'s transaction. If any of its queries
+errors, **Postgres aborts the transaction server-side — a JS `try/catch` does not
+undo that**, and every later query including the `value_runs` INSERT would fail.
+The instruction "do not let a drift check failure fail the run" would have been
+violated by the obvious implementation.
+
+Resolved with the `SAVEPOINT` / `ROLLBACK TO SAVEPOINT` pattern already established
+in `walkSpine.ts`'s `verify_guard`. **A failed check is an unrun check**: catch it,
+pass `driftChecksRan: false`, let D0 fire. Producing a record matters more than
+checking it, and D0 already says the record is unverified.
+
+### Verified on production
+
+```
+run 20   F3 (outcome, warning)  +  D0 (instrument, warning)   checks not yet wired
+run 21   F3 (outcome, warning)                                checks ran, lists matched
+```
+
+Silence is also what a broken check produces, so the comparison was proved by hand:
+
+```
+begin;
+drop trigger evidence_touch on evidence;
+select count(*) from hardening_manifest m
+  left join pg_trigger t on ... where t.tgname is null;
+-- 1
+rollback;
+```
+
+The join finds the absence. The destructive version — dropping a trigger on
+production to watch D1 fire through a real run — was **not** performed: real risk
+for marginal gain, and the D0-then-no-D0 transition already showed the wiring works.
+
+Worth noting what the test trigger does: `evidence_touch` maintains
+`evidence.updated_at`. Had it stayed dropped, that column would silently stop
+updating and nothing else would fail. **Harmless-looking, invisible at runtime, and
+detectable only by comparing lists** — precisely the class D1 exists for.
+
+### Deferred, with reasons
+
+- **D2** migration journal versus schema. Local's exact failure — the journal
+  claimed 0013 applied while the column was absent — and checkable only for
+  migrations whose effect is inspectable
+- **D3** governed tables missing governance columns. `lvrf_touch` errors on write to
+  a table with no `updated_at`
+- **D4** orphaned supersession — `superseded_by_id` pointing at a deleted or
+  nonexistent row
