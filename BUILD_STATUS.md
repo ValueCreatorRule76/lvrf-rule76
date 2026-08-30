@@ -3652,3 +3652,9 @@ session — as every gate test in this project's history has been — leaves not
 The trigger raises and no application is listening.
 
 Do not describe this as complete coverage.
+
+Provenance of the entry above: migration 0016 and the hardening update were applied
+on srv1862778 on 30 August 2026, and both results — the recorded refusal and the
+blocked DELETE — were produced there via curl to 127.0.0.1:3001 and psql as
+postgres. The session that authored this entry generated the migration locally and
+did not run it, and flagged that it could not attest to the production claims.
