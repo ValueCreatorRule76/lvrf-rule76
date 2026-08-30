@@ -2920,3 +2920,121 @@ tracker will not correct itself.
 
 Production is correct. Two of the six call sites could not be exercised locally as
 a result, and were verified on production instead.
+
+---
+
+## The commit stage, and the first band change — 30 August 2026
+
+### POST /api/value-outcomes/:outcomeId/commit
+
+Added to the existing `outcomeWalk` router, which already held `/measure` and
+`/verify`. Commit is the stage between baseline and measure and belongs with them.
+
+`value_outcomes_commit_is_complete` requires `committed_at` to imply both
+`target_value` and `committed_by_person_id`. All three are set together or the
+write is refused.
+
+The committer **must belong to the outcome's institution and must not be
+simulated** — the same rule `/verify` applies to its verifier. A commitment by the
+vendor is not a commitment.
+
+Refuses: 404 on a missing, soft-deleted or superseded outcome. 409 if
+`committed_at` is already set, naming the existing committer and date — a
+commitment is not amended, the outcome is superseded. 409 if realization is not
+`claimed`, because committing after measurement is backwards.
+
+The commitment note is written as an `attestation` evidence row linked with
+`supports = 'impact_basis'`, provenance naming the committer. Mirrors how `/verify`
+writes its attestation.
+
+**HB-0014 fires in the same transaction, healthState `healthy`.**
+`buildHeartbeatPlan` has a `watch` branch for a synthetic sponsor; it is
+unreachable at this call site, because a real non-simulated committer at the
+institution is the only way this endpoint succeeds. Stated in a comment so nobody
+later "fixes" it to match the plan's literal branch.
+
+### The model correction: what human_commit_of_record scores
+
+The factor asks *"Did a named, non-synthetic person commit to THE TARGET?"* It was
+scoring `engagements.sponsor_person_id` — a **relationship-level** field. It now
+scores `value_outcomes.committed_by_person_id`, mirroring the verifier block
+directly beneath it, which already read `verified_by_person_id` off the outcome.
+
+The system already treated sponsor as relationship and verifier as per-outcome,
+deliberately. The commit factor was on the wrong side of that line.
+
+`engagements.sponsor_person_id` was dropped from produceRun's SELECT — confirmed by
+grep that nothing else reads it except the schema definition and
+`seedCustomerZero.ts`, which only writes it.
+
+### WHY THIS WAS SAFE NOW AND WOULD NOT BE LATER
+
+**A change to what a factor READS changes what every prior score MEANT**, and
+nothing records which model version scored a run.
+
+Safe here for two reasons, both temporary:
+- **No run had ever earned this factor.** Every one read *sponsor of record is
+  synthetic*, so no stored score changes value
+- **All thirteen runs are locked and immutable**, so none will be recomputed
+
+This is the concrete argument for versioned model weights, previously a
+hypothetical on the 2.0 roster. The moment one run has earned a factor, changing
+what that factor reads silently makes it incomparable to the next.
+
+### The walkSpine fence, tested
+
+Renaming `FindingsInput.sponsorSynthetic` broke `walkSpine.ts:905`, which was on the
+do-not-touch list. **Flagged rather than resolved unilaterally.**
+
+Resolution: the one-line key rename only. The fence existed to protect the Customer
+Zero walk's sequence, derivations and score — not to make the file immutable. A key
+rename on a call site changes none of those.
+
+**Verified, not assumed:** `verifyConfidenceParity.ts` confirms Customer Zero still
+scores exactly 30.0/100, band low, identical F2/F3/F4 findings. The fence held in
+substance even though the file was edited.
+
+### Verified on production — the first band change in thirteen runs
+
+```
+run 12   45   low
+run 13   55   MEDIUM      terminal_value_stage: commit
+```
+
+`human_commit_of_record` earned 10 for the first time. Target 150 against a sourced
+baseline of 214, committed by a named non-simulated person at the institution.
+
+Coverage held at 35% — HB-0014 is governance, a dimension already measured.
+
+The run page changed in four places at once: TARGET reads 150 where it said NOT YET
+SET on every prior run; the rail shows `03 MODEL · target 150` and `04 COMMIT`
+reached; the confidence panel reads *10/10 Named human sponsor of record — Brad
+Piver (external analyst of record)*; and a fifth block filled on the earned bar.
+
+**The gate still holds.** Realization remains `claimed`, verification refused,
+sharing disabled until a named human verifier confirms sources. Committing did not
+unlock verification and should not.
+
+### The sequence
+
+```
+10 · 10 · 30 · 30 · 45 · 45 · 45 · 45 · 45 · 45 · 45 · 45 · 55
+```
+
+Three plateaus, three rises, one band change. The eight consecutive 45s are the
+runtime heartbeat work — it improved health without touching confidence, which is
+correct: **they are different axes**, and the sequence demonstrates that better than
+any explanation.
+
+### Roster addition: stale names in shared models
+
+Two now, both the same convention-not-constraint shape:
+
+- `ConfidenceInput.sponsorName` receives a committer. The field name no longer
+  matches its content
+- The panel label reads *Named human sponsor of record* where a reader sees it,
+  describing a committer
+
+Correctly out of scope for the change that created them, and they belong together
+with `confidenceModel.isSynthetic()`'s `[SIM]` prefix check — three stale
+conventions in one model file.
