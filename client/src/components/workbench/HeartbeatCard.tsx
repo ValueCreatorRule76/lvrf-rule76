@@ -29,6 +29,16 @@ export function HeartbeatCard({ run }: { run: Run }) {
   }
 
   const allHealthy = events.every((e) => e.healthState === 'healthy');
+  // Runtime emitters never set value_stage — a lock is not a spine stage —
+  // so a run built entirely from runtime events would show "No stage" down
+  // every row: a column with width and no information. Shown only when at
+  // least one event in the set actually carries a stage (a fixture-walk
+  // run, or a run mixing both kinds of event); the per-row fallback below
+  // still applies to whichever rows in that set have none.
+  const hasAnyStage = events.some((e) => e.valueStage !== null);
+  const headers = hasAnyStage
+    ? ['ID', 'Event', 'Stage', 'Category', 'State', 'Hash']
+    : ['ID', 'Event', 'Category', 'State', 'Hash'];
 
   return (
     <Card
@@ -43,7 +53,7 @@ export function HeartbeatCard({ run }: { run: Run }) {
       <table className="w-full border-collapse text-[12.5px]">
         <thead>
           <tr>
-            {['ID', 'Event', 'Stage', 'Category', 'State', 'Hash'].map((h) => (
+            {headers.map((h) => (
               <th
                 key={h}
                 className="whitespace-nowrap border-b border-silver px-3 py-[9px] text-left text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45"
@@ -60,15 +70,17 @@ export function HeartbeatCard({ run }: { run: Run }) {
                 {e.heartbeatId}
               </td>
               <td className="border-b border-rule-soft px-3 py-[9px]">{e.eventType}</td>
-              <td className="border-b border-rule-soft px-3 py-[9px] text-[11.5px] text-ink-45">
-                {/*
-                  heartbeat_events.value_stage is nullable by design — a
-                  system-level event (HB-0001 system init, HB-0002
-                  authentication) is not tied to any spine stage. A blank
-                  cell would be indistinguishable from not-applicable.
-                */}
-                {e.valueStage === null ? <span className="italic">No stage</span> : e.valueStage}
-              </td>
+              {hasAnyStage && (
+                <td className="border-b border-rule-soft px-3 py-[9px] text-[11.5px] text-ink-45">
+                  {/*
+                    heartbeat_events.value_stage is nullable by design — a
+                    system-level event (HB-0001 system init, HB-0002
+                    authentication) is not tied to any spine stage. A blank
+                    cell would be indistinguishable from not-applicable.
+                  */}
+                  {e.valueStage === null ? <span className="italic">No stage</span> : e.valueStage}
+                </td>
+              )}
               <td className="border-b border-rule-soft px-3 py-[9px] text-[11.5px] text-ink-45">
                 {e.category}
               </td>

@@ -219,12 +219,14 @@ const STRUCTURAL_ACTUAL_REQUIREMENT = (metricName: string): string =>
 
 // Appended to the base requirement when state is 'refused' and path is
 // 'viable' — a reader should not have to join requirement and
-// refusal_message to learn the obvious source was already tried. The
-// refusal_message field carries the verbatim reason; this only points at it,
-// so the two never drift out of sync.
+// refusal_message to learn the obvious source was already tried. This is
+// rendered on a page and pasted into customer emails, so it reads as prose,
+// not as a pointer to a JSON field: every caller renders refusal_message
+// directly beneath the requirement it belongs to (see GapListCard.tsx), so
+// this only needs to say the reason follows — never the message itself, to
+// keep one copy and no drift.
 const ALREADY_REFUSED_SUFFIX =
-  ' An earlier attempt to satisfy this was already refused — see refusal_message for why — so the next attempt ' +
-  'needs to address that reason, not repeat it.';
+  ' An earlier attempt to satisfy this was already refused — the reason is below.';
 
 function buildRequirement(factor: string, gap: string, metricName: string): string {
   switch (factor) {

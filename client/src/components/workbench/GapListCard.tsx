@@ -88,10 +88,43 @@ function GapListBody({ run, outcomeId }: { run: Run; outcomeId: string }) {
   return <GapList run={run} gaps={result.gaps} />;
 }
 
-function buildPlainText(run: Run, gaps: GapEntry[]): string {
+// On screen this list sits beside the metric, the score, the refusal
+// banner, the spine — an email gets none of that. Composed entirely from
+// run.payload and the gap entries already in hand: no new fetch, no new
+// number. Where a line's value is not available, the line is omitted rather
+// than estimated — see confidence/findings below.
+function buildPlainTextHeader(run: Run, gaps: GapEntry[]): string[] {
+  const { score, band } = run.payload.confidence;
+  // F4 only fires when computed confidence is LOW (findingsModel.ts) — its
+  // own sentence, not a paraphrase, so "not defensible to a finance
+  // function" is never softened into marketing copy.
+  const f4 = run.payload.findings.find((f) => f.code === 'F4');
+
   const lines: string[] = [];
   lines.push(`${run.payload.engagement} — ${businessMetricName(run.payload.businessMetric)}`);
-  lines.push('Gap register');
+  lines.push('Value record.');
+  lines.push(`Computed confidence: ${score}/100 (${band.toUpperCase()}).`);
+  if (f4) lines.push(f4.message);
+
+  if (gaps.length > 0) {
+    // Each factor's earns is independent of the others (confidenceModel.ts
+    // sums per-factor weight-earned directly into the score), so the sum
+    // below is exact arithmetic on data already in the response, not a
+    // projection.
+    const totalEarns = Math.round(gaps.reduce((sum, g) => sum + g.earns, 0) * 10) / 10;
+    lines.push('');
+    lines.push(
+      `Closing the ${gaps.length} item${gaps.length === 1 ? '' : 's'} below adds ${totalEarns} points.`,
+    );
+    lines.push('Once closed, the outcome can be verified and the record shared with the customer.');
+  }
+
+  return lines;
+}
+
+function buildPlainText(run: Run, gaps: GapEntry[]): string {
+  const lines: string[] = buildPlainTextHeader(run, gaps);
+  lines.push('');
   lines.push(TODAYS_LIST_CAVEAT);
   lines.push('');
 
