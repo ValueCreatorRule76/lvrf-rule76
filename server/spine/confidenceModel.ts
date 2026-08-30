@@ -233,16 +233,19 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
     }
   }
 
-  // 5 & 6. Human actors of record.
-  for (const [factor, label, name, simulated] of [
-    ['human_commit_of_record', 'Committer', input.committerName, input.committerSimulated],
-    ['human_verifier_of_record', 'Verifier', input.verifierName, input.verifierSimulated],
+  // 5 & 6. Human actors of record. The note names the ACTION (committed /
+  // verified), never a role noun — "Sponsor"/"Committer" read fine as a
+  // label for a role, but this factor scores a specific person, and "<name>
+  // of record." is nonsense once <name> is a person rather than a role.
+  for (const [factor, verb, name, simulated] of [
+    ['human_commit_of_record', 'Committed by', input.committerName, input.committerSimulated],
+    ['human_verifier_of_record', 'Verified by', input.verifierName, input.verifierSimulated],
   ] as const) {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
     if (simulated) {
-      award(factor, 0, `${label} of record is synthetic (${name}).`);
+      award(factor, 0, `${verb} ${name} — a simulated identity, not a person of record.`);
     } else {
-      award(factor, weight, `${name} of record.`);
+      award(factor, weight, `${verb} ${name}.`);
     }
   }
 

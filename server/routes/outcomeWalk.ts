@@ -328,8 +328,17 @@ export function outcomeWalkRouter(pool: Pool): Router {
         throw new Error('x-actor-person-id missing on a request past actorContext');
       }
 
-      const { rows: [outcome] } = await client.query<{ id: string; realization: string }>(
-        'SELECT id, realization FROM value_outcomes WHERE id = $1 AND deleted_at IS NULL',
+      const { rows: [outcome] } = await client.query<{
+        id: string;
+        tenant_id: string;
+        institution_id: string;
+        engagement_id: string;
+        realization: string;
+      }>(
+        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization
+           FROM value_outcomes vo
+           JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+          WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
       if (!outcome) {
@@ -354,14 +363,18 @@ export function outcomeWalkRouter(pool: Pool): Router {
       // row that DOES exist with supports = 'actual' already passed
       // lvrf_block_ai_actual at the moment it was linked, so existence here
       // is sufficient; the admissibility filtering has already happened.
-      const { rows: [{ exists: hasActualEvidence }] } = await client.query<{ exists: boolean }>(
-        `SELECT EXISTS (
-           SELECT 1 FROM value_outcome_evidence
-            WHERE value_outcome_id = $1 AND supports = 'actual'
-         )`,
+      // Selecting evidence.simulated alongside existence, rather than a bare
+      // EXISTS, also gives HB-0015 below the same fact buildHeartbeatPlan
+      // scores from (actualSimulated) without a second query or an import of
+      // the plan itself.
+      const { rows: actualEvidenceRows } = await client.query<{ simulated: boolean }>(
+        `SELECT e.simulated
+           FROM value_outcome_evidence voe
+           JOIN evidence e ON e.id = voe.evidence_id
+          WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual'`,
         [outcomeId],
       );
-      if (!hasActualEvidence) {
+      if (actualEvidenceRows.length === 0) {
         res.status(422).json({
           message:
             "no admissible evidence supports an actual for this outcome. AI-sourced, " +
@@ -370,6 +383,13 @@ export function outcomeWalkRouter(pool: Pool): Router {
         });
         return;
       }
+      // lvrf_block_ai_actual already refuses simulated evidence linked with
+      // supports = 'actual' (db/hardening.sql), so this is always false via
+      // this call site today — same shape as HB-0014's unreachable 'watch'
+      // branch below. Computed honestly anyway: the health state is what
+      // buildHeartbeatPlan would score from this evidence, not an assumption
+      // that the guard above makes it moot.
+      const anyActualEvidenceSimulated = actualEvidenceRows.some((r) => r.simulated);
 
       const { rows: [updated] } = await client.query<{ realization: string; value_stage: string }>(
         `UPDATE value_outcomes
@@ -379,6 +399,24 @@ export function outcomeWalkRouter(pool: Pool): Router {
           RETURNING realization, value_stage`,
         [actualValue, actualMeasuredAt, outcomeId],
       );
+
+      // HB-0015 Value Realized. healthState mirrors buildHeartbeatPlan's
+      // actualSimulated branch exactly, derived here from the same evidence
+      // this handler already queried above — not imported from the plan.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0015',
+        tenantId: outcome.tenant_id,
+        institutionId: outcome.institution_id,
+        engagementId: outcome.engagement_id,
+        subjectTable: 'value_outcomes',
+        subjectId: outcomeId,
+        actorPersonId,
+        healthState: anyActualEvidenceSimulated ? 'watch' : 'healthy',
+        payload: {
+          actual_value: actualValue,
+          actual_measured_at: actualMeasuredAt.toISOString(),
+        },
+      });
 
       res.status(200).json({
         realization: updated.realization,
@@ -423,8 +461,17 @@ export function outcomeWalkRouter(pool: Pool): Router {
         throw new Error('x-actor-person-id missing on a request past actorContext');
       }
 
-      const { rows: [outcome] } = await client.query<{ id: string; institution_id: string; realization: string }>(
-        'SELECT id, institution_id, realization FROM value_outcomes WHERE id = $1 AND deleted_at IS NULL',
+      const { rows: [outcome] } = await client.query<{
+        id: string;
+        tenant_id: string;
+        institution_id: string;
+        engagement_id: string;
+        realization: string;
+      }>(
+        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization
+           FROM value_outcomes vo
+           JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+          WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
       if (!outcome) {
@@ -514,6 +561,33 @@ export function outcomeWalkRouter(pool: Pool): Router {
           RETURNING realization, value_stage`,
         [verifiedByPersonId, verifiedAt, outcomeId],
       );
+
+      // HB-0016 Value Verified — CONSTITUTIONAL. The seventh and last health
+      // dimension LVRF can measure today; Security stays UNMEASURED until
+      // authentication exists (see db/HEALTH_MODEL.md, AMENDMENT-003).
+      //
+      // healthState is always 'healthy' here. buildHeartbeatPlan has a
+      // 'warning' branch for realization not reaching 'verified', but it is
+      // UNREACHABLE at this call site: the guard above already 409s any
+      // outcome not currently 'measured', and the UPDATE unconditionally
+      // sets realization = 'verified' — this handler either writes a
+      // completed verification or never reaches this emit. A refused
+      // verification is expressed as this endpoint's 409/422 responses
+      // above, not as a heartbeat for a write that didn't happen.
+      await emitHeartbeat(client, {
+        heartbeatId: 'HB-0016',
+        tenantId: outcome.tenant_id,
+        institutionId: outcome.institution_id,
+        engagementId: outcome.engagement_id,
+        subjectTable: 'value_outcomes',
+        subjectId: outcomeId,
+        actorPersonId,
+        healthState: 'healthy',
+        payload: {
+          verified_at: verifiedAt.toISOString(),
+          verified_by: verifier.full_name,
+        },
+      });
 
       res.status(200).json({
         realization: updated.realization,
