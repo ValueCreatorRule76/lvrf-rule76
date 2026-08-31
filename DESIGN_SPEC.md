@@ -1100,15 +1100,20 @@ state transition.
 - Portfolio learning across engagements
 
 **Explicitly out of scope at every tier:** multi-tenancy, user management, dashboards,
-third-party integrations, industry packs as LVRF features (they are Compass OS
-concerns).
+third-party integrations.
 
 ### Compass OS boundary
 
-Industry Packs, the benchmarking corpus, Deep Research and any financial model are
-**Compass OS concerns inherited by both Studios** — not features copied into each.
-`HB-0010`'s producer is already recorded as Compass, and `HB-0012` names CVAF, LVRF,
-Compass and the Executive Portal as consumers.
+The benchmarking corpus and any financial model are **Compass OS concerns inherited by
+both Studios** — not features copied into each. `HB-0010`'s producer is already
+recorded as Compass, and `HB-0012` names CVAF, LVRF, Compass and the Executive Portal
+as consumers.
+
+**Industry Packs and Deep Research are not on this list — corrected 31 August 2026,
+see §18.** They are not one Compass OS concern shared by both Studios; each Studio
+needs its own. CVAF's packs speak commercial-value language; LVRF's would speak
+learning-value language — different vocabularies, different metrics, different rooms.
+Two things, not one thing copied twice.
 
 Where LVRF needs a Compass concern before Compass exists, it **declares the seam and
 stubs it returning UNMEASURED** — never a plausible default.
@@ -1388,3 +1393,21 @@ from the same state.
 The deploy script's HEAD comparison catches the equivalent for application
 code. There is no equivalent guard for `hardening.sql`, which is applied by
 hand.
+
+### Industry Packs and Deep Research were misattributed to Compass — corrected 31 August 2026
+
+§12 previously listed Industry Packs and Deep Research alongside the benchmarking
+corpus and any financial model as **Compass OS concerns inherited by both Studios —
+not features copied into each.** It also listed "industry packs as LVRF features"
+under 2.0's explicitly-out-of-scope items, on the same reasoning.
+
+That reasoning was wrong for these two items specifically. A pack or a research
+intake is not one thing a Studio borrows from Compass; it is Studio-specific because
+its **vocabulary** is: CVAF's Industry Packs speak commercial-value language, and
+LVRF's would speak learning-value language — different metrics, different rooms. A
+single shared implementation would have to launder one into the other, which is the
+kind of translation this system otherwise refuses to do silently.
+
+The benchmarking corpus and any financial model are unaffected by this correction —
+those remain genuinely shared Compass OS concerns, and the reasoning that they are
+"inherited, not copied" still holds for them.
