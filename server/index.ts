@@ -21,6 +21,7 @@ import { recordDocumentsWriteRouter, recordDocumentsReadRouter } from './routes/
 import { compareRunsRouter } from './routes/compareRuns.js';
 import { gapRegisterRouter } from './routes/gapRegister.js';
 import { researchPromptRouter } from './routes/researchPrompt.js';
+import { industryResearchRouter } from './routes/industryResearch.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/value-runs', recordDocumentsWriteRouter(pool));
 app.use('/api/value-runs', compareRunsRouter(pool));
 app.use('/api/value-outcomes', recordDocumentsReadRouter(pool));
 app.use('/api/value-outcomes', gapRegisterRouter(pool));
+app.use('/api/industries', industryResearchRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 
