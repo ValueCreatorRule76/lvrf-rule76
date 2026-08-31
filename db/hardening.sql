@@ -140,7 +140,14 @@ DECLARE t text;
   governed text[] := ARRAY[
     'tenants', 'institutions', 'persons', 'engagements', 'business_metrics',
     'capabilities', 'assessments', 'evidence', 'reflections',
-    'value_outcomes', 'stewardship_returns', 'heartbeats', 'offerings'
+    'value_outcomes', 'stewardship_returns', 'heartbeats', 'offerings',
+    -- 0019 (2.0 item 5, industry packs step 1): industry_measures is a
+    -- fully governed row (status/version/superseded_by_id/timestamps,
+    -- same shape as business_metrics), so it belongs in this loop rather
+    -- than a bespoke declaration — the generic "Set deleted_at instead"
+    -- remedy is TRUE for it. industries does NOT belong here; see section
+    -- 11 for why it is declared individually instead.
+    'industry_measures'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -483,7 +490,12 @@ DECLARE t text;
   supersession_governed text[] := ARRAY[
     'assessments', 'business_metrics', 'capabilities', 'engagements', 'evidence',
     'heartbeats', 'institutions', 'offerings', 'persons', 'reflections',
-    'stewardship_returns', 'tenants', 'value_outcomes', 'value_runs'
+    'stewardship_returns', 'tenants', 'value_outcomes', 'value_runs',
+    -- 0019: industry_measures carries superseded_by_id and follows the
+    -- same chain-sanity rules as every other table here. industries does
+    -- not — it has no superseded_by_id column — so it is absent from
+    -- this list, not just from the governed array above.
+    'industry_measures'
   ];
 BEGIN
   FOREACH t IN ARRAY supersession_governed LOOP
@@ -508,7 +520,7 @@ END $$;
 -- array in section 4 unmodified.
 --
 -- hardening_manifest is a fifth ungoverned table, deliberately, for a
--- different reason: see section 11. It is TRUNCATEd and repopulated by this
+-- different reason: see section 12. It is TRUNCATEd and repopulated by this
 -- file on every run, so a _no_delete guard on it would make hardening.sql
 -- fail against its own manifest, and _audit/_touch are meaningless on a
 -- table with no UPDATEs. Do not add it to the governed array.
@@ -684,7 +696,65 @@ CREATE TRIGGER research_results_no_delete
   );
 
 -- ------------------------------------------------------------------
--- 11. 2.0 item 4 — hardening manifest: what THIS run applied
+-- 11. 2.0 item 5, industry packs step 1 — industries governance
+-- ------------------------------------------------------------------
+-- industry_measures (db/schema.ts) needs nothing here: it is a fully
+-- governed row — status, version, superseded_by_id, steward_person_id,
+-- created_at, updated_at, deleted_at, same shape as business_metrics — so
+-- it was added to the `governed` array (section 4) and the
+-- `supersession_governed` array (section 5e) above rather than declared
+-- individually. See db/drizzle/0019_*.sql for what the table is and why
+-- it is not a business_metrics row.
+--
+-- industries (db/schema.ts) is NOT fully governed, and that is a
+-- decision, not an oversight. It is TENANT-SCOPED REFERENCE DATA — a
+-- taxonomy seeded from one tenant's own vocabulary, extended by inserting
+-- a row, not walked through a draft/ratify/retire lifecycle. It carries
+-- no updated_at, no superseded_by_id, no deleted_at, so three of the four
+-- standard triggers either don't apply or would fail outright:
+--
+--   _audit              yes. lvrf_audit() only needs NEW.id, present on
+--                        every table, and recording who added an industry
+--                        and when is useful.
+--   _touch               NO. There is no updated_at column for
+--                        lvrf_touch() to stamp; attaching it would fail
+--                        on the first UPDATE with "record NEW has no
+--                        field updated_at".
+--   _no_delete           yes, but with ITS OWN remedy text, same pattern
+--                        as record_documents (5c) and refusals (8):
+--                        there is no deleted_at column, so the generic
+--                        "Set deleted_at instead" would be a false
+--                        instruction.
+--   _supersession_sane   NO. lvrf_supersession_is_sane() (5e) reads
+--                        NEW.superseded_by_id unconditionally; there is
+--                        no such column here, so attaching it would fail
+--                        on every INSERT.
+--
+-- Declared individually rather than through section 4's loop for the same
+-- reason record_documents and refusals are: this table's shape does not
+-- match what the generic loop assumes.
+--
+-- CONSEQUENCE: trigger count goes 68 -> 74. Six new triggers —
+-- industry_measures_audit, industry_measures_touch,
+-- industry_measures_no_delete (via section 4's loop),
+-- industry_measures_supersession_sane (via section 5e's loop), plus
+-- industries_audit and industries_no_delete (declared here). Reconciled
+-- by LIST in the Verification block below, not by total.
+
+DROP TRIGGER IF EXISTS industries_audit ON industries;
+CREATE TRIGGER industries_audit
+  AFTER INSERT OR UPDATE ON industries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS industries_no_delete ON industries;
+CREATE TRIGGER industries_no_delete
+  BEFORE DELETE ON industries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'This is tenant-scoped reference data with no soft-delete path; an unwanted industry stays, unused, rather than being deleted.'
+  );
+
+-- ------------------------------------------------------------------
+-- 12. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
 -- database for weeks, while the trigger count reconciled by coincidence
@@ -740,40 +810,42 @@ COMMIT;
 -- right things are present. Do not re-derive a total here and trust it —
 -- diff the SELECT below against the full list this file declares:
 --
---   13 governed tables (0005 added 'offerings') × 3 (_audit, _touch,
---   _no_delete) — 39
+--   14 governed tables (0005 added 'offerings'; 0019 added
+--   'industry_measures') × 3 (_audit, _touch, _no_delete) — 42
 --   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
 --   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   5e: <table>_supersession_sane × 14 (assessments, business_metrics,
+--   5e: <table>_supersession_sane × 15 (assessments, business_metrics,
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
---   value_outcomes, value_runs) — 14
+--   value_outcomes, value_runs, industry_measures) — 15
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
 --   research_results_no_delete — 3
---   Total: 68 distinct triggers.
+--   11: industries_audit, industries_no_delete — 2
+--   Total: 74 distinct triggers.
 --
--- 11's hardening_manifest table adds no entry to this arithmetic: it is a
+-- 12's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 11 fail. Total stays 68.
+-- TRUNCATE in section 12 fail. Total stays 74.
 --
--- Expect 102 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
+-- Expect 111 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×14 = 56;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
--- each 5e trigger fires on INSERT and UPDATE, ×14 (+28); refusals_no_delete
+-- each 5e trigger fires on INSERT and UPDATE, ×15 (+30); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
 -- research_results_touch on UPDATE only (+1), research_results_no_delete on
--- DELETE only (+1).
--- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 + 1 + 2 + 1 + 1 = 102.
+-- DELETE only (+1); industries_audit fires on INSERT and UPDATE (+2),
+-- industries_no_delete on DELETE only (+1).
+-- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 = 111.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

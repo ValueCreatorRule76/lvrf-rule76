@@ -157,6 +157,16 @@ export const institutions = pgTable('institutions', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
   name: text('name').notNull(),
   industry: text('industry'),
+  /**
+   * 2.0 item 5, industry packs step 1. `industry` (above) is WHAT WAS
+   * STATED AT INTAKE; this is WHAT IT WAS CLASSIFIED AS against the
+   * tenant's industries taxonomy. Classification is a judgement a person
+   * makes, so this migration adds the column NULL on every row and leaves
+   * it there — asserting a classification here would be exactly the
+   * fabrication this system refuses. An unmapped institution has no pack;
+   * that is an honest state, not a gap to backfill silently.
+   */
+  industryId: uuid('industry_id').references((): AnyPgColumn => industries.id, { onDelete: 'restrict' }),
   /** True when this institution IS the tenant — the customer-zero engagement. */
   isTenantSelf: boolean('is_tenant_self').notNull().default(false),
   ...governance(),
@@ -277,6 +287,15 @@ export const businessMetrics = pgTable('business_metrics', {
   definitionConfirmedByPersonId: uuid('definition_confirmed_by_person_id')
     .references(() => persons.id, { onDelete: 'restrict' }),
   definitionConfirmedAt: timestamp('definition_confirmed_at', { withTimezone: true }),
+  /**
+   * 2.0 item 5, industry packs step 1. NULLABLE: an account can track
+   * something no pack knows about, and forcing every metric into a pack
+   * would invent a classification nobody made. This link is what makes
+   * promotion COUNTABLE — "this industry measure has been sourced at N
+   * institutions" is a query over it.
+   */
+  industryMeasureId: uuid('industry_measure_id')
+    .references((): AnyPgColumn => industryMeasures.id, { onDelete: 'restrict' }),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
@@ -299,10 +318,88 @@ export const businessMetrics = pgTable('business_metrics', {
   // resolves "the current metric" must filter superseded_by_id IS NULL
   // itself — see valueOutcomes.ts's business_metrics lookup.
   index('business_metrics_institution_idx').on(t.institutionId),
+  index('business_metrics_industry_measure_idx').on(t.industryMeasureId),
   /** A confirmer with no date, or a date with no confirmer, is a half-recorded fact. */
   check('business_metrics_definition_confirmation_is_complete',
     sql`(${t.definitionConfirmedByPersonId} IS NULL AND ${t.definitionConfirmedAt} IS NULL)
         OR (${t.definitionConfirmedByPersonId} IS NOT NULL AND ${t.definitionConfirmedAt} IS NOT NULL)`),
+]);
+
+/* ================================================================== */
+/* Industry — the tenant's own industry taxonomy                      */
+/* ================================================================== */
+
+/**
+ * 2.0 item 5, industry packs step 1. TENANT-SCOPED, not global: this
+ * taxonomy is drawn from Skillsoft's own industry content-channel list, and
+ * another vendor running LVRF would have a different one — these are not
+ * industry-standard codes (SIC/NAICS), they are one tenant's vocabulary.
+ * See db/drizzle/0019_*.sql for the seed and its three deliberate
+ * divergences from Skillsoft's own channel spelling/grouping.
+ *
+ * REFERENCE DATA, not a governed business object: no status/version/
+ * superseded_by_id/timestamps. An industry is added by inserting a row, not
+ * by a lifecycle a value engineer walks — the taxonomy is EXTENSIBLE (a new
+ * industry is just a new row) but not itself something with a draft/ratify/
+ * retire arc. hardening.sql gives it _audit and _no_delete only; there is
+ * no updated_at for _touch to stamp and no superseded_by_id for
+ * _supersession_sane to police. See hardening.sql for the full reasoning.
+ */
+export const industries = pgTable('industries', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+}, (t) => [
+  unique('industries_tenant_slug_key').on(t.tenantId, t.slug),
+  index('industries_tenant_idx').on(t.tenantId),
+]);
+
+/* ================================================================== */
+/* Industry measure — the pack entry                                  */
+/* ================================================================== */
+
+/**
+ * 2.0 item 5, industry packs step 1. NOT a business_metrics row. This is
+ * the INDUSTRY-LEVEL claim that a measure carries money in an industry — a
+ * hypothesis until sourced, a conclusion once ratified. An account's
+ * business_metrics row is an INSTANCE of it at one institution. The whole
+ * pack rests on that distinction: collapsing the two would let one
+ * customer's metric stand in for the industry's claim, which is the
+ * anecdote-as-fact failure the N=2 ratification threshold (enforced by a
+ * future writer, not by this schema) exists to prevent.
+ *
+ * Reuses governance() but overrides its status default: 'proposed', not
+ * 'draft' — a pack entry starts life as a hypothesis, not a draft. Only
+ * 'proposed' and 'ratified' are used from lifecycle_status today.
+ */
+export const industryMeasures = pgTable('industry_measures', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  industryId: uuid('industry_id').notNull().references(() => industries.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  unit: text('unit').notNull(),
+  direction: metricDirection('direction').notNull(),
+  definition: text('definition').notNull(),
+  ...governance(),
+  status: lifecycleStatus('status').notNull().default('proposed'),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'industry_measures_superseded_by_fk' }).onDelete('restrict'),
+  index('industry_measures_tenant_idx').on(t.tenantId),
+  index('industry_measures_industry_idx').on(t.industryId),
+  // Partial unique index, same technique as 0014's business_metrics index —
+  // and the same latent gap: 0014's was DROPPED in 0015 because a two-step
+  // supersession (insert the successor, THEN mark the ancestor superseded)
+  // makes both rows momentarily match this predicate, and no index
+  // formulation survives that transient state (see the comment on
+  // businessMetrics above for the full argument). No supersession writer
+  // exists yet for industry_measures — this migration is schema-only — so
+  // the failure mode is latent, not active. Whoever writes the
+  // promotion/demotion path must read that comment before reusing
+  // business_metrics' two-step pattern here.
+  uniqueIndex('industry_measures_industry_name_key').on(t.industryId, t.name)
+    .where(sql`${t.deletedAt} IS NULL AND ${t.supersededById} IS NULL`),
 ]);
 
 /* ================================================================== */

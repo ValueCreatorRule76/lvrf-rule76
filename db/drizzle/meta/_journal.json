@@ -134,6 +134,13 @@
       "when": 1788136552182,
       "tag": "0018_dusty_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788149013229,
+      "tag": "0019_simple_starfox",
+      "breakpoints": true
     }
   ]
 }
