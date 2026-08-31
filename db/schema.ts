@@ -112,6 +112,20 @@ export const researchReviewState = pgEnum('research_review_state', [
   'pending', 'accepted', 'rejected',
 ]);
 
+/**
+ * 2.0 item 5, industry packs step 3. research_results (0018) was designed
+ * for ONE shape: a published figure for one metric at one institution,
+ * scalar value + citation. A pack measure is a richer object — see
+ * industryMeasures below — that does not fit those scalar columns. Two
+ * shapes landing in one table with no discriminant is how a parser starts
+ * guessing; this enum is the discriminant. NO DEFAULT on the column that
+ * carries it — see research_results below.
+ */
+export const researchResultKind = pgEnum('research_result_kind', [
+  'metric_value',     // a published figure for one metric at one institution. Scalar: value + citation.
+  'industry_measure', // a candidate pack entry for an industry. Rich shape, carried in raw_response.
+]);
+
 /* ================================================================== */
 /* Shared builders                                                    */
 /* ================================================================== */
@@ -1171,13 +1185,49 @@ export const hardeningManifest = pgTable('hardening_manifest', {
  * version. A parse happened; that is a fact. Review state moves it from
  * pending to accepted/rejected, but the row itself is never retired or
  * versioned — a correction is a new research pass, not an edit here.
+ *
+ * 2.0 item 5, industry packs step 3. TWO SHAPES NOW LAND HERE, and
+ * resultKind is the discriminant — see researchResultKind above. Added
+ * with NO DEFAULT: a default would be an assertion made on this table's
+ * behalf by every future caller, the same reason FindingsInput requires
+ * driftChecksRan rather than defaulting it. Nothing writes to this table
+ * yet, so requiring it costs nothing today and forecloses a wrong
+ * assumption later.
+ *
+ *   metric_value — the original 0018 shape. institutionId is set,
+ *   industryId is null. value/citation are the scalar answer.
+ *
+ *   industry_measure — a candidate pack entry. It belongs to an industry,
+ *   not an account: industryId is set, institutionId and businessMetricId
+ *   are both null. Its shape (name, unit, direction, definition,
+ *   whyItPays, addressable, addressableReasoning, confounders, citation —
+ *   see industryMeasures above) does NOT fit value/citation as scalars,
+ *   and does not get nine columns used by one kind and null for the
+ *   other — that is the sparse-table failure. value and citation stay
+ *   NULL for this kind; the object lives in rawResponse, verbatim, and
+ *   the accept path reads it from there.
+ *
+ * institutionId is now NULLABLE — 0018 had it NOT NULL, written only for
+ * the metric case. researchResultsKindShape (below) enforces the real
+ * invariant in its place: institutionId is required for metric_value and
+ * forbidden for industry_measure, never both, never neither.
  */
 export const researchResults = pgTable('research_results', {
   id: id(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
-  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
-  /** Null when the research was not metric-scoped. */
+  /** Required for metric_value, null for industry_measure — see researchResultsKindShape. */
+  institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
+  /** Null when the research was not metric-scoped, and always null for industry_measure. */
   businessMetricId: uuid('business_metric_id').references(() => businessMetrics.id, { onDelete: 'restrict' }),
+  /** Required for industry_measure, null for metric_value — see researchResultsKindShape. */
+  industryId: uuid('industry_id').references(() => industries.id, { onDelete: 'restrict' }),
+
+  /**
+   * The discriminant. NO DEFAULT — see the table comment above. Read
+   * before institutionId/industryId are interpreted; the CHECK below
+   * enforces that reading rather than trusting it.
+   */
+  resultKind: researchResultKind('result_kind').notNull(),
 
   /** What LVRF asked. */
   researchQuery: text('research_query').notNull(),
@@ -1187,13 +1237,13 @@ export const researchResults = pgTable('research_results', {
   fieldName: text('field_name').notNull(),
 
   found: boolean('found').notNull(),
-  /** Null when found is false. */
+  /** The scalar answer for metric_value when found. Always null for industry_measure. */
   value: text('value'),
-  /** Null when found is false. */
+  /** The scalar citation for metric_value when found. Always null for industry_measure — its citation lives in rawResponse's object. */
   citation: text('citation'),
   /** Null when found is true. */
   notFoundReason: text('not_found_reason'),
-  /** The whole field object as parsed, verbatim. */
+  /** The whole field object as parsed, verbatim. For industry_measure, this IS the record — no per-field columns. */
   rawResponse: jsonb('raw_response').notNull(),
 
   reviewState: researchReviewState('review_state').notNull().default('pending'),
@@ -1210,16 +1260,43 @@ export const researchResults = pgTable('research_results', {
   check('research_results_review_is_complete',
     sql`${t.reviewState} = 'pending'
         OR (${t.reviewedByPersonId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)`),
-  /** The response shape is enforced, not trusted. */
+  /**
+   * Which columns apply is enforced, not trusted — same as
+   * research_results_found_shape below. A metric_value result is
+   * account-scoped and has no industry; an industry_measure result is
+   * industry-scoped and has no account or metric.
+   */
+  check('research_results_kind_shape',
+    sql`(${t.resultKind} = 'metric_value'
+           AND ${t.institutionId} IS NOT NULL
+           AND ${t.industryId} IS NULL)
+        OR (${t.resultKind} = 'industry_measure'
+           AND ${t.industryId} IS NOT NULL
+           AND ${t.institutionId} IS NULL
+           AND ${t.businessMetricId} IS NULL)`),
+  /**
+   * The response shape is enforced, not trusted. 0018 required
+   * value+citation whenever found = true, full stop — that conflicted
+   * with industry_measure once this kind existed, since its value and
+   * citation stay NULL by design (the object lives in rawResponse; see
+   * the table comment). Resolved by splitting the found = true branch on
+   * resultKind: metric_value still requires the scalar pair; industry_measure
+   * requires them to be absent, so a row cannot silently carry both a
+   * scalar answer and a rawResponse object, or neither.
+   */
   check('research_results_found_shape',
-    sql`(${t.found} = true AND ${t.value} IS NOT NULL AND ${t.citation} IS NOT NULL)
-        OR (${t.found} = false AND ${t.notFoundReason} IS NOT NULL)`),
+    sql`(${t.found} = false AND ${t.notFoundReason} IS NOT NULL)
+        OR (${t.found} = true AND ${t.resultKind} = 'metric_value'
+              AND ${t.value} IS NOT NULL AND ${t.citation} IS NOT NULL)
+        OR (${t.found} = true AND ${t.resultKind} = 'industry_measure'
+              AND ${t.value} IS NULL AND ${t.citation} IS NULL)`),
   /** Accepting means an evidence row exists. */
   check('research_results_accepted_has_evidence',
     sql`${t.reviewState} <> 'accepted' OR ${t.evidenceId} IS NOT NULL`),
   index('research_results_tenant_idx').on(t.tenantId),
   index('research_results_institution_idx').on(t.institutionId),
   index('research_results_business_metric_idx').on(t.businessMetricId),
+  index('research_results_industry_idx').on(t.industryId),
   index('research_results_review_state_idx').on(t.reviewState),
 ]);
 
