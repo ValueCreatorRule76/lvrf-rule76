@@ -20,6 +20,7 @@ import { lockRunRouter } from './routes/lockRun.js';
 import { recordDocumentsWriteRouter, recordDocumentsReadRouter } from './routes/recordDocuments.js';
 import { compareRunsRouter } from './routes/compareRuns.js';
 import { gapRegisterRouter } from './routes/gapRegister.js';
+import { researchPromptRouter } from './routes/researchPrompt.js';
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/value-outcomes', outcomeWalkRouter(pool));
 app.use('/api/value-outcomes', outcomeEvidenceRouter(pool));
 app.use('/api/engagements', produceRunRouter(pool));
 app.use('/api/business-metrics', validateMetricRouter(pool));
+app.use('/api/business-metrics', researchPromptRouter(pool));
 app.use('/api/value-runs', lockRunRouter(pool));
 app.use('/api/value-runs', recordDocumentsWriteRouter(pool));
 app.use('/api/value-runs', compareRunsRouter(pool));
