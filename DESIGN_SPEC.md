@@ -1368,3 +1368,23 @@ The table is no longer empty and the gap is no longer one thing:
 
 §13 now carries both of these as separate rows rather than one row that would
 have gone stale in a different way than the first correction did.
+
+### FINDING: the manifest cannot catch a hardening run that never happened — 31 August 2026
+
+On 31 August the trigger count and the manifest count both read 64 while the
+intended state was 65 — the hardening change had been written but never
+pushed, so `git pull` reported "Already up to date" and the file that ran
+was the old one.
+
+Two derived numbers agreed, and agreement proved nothing: both came from the
+same unchanged database. This is the 23 August trigger-count coincidence in
+a different costume.
+
+D1 compares the manifest against `pg_trigger`, so it catches a trigger
+dropped BETWEEN hardening runs. It cannot catch a hardening run that was
+never performed, because the manifest and the catalog are written and read
+from the same state.
+
+The deploy script's HEAD comparison catches the equivalent for application
+code. There is no equivalent guard for `hardening.sql`, which is applied by
+hand.
