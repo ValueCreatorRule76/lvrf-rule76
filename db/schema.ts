@@ -103,6 +103,15 @@ export const healthState = pgEnum('health_state', [
 
 export const auditOperation = pgEnum('audit_operation', ['insert', 'update', 'soft_delete']);
 
+/**
+ * 2.0 item 5. Three states, not two: a field nobody has looked at yet is not
+ * rejected. Same absent-versus-simulated distinction as elsewhere in this
+ * schema — see research_results below.
+ */
+export const researchReviewState = pgEnum('research_review_state', [
+  'pending', 'accepted', 'rejected',
+]);
+
 /* ================================================================== */
 /* Shared builders                                                    */
 /* ================================================================== */
@@ -947,6 +956,89 @@ export const hardeningManifest = pgTable('hardening_manifest', {
   tableName: text('table_name').notNull(),
 }, (t) => [
   unique('hardening_manifest_trigger_table_key').on(t.triggerName, t.tableName),
+]);
+
+/* ================================================================== */
+/* Research Results — parsed, pending a human decision                */
+/* ================================================================== */
+
+/**
+ * 2.0 item 5. Research intake is four stages: LVRF generates a prompt, a
+ * human runs it in an AI agent, LVRF parses the response, and a human
+ * accepts or rejects each field. Parsing and accepting produce DIFFERENT
+ * FACTS — parsing establishes that the agent returned this; accepting
+ * establishes that a person judged the citation checkable and the value
+ * worth recording. Collapsing them would make pasting an act of
+ * endorsement, and nobody could tell which fields a human actually looked
+ * at.
+ *
+ * A parsed field is not evidence. Evidence (see `evidence` above) is a
+ * claim the system stands behind. This table holds parsed fields until a
+ * person decides.
+ *
+ * A REJECTED result is kept, not discarded. "We researched this and
+ * rejected it" is a fact, and this system currently forgets everything it
+ * declines — the same argument that produced `refusals` above.
+ *
+ * NO confidence column, deliberately. LVRF computes confidence from the
+ * evidence ledger and never accepts an asserted one — an agent's
+ * self-declared confidence has no place here.
+ *
+ * SHAPE: insert-then-review, same family as `refusals` and
+ * `hardening_manifest` — no deletedAt, no supersededById, no status, no
+ * version. A parse happened; that is a fact. Review state moves it from
+ * pending to accepted/rejected, but the row itself is never retired or
+ * versioned — a correction is a new research pass, not an edit here.
+ */
+export const researchResults = pgTable('research_results', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  /** Null when the research was not metric-scoped. */
+  businessMetricId: uuid('business_metric_id').references(() => businessMetrics.id, { onDelete: 'restrict' }),
+
+  /** What LVRF asked. */
+  researchQuery: text('research_query').notNull(),
+  /** What the agent SAYS it ran — not necessarily identical to researchQuery. */
+  queryAsExecuted: text('query_as_executed').notNull(),
+  researchTool: text('research_tool').notNull(),
+  fieldName: text('field_name').notNull(),
+
+  found: boolean('found').notNull(),
+  /** Null when found is false. */
+  value: text('value'),
+  /** Null when found is false. */
+  citation: text('citation'),
+  /** Null when found is true. */
+  notFoundReason: text('not_found_reason'),
+  /** The whole field object as parsed, verbatim. */
+  rawResponse: jsonb('raw_response').notNull(),
+
+  reviewState: researchReviewState('review_state').notNull().default('pending'),
+  reviewedByPersonId: uuid('reviewed_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewNote: text('review_note'),
+  /** Set when accepted and an evidence row was written from this result. */
+  evidenceId: uuid('evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
+
+  parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
+  parsedByPersonId: uuid('parsed_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+}, (t) => [
+  /** A decision has a decider and a time, both or neither. */
+  check('research_results_review_is_complete',
+    sql`${t.reviewState} = 'pending'
+        OR (${t.reviewedByPersonId} IS NOT NULL AND ${t.reviewedAt} IS NOT NULL)`),
+  /** The response shape is enforced, not trusted. */
+  check('research_results_found_shape',
+    sql`(${t.found} = true AND ${t.value} IS NOT NULL AND ${t.citation} IS NOT NULL)
+        OR (${t.found} = false AND ${t.notFoundReason} IS NOT NULL)`),
+  /** Accepting means an evidence row exists. */
+  check('research_results_accepted_has_evidence',
+    sql`${t.reviewState} <> 'accepted' OR ${t.evidenceId} IS NOT NULL`),
+  index('research_results_tenant_idx').on(t.tenantId),
+  index('research_results_institution_idx').on(t.institutionId),
+  index('research_results_business_metric_idx').on(t.businessMetricId),
+  index('research_results_review_state_idx').on(t.reviewState),
 ]);
 
 // ------------------------------------------------------------------

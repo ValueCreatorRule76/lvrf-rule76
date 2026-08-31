@@ -508,7 +508,7 @@ END $$;
 -- array in section 4 unmodified.
 --
 -- hardening_manifest is a fifth ungoverned table, deliberately, for a
--- different reason: see section 10. It is TRUNCATEd and repopulated by this
+-- different reason: see section 11. It is TRUNCATEd and repopulated by this
 -- file on every run, so a _no_delete guard on it would make hardening.sql
 -- fail against its own manifest, and _audit/_touch are meaningless on a
 -- table with no UPDATEs. Do not add it to the governed array.
@@ -631,7 +631,60 @@ CREATE TRIGGER evidence_resolution_is_final
   FOR EACH ROW EXECUTE FUNCTION lvrf_resolution_is_final();
 
 -- ------------------------------------------------------------------
--- 10. 2.0 item 4 — hardening manifest: what THIS run applied
+-- 10. 2.0 item 5 — research_results governance
+-- ------------------------------------------------------------------
+-- research_results (db/schema.ts) holds parsed research fields pending a
+-- human accept/reject decision — see the migration comment on
+-- db/drizzle/0018_dusty_gideon.sql for why parsing and accepting are
+-- different facts.
+--
+-- Full triad, individually declared rather than through the section 4
+-- loop: research_results needs a NON-GENERIC _no_delete remedy (a parsed
+-- result records what an agent returned and what a person decided about
+-- it — there is no deleted_at column, so "Set deleted_at instead" would be
+-- permanently false), the same reason record_documents (5c) and refusals
+-- (8) are declared here rather than added to the governed array unmodified.
+--
+-- _touch is bespoke, not the generic lvrf_touch(): this table has no
+-- updated_at column, and the generic function would fail on the first
+-- UPDATE with "record NEW has no field updated_at". What DOES need to be
+-- server-set rather than caller-supplied is reviewed_at — the review
+-- decision is the only UPDATE this table's design allows, so
+-- lvrf_touch_reviewed_at() stamps reviewed_at on every UPDATE the same way
+-- lvrf_touch() stamps updated_at everywhere else. One pattern, a different
+-- column, because this table has no updated_at to reuse. It does not set
+-- reviewed_by_person_id — a person cannot be inferred the way "now" can,
+-- so that column stays caller-supplied and is what
+-- research_results_review_is_complete (0018) actually checks alongside it.
+--
+-- CONSEQUENCE: trigger count goes 65 -> 68.
+
+CREATE OR REPLACE FUNCTION lvrf_touch_reviewed_at() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.reviewed_at := now();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_results_audit ON research_results;
+CREATE TRIGGER research_results_audit
+  AFTER INSERT OR UPDATE ON research_results
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS research_results_touch ON research_results;
+CREATE TRIGGER research_results_touch
+  BEFORE UPDATE ON research_results
+  FOR EACH ROW EXECUTE FUNCTION lvrf_touch_reviewed_at();
+
+DROP TRIGGER IF EXISTS research_results_no_delete ON research_results;
+CREATE TRIGGER research_results_no_delete
+  BEFORE DELETE ON research_results
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A parsed research result records what an agent returned and what a person decided about it; it cannot be deleted.'
+  );
+
+-- ------------------------------------------------------------------
+-- 11. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
 -- database for weeks, while the trigger count reconciled by coincidence
@@ -642,7 +695,7 @@ CREATE TRIGGER evidence_resolution_is_final
 -- DERIVED, NOT ENUMERATED: this does not repeat any trigger name that was
 -- already typed in a CREATE TRIGGER statement above, whether from the
 -- `governed` loop, the `supersession_governed` loop, or one of the
--- individually-declared triggers in sections 5a/5b/5c/5d/8/9. It reads back
+-- individually-declared triggers in sections 5a/5b/5c/5d/8/9/10. It reads back
 -- from information_schema.triggers — the same catalog the Verification
 -- block below already treats as ground truth for the trigger count — which
 -- by now, inside this same transaction, reflects every CREATE TRIGGER this
@@ -668,7 +721,7 @@ SELECT DISTINCT trigger_name, event_object_table
 FROM information_schema.triggers
 WHERE trigger_schema = 'public';
 
--- CONSEQUENCE: trigger count is unaffected by this section — stays 64.
+-- CONSEQUENCE: trigger count is unaffected by this section — stays 68.
 -- hardening_manifest carries no triggers of its own (see the
 -- "Known ungoverned tables" note above: no _audit, no _touch, no
 -- _no_delete), so this section adds rows to a table, not triggers to the
@@ -700,23 +753,27 @@ COMMIT;
 --   value_outcomes, value_runs) — 14
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
---   Total: 65 distinct triggers.
+--   10: research_results_audit, research_results_touch,
+--   research_results_no_delete — 3
+--   Total: 68 distinct triggers.
 --
--- 10's hardening_manifest table adds no entry to this arithmetic: it is a
+-- 11's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 10 fail. Total stays 65.
+-- TRUNCATE in section 11 fail. Total stays 68.
 --
--- Expect 98 rows here: information_schema.triggers emits one row per event
+-- Expect 102 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
 -- each 5e trigger fires on INSERT and UPDATE, ×14 (+28); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
--- only (+1).
--- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 + 1 = 98.
+-- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
+-- research_results_touch on UPDATE only (+1), research_results_no_delete on
+-- DELETE only (+1).
+-- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 + 1 + 2 + 1 + 1 = 102.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

@@ -127,6 +127,13 @@
       "when": 1788131075321,
       "tag": "0017_white_iron_lad",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788136552182,
+      "tag": "0018_dusty_gideon",
+      "breakpoints": true
     }
   ]
 }
