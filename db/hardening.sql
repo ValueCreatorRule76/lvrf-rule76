@@ -520,7 +520,7 @@ END $$;
 -- array in section 4 unmodified.
 --
 -- hardening_manifest is a fifth ungoverned table, deliberately, for a
--- different reason: see section 12. It is TRUNCATEd and repopulated by this
+-- different reason: see section 13. It is TRUNCATEd and repopulated by this
 -- file on every run, so a _no_delete guard on it would make hardening.sql
 -- fail against its own manifest, and _audit/_touch are meaningless on a
 -- table with no UPDATEs. Do not add it to the governed array.
@@ -754,7 +754,50 @@ CREATE TRIGGER industries_no_delete
   );
 
 -- ------------------------------------------------------------------
--- 12. 2.0 item 4 — hardening manifest: what THIS run applied
+-- 12. 2.0 item 5, industry packs step 2 — industry_measure_exclusions
+--     governance
+-- ------------------------------------------------------------------
+-- industry_measure_exclusions (db/schema.ts) is a measure tested and
+-- REJECTED for an industry — kept so the same wrong proposal is not made
+-- twice, the same argument that produced refusals (section 8). Same
+-- insert-only shape: no deleted_at, no superseded_by_id, no status, no
+-- version, so it is declared individually rather than through section 4's
+-- loop, for the same reason industries (section 11) is:
+--
+--   _audit              yes, generic — lvrf_audit() only needs NEW.id.
+--                        Unlike refusals, which gets no _audit because
+--                        the row IS the record of the event and a second
+--                        audit_log entry would duplicate it, an exclusion
+--                        is a business judgement about a MEASURE, not a
+--                        record of an access attempt — worth its own
+--                        audit trail if a person's reasoning is ever
+--                        corrected by re-inserting under a new row.
+--   _touch               NO. There is no updated_at column.
+--   _no_delete           yes, with its own remedy text, same pattern as
+--                        refusals (8) and industries (11): there is no
+--                        deleted_at column, so the generic "Set
+--                        deleted_at instead" would be a false
+--                        instruction.
+--   _supersession_sane   NO. There is no superseded_by_id column.
+--
+-- CONSEQUENCE: trigger count goes 74 -> 76. Two new triggers —
+-- industry_measure_exclusions_audit, industry_measure_exclusions_no_delete.
+-- Reconciled by LIST in the Verification block below, not by total.
+
+DROP TRIGGER IF EXISTS industry_measure_exclusions_audit ON industry_measure_exclusions;
+CREATE TRIGGER industry_measure_exclusions_audit
+  AFTER INSERT OR UPDATE ON industry_measure_exclusions
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS industry_measure_exclusions_no_delete ON industry_measure_exclusions;
+CREATE TRIGGER industry_measure_exclusions_no_delete
+  BEFORE DELETE ON industry_measure_exclusions
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'This is an immutable record of a measure tested and rejected for an industry; it cannot be deleted, because the rejection happened.'
+  );
+
+-- ------------------------------------------------------------------
+-- 13. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
 -- database for weeks, while the trigger count reconciled by coincidence
@@ -826,15 +869,17 @@ COMMIT;
 --   10: research_results_audit, research_results_touch,
 --   research_results_no_delete — 3
 --   11: industries_audit, industries_no_delete — 2
---   Total: 74 distinct triggers.
+--   12: industry_measure_exclusions_audit,
+--   industry_measure_exclusions_no_delete — 2
+--   Total: 76 distinct triggers.
 --
--- 12's hardening_manifest table adds no entry to this arithmetic: it is a
+-- 13's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 12 fail. Total stays 74.
+-- TRUNCATE in section 13 fail. Total stays 76.
 --
--- Expect 111 rows here: information_schema.triggers emits one row per event
+-- Expect 114 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×14 = 56;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -844,8 +889,10 @@ COMMIT;
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
 -- research_results_touch on UPDATE only (+1), research_results_no_delete on
 -- DELETE only (+1); industries_audit fires on INSERT and UPDATE (+2),
--- industries_no_delete on DELETE only (+1).
--- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 = 111.
+-- industries_no_delete on DELETE only (+1);
+-- industry_measure_exclusions_audit fires on INSERT and UPDATE (+2),
+-- industry_measure_exclusions_no_delete on DELETE only (+1).
+-- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 = 114.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

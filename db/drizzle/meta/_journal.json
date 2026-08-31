@@ -141,6 +141,13 @@
       "when": 1788149013229,
       "tag": "0019_simple_starfox",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788179041115,
+      "tag": "0020_tiresome_sauron",
+      "breakpoints": true
     }
   ]
 }

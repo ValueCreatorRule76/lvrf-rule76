@@ -372,6 +372,28 @@ export const industries = pgTable('industries', {
  * Reuses governance() but overrides its status default: 'proposed', not
  * 'draft' — a pack entry starts life as a hypothesis, not a draft. Only
  * 'proposed' and 'ratified' are used from lifecycle_status today.
+ *
+ * 2.0 item 5, industry packs STEP 2. Three research runs (CDMO,
+ * Manufacturing, Healthcare providers) showed name/unit/direction/
+ * definition was not enough to make an entry usable, so five more fields
+ * are required — ALL FIVE NOT NULL, because nothing writes to this table
+ * yet and tightening it now costs nothing. See each field's comment below
+ * for why it earned its place, and db/drizzle/0020_*.sql for the full
+ * argument.
+ *
+ * ADDRESSABLE = FALSE ENTRIES STAY IN THE PACK. They are NOT moved to
+ * industry_measure_exclusions. A measure tested and KEPT with
+ * addressable = false is a different fact from one tested and REJECTED:
+ * healthcare's salaries-and-benefits ratio is exactly this case — the
+ * obvious measure to propose, tested, and found not to hold. If it were
+ * dropped from the pack instead of kept at addressable = false, the next
+ * person to open the pack would propose it again, because it is still the
+ * obvious thing to propose — the pack would have tested it, learned it
+ * does not hold, and then forgotten. It is also commercially stronger: an
+ * account manager who can say "we deliberately do not claim against your
+ * labour ratio, because your payer rates move it more than we can" is
+ * more credible than one who claims everything. The refusal is the
+ * product.
  */
 export const industryMeasures = pgTable('industry_measures', {
   id: id(),
@@ -381,6 +403,33 @@ export const industryMeasures = pgTable('industry_measures', {
   unit: text('unit').notNull(),
   direction: metricDirection('direction').notNull(),
   definition: text('definition').notNull(),
+  /**
+   * The commercial argument, and the field an account manager reads
+   * aloud. TRIR feeding the workers' compensation experience modification
+   * rate for three years at a time is worth more than the metric's name.
+   */
+  whyItPays: text('why_it_pays').notNull(),
+  /**
+   * The whole pack turns on this pair. Healthcare's salaries-and-benefits
+   * ratio came back FALSE: the denominator is set by payer contract
+   * rates, so a rate increase lowers it with no change in labour
+   * behaviour at all — the measure a learning vendor would MOST want to
+   * claim, and the honest answer is no. See the table comment above for
+   * why a false here does not remove the row.
+   */
+  addressable: boolean('addressable').notNull(),
+  addressableReasoning: text('addressable_reasoning').notNull(),
+  /**
+   * NOT NULLABLE. A measure with no stated confounders is a measure
+   * nobody thought about. Healthcare is where this earned its place: raw
+   * ALOS is a trap, because a hospital winning higher-acuity volume sees
+   * length of stay RISE while performing better; A/R days "can be
+   * improved by writing off aged accounts rather than collecting them."
+   * A pack entry that hides its own misuse is worse than no entry.
+   */
+  confounders: text('confounders').notNull(),
+  /** A proposed measure without one is a guess wearing a schema. */
+  citation: text('citation').notNull(),
   ...governance(),
   status: lifecycleStatus('status').notNull().default('proposed'),
 }, (t) => [
@@ -400,6 +449,42 @@ export const industryMeasures = pgTable('industry_measures', {
   // business_metrics' two-step pattern here.
   uniqueIndex('industry_measures_industry_name_key').on(t.industryId, t.name)
     .where(sql`${t.deletedAt} IS NULL AND ${t.supersededById} IS NULL`),
+]);
+
+/* ================================================================== */
+/* Industry measure exclusion — a measure tested and rejected          */
+/* ================================================================== */
+
+/**
+ * 2.0 item 5, industry packs step 2. Measures tested and REJECTED for an
+ * industry, kept so the same wrong proposal is not made twice — the same
+ * argument that produced refusals: the system otherwise forgets everything
+ * it declines. NOT the same fact as industry_measures.addressable = false:
+ * that is a measure KEPT in the pack because the test itself is a useful
+ * finding; this is a measure that does not belong in the pack at all.
+ *
+ * Insert-only, same shape as refusals: no deleted_at, no superseded_by_id,
+ * no status, no version. A rejection happened; that is a fact, not a
+ * claim with a lifecycle. citation is nullable, unlike industry_measures' —
+ * a rejected measure is often a real measure with a real source that
+ * simply does not hold for this industry, but not always one anyone
+ * bothered to cite before rejecting it.
+ */
+export const industryMeasureExclusions = pgTable('industry_measure_exclusions', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  industryId: uuid('industry_id').notNull().references(() => industries.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  /** Why it was rejected. */
+  reason: text('reason').notNull(),
+  /** Often a real measure with a real source that simply does not hold. */
+  citation: text('citation'),
+  excludedByPersonId: uuid('excluded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  excludedAt: timestamp('excluded_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique('industry_measure_exclusions_industry_name_key').on(t.industryId, t.name),
+  index('industry_measure_exclusions_tenant_idx').on(t.tenantId),
+  index('industry_measure_exclusions_industry_idx').on(t.industryId),
 ]);
 
 /* ================================================================== */
