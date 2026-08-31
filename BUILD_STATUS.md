@@ -4367,3 +4367,230 @@ CVAF's packs are **code modules** — `EPCIndustryPack.js`, authored, containing
 prompt text and field definitions. **An authored pack is a starting hypothesis; an
 earned pack is a conclusion.** LVRF's pack principle says earned, so the CVAF shape
 is the proposed layer only, and LVRF needs the second.
+
+---
+
+## Industry packs — the schema, built from three research runs — 31 August 2026
+
+Pulled from 3.0 into 2.0. Six migrations today; four of them are this.
+
+### The taxonomy is the tenant's
+
+`industries` is **tenant-scoped, not global** — it is drawn from Skillsoft's own
+industry channel list, and another vendor running LVRF would have a different one.
+Ten seeded, tenant resolved by name rather than id, since local and production
+tenant uuids differ.
+
+Three deliberate divergences from Skillsoft's list, each recorded in the migration:
+
+- Their list spells it **"Geospacial"**. Seeded corrected. The divergence is
+  deliberate, not a transcription error
+- They list "Defense Industry"; seeded **Aerospace & Defense**, since their own
+  channel content is titled "The Aerospace and Defense Industry"
+- They list "Biotechnology" with no Pharmaceutical entry. **Combined**, because a
+  CDMO sits in both. The taxonomy starts from the tenant's vocabulary and is not
+  constrained by a content channel's organisation
+
+`institutions.industry_id` was added **NULL on every row, and the existing free-text
+`industry` was not migrated.** They are two different facts: `industry` is what was
+stated at intake, `industry_id` is what it was classified as. **Classification is a
+judgement a person makes**, and asserting it in a migration would be fabrication.
+
+Both institutions are unclassified today. Skillsoft's intake text reads *Corporate
+learning / talent development* — and no such industry exists in a taxonomy built for
+its customers. `is_tenant_self` institutions may never take an `industry_id`, which
+is coherent rather than a gap.
+
+### industry_measures is NOT a business_metrics row
+
+It is the **industry-level claim that a measure carries money.** An account's
+`business_metrics` row is an *instance* of it at one institution, linked through a
+nullable `industry_measure_id` — nullable because an account can track something no
+pack knows about, and forcing every metric into a pack would invent
+classifications.
+
+That link is what makes promotion **countable**: *this industry measure has been
+sourced at N institutions* is a query over it.
+
+### Two layers, no new mechanism
+
+`proposed` is a hypothesis. `ratified` means sourced at threshold.
+`lifecycle_status` already carries both, so **no `promoted_at` is needed** — which
+was item 4's last surviving objection.
+
+**Threshold: N = 2, stated and never hardcoded.** One is a coincidence; three is
+unreachable for years and a threshold nobody meets makes the two layers decorative.
+No LVRF pack can be ratified today, and **the threshold is not lowered to fix
+that.**
+
+---
+
+## THE THREE RESEARCH RUNS, and what they changed
+
+The schema was designed against real output, not a guess. Three runs — CDMO,
+Manufacturing (discrete and process), Healthcare providers — four measures each,
+citations demanded.
+
+### What came back
+
+```
+CDMO           1 of 4 addressable   Lot Acceptance Rate, FDA-defined
+Manufacturing  4 of 4 addressable   TRIR feeds the workers' comp experience
+                                    modification rate for three years at a time
+Healthcare     3 of 4 addressable   one honest refusal, one named trap
+```
+
+Citations were **real and checkable**: Charles River Q2 2026 with a named CEO and a
+quoted book-to-bill of 1.19x; Samsung Biologics with capacity in litres; Lifecore's
+10-K with an accession number and *44%, 18% and 10%*; FDA's own Lot Acceptance Rate
+definition; Louisiana-Pacific's OEE disclosed at 77% and 79%; Walmart's OTIF at a
+98% threshold with a 3%-of-COGS fine; HFMA MAP Key FM-1.
+
+### Finding: Curia's metric is confirmed as invented
+
+*Time to full productivity, newly promoted manager* **does not appear** in the CDMO
+run. Four cited measures a CDMO's CFO watches, and it is not among them.
+
+It was inferred from a published case study — plausible and unsourced. **Exactly the
+failure the pack is designed to prevent**, and the reason the pack exists rather
+than a metric being proposed per account.
+
+### Finding: most money measures are unaddressable
+
+Three of four CDMO measures — book-to-bill, capacity utilisation, customer
+concentration — **carry money and cannot be moved by workforce capability.** No
+amount of manager training changes a customer's revenue concentration.
+
+The Manufacturing and Healthcare prompts therefore asked for
+`addressable_by_workforce_capability` explicitly, and the Manufacturing run returned
+its own exclusion list unprompted: *"Excluded rather than dressed up."*
+
+### Finding: confounders are where the traps live
+
+Added to the Healthcare prompt after the first two runs, and it earned its place
+immediately:
+
+> *"A hospital that wins higher-acuity transfer and surgical volume will see raw
+> length of stay rise while performing better, which is why raw ALOS is a trap"*
+
+> *"The measure can be improved by writing off aged accounts rather than collecting
+> them, so it must always be read alongside the denial write-off rate"*
+
+A pack entry that hides its own misuse is worse than no entry. **`confounders` is
+NOT NULL** — a measure with no stated confounders is a measure nobody thought about.
+
+### The honest refusal that validated the whole exercise
+
+Healthcare's **salaries and benefits as a percentage of revenue** came back
+`addressable: false`.
+
+That is the measure a learning vendor would most want to claim. It is labour cost.
+It looks like the obvious training play. And the research says: **the denominator is
+set by payer contract rates, so a rate increase lowers the ratio with no change in
+labour behaviour at all.**
+
+An agent willing to say no to that is an agent whose yeses mean something.
+
+---
+
+## Five required columns, each earned by the data
+
+```
+why_it_pays            NOT NULL   the commercial argument; the field an account
+                                  manager reads aloud
+addressable            NOT NULL   the whole pack turns on this
+addressable_reasoning  NOT NULL   the reason, not just the flag
+confounders            NOT NULL   where the traps live
+citation               NOT NULL   a proposed measure without one is a guess
+                                  wearing a schema
+```
+
+### addressable = false ENTRIES STAY IN THE PACK
+
+Counter-intuitive, and deliberate.
+
+A measure tested and **kept** with `addressable = false` is different from one
+tested and **rejected**.
+
+If the pack held only addressable measures, healthcare's salaries-and-benefits entry
+would vanish — and **the next person to open that pack would propose it, because it
+is the obvious thing to propose.** The pack would have tested it, learned it does
+not hold, and then forgotten.
+
+Commercially it is stronger too: an account manager who can say *"we deliberately do
+not claim against your labour ratio, because your payer rates move it more than we
+can"* is more credible than one who claims everything. **The refusal is the
+product** — as it has been everywhere else in this system.
+
+### industry_measure_exclusions
+
+Measures tested and **rejected** for an industry, kept so the same wrong proposal is
+not made twice. Same argument that produced `refusals`.
+
+Insert-only. `_audit` and `_no_delete` only — and the `_audit` decision was
+reasoned rather than copied: **a refusal IS the record of an attempt, so a second
+audit row would duplicate it; an exclusion is a business judgement about a measure,
+so its own trail is worth having.**
+
+`citation` is nullable here, unlike on `industry_measures` — an excluded measure is
+often a real one with a real source that simply does not hold. Capacity utilisation
+has a Federal Reserve series behind it and is still excluded.
+
+---
+
+## research_results gained a discriminant
+
+The table was designed for **metric values**: one field, one value, one citation,
+scalar columns to match. A **pack measure** is a richer object — nine fields — and
+does not fit scalars.
+
+`result_kind` is `'metric_value' | 'industry_measure'`, **NOT NULL with no
+default.** A default would be an assertion made on behalf of every caller, the same
+reason `driftChecksRan` is required on `FindingsInput`.
+
+No per-field columns were added for the measure shape. `raw_response` holds the
+object; nine columns used by one kind and null for the other is the sparse-table
+failure.
+
+### A conflict that would have failed on the first paste
+
+`research_results_found_shape` from 0018 required `value IS NOT NULL AND citation IS
+NOT NULL` whenever `found = true` — **unconditionally.** An `industry_measure` row
+has `found = true` with both NULL by design.
+
+**The first pasted measure would have been refused, and it would have looked like a
+parser bug rather than a constraint.**
+
+Resolved by splitting the branch on `result_kind`, and the resolution is stronger
+than relaxing it: `metric_value` still requires the scalar pair, and
+`industry_measure` requires them to be **absent** — so a row cannot carry both a
+scalar answer and an object, or neither.
+
+`institution_id` was NOT NULL in 0018 and is now nullable, with
+`research_results_kind_shape` enforcing the scoping instead: a metric value has an
+institution and no industry; a measure has an industry and neither institution nor
+metric.
+
+### Verified on production — three directions
+
+```
+metric_value, found=true, null scalars        REFUSED  found_shape
+industry_measure, found=true, scalars set     REFUSED  found_shape
+industry_measure, found=true, object only     INSERT 0 1
+```
+
+A constraint that only fires one way would let the shapes blur exactly where the
+discriminant was meant to keep them apart.
+
+Trigger count 68 → 76 across the four pack migrations.
+
+### Not seeded
+
+The three research runs are **data a person reviews and accepts**, and accepting is
+a separate act from creating the schema — the same reason
+`institutions.industry` was not migrated to `industry_id`.
+
+Nothing writes to `industry_measures` yet. The parse-and-review path is next, and it
+goes through `research_results` rather than a direct create endpoint: **a pack entry
+arriving with no record of the research that produced it would bypass the flow
+entirely.**
