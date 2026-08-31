@@ -508,7 +508,7 @@ END $$;
 -- array in section 4 unmodified.
 --
 -- hardening_manifest is a fifth ungoverned table, deliberately, for a
--- different reason: see section 9. It is TRUNCATEd and repopulated by this
+-- different reason: see section 10. It is TRUNCATEd and repopulated by this
 -- file on every run, so a _no_delete guard on it would make hardening.sql
 -- fail against its own manifest, and _audit/_touch are meaningless on a
 -- table with no UPDATEs. Do not add it to the governed array.
@@ -576,7 +576,62 @@ CREATE TRIGGER refusals_no_delete
   );
 
 -- ------------------------------------------------------------------
--- 9. 2.0 item 4 — hardening manifest: what THIS run applied
+-- 9. Citation resolution is final
+-- ------------------------------------------------------------------
+-- A citation resolution could previously be rewritten or reversed once set.
+-- evidence_resolution_requires_human (CHECK, db/schema.ts) enforces that a
+-- resolution carries a named person and a timestamp; nothing prevented
+-- those values being changed afterwards, or citation_resolved being
+-- flipped back to false.
+--
+-- WHY THIS MATTERS: the Deep Research seam. LVRF does not produce
+-- AI-sourced evidence — it accepts it from outside and governs it. The
+-- ONLY thing standing between AI-sourced text and verified evidence is a
+-- named human resolving the citation. A gate that can be quietly reopened
+-- is not a gate.
+--
+-- Modeled on lvrf_locked_run_immutable (5b): keyed on the row's PRIOR
+-- state, so the first write (false -> true, setting the resolution) passes
+-- and every later one is caught — a one-way door that closes behind
+-- itself. Unlike locked_run_immutable, this does not freeze the whole row:
+-- only the three resolution columns are frozen once set. Every other
+-- column on evidence stays editable — this freezes the RESOLUTION, not the
+-- evidence row.
+--
+-- WHAT THIS DOES NOT DO: it does not prevent a resolution being
+-- SUPERSEDED. Creating a new evidence row that supersedes this one is the
+-- sanctioned correction path, and lvrf_supersession_is_sane (5e) already
+-- governs that chain. Immutability here means "not silently edited," not
+-- "never correctable."
+--
+-- CONSEQUENCE: trigger count goes 64 -> 65.
+
+CREATE OR REPLACE FUNCTION lvrf_resolution_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  -- Unresolved is the normal case and is not governed by this trigger.
+  IF NOT OLD.citation_resolved THEN RETURN NEW; END IF;
+
+  IF NEW.citation_resolved IS DISTINCT FROM OLD.citation_resolved
+     OR NEW.citation_resolved_by_person_id IS DISTINCT FROM OLD.citation_resolved_by_person_id
+     OR NEW.citation_resolved_at IS DISTINCT FROM OLD.citation_resolved_at THEN
+    RAISE EXCEPTION
+      'LVRF: evidence % citation resolution is final. A resolved citation is the human '
+      'gate between AI-sourced text and verified evidence, and it cannot be rewritten or '
+      'reversed once set. Supersede the evidence row instead.', OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS evidence_resolution_is_final ON evidence;
+CREATE TRIGGER evidence_resolution_is_final
+  BEFORE UPDATE ON evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_resolution_is_final();
+
+-- ------------------------------------------------------------------
+-- 10. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
 -- database for weeks, while the trigger count reconciled by coincidence
@@ -587,7 +642,7 @@ CREATE TRIGGER refusals_no_delete
 -- DERIVED, NOT ENUMERATED: this does not repeat any trigger name that was
 -- already typed in a CREATE TRIGGER statement above, whether from the
 -- `governed` loop, the `supersession_governed` loop, or one of the
--- individually-declared triggers in sections 5a/5b/5c/5d/8. It reads back
+-- individually-declared triggers in sections 5a/5b/5c/5d/8/9. It reads back
 -- from information_schema.triggers — the same catalog the Verification
 -- block below already treats as ground truth for the trigger count — which
 -- by now, inside this same transaction, reflects every CREATE TRIGGER this
@@ -644,22 +699,24 @@ COMMIT;
 --   offerings, persons, reflections, stewardship_returns, tenants,
 --   value_outcomes, value_runs) — 14
 --   8: refusals_no_delete — 1
---   Total: 64 distinct triggers.
+--   9: evidence_resolution_is_final — 1
+--   Total: 65 distinct triggers.
 --
--- 9's hardening_manifest table adds no entry to this arithmetic: it is a
+-- 10's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 9 fail. Total stays 64.
+-- TRUNCATE in section 10 fail. Total stays 65.
 --
--- Expect 97 rows here: information_schema.triggers emits one row per event
+-- Expect 98 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1) = 52;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
 -- each 5e trigger fires on INSERT and UPDATE, ×14 (+28); refusals_no_delete
--- fires on DELETE only (+1).
--- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 = 97.
+-- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
+-- only (+1).
+-- 52 + 2 + 1 + 4 + 3 + 6 + 28 + 1 + 1 = 98.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'
