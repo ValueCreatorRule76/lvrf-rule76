@@ -26,6 +26,28 @@ import { isUuid } from './params.js';
  * This is a read: actorContext returns early on GET and never sets
  * req.dbClient, so this queries the pool directly, same as gapRegister.ts
  * and persons.ts.
+ *
+ * SCOPE. There are two metric families in this system, and this route
+ * serves exactly one of them.
+ *
+ *   VENDOR METRICS — DRR, NRR, ARR. How the tenant measures itself.
+ *   Published, therefore researchable. Not industry-specific: these
+ *   are how any subscription business measures itself, identical for a
+ *   CRM company.
+ *
+ *   CUSTOMER OUTCOME METRICS — audit findings, time to productivity,
+ *   batch right-first-time. What an account's business runs on.
+ *   Industry-specific, and NOT published. This is where the solutions
+ *   argument lives, because a solution is a claim that an offering
+ *   moves a customer's business measure. Content moves consumption; a
+ *   solution moves an outcome.
+ *
+ *   An account manager cannot sell against the tenant's DRR. Nobody at
+ *   a customer cares about their vendor's retention rate.
+ *
+ * A metric's value can only be researched where the institution
+ * publishes it — this route refuses (422) any metric that does not
+ * belong to the tenant-self institution.
  */
 
 interface BusinessMetricForPrompt {
@@ -39,6 +61,7 @@ interface BusinessMetricForPrompt {
   institution_id: string;
   institution_name: string;
   institution_industry: string | null;
+  institution_is_tenant_self: boolean;
 }
 
 // Turns a metric name into a field_name an agent can echo back verbatim and
@@ -182,7 +205,8 @@ export function researchPromptRouter(pool: Pool): Router {
       const { rows: [bm] } = await pool.query<BusinessMetricForPrompt>(
         `SELECT bm.id, bm.name, bm.unit, bm.direction, bm.source_system,
                 bm.reporting_cadence, bm.definition_notes, bm.institution_id,
-                i.name AS institution_name, i.industry AS institution_industry
+                i.name AS institution_name, i.industry AS institution_industry,
+                i.is_tenant_self AS institution_is_tenant_self
            FROM business_metrics bm
            JOIN institutions i ON i.id = bm.institution_id
           WHERE bm.id = $1
@@ -192,6 +216,20 @@ export function researchPromptRouter(pool: Pool): Router {
       );
       if (!bm) {
         res.status(404).json({ message: `business metric ${metricId} not found, retired, or superseded` });
+        return;
+      }
+
+      // A metric's value can only be researched where the institution
+      // publishes it. A customer outcome metric lives in that customer's
+      // system of record, not in any public source — see the file comment.
+      if (!bm.institution_is_tenant_self) {
+        res.status(422).json({
+          message:
+            `business metric ${metricId} belongs to ${bm.institution_name}, a customer account, ` +
+            'not the tenant-self institution. A customer outcome metric lives in that customer\'s ' +
+            'system of record, not in any public source, so it cannot be researched. Researching ' +
+            'WHICH measures carry money in an industry is a different capability and is not this route.',
+        });
         return;
       }
 
