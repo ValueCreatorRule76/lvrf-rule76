@@ -4189,3 +4189,181 @@ detectable only by comparing lists** — precisely the class D1 exists for.
   a table with no `updated_at`
 - **D4** orphaned supersession — `superseded_by_id` pointing at a deleted or
   nonexistent row
+
+---
+
+## Research intake, and a reversal — 30 August 2026
+
+2.0 item 5. What was built is narrower than what was scoped, and the reason is
+worth more than the feature.
+
+### The staging table — research_results
+
+Research intake is four stages: **LVRF generates a prompt, a human runs it in an AI
+agent, LVRF parses the response, a human accepts or rejects each field.**
+
+Parsing and accepting produce **different facts**. Parsing establishes that the
+agent returned this; accepting establishes that a person judged the citation
+checkable and the value worth recording. Collapsing them would make pasting an act
+of endorsement, and nobody could tell which fields a human actually looked at.
+
+A parsed field is **not evidence**. Evidence is a claim the system stands behind.
+
+**Three review states, not two:** `pending`, `accepted`, `rejected`. A field nobody
+has looked at is not rejected — the absent-versus-simulated distinction, third
+instance today. This also makes review **per field and partial**: accept two, reject
+one, leave three.
+
+**A rejected result is kept.** *We researched this and rejected it* is a fact, and
+this system forgets everything it declines — the same argument that produced
+`refusals`.
+
+Three CHECK constraints enforce the shape rather than trusting it: a decision has a
+decider and a time; `found` implies value and citation while not-found implies a
+reason; accepting implies an evidence row exists.
+
+**No confidence column.** LVRF computes confidence from the evidence ledger and
+never accepts an asserted one. An agent's self-declared confidence has no place in
+the record.
+
+`query_as_executed` sits alongside `research_query`, because **an agent may narrow,
+decompose or rewrite the prompt it was given, and what ran is a different fact from
+what was asked.** That is true with one user or a hundred; it is a provenance fact,
+not an access-control one.
+
+Trigger count 65 → 68.
+
+### THE REVERSAL: the design was aimed at the wrong metric family
+
+The question that found it was not technical. It was: **how does an account manager
+sell value with this?**
+
+**Two families, and conflating them cost a design:**
+
+```
+VENDOR METRICS            DRR, NRR, ARR. How the tenant measures itself.
+                          PUBLISHED, therefore researchable. Not
+                          industry-specific — identical for a CRM company.
+
+CUSTOMER OUTCOME METRICS  audit findings, time to productivity, batch
+                          right-first-time. What an account's business runs on.
+                          Industry-specific, and NOT PUBLISHED.
+```
+
+**An account manager cannot sell against the tenant's DRR.** Nobody at Curia cares
+about Skillsoft's retention rate. The solutions argument lives entirely in the
+second family, because **a solution is a claim that an offering moves a customer's
+business measure. Content moves consumption; a solution moves an outcome.**
+
+And metric-value research **cannot reach the second family at all.** Curia's 214
+days is in their HRIS. No public source contains it, and no prompt will find it.
+
+### What the route became
+
+`GET /api/business-metrics/:metricId/research-prompt` now refuses with 422 unless
+the metric belongs to the tenant-self institution. Skillsoft's DRR is genuinely
+researchable and the prompt is good for that narrow case; leaving the route looking
+general would have implied a capability it does not have.
+
+The refusal names the reason rather than stating a rule.
+
+The prompt itself is composed entirely from live rows and asks for a citation
+**specific enough that a person can locate it without further searching** — naming
+the lazy answer in advance: *"investor relations" or a bare homepage URL is not a
+citation.* Where `definition_notes` carries the literal `UNCONFIRMED` marker, it
+also asks for the calculation methodology, with the instruction that **an
+unpublished methodology is a finding, not a failure.**
+
+### Still open on the prompt
+
+The metric's cadence is Quarterly and the prompt asks for *the current reported
+value*. An agent will return whatever it finds most recently, and **the value does
+not carry its reporting period** — DRR at Q1 FY2027 and Q4 FY2026 are two different
+facts with the same field name. The citation carries a date, but the period should
+be its own field.
+
+The parser (step 3) was not built. Building it against the wrong metric family
+would have been the wrong parser.
+
+---
+
+## Industry packs — the shape, agreed 30 August 2026
+
+**Pulled from 3.0 into 2.0.** Research intake cannot be finished without them: a
+prompt asking *which measures carry money in this industry* needs somewhere for the
+answer to live.
+
+### Two layers, mirroring what the system already does
+
+A pack is a set of business measures for an **industry**. Each entry is:
+
+```
+proposed   plausibly carries money in this industry. A HYPOTHESIS, marked as one.
+           Populated by research or judgement.
+
+ratified   sourced from a named institution's own system of record, at threshold.
+           Carries its provenance.
+```
+
+**Same structure as an Outside-In hypothesis becoming a validated baseline** — which
+means it needs no new mechanism. `lifecycle_status` already carries `proposed` and
+`ratified`.
+
+**That resolves item 4's surviving objection:** `promoted_at` was redundant because
+`lifecycle_status` already says it. The other two objections are also gone — the
+Compass boundary was withdrawn today, and the pack is now scoped as industry-wide
+rather than needing two accounts to share one capability.
+
+### THE THRESHOLD: N = 2, stated and never hardcoded
+
+**One is a coincidence.** A measure sourced at a single account says that account
+cares about it, not that the industry does. A pack built from N=1 is a pack of
+anecdotes with a promotion mechanism attached.
+
+**Three is where it should eventually sit**, and it is unreachable for years at
+current pace. A threshold nobody can meet is a threshold nobody uses, and every
+entry stays permanently proposed — which makes the two layers decorative.
+
+**Two is the smallest number that means more than one institution independently ran
+on this measure**, and it is reachable inside a real engagement year.
+
+The threshold is a **stated value in the record and in configuration, never a
+literal buried in code.** Changing it changes what every existing pack entry means,
+which is the same argument that produced model versioning.
+
+### Demotion exists
+
+A ratified measure returns to `proposed` if the sourcing behind it is superseded and
+not replaced. **A pack that can only gain entries accumulates stale truth.**
+
+### No LVRF pack can be ratified today, and the threshold is not lowered to fix that
+
+One customer account exists, and it is a reference example built from published
+material. **Every entry would sit at `proposed` until a second real engagement.**
+
+That is the same position the system takes everywhere else: the standard is not
+relaxed to make the demonstration work.
+
+### What a pack is FOR, commercially
+
+An account manager working a CDMO opens the pack and sees the measures that carry
+money there — which are hypotheses, which have been sourced at real accounts, and
+where.
+
+That is what turns *we sell manager training* into *in CDMOs, manager capability
+shows up in scientist time-to-productivity, and we have sourced that at two
+accounts.*
+
+### And it resolves what research is for
+
+Research does not find a customer's metric value. **It finds which measures an
+industry cares about and whether an account says they matter** — which is exactly
+what public sources contain. That populates the `proposed` layer. **Measurement
+promotes to `ratified`.**
+
+### Not CVAF's shape
+
+CVAF's packs are **code modules** — `EPCIndustryPack.js`, authored, containing
+prompt text and field definitions. **An authored pack is a starting hypothesis; an
+earned pack is a conclusion.** LVRF's pack principle says earned, so the CVAF shape
+is the proposed layer only, and LVRF needs the second.
