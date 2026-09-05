@@ -4815,3 +4815,165 @@ check to self-diagnose.
 - **The account workbench does not exist**, nor the model underneath it.
   `institutions` has no website column, the create form writes `industry` as free
   text rather than `industry_id`, and company inputs have nowhere to live at all
+
+---
+
+## The pack and the account meet — 5 September 2026
+
+Three screens built to close a demo gap: **the pack and the account were separate
+demonstrations, and the argument only lands if an account inherits its industry's
+pack.**
+
+### /packs/:slug — the pack view
+
+By **slug, not id** — this is a URL a person types or forwards, and
+`/packs/manufacturing` is legible where a uuid is not.
+
+Two groups, and the split is the whole page:
+
+```
+WHAT YOU CAN CLAIM AGAINST     addressable = true
+WHAT YOU CANNOT — AND WHY      addressable = false
+```
+
+The second is a numbered card with equal weight, not a footnote. On the
+manufacturing pack it is half the page.
+
+**`WHAT MOVES THIS THAT IS NOT CAPABILITY`** renders in gold on every entry. That
+label does the work — an account manager reads it before making a claim, and it
+names the confounder rather than gesturing at uncertainty.
+
+Every page carries, unconditionally: *nothing in this pack is ratified today.*
+**An unratified pack that reads as settled is the overclaim this system exists to
+prevent.**
+
+Seven of ten industries are empty and say *no measures have been proposed for this
+industry yet* — which reads as not-yet-researched, correctly.
+
+### POST /api/institutions/:id/industry — classification is an act
+
+Every institution had `industry_id` NULL, deliberately: the migration did not
+classify anything, because **classification is a judgement a person makes, not a
+fact a migration asserts.** This is that act.
+
+`classification_note` is **required**, and written as an evidence row naming the
+classifier. `institutions.industry` — the intake text — is never touched. Two
+different facts: what was said, and what it was classified as.
+
+Curia's classification names the reasoning that would otherwise have been lost:
+
+> *The intake text reads CDMO, and the taxonomy has no CDMO entry... Classified
+> here rather than Manufacturing because the regulatory regime, not the process,
+> determines what carries money — lot acceptance is an FDA construct.*
+
+409 on re-classification, naming the current industry. **Changing what an account IS
+changes what every pack lookup against it meant** — same reasoning as a locked run.
+
+### /accounts/:id — where the two halves meet
+
+Everything else in this system is about one run or one industry. **This is about one
+customer.**
+
+```
+00  INTAKE VS. CLASSIFICATION      both facts, side by side
+01  WHAT THIS INDUSTRY SAYS CARRIES MONEY
+02  WHAT THIS ACCOUNT IS ACTUALLY MEASURING
+03  THE GAP
+```
+
+Section 03 is the demo. Two columns, four words of label, **no sentence connecting
+them**:
+
+```
+NO PACK BASIS                    CLAIMABLE, NOT MEASURED
+Time to full productivity,       Lot Acceptance Rate (LAR)
+newly promoted manager
+```
+
+Nobody has to be told that a CDMO account measuring a manager-productivity metric
+while ignoring FDA-defined lot acceptance has the wrong measure. **The screen
+renders the mismatch and the reader draws the conclusion.**
+
+This is also where Curia's invented metric — inferred from a case study in August,
+absent from both CDMO research runs — becomes visible rather than argued.
+
+---
+
+## Four badge families, because coverage and basis are opposite questions
+
+Five badges existed across two pages doing three different jobs with inconsistent
+framing. `NOT MEASURING` and `NO PACK BASIS` were both absences, inversely framed,
+and **neither said whether the absence mattered.**
+
+The tenant-self case exposed it: DRR carried `NO PACK BASIS` — true, and reading as
+a deficiency when the state is by design. There is no vendor-metrics pack for
+Skillsoft's own metric to belong to.
+
+```
+STATUS        PROPOSED | RATIFIED              what the pack claims about itself
+CLAIMABILITY  CLAIMABLE | NOT ADDRESSABLE      can an offering move it
+COVERAGE      MEASURED | NOT MEASURED          does this account measure this
+                                               PACK MEASURE
+BASIS         PACK BASIS | NO PACK BASIS |     does this ACCOUNT METRIC map to
+              NOT APPLICABLE                   a pack measure
+```
+
+**Coverage and basis are the reverse of each other**, which is why forcing account
+metrics into a coverage vocabulary produced the harsh reading. A pack measure the
+account fails to measure is a gap; an account metric with no pack basis is a
+finding.
+
+**No silent good state.** `CLAIMABLE` and `MEASURED` are rendered, not implied —
+absence of a badge is ambiguous, and this system does not render absence as a state.
+
+`NOT APPLICABLE` in neutral is the tenant-self case, and it reads as by-design
+rather than as a deficiency.
+
+**Coverage does not appear on the pack page at all** — that page has no account in
+frame, so *applicable* has no referent there. Rendering nothing is correct rather
+than a silent state. That was the agent's call and it was right.
+
+---
+
+## SIX RENDERING DEFECTS, all found by reading pages rather than code
+
+1. **Section 01 said "yet" where section 00 said "never".** On a tenant-self
+   account: *"not classified against an industry yet"* directly below *"and it never
+   will be."* The `is_tenant_self` branch was handled in classification and not in
+   the pack section. **Two sections contradicting each other on one screen.**
+
+2. **`21 RUNS · 55.0 MEDIUM`** gave equal weight to the score and the count. The
+   count is honest and it is also what makes a customer record look like a test
+   harness. Current state now leads; history is a quiet secondary label. **No number
+   changed and nothing was removed.**
+
+3. **`source_system` competed with the metric name** — monospace at body weight,
+   wrapping to two lines. The provenance was louder than the label.
+
+4. **`NO PACK BASIS` on a tenant-self metric** read as a deficiency where the state
+   is by design.
+
+5. **Vocabulary drift in the gap section.** After the four families were defined,
+   section 03's headings were the last place using the superseded words — a reader
+   saw *addressable* in a heading and `CLAIMABLE` on a badge for the same property.
+   Fixed, along with an empty-state message one line below it and a code comment
+   describing the same states in old words.
+
+6. **The empty pack**, which was not a defect — `/packs/retail` renders correctly
+   and seven of ten industries are in that state.
+
+### A judgement call worth recording
+
+`IndustryPackPage`'s section titles — *WHAT YOU CAN CLAIM AGAINST* and *WHAT YOU
+CANNOT — AND WHY* — are prose framings of `CLAIMABLE` and `NOT ADDRESSABLE`, and
+were **deliberately left alone.**
+
+> A heading is a topic sentence; a badge is a state label. Different registers can
+> name the same property in different words without disagreeing. *What you can claim
+> against* is better copy than *claimable*, and it answers a different question:
+> which basket is this, versus what is this row.
+
+The gap-section headings were different in kind — terse all-caps labels sitting
+directly over rows whose badges said something else. **Same register, competing.**
+
+That distinction is the rule for future copy in this client.
