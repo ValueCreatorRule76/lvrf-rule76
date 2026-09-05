@@ -95,15 +95,23 @@ function measuredIndustryMeasureIds(metrics: InstitutionBusinessMetric[]): Set<s
 function PackSection({
   pack,
   measuredIds,
+  isTenantSelf,
 }: {
   pack: InstitutionPackMeasure[] | null;
   measuredIds: Set<string>;
+  isTenantSelf: boolean;
 }) {
   if (pack === null) {
     return (
       <Card n="01" title="What this industry says carries money">
         <p className="m-0 text-[12.5px] text-ink-45">
-          No pack — this account is not classified against an industry yet.
+          {isTenantSelf
+            ? // Not "yet" — an industry pack describes what carries money for
+              // a CUSTOMER, and this account is the tenant itself. No amount
+              // of time makes one apply; this must not contradict section
+              // 00's "and it never will be."
+              'No pack applies — an industry pack describes what carries money for a customer, and this is the tenant’s own account.'
+            : 'No pack — this account is not classified against an industry yet.'}
         </p>
       </Card>
     );
@@ -314,7 +322,11 @@ export function InstitutionPage() {
       </header>
 
       <ClassificationSection view={view} />
-      <PackSection pack={view.pack} measuredIds={measuredIds} />
+      <PackSection
+        pack={view.pack}
+        measuredIds={measuredIds}
+        isTenantSelf={view.institution.is_tenant_self}
+      />
       <MetricsSection metrics={view.metrics} />
       <GapSection pack={view.pack} metrics={view.metrics} measuredIds={measuredIds} />
 
