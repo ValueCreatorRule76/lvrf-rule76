@@ -162,6 +162,13 @@
       "when": 1788611144271,
       "tag": "0022_chemical_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788636851732,
+      "tag": "0023_whole_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

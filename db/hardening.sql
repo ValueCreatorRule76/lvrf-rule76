@@ -520,7 +520,7 @@ END $$;
 -- array in section 4 unmodified.
 --
 -- hardening_manifest is a fifth ungoverned table, deliberately, for a
--- different reason: see section 13. It is TRUNCATEd and repopulated by this
+-- different reason: see section 14. It is TRUNCATEd and repopulated by this
 -- file on every run, so a _no_delete guard on it would make hardening.sql
 -- fail against its own manifest, and _audit/_touch are meaningless on a
 -- table with no UPDATEs. Do not add it to the governed array.
@@ -797,7 +797,61 @@ CREATE TRIGGER industry_measure_exclusions_no_delete
   );
 
 -- ------------------------------------------------------------------
--- 13. 2.0 item 4 — hardening manifest: what THIS run applied
+-- 13. 2.0 item 5, industry packs step 5 — capability_industry_measures
+--     governance
+-- ------------------------------------------------------------------
+-- capability_industry_measures (db/schema.ts) records a JUDGEMENT with
+-- an author: which industry measure a capability claims to move, and by
+-- what mechanism. Insert-only, same shape as industry_measure_exclusions
+-- and refusals: no deleted_at, no superseded_by_id, no status, no
+-- version, so it is declared individually rather than through section
+-- 4's loop, for the same reason industries (11) and
+-- industry_measure_exclusions (12) are:
+--
+--   _audit              yes, generic — lvrf_audit() needs NEW.id, and
+--                        UNLIKE offering_capabilities this table HAS one.
+--                        See db/drizzle/0023_*.sql for why: a claim with
+--                        no audit trail defeats the point of
+--                        claimed_by_person_id, where offering_capabilities
+--                        records a structural attachment nobody judged.
+--   _touch               NO. There is no updated_at column.
+--   _no_delete           yes, with its own remedy text, same pattern as
+--                        refusals (8), industries (11) and
+--                        industry_measure_exclusions (12): there is no
+--                        deleted_at column, so the generic "Set
+--                        deleted_at instead" would be a false
+--                        instruction. Remedy text points at superseding
+--                        the CAPABILITY, since that is how a claim made
+--                        here is actually withdrawn.
+--   _supersession_sane   NO. There is no superseded_by_id column.
+--
+-- THIS DOES NOT CLOSE the "Known ungoverned tables" gap noted after
+-- section 5e — offering_capabilities, value_outcome_evidence,
+-- person_roles and reflection_evidence still have no _audit, for the
+-- same NEW.id::text limitation. capability_industry_measures sidesteps
+-- the gap for itself, by having an id column; it does not fix
+-- lvrf_audit() for composite-key tables in general, which remains a
+-- separate, undecided question.
+--
+-- CONSEQUENCE: trigger count goes 76 -> 78. Two new triggers —
+-- capability_industry_measures_audit,
+-- capability_industry_measures_no_delete. Reconciled by LIST in the
+-- Verification block below, not by total.
+
+DROP TRIGGER IF EXISTS capability_industry_measures_audit ON capability_industry_measures;
+CREATE TRIGGER capability_industry_measures_audit
+  AFTER INSERT OR UPDATE ON capability_industry_measures
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS capability_industry_measures_no_delete ON capability_industry_measures;
+CREATE TRIGGER capability_industry_measures_no_delete
+  BEFORE DELETE ON capability_industry_measures
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'This is an immutable record of a claim that a capability moves an industry measure; it cannot be deleted, because the claim was made. To withdraw it, supersede the capability instead.'
+  );
+
+-- ------------------------------------------------------------------
+-- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
 -- database for weeks, while the trigger count reconciled by coincidence
@@ -871,15 +925,17 @@ COMMIT;
 --   11: industries_audit, industries_no_delete — 2
 --   12: industry_measure_exclusions_audit,
 --   industry_measure_exclusions_no_delete — 2
---   Total: 76 distinct triggers.
+--   13: capability_industry_measures_audit,
+--   capability_industry_measures_no_delete — 2
+--   Total: 78 distinct triggers.
 --
--- 13's hardening_manifest table adds no entry to this arithmetic: it is a
+-- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 13 fail. Total stays 76.
+-- TRUNCATE in section 14 fail. Total stays 78.
 --
--- Expect 114 rows here: information_schema.triggers emits one row per event
+-- Expect 117 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×14 = 56;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -891,8 +947,10 @@ COMMIT;
 -- DELETE only (+1); industries_audit fires on INSERT and UPDATE (+2),
 -- industries_no_delete on DELETE only (+1);
 -- industry_measure_exclusions_audit fires on INSERT and UPDATE (+2),
--- industry_measure_exclusions_no_delete on DELETE only (+1).
--- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 = 114.
+-- industry_measure_exclusions_no_delete on DELETE only (+1);
+-- capability_industry_measures_audit fires on INSERT and UPDATE (+2),
+-- capability_industry_measures_no_delete on DELETE only (+1).
+-- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 = 117.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

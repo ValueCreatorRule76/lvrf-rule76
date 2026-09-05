@@ -1545,3 +1545,83 @@ export const offeringCapabilities = pgTable('offering_capabilities', {
 
   index('offering_capabilities_capability_idx').on(t.capabilityId),
 ]);
+
+// ------------------------------------------------------------------
+// capability_industry_measures — junction, the missing edge in the
+// solution-to-measure chain:
+//
+//   offering -> capability          offering_capabilities (above)
+//   capability -> business_metric   value_outcomes (an institution's INSTANCE)
+//   capability -> industry_measure  THIS TABLE (the industry-level CLAIM)
+//
+// Without this edge nothing states WHICH INDUSTRY MEASURE a capability
+// claims to move. Curia's "New manager effectiveness" — created by
+// offeringAttachment.ts with just a name, no description, no role family
+// — is the content-shaped hypothesis this table exists to close off: a
+// capability named after a training topic, with nothing said about what
+// it actually changes.
+//
+// `claim` is NOT NULLABLE and is the point of the table: the MECHANISM by
+// which this capability moves this measure — "deviation handling and
+// batch-record execution are the operator behaviours behind lot
+// rejection," not "improves lot acceptance." A link with no stated
+// mechanism only asserts that two things are related; the mechanism is
+// what makes that assertion checkable.
+//
+// `claimedByPersonId`, for the same reason institutionClassify.ts's
+// classification_note carries an author: this is a judgement, and a
+// judgement with no author is the authored-prose problem this system
+// exists to refuse.
+//
+// NO is_primary — DELIBERATELY, unlike offering_capabilities above.
+// There, one offering needs at most one privileged capability
+// (offering_capabilities_one_primary). Here, a capability may claim
+// several industry measures at once and none is privileged over the
+// others: new-manager-effectiveness training could plausibly move both a
+// time-to-productivity measure and a quality measure, and ranking one
+// "primary" would assert an ordering nobody has judged. The asymmetry
+// with offering_capabilities is deliberate, not a gap.
+//
+// INSERT-ONLY, same shape as industry_measure_exclusions and refusals: no
+// deleted_at, no superseded_by_id, no status, no version. A claim was
+// made; that is a fact. To withdraw it, supersede the CAPABILITY (which
+// already carries superseded_by_id via governance()) — not this row.
+//
+// SURROGATE id, UNLIKE offering_capabilities — a deliberate divergence
+// from that table's shape, not an inconsistency. offering_capabilities
+// records a STRUCTURAL ATTACHMENT (this offering runs through this
+// capability); nobody's judgement is on the line, so there is nothing
+// for an audit trail to be worth. This table records a JUDGEMENT WITH AN
+// AUTHOR — who claimed a capability moves a measure, and by what
+// mechanism — and a judgement with no audit trail defeats the point of
+// claimedByPersonId, the same reasoning classification (0019) carries an
+// author for. lvrf_audit() (db/hardening.sql) hardcodes NEW.id::text, so
+// a table wanting _audit needs a real id column; the composite pair is
+// preserved as a UNIQUE constraint instead of the primary key, so "one
+// claim per capability+measure pair" is enforced exactly as it would be
+// under a composite PK.
+//
+// This sidesteps hardening.sql's "Known ungoverned tables" gap — it does
+// not close it. offering_capabilities, value_outcome_evidence,
+// person_roles and reflection_evidence still have no _audit, and closing
+// that generally (a composite-key-aware audit function, or adding a
+// surrogate id to each) remains an undecided, separate question. This
+// migration only gives ITS OWN table an id, because this table's
+// content — an authored claim — genuinely wants one.
+// ------------------------------------------------------------------
+
+export const capabilityIndustryMeasures = pgTable('capability_industry_measures', {
+  id: id(),
+  capabilityId: uuid('capability_id').notNull()
+                  .references(() => capabilities.id, { onDelete: 'restrict' }),
+  industryMeasureId: uuid('industry_measure_id').notNull()
+                  .references(() => industryMeasures.id, { onDelete: 'restrict' }),
+  /** The mechanism, not the outcome. Required — see the header comment. */
+  claim: text('claim').notNull(),
+  claimedByPersonId: uuid('claimed_by_person_id').notNull()
+                  .references(() => persons.id, { onDelete: 'restrict' }),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique('capability_industry_measures_pair_key').on(t.capabilityId, t.industryMeasureId),
+  index('capability_industry_measures_measure_idx').on(t.industryMeasureId),
+]);
