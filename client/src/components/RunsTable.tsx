@@ -80,7 +80,14 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 className="cursor-pointer hover:bg-offwhite"
               >
                 <td className="border-b border-rule-soft px-3 py-[9px] font-semibold">
-                  <Link to={`/runs/${r.id}`} className="text-ink hover:text-gold-ink">
+                  {/* The account view, not the run — a different destination from the
+                      row's own click-through, so this link stops the click from also
+                      bubbling into the row's navigate(`/runs/${r.id}`) above. */}
+                  <Link
+                    to={`/accounts/${r.institution_id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-ink hover:text-gold-ink"
+                  >
                     {r.institution_name}
                   </Link>
                 </td>

@@ -4,6 +4,7 @@
 
 export interface RunListItem {
   id: string;
+  institution_id: string;
   institution_name: string;
   run_number: number;
   terminal_value_stage: string;

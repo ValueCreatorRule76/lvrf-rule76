@@ -14,6 +14,7 @@ export function runsIndexRouter(pool: Pool): Router {
       const { rows } = await pool.query(`
         SELECT
           vr.id,
+          i.id AS institution_id,
           i.name AS institution_name,
           vr.run_number,
           vr.terminal_value_stage,
