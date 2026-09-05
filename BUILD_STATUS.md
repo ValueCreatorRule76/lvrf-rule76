@@ -4594,3 +4594,61 @@ Nothing writes to `industry_measures` yet. The parse-and-review path is next, an
 goes through `research_results` rather than a direct create endpoint: **a pack entry
 arriving with no record of the research that produced it would bypass the flow
 entirely.**
+
+---
+
+## Industry pack accept/reject built — 5 September 2026
+
+Parse-and-review's second step: `POST /api/research-results/:id/accept` and
+`POST /api/research-results/:id/reject`. Accept turns one pending
+`industry_measure` result into a `proposed` `industry_measures` row, in one
+transaction; reject records that a person judged it unsound. Neither writes
+`industry_measure_exclusions` — that table is a standing per-industry judgement,
+narrower than one rejected research response; a person-reviewed path from rejected
+`research_results` into it is still future work.
+
+### A conflict caught before it shipped
+
+`research_results_accepted_has_evidence` (0018) required `evidence_id IS NOT NULL`
+whenever `review_state = 'accepted'`, **unconditionally** — written when
+`metric_value` was the only kind, and accepting one always creates an evidence row.
+Accepting an `industry_measure` creates an `industry_measures` row instead; it has
+no evidence to point to. Every industry-pack accept would have been refused by a
+constraint that looked like it was protecting the table, not blocking it.
+
+Resolved with migration `0022`: added `industry_measures_id` (nullable, FK
+`industry_measures`), and replaced the constraint with `research_results_accepted_has_record` — same discriminant as `research_results_kind_shape` and
+`research_results_found_shape`, and an XOR rather than an OR: an accepted row must
+carry its own kind's id and not the other kind's.
+
+### Finding: a local database without `hardening.sql` has NO governance
+
+Caught while testing the accept route: `research_results.reviewed_at` — meant to be
+stamped by the `research_results_touch` trigger (`hardening.sql` §10) on every
+`UPDATE` — stayed `NULL`, and `research_results_review_is_complete` refused the
+accept. `pg_trigger` on the local dev database showed **zero** rows: `hardening.sql`
+had never been run against it, only `drizzle-kit migrate`. Tables, columns and every
+CHECK constraint looked completely normal under `\d` — nothing about that command,
+or a clean `drizzle-kit migrate`, reveals that every trigger in the system is
+missing: no audit trail, no delete guards, no server-set timestamps, no
+supersession checks. Every test run against that database up to this point proved
+the code path executed, not that governance held. Documented prominently in
+`LVRF_Local_Setup.md` (a FINDING at the top of the document, and reinforced at
+Phase 8) rather than fixed quietly — the setup steps were followed in order and it
+still happened, so the gap is in what verifies the setup, not just in one missed
+command. Re-run: `psql -d lvrf -f db/hardening.sql`, idempotent, safe after every
+migration.
+
+### Routing correction
+
+Accept/reject first landed as more routes on `industryResearchRouter`, mounted at
+`/api/industries`. Wrong: neither route is industry-scoped, and mounting them there
+put an industry-shaped prefix in front of endpoints with no `:industryId` — the same
+"wrong address" failure mode `recordDocuments.ts`'s write/read split exists to
+prevent, just not yet triggered. Split into a second router,
+`researchResultsReviewRouter`, mounted separately at `/api/research-results` in
+`server/index.ts`. `industryResearchRouter` now carries only the industry-scoped
+parse route.
+
+Trigger count unchanged by this section — `hardening.sql` was already declaring
+`research_results_touch`; the local database simply hadn't run it. No new table.

@@ -1250,8 +1250,10 @@ export const researchResults = pgTable('research_results', {
   reviewedByPersonId: uuid('reviewed_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   reviewNote: text('review_note'),
-  /** Set when accepted and an evidence row was written from this result. */
+  /** Set when accepted and an evidence row was written from this result. metric_value only — see researchResultsAcceptedHasRecord. */
   evidenceId: uuid('evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
+  /** Set when accepted and an industry_measures row was written from this result. industry_measure only — see researchResultsAcceptedHasRecord. */
+  industryMeasuresId: uuid('industry_measures_id').references(() => industryMeasures.id, { onDelete: 'restrict' }),
 
   parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
   parsedByPersonId: uuid('parsed_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
@@ -1290,9 +1292,29 @@ export const researchResults = pgTable('research_results', {
               AND ${t.value} IS NOT NULL AND ${t.citation} IS NOT NULL)
         OR (${t.found} = true AND ${t.resultKind} = 'industry_measure'
               AND ${t.value} IS NULL AND ${t.citation} IS NULL)`),
-  /** Accepting means an evidence row exists. */
-  check('research_results_accepted_has_evidence',
-    sql`${t.reviewState} <> 'accepted' OR ${t.evidenceId} IS NOT NULL`),
+  /**
+   * Accepting means the kind's own record exists — renamed from
+   * research_results_accepted_has_evidence (0018), which required
+   * evidence_id whenever accepted, full stop. That was written when
+   * metric_value was the only kind: accepting a metric_value creates an
+   * evidence row. Accepting an industry_measure creates an
+   * industry_measures row instead (see the industry pack accept route) —
+   * it has no evidence to point to, so the unconditional form would
+   * refuse every industry_measure accept outright. Split by result_kind,
+   * same discriminant as research_results_kind_shape and
+   * research_results_found_shape above, and made an XOR rather than an
+   * OR: an accepted row must carry its OWN kind's id and NOT the other
+   * kind's, so metric_value cannot point at an industry_measures row (or
+   * vice versa) by accident. An accepted row that produced nothing is a
+   * lie the database refuses, not something the application promises to
+   * avoid — same reasoning as the two constraints beside it.
+   */
+  check('research_results_accepted_has_record',
+    sql`${t.reviewState} <> 'accepted'
+        OR (${t.resultKind} = 'metric_value'
+              AND ${t.evidenceId} IS NOT NULL AND ${t.industryMeasuresId} IS NULL)
+        OR (${t.resultKind} = 'industry_measure'
+              AND ${t.industryMeasuresId} IS NOT NULL AND ${t.evidenceId} IS NULL)`),
   index('research_results_tenant_idx').on(t.tenantId),
   index('research_results_institution_idx').on(t.institutionId),
   index('research_results_business_metric_idx').on(t.businessMetricId),

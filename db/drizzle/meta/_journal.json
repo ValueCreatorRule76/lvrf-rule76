@@ -155,6 +155,13 @@
       "when": 1788179474424,
       "tag": "0021_petite_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788611144271,
+      "tag": "0022_chemical_next_avengers",
+      "breakpoints": true
     }
   ]
 }

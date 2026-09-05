@@ -8,6 +8,51 @@ unless noted (`Cmd + Space`, type `terminal`).
 
 ---
 
+## FINDING — a local database without `hardening.sql` has NO governance
+
+Discovered 5 September 2026, while building the industry-pack accept/reject routes:
+this repo's local dev database had been recreated via `drizzle-kit migrate` alone at
+some point, and `db/hardening.sql` (Phase 8, below) had never been run against it. It
+was caught only because a trigger-stamped column (`research_results.reviewed_at`)
+stayed `NULL` and a CHECK constraint downstream of it fired — a symptom, not the
+cause. `\d` on any table showed the columns and CHECK constraints from `schema.ts`
+looking completely normal; nothing about a plain `psql \d` or a passing `drizzle-kit
+migrate` run reveals that the triggers are missing.
+
+**`schema.ts` (via drizzle migrations) and `hardening.sql` are two separate, both
+required layers.** Migrations create tables, columns and CHECK constraints.
+`hardening.sql` is the **only** source of every trigger in this system: audit
+logging, `reviewed_at`/`updated_at` stamping, the no-hard-delete guards, the
+supersession-sanity checks, the AI-actual-value blocks — all of it (see
+`CLAUDE.md`'s non-negotiable rules 2–4, all trigger-enforced). Skip it, and:
+
+- Hard deletes on governed tables silently succeed instead of being refused.
+- No row in `audit_log` ever gets written — no actor trail, ever.
+- Server-set columns (`reviewed_at`, `updated_at`) stay `NULL` forever, which can
+  itself make an otherwise-correct CHECK constraint fail in a way that looks like
+  an application bug.
+- Every one of the "must FAIL" acceptance tests at the end of Phase 8 will
+  **succeed** instead — the exact false-confidence failure mode this system is
+  built to prevent (see `CLAUDE.md`'s governing AI principle).
+
+**Every test run against a database in this state is weaker than it looks** — it
+proves the code path executes, not that governance holds. If you did the setup
+phases out of order, restored a dump, or ran `drizzle-kit migrate` after a fresh
+`createdb` without immediately following it with `hardening.sql`, assume this has
+happened to you. Verify with:
+
+```sql
+SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal;
+```
+
+Zero (or noticeably fewer than the count logged at the end of `hardening.sql`'s own
+run) means governance is off. Re-run `psql -d lvrf -f db/hardening.sql` — it is
+idempotent (`DROP TRIGGER IF EXISTS` / `CREATE OR REPLACE FUNCTION`) and safe to run
+again at any time, including after every later migration that touches a governed
+table.
+
+---
+
 ## Phase 0 — What you already have
 
 Check before installing anything:
@@ -210,6 +255,15 @@ every foreign key says `ON DELETE RESTRICT`, and all nine CHECK constraints appe
 npx drizzle-kit migrate
 psql -d lvrf -f db/hardening.sql
 ```
+
+**Both commands, every time — `drizzle-kit migrate` alone is not enough.** It
+applies tables, columns and CHECK constraints only; every trigger in this system
+(audit, delete guards, `reviewed_at`/`updated_at` stamping, supersession checks) is
+declared solely in `hardening.sql` and does not exist until it is run. A database
+that only ever saw `drizzle-kit migrate` looks identical to `\d` and passes a naive
+smoke test, but has zero governance — see the FINDING at the top of this document.
+Re-run `hardening.sql` after every later migration that touches a governed table
+too; it is idempotent.
 
 Expect 22 triggers in the verification output, and no `UPDATE`/`DELETE` privileges for
 `lvrf_app` on `audit_log` or `heartbeat_events`.
