@@ -161,8 +161,13 @@ function MetricsSection({ metrics }: { metrics: InstitutionBusinessMetric[] }) {
               <div>
                 <span className="text-[13.5px] font-semibold text-ink">{m.name}</span>
                 <span className="ml-2 font-mono text-[11px] text-ink-45">
-                  {m.unit} · {m.direction} · {m.source_system}
+                  {m.unit} · {m.direction}
                 </span>
+                {/* Provenance, not a label — same muted, non-mono treatment
+                    as EvidenceCard's Provenance column, so source_system
+                    reads as subordinate to the metric name above it rather
+                    than competing with it at body weight. */}
+                <span className="block text-[11.5px] text-ink-45">{m.source_system}</span>
               </div>
               <Badge tone={m.industry_measure_id ? 'healthy' : 'warning'}>
                 {m.industry_measure_id ? 'Maps to a pack measure' : 'No pack basis'}
@@ -288,15 +293,22 @@ export function InstitutionPage() {
           <h1 className="m-0 my-1.5 font-display text-[40px] leading-[.98] tracking-[.012em]">
             {view.institution.name}
           </h1>
-          <div className="flex items-center gap-2 pb-1">
-            <Badge tone="neutral">
-              {view.runs.count} {view.runs.count === 1 ? 'run' : 'runs'}
-            </Badge>
-            {view.runs.latest_confidence_band && (
+          {/* Current state leads, history is secondary: the score is what a
+              reader needs, the run count is provenance for it. A bordered
+              Badge for both would read as two equal facts — the count is
+              downgraded to plain muted text so the eye lands on the score
+              first, not on how many attempts produced it. */}
+          <div className="flex items-center gap-2.5 pb-1">
+            {view.runs.latest_confidence_band ? (
               <Badge tone={CONFIDENCE_TONE[view.runs.latest_confidence_band] ?? 'neutral'}>
                 {view.runs.latest_confidence_score} · {view.runs.latest_confidence_band}
               </Badge>
+            ) : (
+              <Badge tone="neutral">Not yet run</Badge>
             )}
+            <span className="text-[10.5px] text-ink-45">
+              {view.runs.count} {view.runs.count === 1 ? 'run' : 'runs'}
+            </span>
           </div>
         </div>
       </header>
