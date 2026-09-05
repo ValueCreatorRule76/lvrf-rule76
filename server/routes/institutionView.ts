@@ -24,6 +24,25 @@ import { isUuid } from './params.js';
  * server/lib/refusal.ts's comment on isCheckViolation/isUniqueViolation,
  * which waited for TEN copies). One duplicate is not that yet.
  */
+interface PackMeasureRow {
+  id: string;
+  name: string;
+  unit: string;
+  direction: string;
+  addressable: boolean;
+  why_it_pays: string;
+  status: string;
+}
+
+interface MetricRow {
+  id: string;
+  name: string;
+  unit: string;
+  direction: string;
+  source_system: string;
+  industry_measure_id: string | null;
+}
+
 async function resolveActorTenantId(
   pool: Pool,
   req: Request,
@@ -101,9 +120,9 @@ export function institutionViewRouter(pool: Pool): Router {
       // not the same shape as a classified industry that happens to have
       // zero measures (industryPack.ts's own "empty pack is real" case,
       // which still returns []).
-      let pack: unknown[] | null = null;
+      let pack: PackMeasureRow[] | null = null;
       if (institution.industry_id) {
-        const { rows: measures } = await pool.query(
+        const { rows: measures } = await pool.query<PackMeasureRow>(
           `SELECT id, name, unit, direction, addressable, why_it_pays, status
              FROM industry_measures
             WHERE industry_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
@@ -116,13 +135,48 @@ export function institutionViewRouter(pool: Pool): Router {
       // superseded_by_id IS NULL — resolved by institution_id, not a
       // primary key, so the supersession chain has to be filtered here,
       // same as every other non-PK business_metrics lookup in this codebase.
-      const { rows: metrics } = await pool.query(
-        `SELECT name, unit, direction, source_system, industry_measure_id
+      // id is selected now (it wasn't before) — needed to key the gap join
+      // below, and it is what metricPackBasis.ts's :metricId addresses.
+      const { rows: metrics } = await pool.query<MetricRow>(
+        `SELECT id, name, unit, direction, source_system, industry_measure_id
            FROM business_metrics
           WHERE institution_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
           ORDER BY name`,
         [institutionId],
       );
+
+      /**
+       * THE GAP, computed here — not left for a caller to re-derive from
+       * `pack` and `metrics` separately. Both sides key off the SAME FK,
+       * business_metrics.industry_measure_id, checked here before this
+       * change: nothing joined on anything ELSE — no name comparison, no
+       * fuzzy match — this column simply had no writer anywhere in this
+       * codebase (see metricPackBasis.ts), so every metric's
+       * industry_measure_id was NULL. That is why an account metric named
+       * the same as a pack measure could appear on BOTH sides at once: the
+       * left list (industry_measure_id IS NULL) is correct for every row,
+       * because every row's value genuinely was null; the right list
+       * (addressable pack measures no metric points at) is ALSO correct
+       * for every row, for the same reason. Two independently-correct
+       * computations produced a jointly-false impression, because the one
+       * fact that would have resolved it — a person's stated judgement
+       * that this metric instantiates that measure — did not yet have
+       * anywhere to be written. Fixing the join here would have changed
+       * nothing while that fact stayed unwritable; the real fix is
+       * metricPackBasis.ts, this being the read side that now reports
+       * whatever it wrote correctly, from one shared Set, not two.
+       */
+      const measuredPackMeasureIds = new Set(
+        metrics
+          .map((m) => m.industry_measure_id)
+          .filter((id): id is string => id !== null),
+      );
+      const gap = {
+        unmapped_metrics: metrics.filter((m) => m.industry_measure_id === null),
+        addressable_unmeasured: (pack ?? []).filter(
+          (m) => m.addressable && !measuredPackMeasureIds.has(m.id),
+        ),
+      };
 
       const { rows: engagementRows } = await pool.query<{ id: string; name: string }>(
         `SELECT id, name FROM engagements
@@ -166,6 +220,7 @@ export function institutionViewRouter(pool: Pool): Router {
         },
         pack,
         metrics,
+        gap,
         engagements: engagementRows,
         runs: {
           count: runCount,
