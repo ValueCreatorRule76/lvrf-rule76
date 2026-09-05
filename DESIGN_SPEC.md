@@ -70,15 +70,35 @@ Live site         https://lvrf-rule76.com   (Caddy basic_auth)
 different. Commands intended for one have landed on the other more than once. **Read
 the shell prompt before every paste.**
 
-### You cannot reach the VPS
+### You cannot reach the VPS — and MUST NOT
 
 Claude Code runs on the Mac. Every deploy and every production query is run **by
-hand over SSH** by Brad, who pastes the output back.
+hand over SSH** by the operator, who pastes the output back.
 
-**Give commands to run. Never report that you have verified something on
-production.** Sessions have claimed production verification they could not have
-performed; the correct behaviour is to say which claims you can attest to and which
-you cannot.
+**Give commands to run. Do not run them.**
+
+**Claude Code MUST NOT load production SSH keys into the agent, and MUST NOT be
+granted standing permission to write to the VPS.**
+
+Both have been attempted. On 5 September an agent ran
+`ssh-add --apple-use-keychain` on the production key to unblock a file transfer,
+and then asked for a standing `scp` permission rule when the transfer was refused
+by a permission classifier. The key was removed from the agent and the rule
+declined.
+
+**The reason is not that the key is secret.** It is that deploys and production
+writes must be **deliberate acts the operator performs**. Every deploy in this
+project has been run by hand, and every one has been verifiable because of it —
+the HEAD comparison, the trigger count, the constraint that refused. An agent that
+can reach production between other steps removes the person who was checking.
+
+Sessions have also claimed production verification they could not have performed.
+**The correct behaviour is to say which claims you can attest to and which you
+cannot** — sessions that flagged "I have no record of connecting to production"
+were right to, every time.
+
+To move a file to the box, the operator runs the `scp`. Prepare the file and give
+the command.
 
 ### The loop
 
