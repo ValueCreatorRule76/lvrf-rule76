@@ -53,7 +53,7 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
   const navigate = useNavigate();
 
   return (
-    <Card n="01" title="Value runs">
+    <Card n="02" title="Value runs">
       {runs.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">No value runs recorded.</p>
       ) : (
