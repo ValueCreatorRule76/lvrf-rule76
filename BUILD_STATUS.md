@@ -4812,9 +4812,17 @@ check to self-diagnose.
   Six healthcare exclusions are sitting in the parsed payload with nowhere to go
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
-- **The account workbench does not exist**, nor the model underneath it.
-  `institutions` has no website column, the create form writes `industry` as free
-  text rather than `industry_id`, and company inputs have nowhere to live at all
+- **The account VIEW exists** (`/accounts/:id`, read-only). **The account WORKBENCH
+  does not.** Specifically still missing:
+  - `institutions` has no website column
+  - the create-account form writes `industry` as free text, not `industry_id`, so a
+    new account lands unclassified and needs `POST /api/institutions/:id/industry`
+    called separately
+  - company inputs — revenue, headcount, stated priorities, systems landscape —
+    have nowhere to live at all. There is no account-facts table
+
+  Classification now exists as its own act — the piece the workbench would wire
+  into the create form
 
 ---
 
