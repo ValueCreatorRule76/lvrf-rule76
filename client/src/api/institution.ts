@@ -25,11 +25,22 @@ export interface InstitutionPackMeasure {
 }
 
 export interface InstitutionBusinessMetric {
+  id: string;
   name: string;
   unit: string;
   direction: 'increase' | 'decrease';
   source_system: string;
   industry_measure_id: string | null;
+}
+
+// The server-computed gap (institutionView.ts) — the one place this
+// answer is derived. unmapped_metrics and addressable_unmeasured are the
+// same row shapes as `metrics` and `pack` above, because the route builds
+// both lists by filtering those same two arrays, not by selecting a
+// different projection of either table.
+export interface InstitutionGap {
+  unmapped_metrics: InstitutionBusinessMetric[];
+  addressable_unmeasured: InstitutionPackMeasure[];
 }
 
 export interface InstitutionEngagement {
@@ -48,6 +59,7 @@ export interface InstitutionView {
   /** NULL when unclassified — there is no pack to look up. [] is a real, classified, empty pack. */
   pack: InstitutionPackMeasure[] | null;
   metrics: InstitutionBusinessMetric[];
+  gap: InstitutionGap;
   engagements: InstitutionEngagement[];
   runs: InstitutionRunsSummary;
 }

@@ -4,6 +4,7 @@ import { useActor } from '../actor/ActorContext';
 import {
   fetchInstitutionView,
   type InstitutionBusinessMetric,
+  type InstitutionGap,
   type InstitutionPackMeasure,
   type InstitutionView,
 } from '../api/institution';
@@ -144,9 +145,22 @@ function ClassificationSection({ view }: { view: InstitutionView }) {
   );
 }
 
-// Which pack measure ids the account already reports against — a plain
-// Set, computed once, so both this card and the gap section below read the
-// same membership test instead of each re-deriving it.
+// SERVES ONE PURPOSE ONLY: PackSection's per-measure COVERAGE badge
+// (MEASURED vs NOT MEASURED), answered for EVERY pack measure, addressable
+// or not. This is NOT the gap computation and must never be extended back
+// into one — the gap (which account metrics have no pack basis, which
+// addressable measures nothing measures) is computed exactly once, on the
+// server, in institutionView.ts, and arrives here as view.gap. Recomputing
+// that filtering client-side from raw pack/metrics arrays is the "two
+// implementations of one rule" divergence heartbeatLedger.ts warns about —
+// it drifts the moment either side changes without the other. This Set
+// survives that cleanup only because the badge asks a DIFFERENT question
+// than the gap does: the gap's addressable_unmeasured list is already
+// filtered to addressable measures, so it cannot answer "is THIS
+// (possibly non-addressable) measure covered?" for every row PackSection
+// renders. If a future change makes the server return per-measure
+// coverage too, replace this Set with that field and delete this comment
+// along with it — do not let both live side by side "just in case."
 function measuredIndustryMeasureIds(metrics: InstitutionBusinessMetric[]): Set<string> {
   return new Set(
     metrics
@@ -260,17 +274,21 @@ function MetricsSection({
 // newly promoted manager," which appears in no pack the CDMO industry
 // carries — the pack's own claim is that Lot Acceptance Rate is what
 // carries money there. The mismatch is left to speak for itself.
-function GapSection({
-  pack,
-  metrics,
-  measuredIds,
-}: {
-  pack: InstitutionPackMeasure[] | null;
-  metrics: InstitutionBusinessMetric[];
-  measuredIds: Set<string>;
-}) {
-  const unmapped = metrics.filter((m) => m.industry_measure_id === null);
-  const opportunities = (pack ?? []).filter((m) => m.addressable && !measuredIds.has(m.id));
+//
+// BOTH LISTS COME FROM view.gap, NOT RE-DERIVED HERE. institutionView.ts
+// computes unmapped_metrics/addressable_unmeasured itself now, from the
+// same industry_measure_id FK — this component used to filter `metrics`
+// and `pack` again, client-side, which was a second implementation of the
+// same rule the server already answers. Two implementations of one rule is
+// exactly the divergence shape that let a metric and a pack measure
+// sharing a name show up on both sides at once before metricPackBasis.ts
+// existed to link them: nothing was WRONG with either filter, but keeping
+// two meant either one could silently drift from the other. `pack` is
+// still accepted here, but ONLY to tell "unclassified/no pack" apart from
+// "classified, pack has nothing outstanding" for the right column's
+// message — never to filter or compute a list.
+function GapSection({ gap, pack }: { gap: InstitutionGap; pack: InstitutionPackMeasure[] | null }) {
+  const { unmapped_metrics: unmapped, addressable_unmeasured: opportunities } = gap;
 
   return (
     <Card n="03" title="The gap">
@@ -286,7 +304,7 @@ function GapSection({
           ) : (
             <ul className="m-0 mt-1.5 list-none p-0">
               {unmapped.map((m) => (
-                <li key={m.name} className="border-b border-rule-soft py-1.5 last:border-b-0">
+                <li key={m.id} className="border-b border-rule-soft py-1.5 last:border-b-0">
                   <span className="text-[13px] text-ink">{m.name}</span>
                 </li>
               ))}
@@ -393,7 +411,7 @@ export function InstitutionPage() {
         isTenantSelf={view.institution.is_tenant_self}
       />
       <MetricsSection metrics={view.metrics} isTenantSelf={view.institution.is_tenant_self} />
-      <GapSection pack={view.pack} metrics={view.metrics} measuredIds={measuredIds} />
+      <GapSection gap={view.gap} pack={view.pack} />
 
       <Card n="04" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
         {view.engagements.length === 0 ? (
