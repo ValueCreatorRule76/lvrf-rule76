@@ -4652,3 +4652,166 @@ parse route.
 
 Trigger count unchanged by this section — `hardening.sql` was already declaring
 `research_results_touch`; the local database simply hadn't run it. No new table.
+
+---
+
+## The pack has entries — parse and review — 5 September 2026
+
+`POST /api/industries/:industryId/research-results` parses a research response into
+`research_results` as `pending`. `POST /api/research-results/:id/accept` turns one
+pending row into an `industry_measures` entry. Reject records the decision and
+writes nothing.
+
+**Two routers, not one** — matching the `recordDocuments.ts` precedent. Parse is
+industry-scoped; accept and review are not, and a router mounted at a prefix should
+contain only routes belonging to that prefix.
+
+### THE FIRST PACK ENTRY IS ONE THE PACK TELLS YOU NOT TO CLAIM
+
+```
+Salaries and benefits as a percentage of revenues
+  % of revenues · decrease · proposed · addressable = FALSE
+  "The ratio is set primarily by prices and mix that no amount of process
+   improvement..."
+```
+
+That is the measure a learning vendor would most want to sell against. It is labour
+cost. And the research says the denominator is set by payer contract rates, so a
+rate increase lowers the ratio with no change in labour behaviour at all.
+
+**Accepted first, deliberately.** If `addressable = false` entries were going to be
+quietly dropped anywhere, the accept path is where it would happen.
+
+The healthcare pack now holds four cited entries: three claimable, one explicitly
+not. **An account manager opening it sees the most tempting metric in the sector
+with *do not claim this* attached, and why.**
+
+### Refuse wholesale, not partially
+
+The parse route validates the entire payload — envelope, exclusion list, every
+measure — before a single INSERT executes. On failure, one error carries every
+issue and nothing is written.
+
+**A parser that accepts what it understands and drops the rest is how a research
+result becomes half-applied with nobody noticing.**
+
+Proved on production with the Manufacturing run: **422, seven issues, nothing
+written**, and `research_results` still at 4 afterwards.
+
+### Version drift is a refusal, not a patch
+
+Three research runs exist and **only one conformed.** The CDMO run predates
+`addressable_by_workforce_capability`; Manufacturing has it but no `confounders`.
+Both were refused:
+
+> *"measures[0].confounders is missing. This response predates the current contract
+> and must be re-run — a reviewer may not supply it at accept time."*
+
+**A reviewer who fills a gap becomes the source of a claim that should have come
+from the research.** The citation and the reasoning must originate together. Two of
+three files were thrown away rather than patched, and both need re-running.
+
+An addition not in the spec, and correct: **a field that is present but malformed
+gets a plain type error, not the predates-the-contract message.** Bad data and an
+old response are different problems with different remedies.
+
+### The mapping is the only seam between the two shapes
+
+`raw_response` holds the research object; `industry_measures` has columns. The
+accept path maps nine keys explicitly and **refuses on anything unmapped**, naming
+it.
+
+A silently dropped field is a fact the research established and the pack forgot. The
+parse route validates the shape on the way in; this is the second gate, and it
+catches a `raw_response` written before a contract change.
+
+### Accept produces `proposed`, never `ratified`
+
+Accepting a research result is a judgement that a measure is **worth proposing** —
+not that it is proven. Ratification means sourced at N=2 institutions and is a
+separate act with a separate threshold.
+
+409 on re-accept, naming the existing reviewer and date. **A decision is not
+amended; it is a fact.**
+
+---
+
+## CONSTRAINT CONFLICT: caught before it refused every accept
+
+`research_results_accepted_has_evidence` read
+`review_state <> 'accepted' OR evidence_id IS NOT NULL` — **unconditional on
+`result_kind`.**
+
+An `industry_measure` accept creates an `industry_measures` row and has no
+`evidence_id`, so **the constraint would have refused every pack accept.** Flagged
+before any route code was written, and it also surfaced a gap in the spec: the new
+id was to be stored on the row and no column existed for it.
+
+Resolved with a new nullable `industry_measures_id` and a kind-conditional XOR,
+renamed `research_results_accepted_has_record` since it is no longer about evidence:
+
+```
+review_state <> 'accepted'
+OR (result_kind = 'metric_value'
+      AND evidence_id IS NOT NULL AND industry_measures_id IS NULL)
+OR (result_kind = 'industry_measure'
+      AND industry_measures_id IS NOT NULL AND evidence_id IS NULL)
+```
+
+**An accepted row that produced nothing is a lie the database should refuse**, not
+something the application promises to avoid. This table already carries
+`kind_shape` and `found_shape` for exactly that reason — a hole here would sit
+beside two constraints that exist to prevent holes, and an accepted measure with no
+link would be indistinguishable from one that worked.
+
+Applied as its own migration, before the routes, so neither was debugged against
+the other.
+
+## DEFECT: the routes were mounted under the wrong prefix
+
+The accept and reject routes were defined inside `industryResearchRouter`, mounted
+at `/api/industries` — so they resolved at
+`/api/industries/research-results/:id/accept`. **Not industry-scoped, sitting under
+an industry prefix, with no `:industryId` in the path.**
+
+Flagged rather than silently changing the mount, since "no mount change" was an
+explicit instruction. Fixed by splitting into a second router at
+`/api/research-results`, and verified that the old nested path now 404s at the
+Express router level.
+
+---
+
+## FINDING: local had no triggers at all
+
+`db/hardening.sql` had **never been applied to the local development database.**
+Zero triggers existed.
+
+Noticed only because `reviewed_at` was not being stamped during an accept test — a
+trigger-maintained column staying null.
+
+**So every local test before tonight ran against a database with no governance
+whatsoever:** no audit trail, no delete protection, no gates, no supersession
+checks, no simulated-attestor refusals. Local test results carry materially less
+weight than they appeared to.
+
+This is a wider version of the migration-journal drift already on the record.
+`LVRF_Local_Setup.md` now carries a prominent FINDING before Phase 0 and a
+reinforcement where `hardening.sql` is first invoked, with the `pg_trigger` count
+check to self-diagnose.
+
+---
+
+## Still outstanding
+
+- **CDMO and Manufacturing must be re-run** with the current prompt. Both were
+  correctly refused; their measures are lost until re-run, and that is the cost of
+  not letting a reviewer patch a response
+- The **exclusion list is not written by parse.**
+  `industry_measure_exclusions` requires `excluded_by_person_id` — a person's
+  judgement — so an exclusion an agent proposed is a candidate, not a decision.
+  Six healthcare exclusions are sitting in the parsed payload with nowhere to go
+- **Rejecting a research result does not create an exclusion.** A rejection is
+  narrower than a standing industry-wide judgement
+- **The account workbench does not exist**, nor the model underneath it.
+  `institutions` has no website column, the create form writes `industry` as free
+  text rather than `industry_id`, and company inputs have nowhere to live at all
