@@ -254,9 +254,9 @@ function MetricsSection({
 }
 
 // THE POINT OF THE SCREEN. Two lists, rendered plainly, no interpretation
-// attached — an account metric with no industry_measure_id, and a pack
-// measure marked addressable that nothing at this account measures. Curia
-// is the case that motivated this: it measures "Time to full productivity,
+// attached — an account metric with NO PACK BASIS, and a pack measure that
+// is CLAIMABLE but NOT MEASURED at this account. Curia is the case that
+// motivated this: it measures "Time to full productivity,
 // newly promoted manager," which appears in no pack the CDMO industry
 // carries — the pack's own claim is that Lot Acceptance Rate is what
 // carries money there. The mismatch is left to speak for itself.
@@ -277,7 +277,7 @@ function GapSection({
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45">
-            Measured with no pack basis
+            No pack basis
           </span>
           {unmapped.length === 0 ? (
             <p className="m-0 mt-1.5 text-[12.5px] text-ink-45">
@@ -296,13 +296,13 @@ function GapSection({
 
         <div>
           <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45">
-            Addressable, not measured
+            Claimable, not measured
           </span>
           {pack === null ? (
             <p className="m-0 mt-1.5 text-[12.5px] text-ink-45">No pack to compare against.</p>
           ) : opportunities.length === 0 ? (
             <p className="m-0 mt-1.5 text-[12.5px] text-ink-45">
-              Nothing addressable in this pack is currently unmeasured.
+              Nothing claimable in this pack is currently not measured.
             </p>
           ) : (
             <ul className="m-0 mt-1.5 list-none p-0">
