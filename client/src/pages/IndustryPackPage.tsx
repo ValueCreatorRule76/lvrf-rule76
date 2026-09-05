@@ -38,7 +38,18 @@ function MeasureEntry({ measure }: { measure: IndustryMeasure }) {
           <span className="font-mono text-[11px] text-ink-45">
             {m.unit} · {m.direction}
           </span>
+          {/* STATUS then CLAIMABILITY — same order and same two families
+              InstitutionPage.tsx's PackSection uses; that file also adds a
+              COVERAGE badge, which has no meaning here: there is no
+              institution in this page's frame for "measured" to be true or
+              false of. CLAIMABLE is rendered explicitly, not left implied
+              by which of the two groups below a measure landed in — same
+              "no silent good state" rule as everywhere else this
+              vocabulary appears. */}
           <Badge tone={STATUS_TONE[m.status] ?? 'neutral'}>{m.status}</Badge>
+          <Badge tone={m.addressable ? 'neutral' : 'watch'}>
+            {m.addressable ? 'Claimable' : 'Not addressable'}
+          </Badge>
         </div>
       </div>
 

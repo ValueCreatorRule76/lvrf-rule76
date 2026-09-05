@@ -25,6 +25,69 @@ const STATUS_TONE: Record<string, 'healthy' | 'watch' | 'critical' | 'neutral'> 
   rejected: 'critical',
 };
 
+/**
+ * THREE BADGE FAMILIES — now four, with BASIS — each answering a different
+ * question, never blended into one vocabulary:
+ *
+ *   STATUS       what the pack claims about itself: PROPOSED | RATIFIED.
+ *                Nothing is ratified today. Tone: STATUS_TONE above —
+ *                untouched by this pass.
+ *   CLAIMABILITY whether a learning offering can move it: CLAIMABLE |
+ *                NOT ADDRESSABLE. Always rendered — CLAIMABLE is a fact,
+ *                not the silent default when nothing else is shown.
+ *   COVERAGE     whether THIS ACCOUNT measures a PACK measure: MEASURED |
+ *                NOT MEASURED. Applies only where an institution's own
+ *                measurement can be checked, i.e. PackSection here — the
+ *                industry-level IndustryPackPage.tsx has no institution to
+ *                check coverage against, and correctly carries no COVERAGE
+ *                badge at all, not a NOT APPLICABLE one (there is no
+ *                account in the frame for "not applicable" to apply to).
+ *   BASIS        the reverse question, asked of an ACCOUNT METRIC instead
+ *                of a pack measure: does this metric map to a pack
+ *                measure? PACK BASIS | NO PACK BASIS | NOT APPLICABLE.
+ *                Forcing this into COVERAGE would misstate Curia's own
+ *                finding — an unmapped metric is not a pack measure the
+ *                account failed to measure, it is a metric the account
+ *                measures with no pack basis, the inverse direction of
+ *                the same question. NOT APPLICABLE is the is_tenant_self
+ *                case: there is no pack for a tenant's own metric (DRR) to
+ *                belong to, and never will be (section 00's own claim) —
+ *                that is a fact about the frame, not a deficiency, so it
+ *                gets the same neutral tone as PACK BASIS, not the watch
+ *                tone NO PACK BASIS uses for a customer account's genuine
+ *                unmapped metric (Curia's case).
+ *
+ * TONES: CLAIMABLE / MEASURED / PACK BASIS are ordinary states, not scores
+ * — neutral, not healthy. NOT ADDRESSABLE / NOT MEASURED / NO PACK BASIS
+ * are absences a reader must notice, not failures — watch, not critical or
+ * warning. NOT APPLICABLE is neutral: a fact about the frame, not a
+ * warning about the account.
+ */
+function claimabilityBadge(addressable: boolean) {
+  return (
+    <Badge tone={addressable ? 'neutral' : 'watch'}>
+      {addressable ? 'Claimable' : 'Not addressable'}
+    </Badge>
+  );
+}
+
+function coverageBadge(measured: boolean) {
+  return (
+    <Badge tone={measured ? 'neutral' : 'watch'}>{measured ? 'Measured' : 'Not measured'}</Badge>
+  );
+}
+
+function basisBadge(industryMeasureId: string | null, isTenantSelf: boolean) {
+  if (isTenantSelf) {
+    return <Badge tone="neutral">Not applicable</Badge>;
+  }
+  return (
+    <Badge tone={industryMeasureId ? 'neutral' : 'watch'}>
+      {industryMeasureId ? 'Pack basis' : 'No pack basis'}
+    </Badge>
+  );
+}
+
 const CONFIDENCE_TONE: Record<string, 'healthy' | 'watch' | 'critical'> = {
   high: 'healthy',
   medium: 'watch',
@@ -139,11 +202,9 @@ function PackSection({
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {!m.addressable && <Badge tone="neutral">Not addressable</Badge>}
                   <Badge tone={STATUS_TONE[m.status] ?? 'neutral'}>{m.status}</Badge>
-                  <Badge tone={isMeasuring ? 'healthy' : 'watch'}>
-                    {isMeasuring ? 'Measuring' : 'Not measuring'}
-                  </Badge>
+                  {claimabilityBadge(m.addressable)}
+                  {coverageBadge(isMeasuring)}
                 </div>
               </li>
             );
@@ -154,7 +215,13 @@ function PackSection({
   );
 }
 
-function MetricsSection({ metrics }: { metrics: InstitutionBusinessMetric[] }) {
+function MetricsSection({
+  metrics,
+  isTenantSelf,
+}: {
+  metrics: InstitutionBusinessMetric[];
+  isTenantSelf: boolean;
+}) {
   return (
     <Card n="02" title="What this account is actually measuring" badge={<Badge tone="neutral">{metrics.length}</Badge>}>
       {metrics.length === 0 ? (
@@ -177,9 +244,7 @@ function MetricsSection({ metrics }: { metrics: InstitutionBusinessMetric[] }) {
                     than competing with it at body weight. */}
                 <span className="block text-[11.5px] text-ink-45">{m.source_system}</span>
               </div>
-              <Badge tone={m.industry_measure_id ? 'healthy' : 'warning'}>
-                {m.industry_measure_id ? 'Maps to a pack measure' : 'No pack basis'}
-              </Badge>
+              {basisBadge(m.industry_measure_id, isTenantSelf)}
             </li>
           ))}
         </ul>
@@ -327,7 +392,7 @@ export function InstitutionPage() {
         measuredIds={measuredIds}
         isTenantSelf={view.institution.is_tenant_self}
       />
-      <MetricsSection metrics={view.metrics} />
+      <MetricsSection metrics={view.metrics} isTenantSelf={view.institution.is_tenant_self} />
       <GapSection pack={view.pack} metrics={view.metrics} measuredIds={measuredIds} />
 
       <Card n="04" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
