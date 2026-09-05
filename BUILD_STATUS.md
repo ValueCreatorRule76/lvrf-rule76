@@ -4985,3 +4985,184 @@ The gap-section headings were different in kind — terse all-caps labels sittin
 directly over rows whose badges said something else. **Same register, competing.**
 
 That distinction is the rule for future copy in this client.
+
+---
+
+## Curia done right — the solution-to-measure chain — 5 September 2026
+
+The demo argument: **an outside-in hypothesis without an industry benchmark reaches
+for the measure that resembles the product. With the benchmark, it reaches for the
+measure that carries money.** Same account, same vendor, better claim.
+
+Both now exist on Curia, side by side, and both started at 10/100.
+
+### What the first hypothesis was
+
+*Time to full productivity, newly promoted manager* — inferred from a published
+case study in August, with a baseline of 180 days that no Curia system supplied.
+The capability behind it was named `New manager effectiveness`, **with no
+description and no role family**, created by the attachment route with just a name
+because nobody stated what capability was being claimed.
+
+That is the content-shaped hypothesis visible in the data: **a capability named
+after a training topic, with nothing said about what it changes.**
+
+Neither CDMO research run produced that measure. The pack says the money is in lot
+acceptance.
+
+### What the second one is
+
+```
+Skillsoft Compliance Suite        content     PRIMARY
+Skillsoft CAISY (simulation)      practice
+Skill Benchmarks & Readiness      assessment
+        ↓
+GMP procedural execution — deviation handling and batch-record discipline
+        ↓
+Lot Acceptance Rate (LAR)         FDA-defined, addressable
+```
+
+**Three offerings, not one**, and of three different families. Deviation handling
+under GMP is procedural competence: content delivers it, simulation rehearses it,
+and the assessment is what makes the claim measurable at all. Without the third the
+value claim rests on consumption rather than demonstrated ability.
+
+### The claim names what it does NOT address
+
+`capability_industry_measures.claim` is required and is the **mechanism**, not a
+restatement of the link. Curia's reads:
+
+> *Lot rejection under GMP traces to execution against the batch record...*
+> *It does not address the confounders the research names: new-product introduction
+> and technology transfer depress the rate for the first several batches regardless
+> of skill, raw-material variability produces supply-chain rejections, equipment age
+> drives deviations independent of the operator, and the ratio moves mechanically
+> with how a site defines a lot. A claim on this measure must be read against those
+> four.*
+
+**That second half is what stops it being the same overclaim in better clothes.**
+
+### THE BASELINE: researched, not invented
+
+Curia's lot acceptance rate is not public, and `baseline_value` is NOT NULL — so
+the outcome could not be created without a number.
+
+**The rule is not "never infer." It is "never invent, and mark what is inferred."**
+Run 1 of the first hypothesis did this correctly: 180 days marked ASSERTED, scoring
+10/100 with `baseline_evidence_verified` at 0 of 25.
+
+So a research run asked one question: **does a published benchmark VALUE exist for
+lot acceptance rate?** Not the definition — that was already in hand from FDA.
+
+**It does, and the search that found it is the useful part.** Nine sources checked,
+five returning nothing:
+
+```
+FOUND      ISPE Quality Metrics Pilot Wave 1 (2015) and Wave 2 (June 2016) —
+           figure-level medians, quartiles and distributions
+NOTHING    FDA/CDER — definitions and a reporting framework only; the programme
+           never reached mandatory collection
+NOTHING    PDA — metrics defined, no values reported
+GATED      BioPhorum, McKinsey POBOS — member and subscription only
+WITHHELD   Wang et al. (2022) reports regression coefficients and explicitly
+           withholds the baseline rates at two anonymised API sites
+NOTHING    Samsung Biologics, Catalent, Lonza filings — no rate disclosed
+```
+
+**95.3%** was taken: the low end of Wave 1's API/Biologics/Other median range
+(95.3–98.1%), because Curia does API and drug-substance work and **a claim built on
+a conservative baseline does not collapse if the real figure is higher.**
+
+Three limitations travel with it in `definition_notes`, all named by the research
+itself: the data is from 2014–2015 and nothing comparable has been published since;
+the sample **pooled innovator and contract sites** without segmenting CDMOs; and it
+is **self-reported under a proposed FDA definition that participants applied
+inconsistently**, which the Wave 2 report states itself.
+
+`baseline_measured_at` is **2015-12-31** — the end of the ISPE collection window,
+not a date on which anything at Curia was measured. Stated in the notes, so a 2015
+date on a 2026 record reads as deliberate rather than as an error.
+
+### Both hypotheses scored 10/100
+
+**A better-aimed claim does not start with more confidence.** It starts in the same
+place — asserted baseline, no evidence, nobody named — and the difference is what it
+is aimed at, not how well supported it is on day one.
+
+That is a stronger demonstration than a high score would have been.
+
+---
+
+## Two missing edges, both closed
+
+```
+offering -> capability          EXISTED  offering_capabilities, with is_primary
+capability -> business_metric   EXISTED  value_outcomes ties them
+capability -> industry_measure  BUILT    capability_industry_measures
+business_metric -> industry_measure  WRITER BUILT — the column existed since 0019
+                                     and nothing had ever written it
+```
+
+`capability_industry_measures` takes a **surrogate id** where `offering_capabilities`
+uses a composite PK, and the reason is stated: **this table records a judgement with
+an author**, and `lvrf_audit()` cannot serve a composite-key table. Dropping `_audit`
+would keep the author and lose the record of changes to it.
+
+That **sidesteps DEFECT-003 rather than closing it** — `offering_capabilities`,
+`value_outcome_evidence`, `person_roles` and `reflection_evidence` still lack
+`_audit` for the same reason. Forking `lvrf_audit()` inside a feature migration was
+declined; that decision belongs on its own.
+
+`POST /api/business-metrics/:id/pack-basis` requires a `basis_note`, because **the
+two are not always the same thing**: a site computing lot acceptance over lots
+RELEASED rather than lots STARTED is measuring a different number under the same
+name. Curia's note says exactly that, and says the metric must be superseded rather
+than reinterpreted if it turns out to be true.
+
+Trigger count 76 → 78.
+
+---
+
+## FINDING: two individually-correct computations, jointly misleading
+
+The account view showed Lot Acceptance Rate on **both sides of the gap** — `NO PACK
+BASIS` on the left and `CLAIMABLE, NOT MEASURED` on the right.
+
+The obvious diagnosis was a disagreement between two joins. **It was not.** The
+investigation found the computation had only ever joined on `industry_measure_id`,
+with no name-matching and no second key, and both lists were individually right:
+
+- the account metric had `industry_measure_id IS NULL`, so it belonged on the left
+- the pack measure was claimed by no metric, so it belonged on the right
+
+**The fact that would have collapsed them — a person's judgement that this metric
+instantiates that measure — had nowhere to be recorded.** The column had no writer.
+
+Nothing in the code was wrong. That shape is worth remembering: **a defect that
+looks like a logic error and is actually a missing writer.** It was invisible until
+an account metric shared a name with a pack measure.
+
+### And the gap was computed twice
+
+The gap was **client-only and implicit**, unpinned by any test or schema, while the
+server returned the raw arrays. It now has one canonical server-computed answer.
+
+`measuredIndustryMeasureIds()` was **kept client-side for the coverage badge only**,
+and that was argued rather than assumed: `gap.addressable_unmeasured` is filtered to
+addressable, so it cannot answer *is this measure covered* for the non-addressable
+rows the pack section also renders. **Different questions, not the same rule twice**
+— and the alternative was API surface to save a Set built from data already in hand.
+
+The helper's comment now states it serves exactly one purpose, with an instruction
+to replace rather than duplicate if the server ever returns per-measure coverage.
+**A leftover helper that looks like it still drives the gap is how the second
+implementation grows back.**
+
+### Eighth instance of a type written from a description
+
+`InstitutionBusinessMetric` was missing `id`, which the server had been selecting.
+Found while wiring the client to the server's gap — in a type that had been asked
+to be read from the server rather than inferred.
+
+Also fixed while there: the unmapped list keyed off `m.name`, which was never safe
+since duplicate metric names are legal.
