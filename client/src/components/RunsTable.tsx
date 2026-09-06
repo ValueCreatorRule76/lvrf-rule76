@@ -82,14 +82,21 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 <td className="border-b border-rule-soft px-3 py-[9px] font-semibold">
                   {/* The account view, not the run — a different destination from the
                       row's own click-through, so this link stops the click from also
-                      bubbling into the row's navigate(`/runs/${r.id}`) above. */}
-                  <Link
-                    to={`/accounts/${r.institution_id}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-ink hover:text-gold-ink"
-                  >
-                    {r.institution_name}
-                  </Link>
+                      bubbling into the row's navigate(`/runs/${r.id}`) above. Null when
+                      the owning engagement or institution has since been retired — the
+                      run still shows, with no owner to link to; same phrasing ActorBar
+                      already uses for the same absence. */}
+                  {r.institution_id && r.institution_name ? (
+                    <Link
+                      to={`/accounts/${r.institution_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-ink hover:text-gold-ink"
+                    >
+                      {r.institution_name}
+                    </Link>
+                  ) : (
+                    <span className="text-ink-45">no institution</span>
+                  )}
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px] font-mono">
                   {r.run_number}

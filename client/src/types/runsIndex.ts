@@ -4,8 +4,9 @@
 
 export interface RunListItem {
   id: string;
-  institution_id: string;
-  institution_name: string;
+  /** null if the owning engagement or institution has since been retired — the run itself still shows. */
+  institution_id: string | null;
+  institution_name: string | null;
   run_number: number;
   terminal_value_stage: string;
   confidence_score: string;
