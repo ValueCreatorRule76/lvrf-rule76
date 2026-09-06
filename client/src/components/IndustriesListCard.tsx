@@ -5,11 +5,12 @@ import { fetchIndustries, type FetchIndustriesResult } from '../api/packs';
 import { Card, Badge } from './workbench/Card';
 import { FOCUS_RING } from './GovernedForm';
 
-// A plain list, not a picker — nothing links to a pack today, so this only
-// needs to exist, not to filter or search. Renumbered ("00", pushing
-// CreateAccountCard to "01" and RunsTable to "02") rather than inserted
-// before "00", since a card numbered lower than "00" has no precedent
-// anywhere in this codebase and would read as a typo, not a position.
+// A plain list, not a picker — each row links to /packs/:slug, but nothing
+// here filters or searches. Lives on PacksIndexPage now, as that page's
+// only card, still n="00" — it used to sit on RunsIndexPage, pushing
+// CreateAccountCard and RunsTable down a number each; both have since
+// moved or renumbered on their own pages, and this card left with neither
+// behind it.
 export function IndustriesListCard() {
   const { actor } = useActor();
   const [result, setResult] = useState<FetchIndustriesResult | null>(null);

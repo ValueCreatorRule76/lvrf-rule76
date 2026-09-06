@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { RunPage } from './pages/RunPage';
 import { RunsIndexPage } from './pages/RunsIndexPage';
 import { AccountsIndexPage } from './pages/AccountsIndexPage';
+import { PacksIndexPage } from './pages/PacksIndexPage';
 import { IndustryPackPage } from './pages/IndustryPackPage';
 import { InstitutionPage } from './pages/InstitutionPage';
 import { ActorProvider } from './actor/ActorContext';
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/" element={<AccountsIndexPage />} />
           <Route path="/runs" element={<RunsIndexPage />} />
           <Route path="/runs/:id" element={<RunPage />} />
+          <Route path="/packs" element={<PacksIndexPage />} />
           <Route path="/packs/:slug" element={<IndustryPackPage />} />
           <Route path="/accounts/:id" element={<InstitutionPage />} />
         </Routes>

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchRuns, type FetchRunsResult } from '../api/runsIndex';
 import { RunsTable } from '../components/RunsTable';
-import { IndustriesListCard } from '../components/IndustriesListCard';
 
 export function RunsIndexPage() {
   const [result, setResult] = useState<FetchRunsResult | null>(null);
@@ -37,7 +36,6 @@ export function RunsIndexPage() {
           Value runs
         </h1>
       </header>
-      <IndustriesListCard />
       <RunsTable runs={result.runs} />
     </div>
   );

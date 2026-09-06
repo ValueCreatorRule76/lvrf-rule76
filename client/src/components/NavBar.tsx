@@ -2,10 +2,12 @@ import { NavLink } from 'react-router-dom';
 import { Badge } from './workbench/Card';
 import { FOCUS_RING } from './GovernedForm';
 
-// TWO links, nothing else. NO Packs link — there is no GET /api/industries
-// index scoped for navigation chrome, and a link aimed at one seeded slug
-// would put a stated fact (which industry) into the chrome as a constant.
-// The only route to a pack is InstitutionPage's own classification link.
+// THREE links. Packs sits second, not last: it is reference data an
+// account reaches into, and runs are the log — Accounts, Packs, Runs
+// follows that order, not alphabetical or build order. Packs now has a
+// real index page (PacksIndexPage) to point at; before that page existed
+// this bar deliberately omitted the link rather than aim it at one
+// seeded slug.
 //
 // NO user menu, no sign-out, no settings. There is no user model — the
 // perimeter is basic auth and the actor is a spoofable header
@@ -22,6 +24,7 @@ import { FOCUS_RING } from './GovernedForm';
 // decides, this component only renders what it's told.
 const LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Accounts', end: true },
+  { to: '/packs', label: 'Packs' },
   { to: '/runs', label: 'Runs' },
 ];
 
