@@ -4820,10 +4820,12 @@ check to self-diagnose.
   An exclusion an agent proposed is a candidate, not a decision. ~~**Thirteen
   candidates have nowhere to go.**~~ 10 October: `POST
   /api/industries/:industryId/exclusions` is the person's path (see *Exclusions
-  get a writer*). The 13 still await a decision each: exclude, promote to a
-  not-addressable pack entry, or drop.
-- **Next item, after the 13 exclusion decisions: write routes respond before
-  COMMIT.** `actorContext` commits in `res.once('finish')`, so a client can
+  get a writer*). ~~The 13 still await a decision each.~~ **Decided 10 October:
+  12 excluded, 1 promoted, 0 dropped.** See *The 13 exclusion decisions*.
+- **Case mix index (healthcare): approved for promotion to a not-addressable
+  pack entry, 10 October. Needs a research run producing the full measure
+  shape with a citation; the 10 October decision was not to exclude it.**
+- **Next item: write routes respond before COMMIT.** `actorContext` commits in `res.once('finish')`, so a client can
   get a 2xx and read before the row is visible. Seen in `verify_pack_review.sh`
   and in the Account facts card's reload. Fix by committing before the
   response is flushed, across all routes.
@@ -6182,3 +6184,69 @@ as `lvrf_app`. No POSTs.
 
 **Next:** the 13 exclusion decisions, one at a time. After them comes the
 commit-before-response fix (Still outstanding).
+
+---
+
+## The 13 exclusion decisions — 10 October 2026
+
+The 13 measures that three research runs had "tested and excluded as unaddressable"
+were each decided by Brad Piver and approved as listed: **12 excluded, 1 promoted,
+0 dropped.** The 12 were recorded on prod through
+`POST /api/industries/:industryId/exclusions`, as Brad Piver, from the box against
+127.0.0.1:3001, at 11:47 UTC.
+
+| Pack | Excluded | |
+|---|---|---|
+| Healthcare | 5 | Payer mix · Adjusted admissions / volume growth · Occupancy rate · Bad debt and uncompensated care · Operating EBITDA margin |
+| Manufacturing | 4 | Raw material and commodity input cost · Energy cost per unit · End-market demand, order intake and backlog · Tariff and trade exposure |
+| Pharmaceutical & Biotechnology | 3 | Capacity utilisation (CDMO) · Book-to-bill · Biotech funding environment |
+
+**The approval said "11 exclusions"; the decisions listed 12.** The count was
+corrected and confirmed as 12 before anything was posted.
+
+### The agent's wording is stored apart from the person's reason
+
+Each row carries two different authors, in two different columns:
+
+- **`reason`** — Brad Piver's judgement, verbatim. For example, Occupancy rate:
+  *"The numerator is demand. Capability can free beds, not fill them."*
+- **`proposal_text` + `proposed_by_research_tool`** — what the research run said,
+  verbatim, and which run said it. Each `proposal_text` is the exact array element
+  from that run's `measures_tested_and_excluded_as_unaddressable`. Each tool is that
+  payload's own `research_tool`: "Claude Cowork" for Healthcare (the same tool as
+  prod's 4 accepted Healthcare results), and the two 9–10 October Claude (Opus 5.5)
+  runs for Manufacturing and CDMO.
+
+Neither column is derived from the other. The pack page shows the reason first, and
+the research's wording below it, labelled as the research's.
+
+**How the mapping was made.** Each decision was matched to exactly one array element
+by its leading phrase. The build refused any decision that matched none or more than
+one. Every element was used once, except Healthcare `[1]`, Case mix index. Where the
+stored name is shorter than the research's phrase (#3, "Adjusted admissions / volume
+growth"), the name is the decider's and the longer phrase stays in `proposal_text`.
+No `citation` was sent.
+
+### The promotion: Case mix index
+
+Healthcare's CMI was **not excluded**. It is approved for promotion to a
+not-addressable pack entry, and that waits on a research run producing the full
+measure shape with a citation (Still outstanding). The research's own text ends
+*"Excluded because a capability claim on CMI cannot be separated from acuity drift
+after the fact."* A not-addressable entry is consistent with that: it stays in the
+pack as *do not claim this, and why*, rather than leaving it.
+
+### Verified, read-only
+
+- **12 rows**, 12 of 12 byte-equal to the request on name, `reason`,
+  `proposal_text` and `proposed_by_research_tool`. `citation` is NULL,
+  `excluded_by` is Brad Piver, and each row has its own attributed `audit_log` row.
+- **The packs return them through the API**, byte-equal: healthcare 5,
+  manufacturing 4, pharmaceutical-biotechnology 3. No name appears both as a pack
+  entry and as an exclusion.
+- **Measures and reviews are unchanged.** An md5 over every `industry_measures` row
+  joined to its research result was the same before and after
+  (`7c4620730fb804b458ee1489f55b90d0`). The 12 measures and 12 reviews by Brad Piver
+  are as they were.
+- No refusals were recorded. The request file, its sha256 checked on the box
+  (`f11e946f…`), and every temp file were removed from the box afterwards.
