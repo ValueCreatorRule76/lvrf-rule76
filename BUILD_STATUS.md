@@ -4843,6 +4843,11 @@ check to self-diagnose.
   parser's 422s. It is annotated in place under *Refuse wholesale, not partially*,
   not deleted. A parse refusal that should be on record needs a writer of its
   own.
+- **Two readers don't check that an outcome's engagement is current:** the gap
+  register's single-outcome count and metric re-validation's supersession of
+  outcomes. Both include outcomes under retired engagements (`bf6f5b2d…`,
+  `e3fb0061…` under `c47d075f…`). Filter them, or add an outcome retirement
+  route if one is ever needed.
 
 ---
 
@@ -5676,3 +5681,34 @@ Local has one tenant, so the cross-tenant 404 is not exercised.
 
 No UI. Retirement is rare and irreversible; it goes through the API deliberately until
 there is a reason to put a button on it.
+
+### Deployed, and first use — 10 October 2026
+
+`a24f65b` was deployed via `lvrf-deploy.sh` (`0934466..a24f65b`, bundle
+unchanged at `index-CMSLsC7h.js`, api 200, vhost 401, deploy OK). There was no
+migration and the trigger count is still 82.
+
+**Before, read-only.** *Curia — reference example, not an engagement*
+(`c47d075f-012c-4a3a-9085-5b3f7bdce5f6`, status `draft`) had 21 runs, all
+locked. The latest was run 21 at `55.0` medium. The cohort book was `10.0`
+low, with 2 of 2 measured.
+
+**Retired** at 04:29:10 UTC by Brad Piver, on explicit instruction, via
+`POST /api/engagements/c47d075f-…/retire`. The reason, verbatim: *"Retired
+from the book of record: by its own name this is a reference example, not an
+engagement. It was counted as a cohort member when the weakest-link roll-up
+shipped (0934466). Its runs stay on record, untouched."*
+
+- **Response:** 200, `runs_left_in_place: 21`, `locked_runs_left_in_place:
+  21`, evidence `10535941-9e76-41a1-b555-7349fe497b92`.
+- **Engagement row:** `status = 'retired'`, `deleted_at` set.
+- **`audit_log`:** one `soft_delete` row, actor Brad Piver.
+- **Runs:** all 21 still present, all 21 still locked, none deleted.
+- **The reason:** recorded as an `observation`, `low` confidence, unverified,
+  captured by Brad Piver.
+- **`/api/cohort` after:** `10.0` low, `floor: 'run'`, set by *Curia — lot
+  acceptance, pack-grounded hypothesis* run 1. **1 of 1 measured**, one
+  account, `comparable: true`. The `pharmaceutical-biotechnology` cohort is
+  the same: `10.0` low, 1 of 1.
+- **Left untouched, as designed (no cascade):** two `draft` value outcomes
+  under the engagement, `bf6f5b2d…` and `e3fb0061…`. See *Still outstanding*.
