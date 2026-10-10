@@ -4822,9 +4822,11 @@ check to self-diagnose.
   /api/industries/:industryId/exclusions` is the person's path (see *Exclusions
   get a writer*). ~~The 13 still await a decision each.~~ **Decided 10 October:
   12 excluded, 1 promoted, 0 dropped.** See *The 13 exclusion decisions*.
-- **Case mix index (healthcare): approved for promotion to a not-addressable
+- ~~**Case mix index (healthcare): approved for promotion to a not-addressable
   pack entry, 10 October. Needs a research run producing the full measure
-  shape with a citation; the 10 October decision was not to exclude it.**
+  shape with a citation; the 10 October decision was not to exclude it.**~~
+  **Closed 10 October 2026.** Researched, parsed and accepted as a
+  not-addressable Healthcare entry. See *Case mix index promoted*.
 - ~~**Write routes respond before COMMIT.**~~ Closed 10 October 2026 — see *Commit
   before the response*.
 - **Rejecting a research result does not create an exclusion.** A rejection is
@@ -6377,3 +6379,38 @@ Not exercised on prod: a failing COMMIT. It cannot be produced there without a
 write that fails at COMMIT time. The clone-only verify script is the proof:
 17 passed, 0 failed, including "the API process survived the failed COMMIT"
 and "the server logged the failed COMMIT".
+
+---
+
+## Case mix index promoted — 10 October 2026
+
+This completes the 10 October decision to promote CMI rather than exclude it.
+
+- **Research:** `cmi-payload.json`, one measure, `addressable = false`. Tool: Claude
+  (Opus 5.5) in the Claude app, fetching cms.gov and oig.hhs.gov directly, run
+  10 October. Sources: CMS's own CMI definition, and HHS OIG OEI-02-18-00380 for
+  the audit exposure. Its `why` keeps the original Healthcare run's conclusion: a
+  capability claim on CMI cannot be separated from acuity drift. "Do not claim it;
+  claim the specific, auditable documentation measures instead."
+- **Parsed on prod** as Brad Piver: research result
+  `5ae027ac-906c-4360-bc68-9235347efe45`. A throwaway local clone parsed it first
+  (201, one pending row). Before posting, prod had no current measure and no
+  exclusion with that name. The stored `raw_response` equals the file field for
+  field; only the key order inside `addressable_by_workforce_capability` differs,
+  because `jsonb` reorders keys.
+- **Accepted on prod** by Brad Piver at 12:07 UTC. It is now industry measure
+  `79da8bb0-7771-46ec-845e-d760a7f98b94`, `proposed`, not addressable. The review
+  note is stored exactly as given. It includes the caveat that the
+  1%-of-revenue-per-1%-of-CMI figure is approximate arithmetic, and that the CMS
+  page states no fiscal year.
+
+**Verified read-only after the accept:**
+
+| Check | Result |
+|---|---|
+| Healthcare pack | **5** current measures: 3 claimable, 2 not addressable |
+| CMI entry | Under "What you cannot — and why", `reviewed_by` Brad Piver, note byte-equal |
+| Healthcare's other 4 measures | Unchanged |
+| Healthcare's 5 exclusions | Unchanged |
+| Manufacturing and pharmaceutical-biotechnology packs | Byte-identical before and after |
+| Prod totals | 13 current measures, 13 accepted results, 0 pending, 12 exclusions, no refusals |
