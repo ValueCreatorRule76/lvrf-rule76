@@ -5567,3 +5567,41 @@ rises by exactly one.
 account is unclassified and has no locked run, so the run-floor and
 per-industry checks pass vacuously there. Prod, with Curia classified and
 locked runs, is the first real exercise of them.
+
+### Deployed — 10 October 2026
+
+`0934466` to production via `lvrf-deploy.sh` (`680dd29..0934466`, bundle
+`index-CMSLsC7h.js`, api 200, vhost 401, deploy OK; service up since 03:58:47
+UTC). There was no migration and the trigger count is still 82. Reviewed
+read-only: `GET /api/cohort` on 127.0.0.1:3001 as Brad Piver, plus SELECTs as
+`lvrf_app`. No POSTs.
+
+- **Book composite: `"10.0"`, band `low`, `floor: 'run'`.** It is determined by
+  *Curia — lot acceptance, pack-grounded hypothesis*, run 1, locked
+  2026-09-05 20:01 UTC. `lowest_recorded` is the same run.
+- **2 of 2 engagements measured, across 1 account.** The other member is
+  *Curia — reference example, not an engagement*, at run 21, `"55.0"`, medium.
+- **`model.comparable: true`**, with the note *"Every contributing run was
+  scored by the same model."* One fingerprint contributes: `1.0.0` /
+  `d4cf8f31472a`, on 2 runs.
+- **`by_industry`:** one entry, `pharmaceutical-biotechnology`, which is the
+  same single account and the same composite (`"10.0"` low, set by the lot
+  acceptance engagement). `unclassified_account_count: 0`.
+- **Skillsoft (tenant self) is absent** from the book and from every industry
+  cohort. The response has no average key.
+
+**The MIXED RULERS prediction above was wrong.** The reference engagement has
+21 locked runs, 16 of them unversioned, but only its latest locked run (run
+21) is a run of record, and that run is versioned. Old unversioned runs never
+contribute, so the rulers agree. The prediction counted runs, not runs of
+record.
+
+**Questionable member: *"reference example, not an engagement"*.** It
+counts as a customer engagement because it is a current engagement on a
+customer account. At 55 it does not set the floor, but it inflates
+`measured_count`, and its name says it should not be in a book of record.
+Retiring it is a governance act (set `deleted_at`, or supersede), and nothing
+was changed.
+
+On prod, the account page and card 02 agree. Curia's latest run is the locked
+10.0, so the locked-only rule changes nothing there yet.
