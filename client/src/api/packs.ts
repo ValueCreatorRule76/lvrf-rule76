@@ -26,6 +26,17 @@ export interface IndustryMeasure {
   confounders: string;
   citation: string;
   status: string;
+  /**
+   * The accepted research result behind this entry. Null only if none is
+   * on record — never invented. `note` is the reviewer's own caveat.
+   */
+  review: {
+    note: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string;
+    research_tool: string | null;
+    parsed_at: string | null;
+  } | null;
 }
 
 export interface IndustryPack {

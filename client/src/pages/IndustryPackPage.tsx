@@ -74,6 +74,26 @@ function MeasureEntry({ measure }: { measure: IndustryMeasure }) {
       </div>
 
       <p className="m-0 mt-3 font-mono text-[10.5px] text-ink-45">{m.citation}</p>
+
+      {/* The reviewer's word, beside the research it judged. A caveat raised
+          at review (a threshold to confirm, a figure that is trade press) is
+          only useful if the reader of the pack sees it — this is the place
+          the account manager is when they would otherwise overclaim. */}
+      {m.review ? (
+        <div className="mt-3 border-l-2 border-silver pl-3">
+          <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45">
+            Reviewer's note
+          </span>
+          {m.review.note && <p className="m-0 mt-1 text-[12.5px] text-ink">{m.review.note}</p>}
+          <p className="m-0 mt-1 text-[11px] text-ink-45">
+            Accepted by {m.review.reviewed_by ?? 'an unnamed reviewer'} on{' '}
+            {m.review.reviewed_at.slice(0, 10)}
+            {m.review.research_tool ? ` · research: ${m.review.research_tool}` : ''}
+          </p>
+        </div>
+      ) : (
+        <p className="m-0 mt-3 text-[11px] text-ink-45">No review on record for this entry.</p>
+      )}
     </div>
   );
 }

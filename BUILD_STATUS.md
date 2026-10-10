@@ -5453,12 +5453,14 @@ waiting for a person's judgement**. None of them is in any database.
 
 ### Still outstanding from item (b)
 
-- **Reviewer caveats do not reach the pack.** Surface the accepting
-  `review_note` on `/packs/:slug`, joined through
-  `research_results.industry_measures_id`. Until then, a caveat that only the
-  reviewer raised is invisible to the account manager reading the pack.
+- ~~**Reviewer caveats do not reach the pack.**~~ Closed 10 October 2026 — see
+  *The pack shows the reviewer's note*.
 - **No pack is ratified.** Ratification needs sourcing at N=2 institutions, and
   the threshold is not lowered to fix that.
+- A partial unique index on `research_results(industry_measures_id) WHERE
+  review_state = 'accepted'` would make the pack join's one-review-per-entry
+  assumption a constraint. Fold it into the next migration that has another
+  reason to exist.
 
 ---
 
@@ -5973,3 +5975,60 @@ as `lvrf_app`. No POSTs.
 - `e3fb0061…` gaps → **409**, the frozen message, unchanged.
 - The cohort book is unchanged at `10.0` low, 1 of 1 measured. `/api/health`
   returns 200 with the database connected.
+
+---
+
+## The pack shows the reviewer's note — 10 October 2026
+
+`GET /api/industries/:slug/pack` now returns each entry's accepted review, and
+`/packs/:slug` renders it under the citation: **REVIEWER'S NOTE**, the note itself,
+then *accepted by — on — · research: —*. The footer says only "accepted", not
+"accepted as proposed": the notes already begin with that phrase, so it would
+repeat on every entry.
+
+### Why
+
+A pack entry exists only because a person accepted a research result. Their
+`review_note` is where a caveat raised at review lives — and the research may not
+have written that caveat into its own citation. Before this, the page selected the
+measure's columns only, so a reviewer's *confirm this threshold before relying on it*
+was invisible to the account manager reading the pack, at exactly the moment they
+would overclaim. OEE and OTIF were covered by luck: the research had written the same
+caveats into the citation text.
+
+### How
+
+A LEFT JOIN from `industry_measures` to the accepted `research_results` row
+(`industry_measures_id`, `review_state = 'accepted'`) and its reviewer. One review per
+entry **holds by construction: accepting a result always creates a new measure; nothing
+in the schema enforces one accepted result per measure** (see *Still outstanding from
+item (b)*). `review` is
+null when no accepted result points at the measure — the page then says *No review on
+record*, rather than inventing a reviewer. Every entry reachable today has one.
+
+The research tool is shown alongside, because which agent produced a measure is part
+of how much weight its citation can bear.
+
+No schema change, no migration, still 82 triggers. The account page's pack list is
+unchanged — it lists measures by name, and the full entry is one click away on the pack.
+
+### Verification
+
+`scripts/verify_pack_review.sh`, on a clone dropped on exit: local has no real pack
+data, so it makes one entry the way prod does — parse a one-measure payload into an
+empty industry, accept it with a note — then reads the pack and checks the note,
+reviewer, research tool and timestamp come back on that entry, and that the measure's
+own columns are unchanged.
+
+**The null path is tested.** A measure is inserted directly into the same industry
+with no research result; no API path can create one, because accept writes the
+measure and links the result in the same transaction. Its `review` must come back
+`null`, and the reviewed entry beside it in the same response must keep its own
+review.
+
+**"Appears once" is reported, not tested.** With one accepted result per measure,
+which holds by construction and nothing in the schema enforces, the join cannot
+duplicate the entry, so a count of 1 could not fail. The script prints it as a NOTE
+and counts only a duplicate as a failure. Making it testable needs a second accepted
+result on the same measure, and no API path can create one. That case belongs to the
+partial unique index in Still outstanding.

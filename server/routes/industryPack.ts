@@ -128,14 +128,42 @@ export function industryPackRouter(pool: Pool): Router {
       }
 
       // addressable DESC, then name — what can be claimed comes first.
-      const { rows: measures } = await pool.query(
-        `SELECT name, unit, direction, definition, why_it_pays, addressable,
-                addressable_reasoning, confounders, citation, status
-           FROM industry_measures
-          WHERE industry_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
-          ORDER BY addressable DESC, name`,
+      // THE REVIEW TRAVELS WITH THE MEASURE. A pack entry exists only
+      // because a person accepted a research result (researchResultsReview,
+      // industryResearch.ts), and their review_note is where a caveat raised
+      // at review lives — a caveat the research itself may not have written
+      // into the citation. Before this join the page showed the measure's
+      // own columns only, so a reviewer's "confirm this threshold before
+      // relying on it" was invisible to the account manager reading the
+      // pack. LEFT JOIN, and `review` is null when no accepted result points
+      // at the measure: every entry reachable today has one, but a null says
+      // "no review on record" rather than inventing one.
+      const { rows } = await pool.query<{
+        name: string; unit: string; direction: string; definition: string;
+        why_it_pays: string; addressable: boolean; addressable_reasoning: string;
+        confounders: string; citation: string; status: string;
+        review_note: string | null; reviewed_at: string | null; reviewed_by: string | null;
+        research_tool: string | null; parsed_at: string | null;
+      }>(
+        `SELECT im.name, im.unit, im.direction, im.definition, im.why_it_pays, im.addressable,
+                im.addressable_reasoning, im.confounders, im.citation, im.status,
+                rr.review_note, rr.reviewed_at, reviewer.full_name AS reviewed_by,
+                rr.research_tool, rr.parsed_at
+           FROM industry_measures im
+           LEFT JOIN research_results rr
+                  ON rr.industry_measures_id = im.id AND rr.review_state = 'accepted'
+           LEFT JOIN persons reviewer ON reviewer.id = rr.reviewed_by_person_id
+          WHERE im.industry_id = $1 AND im.deleted_at IS NULL AND im.superseded_by_id IS NULL
+          ORDER BY im.addressable DESC, im.name`,
         [industry.id],
       );
+
+      const measures = rows.map(({ review_note, reviewed_at, reviewed_by, research_tool, parsed_at, ...m }) => ({
+        ...m,
+        review: reviewed_at === null
+          ? null
+          : { note: review_note, reviewed_by, reviewed_at, research_tool, parsed_at },
+      }));
 
       res.json({ industry, measures });
     } catch (err) {
