@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { classifyInstitution } from '../lib/classifyInstitution.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -86,119 +87,26 @@ export function institutionClassifyRouter(pool: Pool): Router {
         throw new Error('x-actor-person-id missing on a request past actorContext');
       }
 
-      // current_industry_name/slug are only populated if industry_id is
-      // already set — needed to name the existing classification in the
-      // 409 below, without a second round trip.
-      const { rows: [institution] } = await client.query<{
-        id: string;
-        tenant_id: string;
-        name: string;
-        industry_id: string | null;
-        current_industry_name: string | null;
-        current_industry_slug: string | null;
-      }>(
-        `SELECT i.id, i.tenant_id, i.name, i.industry_id,
-                ind.name AS current_industry_name, ind.slug AS current_industry_slug
-           FROM institutions i
-           LEFT JOIN industries ind ON ind.id = i.industry_id
-          WHERE i.id = $1 AND i.deleted_at IS NULL`,
-        [institutionId],
-      );
-      if (!institution) {
-        res.status(404).json({ message: `institution ${institutionId} not found` });
-        return;
-      }
-      refusalTenantId = institution.tenant_id;
-
-      // A classification is not amended silently — the same reasoning as a
-      // locked run (lockRun.ts): changing what an account IS changes what
-      // every pack lookup already made against it meant. A second
-      // classification supersedes the INSTITUTION, it does not overwrite
-      // this one's industry_id.
-      if (institution.industry_id !== null) {
-        res.status(409).json({
-          message:
-            `institution ${institutionId} is already classified as ` +
-            `${institution.current_industry_name} (${institution.current_industry_slug}); ` +
-            `a classification is not amended — supersede the institution instead`,
-        });
-        return;
-      }
-
-      // Scoped by tenant_id first — this is the well-formed path, and if it
-      // hits, the institution and industry already share a tenant by
-      // construction. Only on a miss do we check whether the slug exists at
-      // all (for any tenant), which is what tells apart the two distinct
-      // failure modes the caller can hit: a slug that names nothing in this
-      // taxonomy (404), versus a slug that names something, just not for
-      // this institution's tenant (422 — a cross-tenant mismatch is a
-      // caller error, not a missing-resource one).
-      const { rows: [industry] } = await client.query<{ id: string; name: string; slug: string }>(
-        'SELECT id, name, slug FROM industries WHERE tenant_id = $1 AND slug = $2',
-        [institution.tenant_id, industrySlug],
-      );
-      if (!industry) {
-        const { rows: [elsewhere] } = await client.query<{ tenant_id: string }>(
-          'SELECT tenant_id FROM industries WHERE slug = $1 LIMIT 1',
-          [industrySlug],
-        );
-        if (elsewhere) {
-          res.status(422).json({
-            message:
-              `industry_slug '${industrySlug}' does not belong to tenant ${institution.tenant_id}; ` +
-              `institution and industry must share a tenant`,
-          });
-          return;
-        }
-        res.status(404).json({ message: `industry_slug unknown for this tenant: ${industrySlug}` });
-        return;
-      }
-
-      // actorContext already confirmed this id names a real, non-simulated
-      // person before calling next() — this lookup is only for a readable
-      // name in the provenance text, not another authorization check.
-      const { rows: [actorPerson] } = await client.query<{ full_name: string }>(
-        'SELECT full_name FROM persons WHERE id = $1',
-        [actorPersonId],
-      );
-
-      const { rows: [evidenceRow] } = await client.query<{ id: string }>(
-        `INSERT INTO evidence (
-           institution_id, kind, summary, provenance, confidence,
-           source_verified, ai_sourced, simulated, captured_by_person_id
-         ) VALUES ($1, 'observation', $2, $3, 'low', false, false, false, $4)
-         RETURNING id`,
-        [
-          institutionId,
-          classificationNote,
-          `Asserted at industry classification by ${actorPerson.full_name}`,
-          actorPersonId,
-        ],
-      );
-
-      // Race guard, same shape as outcomeWalk.ts's commit: if another
-      // request classified this institution between the SELECT above and
-      // this UPDATE, zero rows come back instead of silently overwriting
-      // whoever won.
-      const { rows: [updated] } = await client.query<{ industry_id: string }>(
-        `UPDATE institutions
-            SET industry_id = $1
-          WHERE id = $2 AND industry_id IS NULL
-          RETURNING industry_id`,
-        [industry.id, institutionId],
-      );
-      if (!updated) {
-        res.status(409).json({
-          message: `institution ${institutionId} was classified by another request just now; retry to see the current classification`,
-        });
+      // The act itself lives in server/lib/classifyInstitution.ts, shared
+      // with POST /api/account-inputs so the create form can classify in
+      // the same transaction. Behaviour here is unchanged.
+      const result = await classifyInstitution(client, {
+        institutionId,
+        industrySlug,
+        classificationNote,
+        actorPersonId,
+        onTenantResolved: (t) => { refusalTenantId = t; },
+      });
+      if (!result.ok) {
+        res.status(result.status).json({ message: result.message });
         return;
       }
 
       res.status(201).json({
-        institution_name: institution.name,
-        industry_name: industry.name,
-        industry_slug: industry.slug,
-        evidence_id: evidenceRow.id,
+        institution_name: result.institutionName,
+        industry_name: result.industryName,
+        industry_slug: result.industrySlug,
+        evidence_id: result.evidenceId,
       });
     } catch (err) {
       if (err instanceof ValidationError) {

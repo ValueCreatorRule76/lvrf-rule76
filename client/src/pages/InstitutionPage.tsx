@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../api/institution';
 import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
+import { AccountFactsCard } from '../components/AccountFactsCard';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -180,7 +181,7 @@ function PackSection({
 }) {
   if (pack === null) {
     return (
-      <Card n="01" title="What this industry says carries money">
+      <Card n="02" title="What this industry says carries money">
         <p className="m-0 text-[12.5px] text-ink-45">
           {isTenantSelf
             ? // Not "yet" — an industry pack describes what carries money for
@@ -195,7 +196,7 @@ function PackSection({
   }
 
   return (
-    <Card n="01" title="What this industry says carries money" badge={<Badge tone="neutral">{pack.length}</Badge>}>
+    <Card n="02" title="What this industry says carries money" badge={<Badge tone="neutral">{pack.length}</Badge>}>
       {pack.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">
           No measures have been proposed for this industry yet.
@@ -237,7 +238,7 @@ function MetricsSection({
   isTenantSelf: boolean;
 }) {
   return (
-    <Card n="02" title="What this account is actually measuring" badge={<Badge tone="neutral">{metrics.length}</Badge>}>
+    <Card n="03" title="What this account is actually measuring" badge={<Badge tone="neutral">{metrics.length}</Badge>}>
       {metrics.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">No business metrics recorded for this account.</p>
       ) : (
@@ -291,7 +292,7 @@ function GapSection({ gap, pack }: { gap: InstitutionGap; pack: InstitutionPackM
   const { unmapped_metrics: unmapped, addressable_unmeasured: opportunities } = gap;
 
   return (
-    <Card n="03" title="The gap">
+    <Card n="04" title="The gap">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45">
@@ -354,6 +355,15 @@ export function InstitutionPage() {
     };
   }, [id, actor]);
 
+  // Refetch WITHOUT clearing to the loading state — used after a fact is
+  // recorded, so the page (and the open add-fact form) stays mounted while
+  // the new row arrives. Stable identity: AccountFactsCard's OnMount runs
+  // it in an effect keyed on it.
+  const refresh = useCallback(() => {
+    if (!id || !actor) return;
+    fetchInstitutionView(id, actor.id).then(setResult);
+  }, [id, actor]);
+
   if (!actor) {
     return (
       <p className="p-8 text-ink-45">
@@ -402,9 +412,27 @@ export function InstitutionPage() {
             </span>
           </div>
         </div>
+        {/* As entered at creation; the CHECK guarantees http(s), so this
+            cannot be a javascript: link. */}
+        {view.institution.website && (
+          <a
+            href={view.institution.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={'text-[12px] text-ink-45 hover:text-gold-ink ' + FOCUS_RING}
+          >
+            {view.institution.website}
+          </a>
+        )}
       </header>
 
       <ClassificationSection view={view} />
+      <AccountFactsCard
+        n="01"
+        institutionId={view.institution.id}
+        facts={view.facts}
+        onRecorded={refresh}
+      />
       <PackSection
         pack={view.pack}
         measuredIds={measuredIds}
@@ -413,7 +441,7 @@ export function InstitutionPage() {
       <MetricsSection metrics={view.metrics} isTenantSelf={view.institution.is_tenant_self} />
       <GapSection gap={view.gap} pack={view.pack} />
 
-      <Card n="04" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
+      <Card n="05" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
         {view.engagements.length === 0 ? (
           <p className="m-0 text-[12.5px] text-ink-45">No engagements recorded for this account.</p>
         ) : (

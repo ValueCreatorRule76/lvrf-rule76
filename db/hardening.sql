@@ -147,7 +147,12 @@ DECLARE t text;
     -- than a bespoke declaration — the generic "Set deleted_at instead"
     -- remedy is TRUE for it. industries does NOT belong here; see section
     -- 11 for why it is declared individually instead.
-    'industry_measures'
+    'industry_measures',
+    -- 0024 (account workbench): institution_facts carries the full
+    -- governance() column set — deleted_at, updated_at, superseded_by_id —
+    -- so the generic triad applies as written, and "Set deleted_at
+    -- instead" is a true remedy for it.
+    'institution_facts'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -495,7 +500,10 @@ DECLARE t text;
     -- same chain-sanity rules as every other table here. industries does
     -- not — it has no superseded_by_id column — so it is absent from
     -- this list, not just from the governed array above.
-    'industry_measures'
+    'industry_measures',
+    -- 0024: institution_facts — corrections supersede, so the chain must
+    -- obey the same sanity rules as every other superseding table.
+    'institution_facts'
   ];
 BEGIN
   FOREACH t IN ARRAY supersession_governed LOOP
@@ -907,17 +915,18 @@ COMMIT;
 -- right things are present. Do not re-derive a total here and trust it —
 -- diff the SELECT below against the full list this file declares:
 --
---   14 governed tables (0005 added 'offerings'; 0019 added
---   'industry_measures') × 3 (_audit, _touch, _no_delete) — 42
+--   15 governed tables (0005 added 'offerings'; 0019 added
+--   'industry_measures'; 0024 added 'institution_facts') × 3 (_audit,
+--   _touch, _no_delete) — 45
 --   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
 --   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   5e: <table>_supersession_sane × 15 (assessments, business_metrics,
+--   5e: <table>_supersession_sane × 16 (assessments, business_metrics,
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
---   value_outcomes, value_runs, industry_measures) — 15
+--   value_outcomes, value_runs, industry_measures, institution_facts) — 16
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
@@ -927,20 +936,21 @@ COMMIT;
 --   industry_measure_exclusions_no_delete — 2
 --   13: capability_industry_measures_audit,
 --   capability_industry_measures_no_delete — 2
---   Total: 78 distinct triggers.
+--   Total: 82 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   _audit, _touch, _no_delete, _supersession_sane.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 78.
+-- TRUNCATE in section 14 fail. Total stays 82.
 --
--- Expect 117 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×14 = 56;
+-- Expect 123 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
--- each 5e trigger fires on INSERT and UPDATE, ×15 (+30); refusals_no_delete
+-- each 5e trigger fires on INSERT and UPDATE, ×16 (+32); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
 -- research_results_touch on UPDATE only (+1), research_results_no_delete on
@@ -950,7 +960,7 @@ COMMIT;
 -- industry_measure_exclusions_no_delete on DELETE only (+1);
 -- capability_industry_measures_audit fires on INSERT and UPDATE (+2),
 -- capability_industry_measures_no_delete on DELETE only (+1).
--- 56 + 2 + 1 + 4 + 3 + 6 + 30 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 = 117.
+-- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 = 123.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

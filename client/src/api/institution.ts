@@ -11,7 +11,35 @@ export interface InstitutionViewInstitution {
   industry_id: string | null;
   industry_name: string | null;
   industry_slug: string | null;
+  /** As entered at creation. http(s) only — institutions_website_is_url. */
+  website: string | null;
   is_tenant_self: boolean;
+}
+
+export type InstitutionFactKind = 'revenue' | 'headcount' | 'stated_priority' | 'system';
+
+/**
+ * One current institution_facts row, with its evidence row's disclosure
+ * state alongside. source_verified belongs to the EVIDENCE, not the fact —
+ * the fact carries no verification of its own. value_numeric is a string
+ * because pg returns numeric as one; it is displayed, never parsed.
+ */
+export interface InstitutionFact {
+  id: string;
+  kind: InstitutionFactKind;
+  value_numeric: string | null;
+  value_text: string | null;
+  unit: string | null;
+  as_of: string;
+  evidence_id: string;
+  evidence_kind: string;
+  provenance: string;
+  source_reference: string | null;
+  confidence: 'low' | 'medium' | 'high';
+  source_verified: boolean;
+  ai_sourced: boolean;
+  captured_by: string;
+  created_at: string;
 }
 
 export interface InstitutionPackMeasure {
@@ -56,6 +84,7 @@ export interface InstitutionRunsSummary {
 
 export interface InstitutionView {
   institution: InstitutionViewInstitution;
+  facts: InstitutionFact[];
   /** NULL when unclassified — there is no pack to look up. [] is a real, classified, empty pack. */
   pack: InstitutionPackMeasure[] | null;
   metrics: InstitutionBusinessMetric[];

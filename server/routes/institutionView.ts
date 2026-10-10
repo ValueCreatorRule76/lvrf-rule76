@@ -98,11 +98,12 @@ export function institutionViewRouter(pool: Pool): Router {
         name: string;
         industry: string | null;
         industry_id: string | null;
+        website: string | null;
         is_tenant_self: boolean;
         industry_name: string | null;
         industry_slug: string | null;
       }>(
-        `SELECT i.id, i.name, i.industry, i.industry_id, i.is_tenant_self,
+        `SELECT i.id, i.name, i.industry, i.industry_id, i.website, i.is_tenant_self,
                 ind.name AS industry_name, ind.slug AS industry_slug
            FROM institutions i
            LEFT JOIN industries ind ON ind.id = i.industry_id
@@ -178,6 +179,45 @@ export function institutionViewRouter(pool: Pool): Router {
         ),
       };
 
+      // Account workbench — current facts with their evidence's disclosure
+      // state alongside. source_verified and citation_resolved come from the
+      // evidence row, never from the fact: the fact has no verification of
+      // its own (see db/schema.ts's institutionFacts comment), so the page
+      // can render an unsourced figure as unverified exactly as the gate
+      // says. value_numeric comes back as a string (pg numeric) and is
+      // passed through as one — parsing it here would lose precision on a
+      // large revenue figure.
+      const { rows: facts } = await pool.query<{
+        id: string;
+        kind: string;
+        value_numeric: string | null;
+        value_text: string | null;
+        unit: string | null;
+        as_of: string;
+        evidence_id: string;
+        evidence_kind: string;
+        provenance: string;
+        source_reference: string | null;
+        confidence: string;
+        source_verified: boolean;
+        ai_sourced: boolean;
+        captured_by: string;
+        created_at: string;
+      }>(
+        `SELECT f.id, f.kind, f.value_numeric, f.value_text, f.unit,
+                to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
+                e.id AS evidence_id, e.kind AS evidence_kind, e.provenance,
+                e.source_reference, e.confidence, e.source_verified, e.ai_sourced,
+                p.full_name AS captured_by, f.created_at
+           FROM institution_facts f
+           JOIN evidence e ON e.id = f.evidence_id
+           JOIN persons p ON p.id = f.captured_by_person_id
+          WHERE f.institution_id = $1
+            AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
+          ORDER BY f.kind, f.as_of DESC, f.created_at DESC`,
+        [institutionId],
+      );
+
       const { rows: engagementRows } = await pool.query<{ id: string; name: string }>(
         `SELECT id, name FROM engagements
           WHERE institution_id = $1 AND deleted_at IS NULL
@@ -216,8 +256,10 @@ export function institutionViewRouter(pool: Pool): Router {
           industry_id: institution.industry_id,
           industry_name: institution.industry_name,
           industry_slug: institution.industry_slug,
+          website: institution.website,
           is_tenant_self: institution.is_tenant_self,
         },
+        facts,
         pack,
         metrics,
         gap,

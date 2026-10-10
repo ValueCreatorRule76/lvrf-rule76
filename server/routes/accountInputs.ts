@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { classifyInstitution } from '../lib/classifyInstitution.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -85,6 +86,18 @@ function optionalArray(obj: Record<string, unknown>, field: string, path: string
 // entry point. There is no update path here and no implicit creation of
 // capabilities — a capability must already exist for the institution
 // before an assessment can baseline against it.
+//
+// Account workbench additions, both optional:
+//   institution.website — stored as entered; institutions_website_is_url
+//     (a CHECK, not a validation here) refuses anything that is not an
+//     http(s) URL
+//   institution.industry_slug + institution.classification_note — sent
+//     TOGETHER or not at all. When sent, the account is classified in this
+//     same transaction by server/lib/classifyInstitution.ts, the one writer
+//     of industry_id. A refused classification refuses the whole create —
+//     actorContext rolls back on any non-2xx — so an account is never left
+//     half-made. institution.industry (the free-text statement) is stored
+//     separately and never derived from the slug, or vice versa.
 // Every actual query in this handler's happy path runs on req.dbClient,
 // inside actorContext's transaction, never on pool — pool is used only by
 // handleGovernanceError, on its own separate connection (see
@@ -111,6 +124,23 @@ export function accountInputsRouter(pool: Pool): Router {
       const institutionInput = requireObject(body.institution, 'institution');
       const institutionName = requireString(institutionInput, 'name', 'institution');
       const institutionIndustry = optionalNullableString(institutionInput, 'industry', 'institution');
+      const institutionWebsite = optionalNullableString(institutionInput, 'website', 'institution');
+      const industrySlug = optionalNullableString(institutionInput, 'industry_slug', 'institution');
+      const classificationNote = optionalNullableString(
+        institutionInput, 'classification_note', 'institution',
+      );
+      const hasSlug = industrySlug !== null && industrySlug.trim() !== '';
+      const hasNote = classificationNote !== null && classificationNote.trim() !== '';
+      if (hasSlug !== hasNote) {
+        // A classification with no recorded reasoning is an assertion with
+        // no author; a note with no classification is reasoning about
+        // nothing. Either half alone is refused, not half-applied.
+        throw new ValidationError(
+          hasSlug
+            ? 'institution.classification_note is required when institution.industry_slug is sent'
+            : 'institution.industry_slug is required when institution.classification_note is sent',
+        );
+      }
 
       const personInputs = optionalArray(body, 'persons', 'body').map((p, i) =>
         requireObject(p, `persons[${i}]`),
@@ -140,11 +170,11 @@ export function accountInputsRouter(pool: Pool): Router {
       refusalTenantId = tenantId;
 
       const { rows: insertedInstitution } = await client.query<{ id: string }>(
-        `INSERT INTO institutions (tenant_id, name, industry)
-         VALUES ($1, $2, $3)
+        `INSERT INTO institutions (tenant_id, name, industry, website)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT ON CONSTRAINT institutions_tenant_name_key DO NOTHING
          RETURNING id`,
-        [tenantId, institutionName, institutionIndustry],
+        [tenantId, institutionName, institutionIndustry, institutionWebsite],
       );
 
       if (insertedInstitution.length === 0) {
@@ -175,6 +205,33 @@ export function accountInputsRouter(pool: Pool): Router {
       }
       const institutionId = insertedInstitution[0].id;
       refusalInstitutionId = institutionId;
+
+      let classification: {
+        industry_name: string;
+        industry_slug: string;
+        evidence_id: string;
+      } | null = null;
+      if (hasSlug && hasNote) {
+        const result = await classifyInstitution(client, {
+          institutionId,
+          industrySlug: industrySlug!,
+          classificationNote: classificationNote!,
+          actorPersonId,
+        });
+        if (!result.ok) {
+          // Non-2xx: actorContext rolls back the institution insert too.
+          res.status(result.status).json({
+            message: `account not created — classification refused: ${result.message}`,
+          });
+          return;
+        }
+        classification = {
+          industry_name: result.industryName,
+          industry_slug: result.industrySlug,
+          evidence_id: result.evidenceId,
+        };
+      }
+
       refusalSubjectTable = 'persons';
 
       const personIds: string[] = [];
@@ -249,6 +306,7 @@ export function accountInputsRouter(pool: Pool): Router {
 
       res.status(201).json({
         institution_id: institutionId,
+        classification,
         person_ids: personIds,
         assessment_ids: assessmentIds,
       });

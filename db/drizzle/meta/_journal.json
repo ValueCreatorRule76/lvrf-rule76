@@ -169,6 +169,13 @@
       "when": 1788636851732,
       "tag": "0023_whole_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791595141354,
+      "tag": "0024_account_workbench",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable, pgEnum, uuid, text, numeric, integer, boolean,
-  timestamp, jsonb, bigserial, index, unique, uniqueIndex, check, primaryKey, foreignKey,
+  timestamp, date, jsonb, bigserial, index, unique, uniqueIndex, check, primaryKey, foreignKey,
 } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
@@ -63,6 +63,16 @@ export const metricDirection = pgEnum('metric_direction', ['increase', 'decrease
 export const evidenceKind = pgEnum('evidence_kind', [
   'assessment_result', 'system_export', 'artifact',
   'observation', 'attestation', 'public_filing', 'vendor_publication',
+]);
+
+/**
+ * Account workbench. What an institution_facts row states. Two numeric
+ * kinds and two text kinds; the CHECKs on institution_facts hold each kind
+ * to its shape. `system` is one row per system ("Workday (HRIS)"), not a
+ * list in prose — a list in prose cannot be superseded one entry at a time.
+ */
+export const institutionFactKind = pgEnum('institution_fact_kind', [
+  'revenue', 'headcount', 'stated_priority', 'system',
 ]);
 
 export const returnKind = pgEnum('return_kind', [
@@ -181,6 +191,13 @@ export const institutions = pgTable('institutions', {
    * that is an honest state, not a gap to backfill silently.
    */
   industryId: uuid('industry_id').references((): AnyPgColumn => industries.id, { onDelete: 'restrict' }),
+  /**
+   * Account workbench. The account's website, as entered at creation.
+   * Nullable — an account with no known website is honest, a guessed one
+   * is not. Written only by POST /api/account-inputs; there is no update
+   * path, same as name and industry.
+   */
+  website: text('website'),
   /** True when this institution IS the tenant — the customer-zero engagement. */
   isTenantSelf: boolean('is_tenant_self').notNull().default(false),
   ...governance(),
@@ -189,6 +206,8 @@ export const institutions = pgTable('institutions', {
     name: 'institutions_superseded_by_fk' }).onDelete('restrict'),
   unique('institutions_tenant_name_key').on(t.tenantId, t.name),
   index('institutions_tenant_idx').on(t.tenantId),
+  check('institutions_website_is_url',
+    sql`${t.website} IS NULL OR ${t.website} ~ '^https?://[^[:space:]]+$'`),
 ]);
 
 /* ================================================================== */
@@ -633,6 +652,64 @@ export const evidence = pgTable('evidence', {
   index('evidence_institution_idx').on(t.institutionId),
   index('evidence_verified_idx').on(t.sourceVerified),
   index('evidence_attested_idx').on(t.attestedByPersonId),
+]);
+
+/* ================================================================== */
+/* Institution fact — the account workbench's company inputs          */
+/* ================================================================== */
+
+/**
+ * Account workbench. Revenue, headcount, stated priorities and the systems
+ * landscape — the company inputs a baseline is argued against. Value spine
+ * stage: baseline.
+ *
+ * PROVENANCE LIVES IN `evidence`, NOT HERE. evidence_id is NOT NULL and
+ * UNIQUE: every fact is backed by exactly one evidence row, so the
+ * existing disclosure gate applies unchanged — provenance NOT NULL,
+ * source_reference, confidence, source_verified, and AMENDMENT-005's
+ * ai_sourced rules. A revenue figure nobody sourced renders unverified
+ * exactly as any other unsourced evidence does. Restating those columns
+ * here would be a second, driftable gate.
+ *
+ * The evidence row must belong to the same institution. A CHECK cannot see
+ * across tables, so POST /api/institutions/:id/facts writes both rows in
+ * one transaction against one institution id; it is the only writer.
+ *
+ * Zero is data: value_numeric >= 0, and 0 is legitimate (a dormant
+ * subsidiary with zero revenue is a fact). Corrections supersede; nothing
+ * is updated in place. Two revenue rows with different as_of dates are
+ * both current — a time series, not a conflict.
+ */
+export const institutionFacts = pgTable('institution_facts', {
+  id: id(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  kind: institutionFactKind('kind').notNull(),
+  valueNumeric: numeric('value_numeric'),
+  valueText: text('value_text'),
+  /** ISO 4217 for revenue; 'people' for headcount; NULL for text kinds. */
+  unit: text('unit'),
+  /** The date the fact describes — fiscal year end, filing date — not the capture date. */
+  asOf: date('as_of').notNull(),
+  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  ...governance(),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'institution_facts_superseded_by_fk' }).onDelete('restrict'),
+  unique('institution_facts_evidence_key').on(t.evidenceId),
+  check('institution_facts_numeric_shape',
+    sql`${t.kind} NOT IN ('revenue', 'headcount')
+        OR (${t.valueNumeric} IS NOT NULL AND ${t.valueNumeric} >= 0 AND ${t.valueText} IS NULL)`),
+  check('institution_facts_text_shape',
+    sql`${t.kind} NOT IN ('stated_priority', 'system')
+        OR (${t.valueText} IS NOT NULL AND btrim(${t.valueText}) <> ''
+            AND ${t.valueNumeric} IS NULL AND ${t.unit} IS NULL)`),
+  check('institution_facts_revenue_currency',
+    sql`${t.kind} <> 'revenue' OR ${t.unit} ~ '^[A-Z]{3}$'`),
+  check('institution_facts_headcount_whole_people',
+    sql`${t.kind} <> 'headcount'
+        OR (${t.unit} = 'people' AND ${t.valueNumeric} = trunc(${t.valueNumeric}))`),
+  index('institution_facts_institution_idx').on(t.institutionId),
 ]);
 
 /* ================================================================== */

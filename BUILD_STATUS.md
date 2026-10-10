@@ -5166,3 +5166,133 @@ to be read from the server rather than inferred.
 
 Also fixed while there: the unmapped list keyed off `m.name`, which was never safe
 since duplicate metric names are legal.
+
+---
+
+## The account workbench — 9 October 2026
+
+Closes the three gaps named under *Still outstanding*: no website column, the create
+form writing `industry` as free text only, and nowhere for company inputs to live.
+Value spine stage: **baseline**.
+
+### Migration 0024 — additive, orphans nothing
+
+- `institutions.website`, nullable, `CHECK institutions_website_is_url` (`^https?://`,
+  no whitespace). Written only at creation, like `name` and `industry`.
+- `institution_facts` — `revenue | headcount | stated_priority | system`, one row
+  per fact, `as_of` the date the fact describes. Full `governance()` column set;
+  corrections supersede. Two revenue rows with different `as_of` are a time series,
+  not a conflict.
+- `hardening.sql`: `institution_facts` joins the governed loop and the supersession
+  loop. **Trigger count 78 → 82**, information_schema rows 117 → 123.
+
+**The deploy script does not migrate.** Prod needs `pg_dump -Fc`, `drizzle-kit
+migrate`, then `hardening.sql`, by hand, before the deploy that ships this code.
+
+### Provenance goes through `evidence`, not new columns
+
+`evidence_id` is `NOT NULL UNIQUE`. Every fact is backed by exactly one evidence row,
+so the existing gate applies unchanged — required provenance, `source_reference`,
+confidence, `source_verified`, and AMENDMENT-005's `ai_sourced` rules. Restating
+those columns on the fact would have been a second gate to drift. **A fact is
+exactly as verified as its evidence**, and the page renders it that way.
+
+The one rule a CHECK cannot hold — the evidence row and the fact share an
+institution — is held by `POST /api/institutions/:id/facts` being the only writer
+and writing both rows in one transaction.
+
+Shape rules are CHECKs, not handler code: numeric kinds `>= 0` (**zero is data** — a
+revenue of 0 is accepted and renders as 0), whole-number headcount with unit
+`people`, ISO 4217 currency for revenue, non-empty text and no number for text kinds.
+
+### Classification at create — one writer, moved, not copied
+
+The classification act moved from `institutionClassify.ts` into
+`server/lib/classifyInstitution.ts`, verbatim. Both the classify endpoint and
+`POST /api/account-inputs` call it. **There is still exactly one writer of
+`industry_id`.** Two copies would have been two gates.
+
+`account-inputs` takes `industry_slug` and `classification_note` together or not at
+all — either half alone is a 422. A refused classification (unknown slug,
+cross-tenant slug) refuses the whole create: actorContext rolls back on any non-2xx,
+so an account is never left half-made. The free-text `industry` is still stored as
+the statement and is never derived from the slug.
+
+The refactor surfaced one thing worth keeping: the classify endpoint set
+`refusalTenantId` before the evidence insert, so a CHECK thrown by that insert was
+still attributed. Returning a result object would have lost that on the throw path.
+The lib takes an `onTenantResolved` callback, called before any write.
+
+### Client
+
+- **Create account**: website; *Industry as stated* (free text) and *Classify as*
+  (the tenant's taxonomy) as two fields, never merged; the reasoning note appears
+  and becomes required only when a classification is chosen.
+- **Account page**: new card 01, *Account facts*, grouped by kind, each row with its
+  evidence's VERIFIED / UNVERIFIED badge and an AI-SOURCED badge where it applies;
+  an *Add a fact* form on `GovernedForm`, provenance first, every select starting
+  unchosen (tri-state for verified / AI-sourced, same as AddEvidenceCard). Later
+  cards renumbered 02–05. Website shown under the account name.
+- `value_numeric` is passed through as pg's numeric string and grouped for display,
+  never parsed to a float.
+
+### Verification
+
+`scripts/verify_account_workbench.sh` runs against `lvrf_verify0024`, a
+`createdb -T lvrf` clone dropped on exit — every governed table refuses DELETE, so
+test accounts written into the real local database could never be removed. It
+typechecks, migrates and hardens the clone, checks the trigger list, starts the API
+on :3099 and exercises every refusal above. `--apply-local` then backs up and
+applies to local `lvrf`.
+
+Server and client both typecheck clean (server checked with TypeScript 6.0.3; the
+repo's 7.0.2 is a native binary). The migration was produced with drizzle-kit's
+`generateMigration` against the 0023 snapshot — the diff contained only this
+change, which also confirms the snapshot was in sync with `schema.ts`.
+
+### First run — two defects, both in the verify script, none in the code
+
+The first real run against a database found nothing wrong in the migration,
+the routes or the client. It found two faults in the script that tests them:
+
+- **The clone's name was refused by drizzle.config.ts's target guard.** The
+  guard accepts `^lvrf(_[a-z0-9]+)?$`; `lvrf_verify_0024` has a second
+  underscore. Renamed to `lvrf_verify0024`. The guard was not loosened — it is
+  a safety control, and the test was what was wrong.
+- **The clone was owned by the wrong role.** `createdb -T lvrf` makes the
+  clone owned by whoever runs it, but `.env` connects as `lvrf_app`, which
+  then has no `CREATE` on the database. `drizzle-kit migrate` died on
+  `CREATE SCHEMA IF NOT EXISTS drizzle` (42501) and **its spinner swallowed
+  the error** — exit 1, no message. Found by running drizzle-orm's migrator
+  directly. Fixed with `createdb -T lvrf -O lvrf_app`, which mirrors local
+  `lvrf`'s ownership.
+
+Also found: **local `lvrf` had never had 0023 applied.** Its last
+`__drizzle_migrations` row was 0022, and it had 76 triggers, not 78. The clone
+therefore migrated 0023 + 0024 together and went 76 → 82. Both applied
+cleanly. `--apply-local` will do the same to local `lvrf`.
+
+Result: 28 passed, 0 failed. Client `npm run lint` (one pre-existing warning,
+`ActorContext.tsx`) and `npm run build` clean.
+
+**Applied to local `lvrf`, 9 October 2026,** via `--apply-local`. Backup:
+`db/backups/lvrf_pre_0024_20261009_223404.dump`. 0023 and 0024 both applied;
+76 → 82 triggers. The create form and the Account facts card were checked in
+headless Chrome; nothing was written.
+
+### Still outstanding from the workbench
+
+- **No update path for `website`.** Same as `name` and `industry`: a wrong one means
+  superseding the institution. Deliberate, but it will chafe first.
+- **No supersession writer for facts.** The column and its trigger exist; the route
+  does not. A wrong fact today can only be outnumbered by a newer `as_of`.
+- **Fact verification has no route.** `source_verified` is set at capture or not at
+  all, same as outcome evidence; a later *I opened it and it says this* act does not
+  exist for either.
+- **No actor-tenant check on mutating institution routes.** Every mutating
+  `/api/institutions/:id/...` route (offerings, inputs, classify, and now facts)
+  checks that the institution exists but not that it belongs to the actor's
+  tenant. This is pre-existing and true of all of them, so the facts route
+  matches the house pattern rather than introducing the gap. Fix it together
+  with the argon2 sessions work. Until then the actor header is spoofable
+  anyway, so a tenant check here would be a check against a claim.
