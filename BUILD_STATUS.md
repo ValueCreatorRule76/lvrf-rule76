@@ -6032,3 +6032,27 @@ duplicate the entry, so a count of 1 could not fail. The script prints it as a N
 and counts only a duplicate as a failure. Making it testable needs a second accepted
 result on the same measure, and no API path can create one. That case belongs to the
 partial unique index in Still outstanding.
+
+### Deployed — 10 October 2026
+
+`eec3536` went out via `lvrf-deploy.sh` (`eadef9b..eec3536`, api 200, vhost
+401, deploy OK; service up since 11:17:00 UTC). The bundle is now
+`index-DsM57LKl.js`, identical to the local build. There was no migration and
+the trigger count is still 82.
+
+**Reviewed read-only**, with GETs on 127.0.0.1:3001 as Brad Piver and one
+SELECT as `lvrf_app`. No POSTs.
+
+- `/api/industries/manufacturing/pack`, `/pharmaceutical-biotechnology/pack`
+  and `/healthcare/pack` each return 200 with 4 entries.
+- **12 of 12 entries carry a review; none is null. 12 of 12 are
+  `reviewed_by` Brad Piver.** The reviews date from 5 September (the 8
+  original measures) and 10 October 03:28 UTC (the 4 from item (b)).
+- **12 of 12 `review.note` values equal their `research_results.review_note`**
+  exactly. Each pack entry was compared with its accepted result in
+  Postgres.
+- **OTIF's `review.note` is exactly the note accepted on 10 October:** *"…the
+  98% threshold and 3% fine come from 2020 trade press of a non-public memo,
+  and a second report differs. Confirm the threshold against the customer's
+  own terms before any claim relies on it."* Its `research_tool` is the item
+  (b) run, Claude (Opus 5.5) in the Claude app, 9–10 October 2026.
