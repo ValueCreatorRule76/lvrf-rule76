@@ -305,6 +305,63 @@ file, which is exactly what you do not want against a database holding real data
 
 ---
 
+## Phase 10 — A local copy of prod data (`lvrf_prodcopy`)
+
+For testing against real data without touching prod or the local `lvrf`.
+
+**1. Take a snapshot on the box, then copy it here:**
+
+```bash
+# on the box
+sudo -u postgres pg_dump -Fc lvrf > ~/lvrf_snapshot_$(date +%Y%m%d_%H%M%S).dump
+chmod 600 ~/lvrf_snapshot_*.dump
+
+# on the Mac
+scp brad@72.60.69.221:~/lvrf_snapshot_<timestamp>.dump ~/lvrf-backups/
+chmod 600 ~/lvrf-backups/*.dump
+```
+
+The snapshot is real prod data. Keep it in `~/lvrf-backups/` (mode `700`), never
+in the repo.
+
+**2. Restore it locally:**
+
+```bash
+./scripts/restore_prod_copy.sh ~/lvrf-backups/lvrf_snapshot_<timestamp>.dump
+```
+
+- Optional assertions: `EXPECT_MEASURES`, `EXPECT_EXCLUSIONS`, `EXPECT_ACCOUNTS`
+  and `EXPECT_RUNS`. Without them, the counts are printed.
+- **Repeatable:** it drops and recreates `lvrf_prodcopy` on every run. It refuses
+  any target but `lvrf_prodcopy`, and any `.env` that is not localhost.
+- **It restores without owners or ACLs, then rebuilds prod's ownership:**
+  - `lvrf_app` owns every table, sequence, type and the `drizzle` schema. That is
+    what migrations produce on prod.
+  - The `lvrf_*` trigger functions stay with the local superuser, as they belong
+    to `postgres` on prod. `lvrf_app` therefore cannot redefine the
+    SECURITY DEFINER audit function.
+  - `hardening.sql` then re-applies the REVOKEs and GRANTs.
+  - The script's own header explains why this way, rather than a plain restore
+    (there is no `postgres` role on the Mac) or `--role=lvrf_app` (which would
+    make the app role own the audit function).
+- **The `vector` extension is left out.** It is installed and unused on prod,
+  and not installed on the Mac.
+- **Checks:** 82 triggers; UPDATE, DELETE and TRUNCATE revoked from `lvrf_app` on
+  `audit_log` and `heartbeat_events`; ownership; and the newest migration equals
+  the repo's latest.
+
+**3. Run the app against it.** Never edit `.env`; this derives the URL from it:
+
+```bash
+DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2- | sed 's#/lvrf$#/lvrf_prodcopy#')" npm run dev
+cd client && npm run dev
+```
+
+Governed rows cannot be deleted. Anything written to `lvrf_prodcopy` stays until
+the next restore. Rerun the script to reset it.
+
+---
+
 # Appendix — Claude Code kickoff prompt
 
 Paste this as your first Claude Code message in the repo.

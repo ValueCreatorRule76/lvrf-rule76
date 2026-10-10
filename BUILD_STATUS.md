@@ -4834,15 +4834,12 @@ check to self-diagnose.
 - ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
   classify at create, and account facts backed by evidence. See *The account
   workbench — 9 October 2026* below; deployed 10 October.
-- **Local `lvrf` has no real pack data.** Prod has **12** measures across 3
-  industries (Healthcare 4, Manufacturing 4, Pharmaceutical & Biotechnology 4),
-  backed by 12 accepted research results. Local has no current measures, only
-  retired test fixtures (Test Measure One, Scrap Rate, Backlog), 3 test-tool
-  research rows, and the **four 10 October parses, left `pending` on
-  purpose**. They were parsed locally as a dry run before prod. They were not
-  reviewed locally, and a pending row cannot be deleted. **Local and prod pack
-  data have diverged**, so a pack screen checked locally shows nothing that
-  prod shows.
+- ~~**Local `lvrf` has no real pack data.**~~ Still true of `lvrf` itself, by
+  design. **Since 10 October there is `lvrf_prodcopy`**, a local restore of a prod
+  snapshot made by `scripts/restore_prod_copy.sh`. Its API responses are
+  byte-identical to prod's (see *A local copy of prod data*). Test against
+  `lvrf_prodcopy`. `lvrf` keeps its test fixtures and the four item (b) parses,
+  left pending on purpose.
 - **"Proved on production with the Manufacturing run: 422, seven issues,
   nothing written" is unverifiable.** No row on prod supports it, because
   `refusals` records database refusals (CHECK and unique violations), not the
@@ -6414,3 +6411,62 @@ This completes the 10 October decision to promote CMI rather than exclude it.
 | Healthcare's 5 exclusions | Unchanged |
 | Manufacturing and pharmaceutical-biotechnology packs | Byte-identical before and after |
 | Prod totals | 13 current measures, 13 accepted results, 0 pending, 12 exclusions, no refusals |
+
+---
+
+## A local copy of prod data — 10 October 2026
+
+`scripts/restore_prod_copy.sh` restores a prod snapshot into **`lvrf_prodcopy`**,
+on the dev Mac only. It never touches `lvrf`, and it is repeatable. Steps and
+commands are in `LVRF_Local_Setup.md`, Phase 10.
+
+**The snapshot:** `lvrf_snapshot_20261010_121025.dump`, 537,396 bytes, 410 TOC
+entries, taken on prod after the CMI accept. It was copied to
+`~/lvrf-backups/` (mode `600`), sha256 `3cc8e6e1…`, matching on both ends.
+
+**Ownership is rebuilt the way prod is built.** The dump is restored without
+owners or ACLs, then:
+
+- `lvrf_app` takes every table, sequence, type and the `drizzle` schema, as
+  migrations do on prod.
+- The 10 `lvrf_*` functions stay with the local superuser, as `postgres` owns
+  them on prod.
+- `hardening.sql` re-applies the REVOKEs and GRANTs.
+
+A plain restore fails, because there is no `postgres` role on the Mac.
+`--role=lvrf_app` was rejected: it would make the app role the owner of the
+SECURITY DEFINER `lvrf_audit()`. The script checks that `lvrf_app` cannot redefine
+it. **`vector` is left out**: it is unused on prod, not installed on the Mac, and
+the restore filters exactly its 2 TOC entries.
+
+**Result: 15 passed, 0 failed, twice.** The second run proves it is repeatable.
+
+- 82 triggers.
+- `audit_log` and `heartbeat_events`: UPDATE, DELETE and TRUNCATE revoked from
+  `lvrf_app`; INSERT and SELECT granted.
+- Every relation is owned by `lvrf_app`, and no `lvrf_*` function is.
+- The newest migration is `0026_exclusion_provenance`.
+- Counts match prod: 13 current measures, 12 exclusions, 2 accounts, 23 runs, and
+  188 audit rows.
+
+**Against the app:** the API and client were run on `lvrf_prodcopy`, using the URL
+derived from `.env` and leaving `.env` itself unchanged.
+
+- **9 of 9 GET responses are byte-identical to prod's**, as the same actor:
+  `/api/institutions`, `/api/cohort`, `/api/industries`, `/api/runs`, the three
+  packs, and both account views.
+- **Rendered:** `/` shows Curia and Skillsoft, and card 02 at `10.0` low with its
+  first real By-industry row. The Healthcare pack shows 5 entries, CMI under
+  not addressable, 5 reviewer's notes and Tested and excluded (5). The
+  Manufacturing pack shows OEE and OTIF with their reviewer's notes, and Tested
+  and excluded (4).
+- Nothing was written: audit rows were still 188 afterwards.
+
+**Two small findings, which only real data could show:**
+
+- Prod has **two people named Brad Piver**: the tenant actor, and *Brad Piver
+  (external analyst of record)* at Curia. The actor picker lists both, and the
+  browse run picked the second. Both resolve to the same tenant, so the pages
+  are the same, but the picker does not make the difference obvious.
+- Card 02's member label reads *Curia · Curia — lot acceptance…*, because the
+  engagement's own name already begins with the account name. Cosmetic.
