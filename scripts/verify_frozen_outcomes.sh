@@ -109,6 +109,23 @@ if [ -n "$OTHER" ] && [ "$OTHER_LEFT" = "1" ]; then
   C="$(code GET "/api/value-outcomes/$OTHER/gaps")"; S="$(baseline_state)"
   [ "$S" = "open" ] && ok "second outcome's baseline gap reads 'open' — not alone at the institution, refusal not attributed" \
     || bad "second outcome's baseline gap before retirement: $S (expected open; gaps -> $C)"
+
+  # The prod defect after 02dbcf3, reproduced: a refusal recorded at the
+  # institution BEFORE the second outcome existed. Written directly, with
+  # the same columns server/lib/refusal.ts's recordRefusal writes plus an
+  # explicit refused_at a day before the outcome's created_at. No API path
+  # can backdate a refusal, and that is the point: on prod the refusal was
+  # simply older than the outcome. supports = 'actual', so it cannot be
+  # confused with the baseline refusal provoked above.
+  q "INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table,
+                           subject_id, sqlstate, constraint_name, message, attempted_payload, refused_at)
+     SELECT i.tenant_id, i.id, '$ACTOR', 'POST /api/value-outcomes/:outcomeId/evidence', 'evidence',
+            NULL, 'P0001', NULL, 'Verification: a refusal from before this outcome existed.',
+            '{\"supports\":\"actual\"}'::jsonb, vo.created_at - interval '1 day'
+       FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id
+      WHERE vo.id = '$OTHER'" > /dev/null \
+    && ok "backdated refusal recorded (supports actual, a day before the second outcome was created)" \
+    || bad "could not record the backdated refusal"
 fi
 
 step "5. Retire the engagement"
@@ -130,6 +147,12 @@ if [ -n "$OTHER" ] && [ "$OTHER_LEFT" = "1" ]; then
   C="$(code GET "/api/value-outcomes/$OTHER/gaps")"; S="$(baseline_state)"
   [ "$S" = "refused" ] && ok "second outcome's baseline gap now reads 'refused' — the frozen outcomes no longer count, so it is alone and the refusal is attributed" \
     || bad "second outcome's baseline gap after retirement: $S (expected refused; gaps -> $C) — frozen outcomes may still be counted"
+  # Same response, other side. The second outcome is now alone, so the
+  # single-outcome guard passes — the only thing keeping the backdated
+  # refusal off it is the time check.
+  S="$(node -e 'try{const b=require("/tmp/lvrf_r.json");const e=Array.isArray(b)?b.find(x=>x.factor==="actual_evidence_verified"):null;console.log(e?e.state:"absent")}catch{console.log("error")}')"
+  [ "$S" = "open" ] && ok "second outcome's actual gap reads 'open' — a refusal from before the outcome existed is not attributed to it" \
+    || bad "second outcome's actual gap: $S (expected open) — a refusal older than the outcome was attributed to it"
 else
   echo "  NOTE  single-outcome count not testable here: needs exactly one current outcome at the institution outside the retired engagement (found $OTHER_LEFT)"
 fi

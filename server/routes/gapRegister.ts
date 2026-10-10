@@ -144,11 +144,28 @@ interface RefusalRow {
  * institution_id is the closest scope the stored row actually carries.
  * Callers must confirm this is the institution's only live outcome before
  * calling this — see the outcome-count guard in the route handler.
+ *
+ * NOT BEFORE THE OUTCOME EXISTED. A refusal recorded before this outcome's
+ * created_at cannot be about it, so it is never attributed. Without this,
+ * the single-outcome guard alone was time-blind: on prod, once the
+ * reference example's outcome was frozen, Curia's lot-acceptance outcome
+ * became the institution's only live one and inherited an AMENDMENT-005
+ * refusal from 30 August, six days before it was created. A side effect,
+ * accepted: when commit supersedes an outcome, the new row is younger than
+ * refusals made against its predecessor, so those read 'open' rather than
+ * 'refused'. Open is this register's default when attribution is unsure.
+ *
+ * THIS IS STILL A GUESS when two outcomes overlap in time: a refusal
+ * recorded while both were live, after the survivor was created, is
+ * attributed to the survivor even if it targeted the other. Only recording
+ * the outcome id on the refusal at write time removes the guess (BUILD_STATUS,
+ * Still outstanding).
  */
 async function findEvidenceRefusal(
   pool: Pool,
   institutionId: string,
   supports: 'baseline' | 'actual',
+  outcomeCreatedAt: Date,
 ): Promise<RefusalRow | null> {
   const { rows } = await pool.query<RefusalRow>(
     `SELECT message, refused_at FROM refusals
@@ -156,9 +173,10 @@ async function findEvidenceRefusal(
         AND endpoint = $1
         AND institution_id = $2
         AND attempted_payload ->> 'supports' = $3
+        AND refused_at >= $4
       ORDER BY refused_at DESC
       LIMIT 1`,
-    [EVIDENCE_ENDPOINT, institutionId, supports],
+    [EVIDENCE_ENDPOINT, institutionId, supports, outcomeCreatedAt],
   );
   return rows[0] ?? null;
 }
@@ -331,10 +349,12 @@ export function gapRegisterRouter(pool: Pool): Router {
         verified_by_person_id: string | null;
         confidence: 'low' | 'medium' | 'high';
         engagement_retired: boolean;
+        created_at: Date;
       }>(
         `SELECT vo.id, vo.institution_id, vo.business_metric_id,
                 vo.claimed_currency_impact, vo.realized_currency_impact, vo.impact_basis,
                 vo.committed_by_person_id, vo.verified_by_person_id, vo.confidence,
+                vo.created_at,
                 (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN engagements eng ON eng.id = vo.engagement_id
@@ -492,7 +512,7 @@ export function gapRegisterRouter(pool: Pool): Router {
           if (f.factor === 'baseline_evidence_verified' || f.factor === 'actual_evidence_verified') {
             const supports = f.factor === 'baseline_evidence_verified' ? 'baseline' : 'actual';
             if (await isSingleOutcomeAtInstitution()) {
-              const refusal = await findEvidenceRefusal(pool, vo.institution_id, supports);
+              const refusal = await findEvidenceRefusal(pool, vo.institution_id, supports, vo.created_at);
               state = refusal
                 ? { state: 'refused', refusalMessage: refusal.message, refusedAt: refusal.refused_at.toISOString() }
                 : alwaysOpen();

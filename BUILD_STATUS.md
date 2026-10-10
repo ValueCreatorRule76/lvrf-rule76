@@ -4849,6 +4849,11 @@ check to self-diagnose.
   `e3fb0061…` under `c47d075f…`). Filter them, or add an outcome retirement
   route if one is ever needed.~~ **Closed 10 October 2026.** See *Retirement
   freezes outcomes*. Four write paths were fixed as well.
+- **Evidence refusals should record the value outcome id at write time, and
+  the gap register should attribute only exact matches. Refusals without an
+  id stay unattributed.** Until then, attribution is a guess, bounded by the
+  single-outcome guard and, since 10 October, by the outcome's creation time.
+  See *The misattribution 02dbcf3 exposed on prod*.
 
 ---
 
@@ -5782,5 +5787,53 @@ byte-for-byte. Result: 15 passed, 0 failed.
 Metric re-validation's skip is reviewed in code, not exercised. Local data has
 no metric that can safely be re-validated.
 
-The two prod outcomes (`bf6f5b2d…`, `e3fb0061…` under `c47d075f…`) are now frozen in
-practice, not just in intent.
+**Only `e3fb0061…` is frozen in practice.** An earlier line here named
+`bf6f5b2d…` too. That was wrong: `bf6f5b2d…` was superseded by `e3fb0061…` on
+30 August, so it is not a current outcome, and `/gaps` returns 404 for it, as
+it always has for superseded outcomes. `e3fb0061…`, under `c47d075f…`, is the
+one current outcome under the retired engagement, and it returns the frozen
+409.
+
+### The misattribution 02dbcf3 exposed on prod
+
+**What prod showed.** After `02dbcf3`, `GET /gaps` for Curia's lot-acceptance
+outcome (`31d097a6…`) read `actual_evidence_verified: refused`. It carried the
+message *"vendor-published evidence may not support a measured actual.
+AMENDMENT-005 Article I"*, and its requirement text said that source had
+already failed. That refusal is prod's only one, recorded **30 August 14:45
+UTC**. The lot-acceptance outcome was created on **5 September**, six days
+later. When the refusal happened, Curia's only outcomes were `bf6f5b2d…` and
+`e3fb0061…`, both under the reference example. A customer-facing work list
+claimed something had been tried and refused for this outcome when it never
+had been. No data was written or wrong, but the register said something false.
+
+**Why.** Refusals carry no outcome id, so the gap register attributes an
+evidence refusal at an institution to an outcome only when that outcome is
+the institution's single live one. **That guard never checked time.** Before
+`02dbcf3`, the frozen outcome still counted, so lot acceptance had a sibling
+and its gap read `open`. The count fix was correct, but it made the
+single-outcome condition true on prod, and the time-blind attribution took
+over. Neither the review nor the 15/0 run caught it, because they exercised
+the count, not the age of the refusal.
+
+**The fix.** `findEvidenceRefusal` now also requires `refused_at >=` the
+outcome's `created_at`. A refusal from before the outcome existed cannot be
+about it. The code says plainly that **attribution is still a guess when two
+outcomes overlap in time**. It also names an accepted side effect: when a
+commit supersedes an outcome, refusals made against the predecessor read
+`open` on the successor, and `open` is the register's default when
+attribution is unsure.
+
+**The test fails against the old code.** `verify_frozen_outcomes.sh`
+reproduces the prod case on the clone. It inserts a refusal at the
+institution timestamped a day before the second outcome's creation, using the
+columns `recordRefusal` writes plus an explicit `refused_at`. No API path can
+backdate a refusal, which is the point: on prod the refusal was simply older
+than the outcome. Once that outcome is alone, its `actual_evidence_verified`
+gap must read `open`.
+
+- **With `02dbcf3`'s `gapRegister.ts`:** 16 passed, 1 failed — *"actual gap:
+  refused (expected open) — a refusal older than the outcome was attributed to
+  it"*.
+- **With the fix:** 17 passed, 0 failed. The baseline refusal, made after the
+  outcome existed, still reads `refused`, so real attribution is unaffected.
