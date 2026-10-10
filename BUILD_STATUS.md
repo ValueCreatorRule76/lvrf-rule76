@@ -4698,6 +4698,12 @@ result becomes half-applied with nobody noticing.**
 Proved on production with the Manufacturing run: **422, seven issues, nothing
 written**, and `research_results` still at 4 afterwards.
 
+> **Unverifiable, annotated 10 October 2026.** No row on prod supports this, and
+> none could: the parser's `ValidationError` 422 returns before
+> `handleGovernanceError` is reached, and `refusals` records only database
+> refusals (CHECK and unique violations). A refused parse leaves no trace by
+> design. The claim may well be true, but the database cannot show it.
+
 ### Version drift is a refusal, not a patch
 
 Three research runs exist and **only one conformed.** The CDMO run predates
@@ -4803,26 +4809,33 @@ check to self-diagnose.
 
 ## Still outstanding
 
-- **CDMO and Manufacturing must be re-run** with the current prompt. Both were
-  correctly refused; their measures are lost until re-run, and that is the cost of
-  not letting a reviewer patch a response
+- ~~**CDMO and Manufacturing must be re-run** with the current prompt.~~ Both
+  were **re-run on 5 September at 2 measures each** and accepted:
+  CDMO (filed under `pharmaceutical-biotechnology`) produced Lot Acceptance Rate
+  and Order Backlog; Manufacturing produced TRIR and Manufacturing Capacity
+  Utilization Rate. **Both packs are thin next to Healthcare's 4.** Filling them
+  out is item (b), in progress.
 - The **exclusion list is not written by parse.**
   `industry_measure_exclusions` requires `excluded_by_person_id` — a person's
   judgement — so an exclusion an agent proposed is a candidate, not a decision.
   Six healthcare exclusions are sitting in the parsed payload with nowhere to go
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
-- **The account VIEW exists** (`/accounts/:id`, read-only). **The account WORKBENCH
-  does not.** Specifically still missing:
-  - `institutions` has no website column
-  - the create-account form writes `industry` as free text, not `industry_id`, so a
-    new account lands unclassified and needs `POST /api/institutions/:id/industry`
-    called separately
-  - company inputs — revenue, headcount, stated priorities, systems landscape —
-    have nowhere to live at all. There is no account-facts table
-
-  Classification now exists as its own act — the piece the workbench would wire
-  into the create form
+- ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
+  classify at create, and account facts backed by evidence. See *The account
+  workbench — 9 October 2026* below; deployed 10 October.
+- **Local `lvrf` has no real pack data.** Prod has 8 measures across 3
+  industries (Healthcare 4, Manufacturing 2, Pharmaceutical & Biotechnology 2),
+  backed by 8 accepted research results. Local has only retired test fixtures
+  (Test Measure One, Scrap Rate, Backlog) and 3 test-tool research rows.
+  **Local and prod pack data have diverged**, so a pack screen checked locally
+  shows nothing that prod shows.
+- **"Proved on production with the Manufacturing run: 422, seven issues,
+  nothing written" is unverifiable.** No row on prod supports it, because
+  `refusals` records database refusals (CHECK and unique violations), not the
+  parser's 422s. It is annotated in place under *Refuse wholesale, not partially*,
+  not deleted. A parse refusal that should be on record needs a writer of its
+  own.
 
 ---
 
