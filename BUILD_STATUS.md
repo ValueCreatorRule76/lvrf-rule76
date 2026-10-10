@@ -4813,23 +4813,30 @@ check to self-diagnose.
   were **re-run on 5 September at 2 measures each** and accepted:
   CDMO (filed under `pharmaceutical-biotechnology`) produced Lot Acceptance Rate
   and Order Backlog; Manufacturing produced TRIR and Manufacturing Capacity
-  Utilization Rate. **Both packs are thin next to Healthcare's 4.** Filling them
-  out is item (b), in progress.
+  Utilization Rate. ~~**Both packs are thin next to Healthcare's 4.**~~ Item (b)
+  closed this on 10 October: both are now at 4. See *Item (b) — Manufacturing and
+  CDMO packs filled out* at the end of this file.
 - The **exclusion list is not written by parse.**
   `industry_measure_exclusions` requires `excluded_by_person_id` — a person's
   judgement — so an exclusion an agent proposed is a candidate, not a decision.
-  Six healthcare exclusions are sitting in the parsed payload with nowhere to go
+  **Thirteen candidates now have nowhere to go:** six from Healthcare, four from
+  the 10 October Manufacturing run and three from the 10 October CDMO run. The
+  13 live only in the original payload files, outside any database.
+  `industry_measure_exclusions` has 0 rows on both prod and local.
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
 - ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
   classify at create, and account facts backed by evidence. See *The account
   workbench — 9 October 2026* below; deployed 10 October.
-- **Local `lvrf` has no real pack data.** Prod has 8 measures across 3
-  industries (Healthcare 4, Manufacturing 2, Pharmaceutical & Biotechnology 2),
-  backed by 8 accepted research results. Local has only retired test fixtures
-  (Test Measure One, Scrap Rate, Backlog) and 3 test-tool research rows.
-  **Local and prod pack data have diverged**, so a pack screen checked locally
-  shows nothing that prod shows.
+- **Local `lvrf` has no real pack data.** Prod has **12** measures across 3
+  industries (Healthcare 4, Manufacturing 4, Pharmaceutical & Biotechnology 4),
+  backed by 12 accepted research results. Local has no current measures, only
+  retired test fixtures (Test Measure One, Scrap Rate, Backlog), 3 test-tool
+  research rows, and the **four 10 October parses, left `pending` on
+  purpose**. They were parsed locally as a dry run before prod. They were not
+  reviewed locally, and a pending row cannot be deleted. **Local and prod pack
+  data have diverged**, so a pack screen checked locally shows nothing that
+  prod shows.
 - **"Proved on production with the Manufacturing run: 422, seven issues,
   nothing written" is unverifiable.** No row on prod supports it, because
   `refusals` records database refusals (CHECK and unique violations), not the
@@ -5342,3 +5349,104 @@ hand, in order, because `lvrf-deploy.sh` does not migrate.
   matches the house pattern rather than introducing the gap. Fix it together
   with the argon2 sessions work. Until then the actor header is spoofable
   anyway, so a tenant check here would be a check against a claim.
+
+---
+
+## Item (b) — Manufacturing and CDMO packs filled out — 10 October 2026
+
+Value spine stage: **baseline**. A pack is what an account's baseline is argued
+against. Manufacturing and CDMO each had 2 measures after the 5 September
+reruns; Healthcare had 4. Both now have 4. Prod has **12 current
+`industry_measures`, all `proposed`**: 4 Healthcare, 4 Manufacturing, 4
+Pharmaceutical & Biotechnology. None is ratified, which is still true of every
+pack.
+
+### The two runs
+
+Both were run with **Claude (Opus 5.5) in the Claude app**, using WebSearch to
+find candidates and WebFetch to read each cited page directly. Both ran on
+9–10 October 2026. Each prompt named the two measures already in its pack and
+asked only for new ones.
+
+| Run | Industry | Added | Addressable |
+|---|---|---|---|
+| `mfg3` | `manufacturing` | Overall Equipment Effectiveness (OEE) | yes |
+| | | On-Time In-Full (OTIF) delivery rate | yes |
+| `cdmo3` | `pharmaceutical-biotechnology` | FDA inspection outcome (Form 483 observations and OAI classification) | yes |
+| | | Customer revenue concentration | **no** |
+
+**What each run dropped, and why.** These were recorded in `query_as_executed`,
+not in the exclusion lists:
+
+- **Manufacturing: first-pass yield** was dropped because no public
+  disclosure ties it to money with a citation, not because it is unaddressable.
+  The run limited candidates to measures with a checkable public citation: a
+  standard, an earnings call with a named speaker and quarter, or a dated report
+  of a published customer policy.
+- **CDMO: batch success rate** was dropped as a **duplicate of Lot
+  Acceptance Rate**, since both count lots that pass release over lots
+  dispositioned. The only public figure for it was the company's own
+  marketing. It is addressable, so it is not in the exclusion list either.
+
+### Parse
+
+`POST /api/industries/:id/research-results`, with Brad Piver as the actor. It
+ran on local `lvrf` first as a dry run, then on prod from the box against
+127.0.0.1:3001. The copies on the box were checked against the originals by
+SHA-256 before posting. Each run returned 201 with 2 `pending` rows, and both
+validated against the current contract on the first attempt. The payload copies
+on the box were removed afterwards.
+
+**The local parses were left `pending` on purpose.** Local: OEE `cd57a552`, OTIF
+`12ce4bdb`, FDA inspection `528a56ab`, concentration `41e4848b`. They were never
+reviewed locally. `research_results` is governed, so they cannot be deleted.
+
+### The four decisions
+
+Brad Piver reviewed all four on prod and accepted each one as proposed, at
+10 October 03:28 UTC. Each accept wrote a `proposed` `industry_measures` row in
+the same transaction. The notes below are verbatim:
+
+- **OEE** (`4daa7a1d`): *"Accepted as proposed. LP Q2 2025 call (78% Siding /
+  79% OSB) and ISO 22400-2 definition. Speaker attribution in the transcript is
+  inferred from context; the figures are not in doubt."*
+- **OTIF** (`bf9d9530`): *"Accepted as proposed. The measure and retailer fines
+  are well established; the 98% threshold and 3% fine come from 2020 trade press
+  of a non-public memo, and a second report differs. Confirm the threshold
+  against the customer's own terms before any claim relies on it."*
+- **FDA inspection outcome** (`1ee7bc7e`): *"Accepted as proposed. 483 facts
+  from FDA-published Bayview response (FEI 3015448605, 9 observations, 20 Apr
+  2021). Revenue-guidance figures are trade press, not Emergent's own filing."*
+- **Customer revenue concentration** (`6925a623`): *"Accepted as proposed, not
+  addressable. Lifecore FY2025 10-K, Item 1A (44% / 18% / 10%)."* These are the
+  same Lifecore figures the original CDMO run cited.
+
+Three of the four notes record a weakness in the evidence. **The reviewer's
+notes live only in `research_results.review_note`.** `/packs/:slug` selects
+only `industry_measures` columns, so the notes never render. For OEE and OTIF
+this happens to be covered: the research wrote the same caveats into its own
+`citation` text, which the pack does show. That was luck, not design. A
+caveat that only the reviewer raised would be invisible.
+
+### The exclusion lists went nowhere
+
+Each payload carried `measures_tested_and_excluded_as_unaddressable`. The
+parser checks their shape and discards them, because nothing writes
+`industry_measure_exclusions`; see *Still outstanding*.
+
+- **Manufacturing (4):** raw material and commodity input cost; energy cost per
+  unit; end-market demand, order intake and backlog; tariff and trade exposure.
+- **CDMO (3):** capacity utilisation (CDMO); book-to-bill; biotech funding
+  environment.
+
+Together with Healthcare's six, that makes **13 agent-proposed exclusions
+waiting for a person's judgement**. None of them is in any database.
+
+### Still outstanding from item (b)
+
+- **Reviewer caveats do not reach the pack.** Surface the accepting
+  `review_note` on `/packs/:slug`, joined through
+  `research_results.industry_measures_id`. Until then, a caveat that only the
+  reviewer raised is invisible to the account manager reading the pack.
+- **No pack is ratified.** Ratification needs sourcing at N=2 institutions, and
+  the threshold is not lowered to fix that.
