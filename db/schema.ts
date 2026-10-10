@@ -514,8 +514,22 @@ export const industryMeasureExclusions = pgTable('industry_measure_exclusions', 
   citation: text('citation'),
   excludedByPersonId: uuid('excluded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   excludedAt: timestamp('excluded_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * 0026. When a research run proposed this exclusion, which tool ran it
+   * and what it said — VERBATIM, kept apart from `reason`. `reason` is the
+   * person's judgement (excluded_by_person_id is NOT NULL for that reason);
+   * the proposal is the agent's. Merging them would let an agent's prose
+   * stand as a person's decision. Both or neither: a proposal with no
+   * named tool, or a tool with nothing it proposed, is half a fact.
+   */
+  proposedByResearchTool: text('proposed_by_research_tool'),
+  proposalText: text('proposal_text'),
 }, (t) => [
   unique('industry_measure_exclusions_industry_name_key').on(t.industryId, t.name),
+  check('industry_measure_exclusions_proposal_is_complete',
+    sql`(${t.proposedByResearchTool} IS NULL AND ${t.proposalText} IS NULL)
+        OR (${t.proposedByResearchTool} IS NOT NULL AND btrim(${t.proposedByResearchTool}) <> ''
+            AND ${t.proposalText} IS NOT NULL AND btrim(${t.proposalText}) <> '')`),
   index('industry_measure_exclusions_tenant_idx').on(t.tenantId),
   index('industry_measure_exclusions_industry_idx').on(t.industryId),
 ]);
@@ -1411,6 +1425,17 @@ export const researchResults = pgTable('research_results', {
   index('research_results_business_metric_idx').on(t.businessMetricId),
   index('research_results_industry_idx').on(t.industryId),
   index('research_results_review_state_idx').on(t.reviewState),
+  /**
+   * 0026. One accepted review per pack entry. The pack page joins each
+   * industry_measures row to its accepted research result to show the
+   * reviewer's note; until this index that join's one-row-per-entry
+   * result held only by construction (accept always creates a new
+   * measure). Partial: pending and rejected rows never carry
+   * industry_measures_id, and the predicate states the rule exactly.
+   */
+  uniqueIndex('research_results_one_accepted_per_measure')
+    .on(t.industryMeasuresId)
+    .where(sql`${t.reviewState} = 'accepted'`),
 ]);
 
 // ------------------------------------------------------------------

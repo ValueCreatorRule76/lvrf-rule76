@@ -10,7 +10,8 @@
 # accept it with a review note, then reads GET /api/industries/:slug/pack
 # and checks the note, reviewer and research tool come back on that entry,
 # and that a measure with no accepted result comes back with review: null.
-# Stop `npm run dev` first. No migration is involved.
+# The clone is migrated to the repo's latest migration and hardened.
+# Stop `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -38,6 +39,11 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
 createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
+# The server code may expect columns local lvrf does not have yet (0026's
+# exclusion provenance, read by the pack route): migrate and harden the
+# clone, never the real local lvrf.
+DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /tmp/lvrf_review_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_review_migrate.log"; exit 1; }
+psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_review_hardening.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"
 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_review_server.log 2>&1 &
@@ -69,7 +75,12 @@ step "4. Parse and accept with a review note"
 C="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $ACTOR" \
   -d "$PAYLOAD" "$BASE/api/industries/$IND/research-results")"
 [ "$C" = "201" ] && ok "parsed -> 201" || { bad "parse -> $C $(cat /tmp/lvrf_r.json)"; exit 1; }
-RR="$(q "SELECT id FROM research_results WHERE industry_id = '$IND' AND review_state = 'pending' ORDER BY parsed_at DESC LIMIT 1")"
+# The id comes from the parse response, NOT from a read-back. actorContext
+# commits on res 'finish', after the 201 is sent, so an immediate SELECT on
+# another connection can run before the COMMIT and find nothing — which is
+# how this line failed once, as /api/research-results//accept.
+RR="$(node -e 'console.log(require("/tmp/lvrf_r.json").results[0].id)')"
+[ -n "$RR" ] || { bad "parse response carried no result id"; exit 1; }
 C="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $ACTOR" \
   -d "{\"review_note\":\"$NOTE\"}" "$BASE/api/research-results/$RR/accept")"
 [ "$C" = "200" ] && ok "accepted -> 200" || { bad "accept -> $C $(cat /tmp/lvrf_r.json)"; exit 1; }
@@ -105,16 +116,15 @@ U="$(rn 'Unreviewed verification measure' .review)"
 [ "$(r .review.note)" = "\"$NOTE\"" ] && [ "$(r .review.reviewed_by)" = "\"$ACTOR_NAME\"" ] \
   && ok "the reviewed entry's review is unaffected by the unreviewed one beside it" || bad "reviewed entry changed: $(r .review)"
 
-# NOT A TEST. With one accepted result per measure — which accept guarantees
-# by construction and nothing in the schema enforces — the join cannot
-# produce a second row for this entry, so a count of 1 here could not have
-# been anything else. Reported, not counted. It would only become a test
-# with a second accepted result pointing at the same measure, which no API
-# path can create; that case belongs to the partial unique index in
-# BUILD_STATUS's Still outstanding, not to this script.
+# NOT A TEST. Since 0026, research_results_one_accepted_per_measure makes a
+# second accepted result for one measure impossible, so the join cannot
+# return this entry twice and a count of 1 could not have been anything
+# else. Reported, not counted. The index itself is tested where it can fail:
+# verify_exclusions.sh step 7 tries to write the duplicate and expects the
+# index to refuse it.
 N="$(node -e "console.log(require('/tmp/lvrf_pack.json').measures.filter(x=>x.name==='Verification measure').length)")"
 if [ "$N" = "1" ]; then
-  echo "  NOTE  the reviewed entry appears once — not a test: with one accepted result per measure the join cannot duplicate it, so this could not fail"
+  echo "  NOTE  the reviewed entry appears once — not a test: research_results_one_accepted_per_measure (0026) rules out a duplicate, so this could not fail; the index is tested in verify_exclusions.sh"
 else
   bad "the reviewed entry appears $N times — the join duplicated it"
 fi

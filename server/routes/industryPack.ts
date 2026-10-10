@@ -165,7 +165,24 @@ export function industryPackRouter(pool: Pool): Router {
           : { note: review_note, reviewed_by, reviewed_at, research_tool, parsed_at },
       }));
 
-      res.json({ industry, measures });
+      // Tested and excluded (industryExclusions.ts): measures a person
+      // judged do not belong in this pack at all. Returned beside the pack
+      // so the page can show what was considered and set aside — the same
+      // reason the table exists: so the same wrong proposal is not made
+      // twice. The research's proposal, when there was one, travels
+      // separately from the person's reason, as it is stored.
+      const { rows: exclusions } = await pool.query(
+        `SELECT x.name, x.reason, x.citation, x.excluded_at,
+                p.full_name AS excluded_by,
+                x.proposed_by_research_tool, x.proposal_text
+           FROM industry_measure_exclusions x
+           JOIN persons p ON p.id = x.excluded_by_person_id
+          WHERE x.industry_id = $1
+          ORDER BY x.name`,
+        [industry.id],
+      );
+
+      res.json({ industry, measures, exclusions });
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
     }

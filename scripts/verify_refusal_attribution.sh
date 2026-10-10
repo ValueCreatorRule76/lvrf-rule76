@@ -6,7 +6,7 @@
 #   ./scripts/verify_refusal_attribution.sh
 #
 # Clone `lvrf_verifyrefusal` (createdb -T lvrf -O lvrf_app), migrated to
-# 0025 and hardened, dropped on exit. Needs an institution with two current
+# the latest migration and hardened, dropped on exit. Needs an institution with two current
 # outcomes under current engagements (local Northgate has two). Stop
 # `npm run dev` first.
 
@@ -32,7 +32,7 @@ q() { psql -At -d "$VERIFY_DB" -c "$1"; }
 step "1. Typecheck"
 npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
-step "2. Clone, migrate to 0025, harden"
+step "2. Clone, migrate to latest, harden"
 dropdb --if-exists "$VERIFY_DB"
 createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
 DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate

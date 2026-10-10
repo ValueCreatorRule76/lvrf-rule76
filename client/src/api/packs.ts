@@ -39,9 +39,23 @@ export interface IndustryMeasure {
   } | null;
 }
 
+/** A measure a person judged does not belong in this pack at all. */
+export interface IndustryExclusion {
+  name: string;
+  /** The person's judgement. */
+  reason: string;
+  citation: string | null;
+  excluded_at: string;
+  excluded_by: string;
+  /** When a research run proposed it: its tool, and its wording verbatim. Both or neither. */
+  proposed_by_research_tool: string | null;
+  proposal_text: string | null;
+}
+
 export interface IndustryPack {
   industry: { id: string; name: string; slug: string };
   measures: IndustryMeasure[];
+  exclusions: IndustryExclusion[];
 }
 
 export type FetchIndustriesResult =

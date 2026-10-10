@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
-import { fetchIndustryPack, type IndustryMeasure, type IndustryPack } from '../api/packs';
+import { fetchIndustryPack, type IndustryExclusion, type IndustryMeasure, type IndustryPack } from '../api/packs';
 import { Card, Badge } from '../components/workbench/Card';
 
 // Lifecycle statuses this table has ever supported (db/schema.ts's
@@ -120,15 +120,59 @@ function MeasureGroup({
   );
 }
 
+// NOT the "cannot claim" card above. Those entries are KEPT in the pack
+// because the reason not to claim them is worth reading; these were judged
+// not to belong in the pack at all. The person's reason leads; the research
+// run's own proposal, when there was one, follows in muted text and is
+// labeled as the agent's, never blended into the person's reason.
+function ExclusionEntry({ exclusion }: { exclusion: IndustryExclusion }) {
+  const x = exclusion;
+  return (
+    <div className="border-b border-rule-soft py-3 last:border-b-0">
+      <h4 className="m-0 text-[13.5px] font-semibold text-ink">{x.name}</h4>
+      <p className="m-0 mt-1 text-[12.5px] text-ink">{x.reason}</p>
+      {x.citation && <p className="m-0 mt-1.5 font-mono text-[10.5px] text-ink-45">{x.citation}</p>}
+      {x.proposal_text && (
+        <p className="m-0 mt-1.5 text-[11.5px] text-ink-45">
+          Proposed by research ({x.proposed_by_research_tool}): {x.proposal_text}
+        </p>
+      )}
+      <p className="m-0 mt-1 text-[11px] text-ink-45">
+        Excluded by {x.excluded_by} on {x.excluded_at.slice(0, 10)}
+      </p>
+    </div>
+  );
+}
+
+function ExclusionGroup({ n, exclusions }: { n: string; exclusions: IndustryExclusion[] }) {
+  return (
+    <Card n={n} title="Tested and excluded" badge={<Badge tone="neutral">{exclusions.length}</Badge>}>
+      {exclusions.length === 0 ? (
+        <p className="m-0 text-[12.5px] text-ink-45">
+          Nothing has been recorded as excluded from this pack yet.
+        </p>
+      ) : (
+        exclusions.map((x) => <ExclusionEntry key={x.name} exclusion={x} />)
+      )}
+    </Card>
+  );
+}
+
 function PackBody({ pack }: { pack: IndustryPack }) {
   const claimable = pack.measures.filter((m) => m.addressable);
   const notClaimable = pack.measures.filter((m) => !m.addressable);
 
+  // Exclusions can exist before any measure is proposed — an industry
+  // where research has so far only ruled things out still shows them.
   if (pack.measures.length === 0) {
     return (
-      <p className="m-0 text-[12.5px] text-ink-45">
-        No measures have been proposed for this industry yet.
-      </p>
+      <>
+        <p className="m-0 mb-4 text-[12.5px] text-ink-45">
+          No measures have been proposed for this industry yet.
+        </p>
+        {/* 00, not 02: with no measures there are no cards 00 and 01 above it. */}
+        {pack.exclusions.length > 0 && <ExclusionGroup n="00" exclusions={pack.exclusions} />}
+      </>
     );
   }
 
@@ -146,6 +190,7 @@ function PackBody({ pack }: { pack: IndustryPack }) {
         measures={notClaimable}
         emptyText="Nothing in this pack has tested unaddressable yet."
       />
+      <ExclusionGroup n="02" exclusions={pack.exclusions} />
     </>
   );
 }

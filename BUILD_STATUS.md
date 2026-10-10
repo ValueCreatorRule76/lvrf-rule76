@@ -4816,13 +4816,17 @@ check to self-diagnose.
   Utilization Rate. ~~**Both packs are thin next to Healthcare's 4.**~~ Item (b)
   closed this on 10 October: both are now at 4. See *Item (b) — Manufacturing and
   CDMO packs filled out* at the end of this file.
-- The **exclusion list is not written by parse.**
-  `industry_measure_exclusions` requires `excluded_by_person_id` — a person's
-  judgement — so an exclusion an agent proposed is a candidate, not a decision.
-  **Thirteen candidates now have nowhere to go:** six from Healthcare, four from
-  the 10 October Manufacturing run and three from the 10 October CDMO run. The
-  13 live only in the original payload files, outside any database.
-  `industry_measure_exclusions` has 0 rows on both prod and local.
+- The **exclusion list is not written by parse** — still true, by design.
+  An exclusion an agent proposed is a candidate, not a decision. ~~**Thirteen
+  candidates have nowhere to go.**~~ 10 October: `POST
+  /api/industries/:industryId/exclusions` is the person's path (see *Exclusions
+  get a writer*). The 13 still await a decision each: exclude, promote to a
+  not-addressable pack entry, or drop.
+- **Next item, after the 13 exclusion decisions: write routes respond before
+  COMMIT.** `actorContext` commits in `res.once('finish')`, so a client can
+  get a 2xx and read before the row is visible. Seen in `verify_pack_review.sh`
+  and in the Account facts card's reload. Fix by committing before the
+  response is flushed, across all routes.
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
 - ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
@@ -5457,10 +5461,8 @@ waiting for a person's judgement**. None of them is in any database.
   *The pack shows the reviewer's note*.
 - **No pack is ratified.** Ratification needs sourcing at N=2 institutions, and
   the threshold is not lowered to fix that.
-- A partial unique index on `research_results(industry_measures_id) WHERE
-  review_state = 'accepted'` would make the pack join's one-review-per-entry
-  assumption a constraint. Fold it into the next migration that has another
-  reason to exist.
+- ~~A partial unique index on `research_results(industry_measures_id)`~~ Added
+  in `0026` as `research_results_one_accepted_per_measure`.
 
 ---
 
@@ -6056,3 +6058,93 @@ SELECT as `lvrf_app`. No POSTs.
   and a second report differs. Confirm the threshold against the customer's
   own terms before any claim relies on it."* Its `research_tool` is the item
   (b) run, Claude (Opus 5.5) in the Claude app, 9–10 October 2026.
+
+---
+
+## Exclusions get a writer — 10 October 2026
+
+Migration `0026`, `POST /api/industries/:industryId/exclusions`, and a third card on
+`/packs/:slug`: **TESTED AND EXCLUDED**.
+
+### Two different facts, kept apart
+
+- **`addressable = false`** — a measure **kept** in the pack, because *do not claim
+  this, and why* is something an account manager must read.
+- **An exclusion** — a measure that **does not belong in the pack at all**, recorded
+  so the same wrong proposal is not made twice.
+
+A measure cannot be both, and both writers now enforce it: excluding a name that is a
+current pack entry is 409; accepting a research result whose name is excluded is 409
+(the result stays pending). There is no route that reverses an exclusion — the table
+is insert-only by design.
+
+### The agent proposes; the person decides — stored apart
+
+The 13 candidates came from research runs that "tested and excluded" them. The parser
+still does not write those: an agent proposing an exclusion is not a person deciding
+one. This route is the person deciding:
+
+- `reason` — the person's judgement, required, at least 12 characters;
+  `excluded_by_person_id` is the actor.
+- `proposed_by_research_tool` + `proposal_text` — **new in 0026**: which run proposed it
+  and what it said, **verbatim**, both or neither (CHECK
+  `industry_measure_exclusions_proposal_is_complete`). Never merged into `reason`, so an
+  agent's prose cannot stand as a person's decision.
+
+The pack page shows the reason first, then *Proposed by research (tool): …* in muted
+text, then who excluded it and when. An industry with exclusions but no measures still
+shows them, as card **00**, since there are no cards 00 and 01 above it. The first
+render numbered it 02 even then; that was fixed at Gate A.
+
+### 0026 also adds the deferred index
+
+`research_results_one_accepted_per_measure`: partial UNIQUE on
+`research_results(industry_measures_id) WHERE review_state = 'accepted'`. The pack's
+one-review-per-entry join is now a constraint, not a property of how accept happens to
+work. Prod has 12 accepted results on 12 distinct measures, so it builds.
+
+Additive only; no trigger change, still 82.
+
+### Verification
+
+`scripts/verify_exclusions.sh`, on a clone migrated to 0026 and hardened, dropped on
+exit: columns and index exist; 82 triggers; short reason, half a proposal and an
+unknown industry are refused with no row written; an exclusion records the actor with
+reason and proposal stored separately, audited; the same name twice is 409; excluding
+a current pack entry is 409; accepting an excluded name is 409 and leaves the result
+pending; a second accepted result for one measure is refused by the index; the pack
+returns the exclusion, verbatim proposal included, and not as a pack entry.
+
+**Tightened at Gate A** so that no check passes for the wrong reason:
+
+- The three 409s ("same name again", "excluding a current pack entry",
+  "accepting an excluded name") must carry their own message or constraint
+  name, not just the status code.
+- The duplicate-accept refusal must name `research_results_one_accepted_per_measure`.
+- The audit check matches this exclusion's `record_id`.
+- The both-or-neither CHECK is exercised directly at the database, since the
+  route's own 422 always reaches it first.
+- An industry with no exclusions must return `exclusions: []`, an empty
+  array rather than a missing key. That is the shape prod's three packs will
+  have.
+
+Result: 27 passed, 0 failed.
+
+**A race the scripts had been winning by timing.** `actorContext` commits on
+`res.once('finish')`, which is *after* the response is sent. A client that gets
+a 2xx and immediately reads on another connection can miss the row it just
+wrote. `verify_pack_review.sh` hit it once: its psql read-back of the new
+pending result came back empty, and the accept went to
+`/api/research-results//accept`. The scripts now take ids from responses and
+wait for a row to be visible before reading its contents. The race itself is in
+the middleware, it predates this item, and it is not fixed here.
+
+`verify_pack_review.sh` also now **migrates and hardens its clone**. The pack
+route reads 0026's columns, and local `lvrf` is still at 0025. Its "appears
+once" NOTE now cites the index instead of saying nothing enforces it. Re-run
+against this code: `verify_pack_review.sh` 17 passed, 0 failed;
+`verify_refusal_attribution.sh` 13 passed, 0 failed.
+
+### Next
+
+The 13 decisions, one at a time, the same way the accepts were made.

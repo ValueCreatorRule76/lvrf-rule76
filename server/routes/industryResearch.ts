@@ -659,6 +659,29 @@ export function researchResultsReviewRouter(pool: Pool): Router {
       // issues is empty past this point: reviewNote and measure are both
       // defined, for the same reason as the `!` assertions in the parse
       // route above.
+
+      // The other half of industryExclusions.ts's rule: a measure cannot be
+      // both in the pack and excluded from it. A person already judged this
+      // name does not belong here; accepting it into the pack would
+      // contradict that judgement silently. Exclusions are insert-only, so
+      // reversing one is a deliberate act, not something accept does.
+      const { rows: [excluded] } = await client.query<{ excluded_by: string; excluded_at: string }>(
+        `SELECT p.full_name AS excluded_by, x.excluded_at
+           FROM industry_measure_exclusions x
+           JOIN persons p ON p.id = x.excluded_by_person_id
+          WHERE x.industry_id = $1 AND x.name = $2`,
+        [candidate.industryId, measure!.name],
+      );
+      if (excluded) {
+        res.status(409).json({
+          message:
+            `"${measure!.name}" was excluded from this pack by ${excluded.excluded_by} on ` +
+            `${new Date(excluded.excluded_at).toISOString().slice(0, 10)}; a measure cannot be both in the ` +
+            'pack and excluded from it. Reject this result — there is no route that reverses an exclusion.',
+        });
+        return;
+      }
+
       const { rows: [insertedMeasure] } = await client.query<{ id: string }>(
         `INSERT INTO industry_measures (
            tenant_id, industry_id, name, unit, direction, definition, why_it_pays,
