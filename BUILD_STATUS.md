@@ -6352,3 +6352,28 @@ or the end of the handler. No statement runs after a response. There are no
 un-awaited `client.query` calls and no `void`, `.then`, `setTimeout` or
 `setImmediate` work in routes, so nothing can touch `req.dbClient` after it is
 released.
+
+### Deployed — 10 October 2026
+
+`06c60a3` went out via `lvrf-deploy.sh` (`9006266..06c60a3`, api 200, vhost
+401, deploy OK; service up since 12:01:20 UTC). There was no migration and no
+client change: still 82 triggers, bundle unchanged at `index-2YI_7srW.js`. The
+built `dist/server/middleware/actorContext.js` carries the new COMMIT-failure
+handling.
+
+**Reviewed read-only**, with GETs on 127.0.0.1:3001 as Brad Piver and SELECTs
+as `lvrf_app`. No POSTs.
+
+- `/api/health`, `/api/cohort`, `/api/industries/healthcare/pack` and
+  `/api/industries/manufacturing/pack` all return **200**.
+- The cohort book is unchanged at `10.0` low, 1 of 1 measured. The healthcare
+  pack still has 4 measures, 4 reviews and 5 exclusions.
+- **`pg_stat_activity`: 0 connections idle in transaction.** `lvrf_app` can
+  read only its own sessions' state: one idle (the API's pool) and one active
+  (the query itself). No other role's session state was readable, but the
+  API's own connections are the ones that matter for this change.
+
+Not exercised on prod: a failing COMMIT. It cannot be produced there without a
+write that fails at COMMIT time. The clone-only verify script is the proof:
+17 passed, 0 failed, including "the API process survived the failed COMMIT"
+and "the server logged the failed COMMIT".
