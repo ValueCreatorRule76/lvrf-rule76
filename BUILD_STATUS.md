@@ -4843,11 +4843,12 @@ check to self-diagnose.
   parser's 422s. It is annotated in place under *Refuse wholesale, not partially*,
   not deleted. A parse refusal that should be on record needs a writer of its
   own.
-- **Two readers don't check that an outcome's engagement is current:** the gap
+- ~~**Two readers don't check that an outcome's engagement is current:** the gap
   register's single-outcome count and metric re-validation's supersession of
   outcomes. Both include outcomes under retired engagements (`bf6f5b2d…`,
   `e3fb0061…` under `c47d075f…`). Filter them, or add an outcome retirement
-  route if one is ever needed.
+  route if one is ever needed.~~ **Closed 10 October 2026.** See *Retirement
+  freezes outcomes*. Four write paths were fixed as well.
 
 ---
 
@@ -5712,3 +5713,74 @@ shipped (0934466). Its runs stay on record, untouched."*
   the same: `10.0` low, 1 of 1.
 - **Left untouched, as designed (no cascade):** two `draft` value outcomes
   under the engagement, `bf6f5b2d…` and `e3fb0061…`. See *Still outstanding*.
+
+---
+
+## Retirement freezes outcomes — the readers and writers that did not know — 10 October 2026
+
+Closes the Still outstanding item from the reference-example retirement, and more of it
+than was written down. The item named two **readers** that counted outcomes under a
+retired engagement. Looking for them found four **writers** that would still *change*
+those outcomes — so "retirement freezes everything under the engagement" was true for
+runs and new outcomes, and false for existing ones.
+
+### What now checks that the outcome's engagement is current
+
+| Path | Before | After |
+|---|---|---|
+| `POST /value-outcomes/:id/commit` | accepted | **409** — outcomes frozen |
+| `POST /value-outcomes/:id/measure` | accepted | **409** |
+| `POST /value-outcomes/:id/verify` | accepted | **409** |
+| `POST /value-outcomes/:id/evidence` | accepted | **409** |
+| `GET /value-outcomes/:id/gaps` | a work list for a frozen outcome | **409** — no gaps to close |
+| gap register's single-outcome count | counted frozen outcomes | excludes them |
+| metric re-validation | superseded frozen outcomes onto the new metric | **skips** them |
+
+**409, not 404.** A frozen outcome exists; it cannot change. A 404 would say the
+opposite of the truth.
+
+**Re-validation leaves frozen outcomes on the old metric.** They stay attached to the
+metric they were claimed against, now superseded — the honest record of what was frozen
+— instead of being carried forward into a measurement chain their engagement has left.
+
+### Not changed, and why
+
+- `recordDocuments` GET still serves documents for a frozen outcome. Reading the record
+  of a retired engagement is exactly what the record is for.
+- `measure` and `verify` look up outcomes without `superseded_by_id IS NULL`, unlike
+  `commit` and `evidence`. Pre-existing and separate; noted, not changed here.
+
+### Verification
+
+`scripts/verify_frozen_outcomes.sh`, on a clone dropped on exit:
+
+- The gap register answers before retirement.
+- After retiring the engagement, **commit, measure, verify, evidence and gaps
+  each return the frozen 409**. The check matches the message, not just the
+  status code, because `measure` and `verify` have other 409s.
+- The refused writes leave the outcome's row unchanged and write no evidence.
+
+**The single-outcome count is tested by behaviour, not by its own SQL.** The
+first draft re-ran the server's count query and compared it with itself,
+which can't fail. The count's only observable effect is that the gap register
+attributes an evidence refusal at the institution to an outcome *only* when
+that outcome is the institution's one live outcome. So the script:
+
+1. Takes a second outcome at the same institution, under an engagement that
+   stays current. Locally that is Northgate's Heartbeat outcome.
+2. Provokes a recorded evidence refusal against it, using AI-sourced evidence
+   marked verified, which `evidence_ai_verify_requires_resolution` refuses.
+3. Checks that its baseline-evidence gap reads `open` while the other
+   engagement's outcomes are live, then `refused` after that engagement is
+   retired.
+
+**This test fails against the old code.** With the count query temporarily
+reverted to the unfiltered form, the run is 14 passed, 1 failed: *"baseline
+gap after retirement: open (expected refused)"*. The code was then restored
+byte-for-byte. Result: 15 passed, 0 failed.
+
+Metric re-validation's skip is reviewed in code, not exercised. Local data has
+no metric that can safely be re-validated.
+
+The two prod outcomes (`bf6f5b2d…`, `e3fb0061…` under `c47d075f…`) are now frozen in
+practice, not just in intent.

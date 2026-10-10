@@ -330,16 +330,28 @@ export function gapRegisterRouter(pool: Pool): Router {
         committed_by_person_id: string | null;
         verified_by_person_id: string | null;
         confidence: 'low' | 'medium' | 'high';
+        engagement_retired: boolean;
       }>(
-        `SELECT id, institution_id, business_metric_id,
-                claimed_currency_impact, realized_currency_impact, impact_basis,
-                committed_by_person_id, verified_by_person_id, confidence
-           FROM value_outcomes
-          WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+        `SELECT vo.id, vo.institution_id, vo.business_metric_id,
+                vo.claimed_currency_impact, vo.realized_currency_impact, vo.impact_basis,
+                vo.committed_by_person_id, vo.verified_by_person_id, vo.confidence,
+                (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
+           FROM value_outcomes vo
+           JOIN engagements eng ON eng.id = vo.engagement_id
+          WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
       if (!vo) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
+        return;
+      }
+      // A register is a work list for closing gaps. An outcome under a
+      // retired engagement is frozen (engagementRetire.ts) — nothing on the
+      // list could be acted on, so there is no list to give.
+      if (vo.engagement_retired) {
+        res.status(409).json({
+          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen, so there are no gaps to close`,
+        });
         return;
       }
 
@@ -441,8 +453,13 @@ export function gapRegisterRouter(pool: Pool): Router {
       const isSingleOutcomeAtInstitution = async (): Promise<boolean> => {
         if (singleOutcomeAtInstitution === null) {
           const { rows: [{ n }] } = await pool.query<{ n: number }>(
-            `SELECT count(*)::int AS n FROM value_outcomes
-              WHERE institution_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+            // Outcomes under a retired engagement are frozen and do not
+            // count as competing outcomes at this institution.
+            `SELECT count(*)::int AS n
+               FROM value_outcomes vo
+               JOIN engagements eng ON eng.id = vo.engagement_id
+                AND eng.deleted_at IS NULL AND eng.superseded_by_id IS NULL
+              WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
             [vo.institution_id],
           );
           singleOutcomeAtInstitution = n <= 1;

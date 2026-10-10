@@ -264,9 +264,15 @@ export function validateMetricRouter(pool: Pool): Router {
         institution_id: string;
         realization: string;
       }>(
-        `SELECT id, engagement_id, capability_id, institution_id, realization
-           FROM value_outcomes
-          WHERE business_metric_id = $1 AND deleted_at IS NULL`,
+        // Outcomes under a retired engagement are frozen
+        // (engagementRetire.ts) and are NOT carried to the new metric: they
+        // stay attached to the metric they were claimed against, now
+        // superseded, which is the honest record of what was frozen.
+        `SELECT vo.id, vo.engagement_id, vo.capability_id, vo.institution_id, vo.realization
+           FROM value_outcomes vo
+           JOIN engagements eng ON eng.id = vo.engagement_id
+            AND eng.deleted_at IS NULL AND eng.superseded_by_id IS NULL
+          WHERE vo.business_metric_id = $1 AND vo.deleted_at IS NULL`,
         [metricId],
       );
 

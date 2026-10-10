@@ -130,11 +130,14 @@ export function outcomeWalkRouter(pool: Pool): Router {
         realization: string;
         committed_at: Date | null;
         existing_committer_name: string | null;
+        engagement_retired: boolean;
       }>(
         `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id,
-                vo.realization, vo.committed_at, cp.full_name AS existing_committer_name
+                vo.realization, vo.committed_at, cp.full_name AS existing_committer_name,
+                (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+           JOIN engagements eng ON eng.id = vo.engagement_id
            LEFT JOIN persons cp ON cp.id = vo.committed_by_person_id
           WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
@@ -145,6 +148,15 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      // Retirement freezes an engagement (engagementRetire.ts): nothing
+      // under it may change. A frozen outcome is not missing, so this is a
+      // 409 naming why, not the 404 above.
+      if (outcome.engagement_retired) {
+        res.status(409).json({
+          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen`,
+        });
+        return;
+      }
 
       // A commitment is not amended — a second commit attempt supersedes
       // the outcome, it does not overwrite this one's target or committer.
@@ -327,10 +339,13 @@ export function outcomeWalkRouter(pool: Pool): Router {
         institution_id: string;
         engagement_id: string;
         realization: string;
+        engagement_retired: boolean;
       }>(
-        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization
+        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization,
+                (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+           JOIN engagements eng ON eng.id = vo.engagement_id
           WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
@@ -340,6 +355,15 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      // Retirement freezes an engagement (engagementRetire.ts): nothing
+      // under it may change. A frozen outcome is not missing, so this is a
+      // 409 naming why, not the 404 above.
+      if (outcome.engagement_retired) {
+        res.status(409).json({
+          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen`,
+        });
+        return;
+      }
       if (outcome.realization !== 'claimed') {
         res.status(409).json({
           message: `value outcome ${outcomeId} is not 'claimed' (currently '${outcome.realization}'); cannot measure`,
@@ -473,10 +497,13 @@ export function outcomeWalkRouter(pool: Pool): Router {
         institution_id: string;
         engagement_id: string;
         realization: string;
+        engagement_retired: boolean;
       }>(
-        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization
+        `SELECT vo.id, i.tenant_id, vo.institution_id, vo.engagement_id, vo.realization,
+                (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+           JOIN engagements eng ON eng.id = vo.engagement_id
           WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
@@ -486,6 +513,15 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      // Retirement freezes an engagement (engagementRetire.ts): nothing
+      // under it may change. A frozen outcome is not missing, so this is a
+      // 409 naming why, not the 404 above.
+      if (outcome.engagement_retired) {
+        res.status(409).json({
+          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen`,
+        });
+        return;
+      }
       if (outcome.realization !== 'measured') {
         // value_outcomes_verified_requires_human would reject this write
         // anyway once realization flips to 'verified' without the rest of

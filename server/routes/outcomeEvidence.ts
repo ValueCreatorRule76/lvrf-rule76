@@ -204,10 +204,13 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         institution_id: string;
         engagement_id: string;
         tenant_id: string;
+        engagement_retired: boolean;
       }>(
-        `SELECT vo.id, vo.institution_id, vo.engagement_id, i.tenant_id
+        `SELECT vo.id, vo.institution_id, vo.engagement_id, i.tenant_id,
+                (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
+           JOIN engagements eng ON eng.id = vo.engagement_id
           WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
@@ -217,6 +220,15 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      // Retirement freezes an engagement (engagementRetire.ts): nothing
+      // under it may change. A frozen outcome is not missing, so this is a
+      // 409 naming why, not the 404 above.
+      if (outcome.engagement_retired) {
+        res.status(409).json({
+          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen`,
+        });
+        return;
+      }
 
       // Read from the database rather than hardcoding the enum's members —
       // a future migration that adds or renames a kind should not require
