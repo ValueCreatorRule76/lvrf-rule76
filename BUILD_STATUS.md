@@ -5280,6 +5280,39 @@ Result: 28 passed, 0 failed. Client `npm run lint` (one pre-existing warning,
 76 → 82 triggers. The create form and the Account facts card were checked in
 headless Chrome; nothing was written.
 
+### Deployed — 10 October 2026
+
+`680dd29` to production (`srv1862778`, `/srv/lvrf`). The migration was run by
+hand, in order, because `lvrf-deploy.sh` does not migrate.
+
+- **Pre-flight:** tree clean at `ce5af3a`. Newest `__drizzle_migrations` row
+  was 0023 (`9d3e0775…`, `1788636851732`), so prod was **not** missing 0023 the
+  way local `lvrf` had been. Only 0024 was pending.
+- **Backup:** `/home/brad/lvrf_pre_0024_20261010_024845.dump`, 484,566 bytes,
+  407 TOC entries. Taken as `sudo -u postgres pg_dump -Fc lvrf`, same as the
+  nightly. It sits on the same volume as the database, like the nightlies.
+- `git pull` `ce5af3a..680dd29` → `drizzle-kit migrate` applied 0024 →
+  `hardening.sql` exit 0.
+- **Triggers 78 → 82.** `institution_facts` has exactly `_audit`, `_no_delete`,
+  `_supersession_sane` and `_touch`.
+- `lvrf-deploy.sh`: api 200, vhost 401, bundle `index-BjARuDzx.js` (identical
+  to the local build), deploy OK. Service active since 02:50:53 UTC.
+- journalctl since 2026-09-06 showed no `capability_industry_measures` or
+  "does not exist" errors, so 0023's route has not been failing in prod.
+
+**Post-deploy review, read-only** (GETs on 127.0.0.1:3001 and SELECTs as
+`lvrf_app`; no POSTs):
+
+- Both accounts' views return 200 with `website: null` and `facts: []`.
+  Pack, metrics, gap, engagements and runs match Postgres: Curia has a pack
+  of 2, 2 metrics, 2 engagements and 22 runs; Skillsoft (unclassified, pack
+  `null`) has 1 metric, 1 engagement and 1 run.
+- `/api/industries` returns 10 and `/api/runs` returns 23, both matching the
+  tables. Zero refusals have been recorded since the restart.
+- The box's `sudo` asks for a password, so the backup, `hardening.sql` and
+  journalctl were run by hand. The agent read Postgres only through
+  `lvrf_app`.
+
 ### Still outstanding from the workbench
 
 - **No update path for `website`.** Same as `name` and `industry`: a wrong one means
