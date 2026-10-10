@@ -5605,3 +5605,74 @@ was changed.
 
 On prod, the account page and card 02 agree. Curia's latest run is the locked
 10.0, so the locked-only rule changes nothing there yet.
+
+---
+
+## Engagement retirement — the first retirement writer — 10 October 2026
+
+`POST /api/engagements/:id/retire`, body `{ "retirement_reason": "..." }`. Value spine
+stage: none directly — it is governance over which engagements the record counts.
+
+### Why it exists
+
+The cohort roll-up counts every current engagement. Curia's *"reference example, not
+an engagement"* — its own name disclaiming it — counted as a member of the book of
+record. Removing it needed a retirement, and **CLAUDE.md rule 2 ("retirement is
+`deleted_at` plus a status change") had no route behind it anywhere in the
+codebase.** The only way to retire anything was a hand-run UPDATE, attributed only if
+whoever ran it remembered to set an actor.
+
+### What it does
+
+One transaction: the reason is written as an evidence row on the institution
+(`observation`, `low`, unverified — the same shape as a classification note), then
+`deleted_at = now()`, `status = 'retired'`, race-guarded on the row still being
+current. `lvrf_audit` records it as a `soft_delete` with the actor.
+
+A reason under 12 characters is refused. A row vanishing from every view with nothing
+saying why is the authored-prose problem in reverse.
+
+### What it deliberately does not do
+
+- **Runs are untouched.** Locked runs are immutable; `runsIndex` already renders a run
+  whose engagement is retired.
+- **No cascade** to value outcomes, capabilities or evidence. Retiring removes the
+  engagement from current views; it does not erase what was claimed under it.
+- **No un-retire.** A mistake is corrected by a new engagement, with the retirement
+  still on record.
+
+### The tenant check is done here
+
+The actor's tenant must own the engagement; a cross-tenant id reads as 404. Other
+mutating routes still lack this (Still outstanding) — this one does not add to that
+list.
+
+### Verification
+
+`scripts/verify_engagement_retire.sh`, on a clone dropped on exit: refusals leave the
+row current; retire sets status and `deleted_at`; every run stays; the reason is an
+unverified observation by the actor; `audit_log` has an attributed `soft_delete`; the
+engagement leaves `/api/engagements` and the cohort; a second retire is 404; hard
+DELETE is still refused.
+
+**Gate A found three defects, all in the script, none in the route:**
+
+- **It was not executable.** It was mode `600`, so `./scripts/…` was refused.
+  It is now `755`, matching the other scripts. A stray `.bak` (an older,
+  looser audit check) was deleted.
+- **One check compared against the wrong string.** `status || '|' ||
+  (deleted_at IS NOT NULL)` renders as `retired|true`, because a boolean cast
+  to text is `true`, not psql's `t` display form. The row was right and the
+  expected value was wrong.
+- **The cohort check could not fail.** The script picked the engagement with
+  the most runs, which locally is Skillsoft's customer-zero engagement, and
+  the cohort excludes the tenant's own account. "Gone from the cohort" passed
+  whether or not retirement worked. It now picks the busiest **customer**
+  engagement (Northgate's Switching Order Verification, 14 runs), and first
+  asserts that it is a cohort member before retirement. Result: 17 passed,
+  0 failed.
+
+Local has one tenant, so the cross-tenant 404 is not exercised.
+
+No UI. Retirement is rare and irreversible; it goes through the API deliberately until
+there is a reason to put a button on it.
