@@ -5837,3 +5837,31 @@ gap must read `open`.
   it"*.
 - **With the fix:** 17 passed, 0 failed. The baseline refusal, made after the
   outcome existed, still reads `refused`, so real attribution is unaffected.
+
+### Deployed — 10 October 2026, two deploys
+
+Both went out via `lvrf-deploy.sh` with no migration (still 82 triggers) and
+the bundle unchanged at `index-CMSLsC7h.js`, api 200, vhost 401. Both were
+reviewed read-only, with GETs on 127.0.0.1:3001 as Brad Piver and SELECTs as
+`lvrf_app`. No POSTs.
+
+**`02dbcf3`** (`a24f65b..02dbcf3`, service up 05:27:58 UTC):
+
+- `e3fb0061…` gaps → **409**, the frozen message. ✓
+- `bf6f5b2d…` gaps → **404**. It is superseded, not frozen; see the correction
+  above.
+- Lot acceptance (`31d097a6…`) gaps → 200, but `actual_evidence_verified` read
+  **`refused`**, carrying the 30 August AMENDMENT-005 refusal from before the
+  outcome existed. **This was a defect**, recorded under *The misattribution
+  02dbcf3 exposed on prod*. It went undocumented as deployed until the fix
+  below.
+
+**`e324bf5`** (`02dbcf3..e324bf5`, service up 05:38:44 UTC):
+
+- Lot acceptance gaps → 200, and **`actual_evidence_verified` now reads
+  `open`**. All five entries read `open` / `viable`: metric definition,
+  baseline evidence, actual evidence, human commit and human verifier.
+- `e3fb0061…` gaps → **409**, the frozen message, unchanged.
+- `bf6f5b2d…` gaps → 404, unchanged.
+- Prod's one refusal row is still there, and still unattributed to any
+  current outcome. The cohort book is unchanged: `10.0` low, 1 of 1 measured.
