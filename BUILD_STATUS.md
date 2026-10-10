@@ -4825,10 +4825,8 @@ check to self-diagnose.
 - **Case mix index (healthcare): approved for promotion to a not-addressable
   pack entry, 10 October. Needs a research run producing the full measure
   shape with a citation; the 10 October decision was not to exclude it.**
-- **Next item: write routes respond before COMMIT.** `actorContext` commits in `res.once('finish')`, so a client can
-  get a 2xx and read before the row is visible. Seen in `verify_pack_review.sh`
-  and in the Account facts card's reload. Fix by committing before the
-  response is flushed, across all routes.
+- ~~**Write routes respond before COMMIT.**~~ Closed 10 October 2026 — see *Commit
+  before the response*.
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
 - ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
@@ -6250,3 +6248,107 @@ pack as *do not claim this, and why*, rather than leaving it.
   are as they were.
 - No refusals were recorded. The request file, its sha256 checked on the box
   (`f11e946f…`), and every temp file were removed from the box afterwards.
+
+---
+
+## Commit before the response — 10 October 2026
+
+`server/middleware/actorContext.ts` only. Every write route is fixed at once, because
+every write route answers through `res.json` (checked: none uses `send`, `end`,
+`sendFile` or `redirect`).
+
+### What was wrong
+
+The middleware committed in `res.once('finish')`, which fires **after** the response is
+flushed. Two consequences:
+
+- **Read-after-write could miss.** A client that got a 2xx and read again at once could
+  get the old state. Seen in `verify_pack_review.sh` and in the Account facts card,
+  which reloads the moment a fact is recorded.
+- **A failed COMMIT was reported as success.** `heartbeat_events_value_run_fk` is
+  DEFERRABLE INITIALLY DEFERRED and checked only at COMMIT. If it failed, the caller
+  already had its 2xx while the write was rolled back — a silent loss the caller could
+  not detect. Nothing shows it ever happened; nothing could have shown it.
+- **And the failed COMMIT crashed the API process.** Found at Gate A, not known
+  before. The old commit ran as `void finalize(...)` inside `res.once('finish')`, so a
+  COMMIT error was an unhandled promise rejection, and Node exits on those. Against
+  `7df208c`'s middleware the verify script's COMMIT-FAIL request got its 201, and
+  then the server died. The log ends in the trace through `finalize` at
+  `actorContext.ts:37`, and the next request could not connect. On prod, systemd
+  would have restarted it, and every request in flight at that moment would have
+  been lost too.
+
+### What it does now
+
+`res.json` is wrapped for mutating requests. On its first call the transaction is
+finished **first** — COMMIT for a status under 400, ROLLBACK otherwise — and only then
+is the body sent. If COMMIT fails, the caller gets **500 — "The write was not
+committed … Nothing from this request was saved."**, never the 2xx the handler meant.
+
+`finish` and `close` stay as fallbacks: `finish` for a response that bypasses
+`res.json` (Express's default error handler), `close` for a client that disconnects
+before any response. Both are no-ops once the wrapper has settled the transaction.
+
+**Every path is handled and logged; no rejection is left unhandled.** This was
+tightened at Gate A, after the old code's crash was found:
+
+- **COMMIT succeeded:** send the body. If sending throws, log `LVRF: response
+  could not be sent after a successful COMMIT; the write IS saved.` Once COMMIT has
+  succeeded, the caller is never told "not committed".
+- **COMMIT failed:** log `LVRF: COMMIT failed; the write was not saved.`, then send
+  the 500. If even that send throws, log `LVRF: could not send the COMMIT-failure
+  response.`
+- **The `finish` / `close` fallbacks** use `finalize(...).catch(...)`, logging
+  `LVRF: transaction finalize failed in fallback handler.`, instead of
+  `void finalize(...)`. That `void` is exactly what turned a failed COMMIT into a
+  process exit.
+
+The success and failure outcomes have separate handlers on the same promise. The
+first cut shared one `.catch`, so a throw while sending a successful body would have
+been reported as "not committed".
+
+**A rule this makes explicit:** a handler must not touch `req.dbClient` after
+`res.json` — the client has been released. All nine heartbeat emissions were checked:
+each runs before its route's response.
+
+A COMMIT-time failure is not routed through `handleGovernanceError`, so it writes no
+`refusals` row. It is a failure to save, not a governance decision.
+
+### Verification
+
+`scripts/verify_commit_before_response.sh`, on a clone migrated and hardened, dropped
+on exit. **Deterministic:** a clone-only DEFERRABLE constraint trigger refuses an
+exclusion named `COMMIT-FAIL` at COMMIT time; the response must be 500 saying the
+write was not committed, and no row may exist (the old code returned 201 here).
+Normal writes still 201, duplicates still 409, a missing actor still 422. **Supporting:**
+25 POST-then-immediate-GET pairs must all see the row. No connection may be left idle
+in transaction.
+
+**Gate A.**
+
+- **Against `7df208c`'s `actorContext.ts`:** COMMIT-FAIL got **201**, and the API
+  process then exited. The script added a check that the server is still answering
+  right after the failed COMMIT, since it had previously caught the crash only
+  indirectly, when step 5 could not connect.
+- **With the new middleware**, after the handling and logging fixes: **17 passed, 0
+  failed**. That includes a check that the server logged the failed COMMIT.
+- **Every other verify script was rerun against it, all passing:**
+
+  | Script | Result |
+  |---|---|
+  | `verify_account_workbench.sh` | 28/0 |
+  | `verify_cohort.sh` | 27/0 |
+  | `verify_engagement_retire.sh` | 17/0 |
+  | `verify_frozen_outcomes.sh` | 21/0 |
+  | `verify_refusal_attribution.sh` | 13/0 |
+  | `verify_pack_review.sh` | 17/0 |
+  | `verify_exclusions.sh` | 27/0 |
+
+**Route audit.** No route responds other than through `res.json`: there is no `send`,
+`end`, `sendFile`, `redirect`, `write` or `pipe`, no `next(err)` in a route, and no
+custom error handler. A scan of all 227 `.json(` calls in `server/routes` and
+`server/lib` found every one followed by a `return`, the end of a `try`, an `else`,
+or the end of the handler. No statement runs after a response. There are no
+un-awaited `client.query` calls and no `void`, `.then`, `setTimeout` or
+`setImmediate` work in routes, so nothing can touch `req.dbClient` after it is
+released.

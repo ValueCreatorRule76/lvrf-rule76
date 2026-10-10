@@ -43,11 +43,76 @@ export function actorContext(pool: Pool) {
     pool
       .connect()
       .then(async (client) => {
+        // COMMIT BEFORE THE RESPONSE, NOT AFTER IT. Until 10 October this
+        // middleware committed in res.once('finish') — which fires only
+        // after the response has been flushed to the client. A client that
+        // got a 2xx and read again at once could miss the row it had just
+        // written (seen in verify_pack_review.sh, and in the Account facts
+        // card's reload), and a COMMIT that failed — the deferred
+        // heartbeat_events_value_run_fk is checked only at COMMIT — was
+        // reported as a success while the write was silently rolled back.
+        //
+        // Every route answers through res.json (checked: none uses send,
+        // end, sendFile or redirect). So res.json is wrapped: on its first
+        // call, the transaction is finished FIRST — COMMIT for a status
+        // under 400, ROLLBACK otherwise — and only then is the body sent.
+        // If COMMIT itself fails, the caller gets a 500 saying the write was
+        // not committed, never the 2xx the handler intended.
+        //
+        // THE TWO OUTCOMES ARE HANDLED SEPARATELY, and every path is caught
+        // and logged. The old commit ran as `void finalize(...)` in 'finish':
+        // a failed COMMIT was an unhandled rejection, and Node exited — the
+        // whole API process died after the false 2xx had already gone out
+        // (BUILD_STATUS, "Commit before the response"). Now:
+        //   - COMMIT succeeded: send the body. If sending throws, log it —
+        //     the write IS saved, and the caller is never told otherwise.
+        //   - COMMIT failed: log it, then send the 500. If even that send
+        //     throws, log that too. Nothing is left to reject unhandled.
+        //
+        // Handlers must not touch req.dbClient after calling res.json — the
+        // client has been released by then. Every heartbeat emission was
+        // checked to run before its route's response.
+        const originalJson = res.json.bind(res);
+        res.json = ((body?: unknown) => {
+          if (settled) return originalJson(body);
+          const commit = res.statusCode < 400;
+          finalize(commit, client).then(
+            () => {
+              try {
+                originalJson(body);
+              } catch (err) {
+                console.error('LVRF: response could not be sent after a successful COMMIT; the write IS saved.', err);
+              }
+            },
+            (err: unknown) => {
+              console.error('LVRF: COMMIT failed; the write was not saved.', err);
+              try {
+                res.status(500);
+                originalJson({
+                  message:
+                    `The write was not committed: ${err instanceof Error ? err.message : String(err)}. ` +
+                    'Nothing from this request was saved.',
+                });
+              } catch (sendErr) {
+                console.error('LVRF: could not send the COMMIT-failure response.', sendErr);
+              }
+            },
+          );
+          return res;
+        }) as typeof res.json;
+
+        // Fallbacks only. 'finish' covers a response that did not go through
+        // res.json (Express's default error handler, after next(err)) —
+        // decided by status, as before. 'close' covers a client that
+        // disconnects before any response: roll back. Both are no-ops once
+        // the wrapper above has settled the transaction.
         res.once('finish', () => {
-          void finalize(res.statusCode < 400, client);
+          finalize(res.statusCode < 400, client).catch((err) =>
+            console.error('LVRF: transaction finalize failed in fallback handler.', err));
         });
         res.once('close', () => {
-          void finalize(false, client);
+          finalize(false, client).catch((err) =>
+            console.error('LVRF: transaction finalize failed in fallback handler.', err));
         });
 
         try {
