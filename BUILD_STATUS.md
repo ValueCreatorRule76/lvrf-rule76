@@ -5942,3 +5942,34 @@ Every freeze assertion is kept. That script also now **migrates and hardens
 its clone**. Local `lvrf` is still at 0024, and the server code now reads and
 writes `refusals.value_outcome_id`, so an unmigrated clone would have broken
 `/gaps` and silently failed to record refusals. Result: 21 passed, 0 failed.
+
+### Deployed — 10 October 2026
+
+`eadef9b` went to production. The migration was run by hand, in order, before
+the deploy:
+
+- **Backup:** `/home/brad/lvrf_pre_0025_20261010_055502.dump`, 523,627 bytes,
+  422 TOC entries, taken as `sudo -u postgres pg_dump -Fc lvrf`.
+- `git pull --ff-only` (`8bf3952..eadef9b`) → `drizzle-kit migrate` applied
+  0025 → `hardening.sql` exit 0 → 82 triggers, column present.
+- `lvrf-deploy.sh` reported deploy OK. Service up since 05:57:56 UTC, bundle
+  unchanged at `index-CMSLsC7h.js`.
+
+**Reviewed read-only**, with GETs on 127.0.0.1:3001 as Brad Piver and SELECTs
+as `lvrf_app`. No POSTs.
+
+- Newest `__drizzle_migrations` row is 0025 (`1791611011165`). **82 distinct
+  triggers**, unchanged.
+- `refusals.value_outcome_id` exists: `uuid`, nullable, with FK
+  `refusals_value_outcome_id_value_outcomes_id_fk` and index
+  `refusals_value_outcome_idx`.
+- **Prod's one refusal, the 30 August AMENDMENT-005 row (`5a54f599…`,
+  supports `actual`), has `value_outcome_id` NULL.** It was not back-filled,
+  and it is attributed to nobody.
+- **Lot acceptance (`31d097a6…`) gaps → 200, all five entries `open` /
+  `viable`.** That is metric definition, baseline evidence, actual evidence,
+  human commit and human verifier. It now reads `open` because the refusal
+  names no outcome, not because of a date bound.
+- `e3fb0061…` gaps → **409**, the frozen message, unchanged.
+- The cohort book is unchanged at `10.0` low, 1 of 1 measured. `/api/health`
+  returns 200 with the database connected.
