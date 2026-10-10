@@ -136,47 +136,37 @@ interface RefusalRow {
  * link) is legitimately "an attempt to attach evidence for this factor was
  * refused" — the verbatim message is what disambiguates which.
  *
- * INSTITUTION-SCOPED, NOT OUTCOME-SCOPED — a real limitation, not an
- * oversight. Neither `refusals.subject_id` (the evidence row, which never
- * persists — the whole request's transaction rolls back on refusal) nor
- * `attempted_payload` (the request body, which carries no outcome id — that
- * comes from the URL) names the outcome an evidence-attach attempt targeted.
- * institution_id is the closest scope the stored row actually carries.
- * Callers must confirm this is the institution's only live outcome before
- * calling this — see the outcome-count guard in the route handler.
+ * EXACT MATCH ON THE OUTCOME, NOTHING ELSE (0025). refusals.value_outcome_id
+ * is written by outcomeEvidence.ts once it has resolved the outcome, so a
+ * refusal names the outcome it targeted. This replaced a guess: before
+ * 0025 the row carried only institution_id, attribution was allowed only
+ * when the outcome was its institution's single live one, and on 10
+ * October that guess put a 30 August refusal on an outcome created six
+ * days later (BUILD_STATUS, "The misattribution 02dbcf3 exposed"). The
+ * single-outcome guard and the created_at bound both existed only to
+ * contain that guess, and both are gone.
  *
- * NOT BEFORE THE OUTCOME EXISTED. A refusal recorded before this outcome's
- * created_at cannot be about it, so it is never attributed. Without this,
- * the single-outcome guard alone was time-blind: on prod, once the
- * reference example's outcome was frozen, Curia's lot-acceptance outcome
- * became the institution's only live one and inherited an AMENDMENT-005
- * refusal from 30 August, six days before it was created. A side effect,
- * accepted: when commit supersedes an outcome, the new row is younger than
- * refusals made against its predecessor, so those read 'open' rather than
- * 'refused'. Open is this register's default when attribution is unsure.
- *
- * THIS IS STILL A GUESS when two outcomes overlap in time: a refusal
- * recorded while both were live, after the survivor was created, is
- * attributed to the survivor even if it targeted the other. Only recording
- * the outcome id on the refusal at write time removes the guess (BUILD_STATUS,
- * Still outstanding).
+ * Rows written before 0025 have no value_outcome_id and are NEVER
+ * attributed — not to the institution's only outcome, not by date. A
+ * refusal whose target was not recorded is history this register cannot
+ * read honestly; 'open' is its answer when it does not know. A commit that
+ * supersedes an outcome creates a new row with a new id, so refusals made
+ * against the predecessor also read 'open' on its successor.
  */
 async function findEvidenceRefusal(
   pool: Pool,
-  institutionId: string,
+  outcomeId: string,
   supports: 'baseline' | 'actual',
-  outcomeCreatedAt: Date,
 ): Promise<RefusalRow | null> {
   const { rows } = await pool.query<RefusalRow>(
     `SELECT message, refused_at FROM refusals
       WHERE subject_table = 'evidence'
         AND endpoint = $1
-        AND institution_id = $2
+        AND value_outcome_id = $2
         AND attempted_payload ->> 'supports' = $3
-        AND refused_at >= $4
       ORDER BY refused_at DESC
       LIMIT 1`,
-    [EVIDENCE_ENDPOINT, institutionId, supports, outcomeCreatedAt],
+    [EVIDENCE_ENDPOINT, outcomeId, supports],
   );
   return rows[0] ?? null;
 }
@@ -349,12 +339,10 @@ export function gapRegisterRouter(pool: Pool): Router {
         verified_by_person_id: string | null;
         confidence: 'low' | 'medium' | 'high';
         engagement_retired: boolean;
-        created_at: Date;
       }>(
         `SELECT vo.id, vo.institution_id, vo.business_metric_id,
                 vo.claimed_currency_impact, vo.realized_currency_impact, vo.impact_basis,
                 vo.committed_by_person_id, vo.verified_by_person_id, vo.confidence,
-                vo.created_at,
                 (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN engagements eng ON eng.id = vo.engagement_id
@@ -468,25 +456,7 @@ export function gapRegisterRouter(pool: Pool): Router {
 
       const gapFactors = confidence.factors.filter((f) => f.gap !== null);
 
-      // Lazy, computed at most once each, only if a gap that needs them exists.
-      let singleOutcomeAtInstitution: boolean | null = null;
-      const isSingleOutcomeAtInstitution = async (): Promise<boolean> => {
-        if (singleOutcomeAtInstitution === null) {
-          const { rows: [{ n }] } = await pool.query<{ n: number }>(
-            // Outcomes under a retired engagement are frozen and do not
-            // count as competing outcomes at this institution.
-            `SELECT count(*)::int AS n
-               FROM value_outcomes vo
-               JOIN engagements eng ON eng.id = vo.engagement_id
-                AND eng.deleted_at IS NULL AND eng.superseded_by_id IS NULL
-              WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
-            [vo.institution_id],
-          );
-          singleOutcomeAtInstitution = n <= 1;
-        }
-        return singleOutcomeAtInstitution;
-      };
-
+      // Lazy, computed at most once, only if a gap that needs it exists.
       let actualInadmissible: boolean | null = null;
       const isActualEvidenceAllInadmissible = async (): Promise<boolean> => {
         if (actualInadmissible === null) {
@@ -511,17 +481,10 @@ export function gapRegisterRouter(pool: Pool): Router {
           // work; see the GapPath comment above the type definitions.
           if (f.factor === 'baseline_evidence_verified' || f.factor === 'actual_evidence_verified') {
             const supports = f.factor === 'baseline_evidence_verified' ? 'baseline' : 'actual';
-            if (await isSingleOutcomeAtInstitution()) {
-              const refusal = await findEvidenceRefusal(pool, vo.institution_id, supports, vo.created_at);
-              state = refusal
-                ? { state: 'refused', refusalMessage: refusal.message, refusedAt: refusal.refused_at.toISOString() }
-                : alwaysOpen();
-            } else {
-              // More than one live outcome at this institution — a
-              // refusal on this endpoint cannot be attributed to THIS
-              // outcome without guessing. See findEvidenceRefusal's comment.
-              state = alwaysOpen();
-            }
+            const refusal = await findEvidenceRefusal(pool, vo.id, supports);
+            state = refusal
+              ? { state: 'refused', refusalMessage: refusal.message, refusedAt: refusal.refused_at.toISOString() }
+              : alwaysOpen();
           } else {
             // metric_definition_confirmed's three gaps, both
             // impact_basis_evidenced gaps, and both person asks — see the

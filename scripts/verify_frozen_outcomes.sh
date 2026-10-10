@@ -5,11 +5,12 @@
 #   ./scripts/verify_frozen_outcomes.sh
 #
 # Clone `lvrf_verifyfrozen` (createdb -T lvrf -O lvrf_app), dropped on exit.
-# Picks a current customer outcome, proves the write paths accept a request
-# shape against it BEFORE retirement (by checking they do not 409), retires
-# its engagement, then proves commit, evidence and the gap register refuse
-# with 409, and that the single-outcome count no longer includes it.
-# Stop `npm run dev` first. No migration is involved.
+# Migrated to the repo's latest migration and hardened, so it runs against
+# the code's schema even when local lvrf is behind. Picks a current customer
+# outcome, retires its engagement, then proves commit, measure, verify,
+# evidence and the gap register refuse with the frozen 409. A second outcome
+# at the same institution checks exact refusal attribution (0025) across
+# the retirement. Stop `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -36,6 +37,11 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
 createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
+# The server code may expect columns local lvrf does not have yet (0025's
+# refusals.value_outcome_id, for one): migrate and harden the clone, never
+# the real local lvrf.
+DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /tmp/lvrf_frozen_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_frozen_migrate.log"; exit 1; }
+psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_frozen_hardening.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"
 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_frozen_server.log 2>&1 &
@@ -55,14 +61,11 @@ INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME'")"
 echo "  outcome $OUTCOME · engagement $ENG"
 
 # A SECOND current outcome at the same institution, under a DIFFERENT
-# engagement — the one that stays current. The single-outcome count is
-# tested through its only observable effect: gapRegister.ts attributes an
-# evidence refusal at the institution to an outcome ONLY when that outcome
-# is the institution's single live one. Before retirement OTHER shares the
-# institution with OUTCOME's engagement's outcomes, so a refusal reads
-# 'open'; after retirement, if frozen outcomes are excluded from the count,
-# OTHER is alone and the same refusal reads 'refused'. Re-running the
-# server's own count SQL would only test the SQL against itself.
+# engagement — the one that stays current. Since 0025 the gap register
+# attributes an evidence refusal only to the outcome the refusal names, so
+# OTHER's own refusal is 'refused' whether or not it has live siblings, and
+# a refusal naming no outcome is never attributed — not even once OTHER is
+# alone at the institution, which is exactly when the old guard misfired.
 OTHER="$(q "SELECT vo.id FROM value_outcomes vo
             JOIN engagements e ON e.id = vo.engagement_id AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
            WHERE vo.institution_id = '$INST' AND vo.engagement_id <> '$ENG'
@@ -103,29 +106,34 @@ REFUSED_EVIDENCE_BODY='{"kind":"observation","summary":"Verification refusal","p
 step "4. Before retirement"
 C="$(code GET "/api/value-outcomes/$OUTCOME/gaps")"
 [ "$C" != "409" ] && ok "gaps -> $C before retirement" || bad "gaps already 409 before retirement: $(msg)"
-if [ -n "$OTHER" ] && [ "$OTHER_LEFT" = "1" ]; then
+if [ -n "$OTHER" ]; then
   C="$(code POST "/api/value-outcomes/$OTHER/evidence" "$REFUSED_EVIDENCE_BODY")"
   [ "$C" = "422" ] && ok "refusal provoked on the second outcome -> 422  $(msg)" || bad "refusal -> $C (expected 422)  $(msg)"
+  [ "$(q "SELECT value_outcome_id FROM refusals ORDER BY refused_at DESC LIMIT 1")" = "$OTHER" ] \
+    && ok "the refusal row names the second outcome (value_outcome_id)" || bad "the refusal row does not name the second outcome"
+  # Exact match (0025): the refusal is the second outcome's own, so it is
+  # attributed at once — while OUTCOME's engagement's outcomes are still
+  # live beside it. Under the old single-outcome guard this read 'open'.
   C="$(code GET "/api/value-outcomes/$OTHER/gaps")"; S="$(baseline_state)"
-  [ "$S" = "open" ] && ok "second outcome's baseline gap reads 'open' — not alone at the institution, refusal not attributed" \
-    || bad "second outcome's baseline gap before retirement: $S (expected open; gaps -> $C)"
+  [ "$S" = "refused" ] && ok "second outcome's baseline gap reads 'refused' at once — its own refusal, siblings or not" \
+    || bad "second outcome's baseline gap: $S (expected refused; gaps -> $C)"
 
-  # The prod defect after 02dbcf3, reproduced: a refusal recorded at the
-  # institution BEFORE the second outcome existed. Written directly, with
-  # the same columns server/lib/refusal.ts's recordRefusal writes plus an
-  # explicit refused_at a day before the outcome's created_at. No API path
-  # can backdate a refusal, and that is the point: on prod the refusal was
-  # simply older than the outcome. supports = 'actual', so it cannot be
-  # confused with the baseline refusal provoked above.
+  # A refusal with NO outcome id — the shape every pre-0025 row has, prod's
+  # 30 August row included. Written directly: no API path writes a NULL
+  # value_outcome_id for the evidence endpoint any more. supports = 'actual',
+  # so it cannot be confused with the baseline refusal above.
   q "INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table,
-                           subject_id, sqlstate, constraint_name, message, attempted_payload, refused_at)
+                           subject_id, sqlstate, constraint_name, message, attempted_payload)
      SELECT i.tenant_id, i.id, '$ACTOR', 'POST /api/value-outcomes/:outcomeId/evidence', 'evidence',
-            NULL, 'P0001', NULL, 'Verification: a refusal from before this outcome existed.',
-            '{\"supports\":\"actual\"}'::jsonb, vo.created_at - interval '1 day'
+            NULL, 'P0001', NULL, 'Verification: a refusal that names no outcome.',
+            '{\"supports\":\"actual\"}'::jsonb
        FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id
       WHERE vo.id = '$OTHER'" > /dev/null \
-    && ok "backdated refusal recorded (supports actual, a day before the second outcome was created)" \
-    || bad "could not record the backdated refusal"
+    && ok "NULL-id refusal recorded at the second outcome's institution (supports actual)" \
+    || bad "could not record the NULL-id refusal"
+  S="$(node -e 'try{const b=require("/tmp/lvrf_r.json");const e=Array.isArray(b)?b.find(x=>x.factor==="actual_evidence_verified"):null;console.log(e?e.state:"absent")}catch{console.log("error")}')"
+  [ "$S" = "open" ] && ok "second outcome's actual gap reads 'open' — a refusal that names no outcome is never attributed" \
+    || bad "second outcome's actual gap: $S (expected open) — a NULL-id refusal was attributed"
 fi
 
 step "5. Retire the engagement"
@@ -143,18 +151,19 @@ frozen "gaps"     "$(code GET "/api/value-outcomes/$OUTCOME/gaps")"
 [ "$(q "SELECT count(*) FROM evidence WHERE institution_id = '$INST' AND summary = 'Verification'")" = "0" ] && ok "no evidence row was written by the refused request" || bad "a refused request wrote evidence"
 [ "$(q "$ROW_SQL")" = "$ROW_BEFORE" ] && ok "the frozen outcome's row is unchanged by the refused writes" || bad "outcome row changed: $ROW_BEFORE -> $(q "$ROW_SQL")"
 
-if [ -n "$OTHER" ] && [ "$OTHER_LEFT" = "1" ]; then
+if [ -n "$OTHER" ]; then
+  # Retiring a sibling engagement changes nothing about attribution now:
+  # the second outcome's own refusal stays its own, and the NULL-id one
+  # stays nobody's — even though the second outcome is now alone at the
+  # institution, which under the old guard is what flipped attribution on.
   C="$(code GET "/api/value-outcomes/$OTHER/gaps")"; S="$(baseline_state)"
-  [ "$S" = "refused" ] && ok "second outcome's baseline gap now reads 'refused' — the frozen outcomes no longer count, so it is alone and the refusal is attributed" \
-    || bad "second outcome's baseline gap after retirement: $S (expected refused; gaps -> $C) — frozen outcomes may still be counted"
-  # Same response, other side. The second outcome is now alone, so the
-  # single-outcome guard passes — the only thing keeping the backdated
-  # refusal off it is the time check.
+  [ "$S" = "refused" ] && ok "second outcome's baseline gap still reads 'refused' after the sibling engagement is retired" \
+    || bad "second outcome's baseline gap after retirement: $S (expected refused; gaps -> $C)"
   S="$(node -e 'try{const b=require("/tmp/lvrf_r.json");const e=Array.isArray(b)?b.find(x=>x.factor==="actual_evidence_verified"):null;console.log(e?e.state:"absent")}catch{console.log("error")}')"
-  [ "$S" = "open" ] && ok "second outcome's actual gap reads 'open' — a refusal from before the outcome existed is not attributed to it" \
-    || bad "second outcome's actual gap: $S (expected open) — a refusal older than the outcome was attributed to it"
+  [ "$S" = "open" ] && ok "second outcome's actual gap still reads 'open' — now alone at the institution, the NULL-id refusal is still not attributed" \
+    || bad "second outcome's actual gap after retirement: $S (expected open) — a NULL-id refusal was attributed once the outcome was alone"
 else
-  echo "  NOTE  single-outcome count not testable here: needs exactly one current outcome at the institution outside the retired engagement (found $OTHER_LEFT)"
+  echo "  NOTE  no second current outcome at the institution outside the retired engagement; attribution checks skipped"
 fi
 
 echo

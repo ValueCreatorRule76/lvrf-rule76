@@ -38,6 +38,12 @@ export interface RefusalContext {
   subjectId: string | null;
   tenantId: string | null;
   institutionId: string | null;
+  /**
+   * The value outcome the request targeted, once the route has resolved it
+   * (null before then, and for routes that are not about an outcome). The
+   * gap register attributes refusals to outcomes only on this exact match.
+   */
+  valueOutcomeId?: string | null;
   /** What was offered. Pass req.body verbatim — see recordRefusal below. */
   attemptedPayload: unknown;
 }
@@ -102,8 +108,9 @@ async function recordRefusal(
     await pool.query(
       `INSERT INTO refusals (
          tenant_id, institution_id, actor_person_id, endpoint, subject_table,
-         subject_id, sqlstate, constraint_name, message, attempted_payload
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         subject_id, sqlstate, constraint_name, message, attempted_payload,
+         value_outcome_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         context.tenantId,
         context.institutionId,
@@ -116,6 +123,7 @@ async function recordRefusal(
         message,
         // What was offered — req.body, unsanitised and untrimmed, is the point.
         context.attemptedPayload,
+        context.valueOutcomeId ?? null,
       ],
     );
   } catch (writeErr) {

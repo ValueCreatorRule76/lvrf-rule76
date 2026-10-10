@@ -102,6 +102,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
     // Captured for handleGovernanceError's refusal record.
     let refusalTenantId: string | null = null;
     let refusalInstitutionId: string | null = null;
+    // The outcome this request targets, once resolved — recorded on any
+    // refusal so the gap register can attribute it exactly (0025).
+    let refusalOutcomeId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -148,6 +151,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      refusalOutcomeId = outcome.id;
       // Retirement freezes an engagement (engagementRetire.ts): nothing
       // under it may change. A frozen outcome is not missing, so this is a
       // 409 naming why, not the 404 above.
@@ -292,6 +296,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         subjectId: outcomeId,
         tenantId: refusalTenantId,
         institutionId: refusalInstitutionId,
+        valueOutcomeId: refusalOutcomeId,
         attemptedPayload: req.body,
       })) {
         return;
@@ -315,6 +320,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
     // Captured for handleGovernanceError's refusal record.
     let refusalTenantId: string | null = null;
     let refusalInstitutionId: string | null = null;
+    // The outcome this request targets, once resolved — recorded on any
+    // refusal so the gap register can attribute it exactly (0025).
+    let refusalOutcomeId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -355,6 +363,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      refusalOutcomeId = outcome.id;
       // Retirement freezes an engagement (engagementRetire.ts): nothing
       // under it may change. A frozen outcome is not missing, so this is a
       // 409 naming why, not the 404 above.
@@ -458,6 +467,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         subjectId: outcomeId,
         tenantId: refusalTenantId,
         institutionId: refusalInstitutionId,
+        valueOutcomeId: refusalOutcomeId,
         attemptedPayload: req.body,
       })) {
         return;
@@ -479,6 +489,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
     // Captured for handleGovernanceError's refusal record.
     let refusalTenantId: string | null = null;
     let refusalInstitutionId: string | null = null;
+    // The outcome this request targets, once resolved — recorded on any
+    // refusal so the gap register can attribute it exactly (0025).
+    let refusalOutcomeId: string | null = null;
 
     try {
       const body = requireObject(req.body, 'body');
@@ -513,6 +526,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
       }
       refusalTenantId = outcome.tenant_id;
       refusalInstitutionId = outcome.institution_id;
+      refusalOutcomeId = outcome.id;
       // Retirement freezes an engagement (engagementRetire.ts): nothing
       // under it may change. A frozen outcome is not missing, so this is a
       // 409 naming why, not the 404 above.
@@ -651,6 +665,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         subjectId: outcomeId,
         tenantId: refusalTenantId,
         institutionId: refusalInstitutionId,
+        valueOutcomeId: refusalOutcomeId,
         attemptedPayload: req.body,
       })) {
         return;

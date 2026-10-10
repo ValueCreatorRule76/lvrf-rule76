@@ -1172,6 +1172,19 @@ export const refusals = pgTable('refusals', {
   subjectTable: text('subject_table').notNull(),
   /** The subject may not exist yet. */
   subjectId: text('subject_id'),
+  /**
+   * The value outcome the refused request targeted, when there was one —
+   * written by the outcome routes (evidence, commit, measure, verify) once
+   * the outcome is resolved. subject_id cannot carry it: for an evidence
+   * attach the subject is the evidence row, which never persists. The gap
+   * register attributes a refusal to an outcome ONLY on this exact match.
+   *
+   * Nullable, and NOT back-filled: rows written before 0025 do not say which
+   * outcome they targeted, and inferring it now would be the guess this
+   * column exists to remove. Those rows stay unattributed.
+   */
+  valueOutcomeId: uuid('value_outcome_id')
+    .references((): AnyPgColumn => valueOutcomes.id, { onDelete: 'restrict' }),
   /** Postgres SQLSTATE, e.g. '23514', '23505'. */
   sqlstate: text('sqlstate').notNull(),
   /** Postgres does not always supply one. */
@@ -1185,6 +1198,7 @@ export const refusals = pgTable('refusals', {
   index('refusals_tenant_idx').on(t.tenantId),
   index('refusals_subject_idx').on(t.subjectTable, t.subjectId),
   index('refusals_refused_at_idx').on(t.refusedAt),
+  index('refusals_value_outcome_idx').on(t.valueOutcomeId),
 ]);
 
 /* ================================================================== */

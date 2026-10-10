@@ -4849,11 +4849,9 @@ check to self-diagnose.
   `e3fb0061…` under `c47d075f…`). Filter them, or add an outcome retirement
   route if one is ever needed.~~ **Closed 10 October 2026.** See *Retirement
   freezes outcomes*. Four write paths were fixed as well.
-- **Evidence refusals should record the value outcome id at write time, and
-  the gap register should attribute only exact matches. Refusals without an
-  id stay unattributed.** Until then, attribution is a guess, bounded by the
-  single-outcome guard and, since 10 October, by the outcome's creation time.
-  See *The misattribution 02dbcf3 exposed on prod*.
+- ~~Evidence refusals should record the value outcome id at write time, and the gap
+  register should attribute only exact matches.~~ Closed 10 October 2026 by `0025` — see
+  *Refusals name their outcome*.
 
 ---
 
@@ -5865,3 +5863,82 @@ reviewed read-only, with GETs on 127.0.0.1:3001 as Brad Piver and SELECTs as
 - `bf6f5b2d…` gaps → 404, unchanged.
 - Prod's one refusal row is still there, and still unattributed to any
   current outcome. The cohort book is unchanged: `10.0` low, 1 of 1 measured.
+
+---
+
+## Refusals name their outcome — the guess is gone — 10 October 2026
+
+Migration `0025`: `refusals.value_outcome_id`, nullable, FK `value_outcomes` RESTRICT,
+indexed. Closes the Still outstanding item written an hour earlier.
+
+### What changed
+
+- `handleGovernanceError` takes an optional `valueOutcomeId` and writes it.
+- The four outcome routes — evidence, commit, measure, verify — pass the outcome's id
+  once they have resolved it. Before resolution it is null, which is accurate.
+- The gap register's `findEvidenceRefusal` matches **`value_outcome_id = this outcome`**
+  and nothing else.
+
+### What was deleted, and why that is the point
+
+Three things existed only to contain a guess, and all three are gone:
+
+- the **single-outcome-at-institution guard** (attribute only if the outcome is its
+  institution's only live one),
+- the **`created_at` bound** added in `e324bf5` (ignore refusals older than the outcome),
+- the **frozen-outcome exclusion in that count**, added in `02dbcf3` — the count no
+  longer exists, so there is nothing to exclude from.
+
+Tonight's sequence is the argument: `02dbcf3` fixed one thing and made the guess true on
+prod; `e324bf5` bounded the guess; `0025` removes it. A guess contained twice is still a
+guess.
+
+### No back-fill, and what it costs
+
+Existing refusals did not record their target. Inferring one now would be the guess
+again. They stay NULL and are **never** attributed — on prod that is the single 30 August
+AMENDMENT-005 row, which will no longer appear on any work list. That is correct: nobody
+can say from the stored row which outcome it was about.
+
+A commit that supersedes an outcome creates a new row with a new id; refusals made
+against the predecessor read `open` on the successor. Same as before, now by exact
+match rather than by date.
+
+No trigger change: still 82. `hardening.sql` unchanged.
+
+### Verification
+
+`scripts/verify_refusal_attribution.sh`: clone, migrate to 0025, harden, 82 triggers,
+existing refusals all NULL (no back-fill). Then at an institution with two current
+outcomes: a refusal provoked on A records A; A's gap reads `refused`; B's is unchanged —
+under the old guard both read `open`, because two live outcomes made attribution
+impossible. A legacy-shaped refusal with no outcome id is attributed to neither.
+
+**Tightened at Gate A.** A and B were first picked by age. Locally that gave
+two verified outcomes that may list no evidence gap at all, so "B unchanged"
+and "not the legacy refusal" could pass on `absent == absent`. The script now
+picks A and B through the gap register itself, choosing two outcomes at one
+institution that both list `baseline_evidence_verified` and
+`actual_evidence_verified` as `open`. It also asserts `open` exactly rather
+than "not refused".
+
+**The exact-match test fails against `e324bf5`'s `gapRegister.ts`:** 12 passed,
+1 failed — *"A baseline: open (expected refused)"*. The old guard will not
+attribute while A has a live sibling. With 0025's register the run is 13
+passed, 0 failed.
+
+`scripts/verify_frozen_outcomes.sh` asserted the old single-outcome behaviour:
+a second outcome reading `open` while not alone and `refused` once alone, plus
+the backdated-refusal case. Those assertions test code that no longer exists.
+They now check:
+
+- The second outcome's own refusal names it and reads `refused` at once,
+  siblings or not.
+- A refusal that names no outcome reads `open`, both before and after the
+  sibling engagement is retired. That includes once the outcome is alone,
+  which is exactly when the old guard misfired.
+
+Every freeze assertion is kept. That script also now **migrates and hardens
+its clone**. Local `lvrf` is still at 0024, and the server code now reads and
+writes `refusals.value_outcome_id`, so an unmigrated clone would have broken
+`/gaps` and silently failed to record refusals. Result: 21 passed, 0 failed.
