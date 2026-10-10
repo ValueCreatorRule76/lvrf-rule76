@@ -10,6 +10,7 @@ import { runsRouter } from './routes/runs.js';
 import { runsIndexRouter } from './routes/runsIndex.js';
 import { accountInputsRouter } from './routes/accountInputs.js';
 import { institutionFactsRouter } from './routes/institutionFacts.js';
+import { cohortRouter } from './routes/cohort.js';
 import { institutionsIndexRouter } from './routes/institutionsIndex.js';
 import { offeringAttachmentRouter } from './routes/offeringAttachment.js';
 import { institutionClassifyRouter } from './routes/institutionClassify.js';
@@ -62,6 +63,7 @@ app.use('/api/industries', industryResearchRouter(pool));
 app.use('/api/industries', industryPackRouter(pool));
 app.use('/api/research-results', researchResultsReviewRouter(pool));
 app.use('/api/capabilities', capabilityClaimsRouter(pool));
+app.use('/api/cohort', cohortRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchInstitutions, type FetchInstitutionsResult } from '../api/institutions';
 import { Card } from '../components/workbench/Card';
 import { CreateAccountCard } from '../components/CreateAccountCard';
+import { CohortCard } from '../components/CohortCard';
 
 // The front door. Card 00 is this table; CreateAccountCard (card 01, its
 // own number, unchanged) moved here from RunsIndexPage — it is an
@@ -82,6 +83,7 @@ export function AccountsIndexPage() {
       </Card>
 
       <CreateAccountCard />
+      <CohortCard n="02" />
     </div>
   );
 }

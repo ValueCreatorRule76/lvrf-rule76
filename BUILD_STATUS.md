@@ -5450,3 +5450,120 @@ waiting for a person's judgement**. None of them is in any database.
   reviewer raised is invisible to the account manager reading the pack.
 - **No pack is ratified.** Ratification needs sourcing at N=2 institutions, and
   the threshold is not lowered to fix that.
+
+---
+
+## 2.0 item 3 — cohort roll-up, weakest link — 10 October 2026
+
+`GET /api/cohort`, and card 02 on the accounts page. Value spine stage: **verify**
+— it is a read of what has been verified, across accounts.
+
+### What a cohort is, and what it is not
+
+The actor's tenant's **customer** accounts: the whole book, and each industry's
+accounts via `industry_id`. The tenant's own account is excluded — the vendor
+measuring itself is a different question from its customers' records.
+
+"Cohort" also means *several outcomes in one engagement* in the 1.2 payload note.
+**That is not what this computes.** A run still holds exactly one outcome, and the
+payload change that meaning needs is untouched.
+
+### The rule: the minimum, never an average
+
+The composite is the **minimum** across members. There is no mean, median or
+weighted sum anywhere in `cohort.ts`, and the verification script greps the
+response for one. One account at 10 and three at 80 average to 62, which describes
+no account.
+
+A **member is one current engagement**; its score is its **latest locked run's**
+`confidence_score`. Unlocked runs do not stand in — a mutable snapshot is not a
+record, the same reason `compareRuns` refuses them.
+
+### Unmeasured is not compliant
+
+A member with no run of record says why: `no_engagement`, `never_run`, or
+`no_locked_run`. It sorts first and sets the floor.
+
+**Unmeasured is empty, not 0.** The first cut gave an unmeasured member a
+score of 0 and rendered a large "0" for the book. Gate A review changed that.
+CLAUDE.md says *a number that cannot be sourced stays empty, and the record
+says so*, and a 0 for an engagement nobody measured is a number nobody sourced.
+Now:
+
+- An unmeasured member's `confidence_score` and `confidence_band` are **null**.
+- When the floor is unmeasured, `composite.score` and `composite.band` are
+  **null**, `floor: 'unmeasured'` says why, and `determined_by` names the
+  member. The card shows **"No score"** in words, never a number.
+- When the floor is a run, `composite.score` is that run's `confidence_score`
+  **as stored** (a pg numeric string), not `Number()` of it.
+- The old `effective_score` is now **`sort_key`**: an internal ordering key,
+  never a score. It is 0 for unmeasured, so those members sort first, and the
+  stored score otherwise. A recorded run of 0 ties with an unmeasured member,
+  and the unmeasured one sorts first, so the composite stays null rather than
+  borrowing that run's 0.
+
+**`composite.lowest_recorded` is context, never the score.** It holds the
+lowest run of record among measured members, or null if there is none. On an
+unmeasured floor the card shows it on a smaller second line: *"Lowest run of
+record: … excluding n unmeasured."* That tells a reader what was recorded
+without letting it stand in for what the cohort scores.
+
+An unmeasured floor has **no band**. Banding it would mean restating the model's
+thresholds outside `confidenceModel.ts`, where they are part of the fingerprint; a
+run's band is read from the run, and a member with no run has none.
+
+**The account page and card 02 can disagree, on purpose.** An account page
+shows its latest run, locked or not. Card 02 counts only locked runs. Locally,
+Northgate's account page reads "80.0 · HIGH", from the latest of 14 unlocked
+runs, while card 02 lists that engagement as unmeasured. Both are right. The
+card says so under its explanation: *"Only locked runs count here; an account
+page shows its latest run, locked or not."*
+
+The card's *N unclassified accounts* note moved out of the By-industry block.
+When every account is unclassified, that block does not render, and the note
+was hidden in exactly the case it exists for.
+
+### Model versions qualify, they do not refuse
+
+Same posture as `compareRuns`. A minimum across runs with different fingerprints,
+or across runs that predate versioning, is still the honest minimum of what was
+recorded — but not on one ruler. `model.comparable` is true only when every
+contributing run carries the same fingerprint, and the card shows MIXED RULERS
+otherwise. Most of Curia's locked runs predate versioning, so expect it.
+
+### A current view, not part of the record
+
+Like the gap register: recomputed from live rows on every request, nothing
+persisted, no write path, no migration, no trigger change (still 82). It reads
+stored scores and never recomputes confidence.
+
+### What prod will show
+
+One customer account. The book's composite is Curia's weakest engagement, and the
+pharmaceutical-biotechnology cohort is the same single account. **The roll-up is
+honest and thin until a second customer exists** — built now because it is a read
+that stores nothing, so the 1.2 rule against speculative write paths does not bite.
+
+### Verification
+
+`scripts/verify_cohort.sh`, on a clone (`lvrf_verifycohort`) dropped on exit.
+The checks are arithmetic, not snapshots:
+
+- If any member is unmeasured, the composite score is null and the floor is
+  `unmeasured`. Otherwise the composite equals the minimum stored score.
+- `lowest_recorded`, when present, equals the minimum stored score among runs
+  of record.
+- Members are sorted weakest first.
+- Every unmeasured member has a null score and a null band.
+- Every run of record is locked.
+- The tenant's own account is absent.
+- No average appears anywhere in the response.
+
+Then it adds an account with no engagement and checks that this account sets
+the floor, with a null score and no band, and that the unclassified count
+rises by exactly one.
+
+**Local data only exercises the unmeasured paths.** Local's one customer
+account is unclassified and has no locked run, so the run-floor and
+per-industry checks pass vacuously there. Prod, with Curia classified and
+locked runs, is the first real exercise of them.
