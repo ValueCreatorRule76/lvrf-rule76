@@ -6148,3 +6148,37 @@ against this code: `verify_pack_review.sh` 17 passed, 0 failed;
 ### Next
 
 The 13 decisions, one at a time, the same way the accepts were made.
+
+### Deployed — 10 October 2026
+
+`9006266` went to production. The migration was run by hand, in order, before
+the deploy:
+
+- **Backup:** `/home/brad/lvrf_pre_0026_20261010_114052.dump`, 525,354 bytes,
+  424 TOC entries, mode `600`, taken as `sudo -u postgres pg_dump -Fc lvrf`.
+- `git pull --ff-only` (`eec3536..9006266`) → `drizzle-kit migrate` applied
+  0026 → `hardening.sql` exit 0 → 82 triggers, 2 columns, index present.
+- `lvrf-deploy.sh` reported deploy OK. Service up since 11:42:52 UTC; the
+  bundle is now `index-2YI_7srW.js`, identical to the local build.
+
+**Reviewed read-only**, with GETs on 127.0.0.1:3001 as Brad Piver and SELECTs
+as `lvrf_app`. No POSTs.
+
+- Newest `__drizzle_migrations` row is 0026 (`1791631805702`). **82 distinct
+  triggers.**
+- `industry_measure_exclusions.proposed_by_research_tool` and `proposal_text`
+  exist, both nullable `text`. CHECK
+  `industry_measure_exclusions_proposal_is_complete` is present.
+- `research_results_one_accepted_per_measure` exists as a partial unique
+  index on `(industry_measures_id) WHERE review_state = 'accepted'`. It built,
+  which confirms no measure had two accepted results.
+- `industry_measure_exclusions` has 0 rows. **All three packs
+  (manufacturing, pharmaceutical-biotechnology, healthcare) return 200 with 4
+  measures each and `"exclusions": []`, an array.**
+- **The 12 reviews are unchanged.** 12 of 12 carry a review, 12 of 12
+  `reviewed_by` Brad Piver, and 12 of 12 match their `research_results` row
+  on note, research tool and `reviewed_at`. OTIF's note is still exactly as
+  accepted. `/api/health` returns 200 with the database connected.
+
+**Next:** the 13 exclusion decisions, one at a time. After them comes the
+commit-before-response fix (Still outstanding).
