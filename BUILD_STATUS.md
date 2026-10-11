@@ -4829,10 +4829,9 @@ check to self-diagnose.
   not-addressable Healthcare entry. See *Case mix index promoted*.
 - ~~**Write routes respond before COMMIT.**~~ Closed 10 October 2026 — see *Commit
   before the response*.
-- **Next: sign-in P3, the tenant check on every route** (writes and reads, one
-  helper, a coverage guard). Built 11 October; see *Sign-in P3* at the end of
-  this file. Deploy pending.
-- **Then: a supersession writer for institution facts** (after P3). Moved up from
+- ~~**Sign-in P3, the tenant check on every route.**~~ **Deployed 11 October 2026.**
+  Sign-in P1–P3 are complete; see *Sign-in P3* at the end of this file.
+- **Next: a supersession writer for institution facts.** Moved up from
   the workbench's own list on 11 October, because a real fact now needs
   correcting.
   - The column, its `_supersession_sane` trigger and `_no_delete` exist; the route
@@ -7466,3 +7465,49 @@ checked again.
 
 The second check already implies the tenant, because the account was
 tenant-checked first.
+
+### Deployed — 11 October 2026
+
+`bfb9371..75e92c3` (`d794f17` writes, `75e92c3` reads) went to production. There
+was no migration and no backup step.
+
+- **The deploy passed:** health 200, `origin_check=configured`, `actor_header=off`;
+  no-session 401; header-only 401; vhost 401; deploy OK.
+  - There was no re-exec: `lvrf-deploy.sh` did not change in P3.
+  - It was pasted twice. The second run was a no-op rebuild and restart, and it
+    also passed.
+  - The service has been up since **14:26:00 UTC**, and the bundle is still
+    `index-Bq_62G2h.js`.
+- **Cookie curl (Brad Piver, 14:27 UTC):**
+  - login 200; the cookie file was `-rw-------`;
+  - `me` 200;
+  - **`/api/institutions` now filters by tenant and returns the same two
+    accounts as before:** Curia (Pharmaceutical & Biotechnology, 1 engagement)
+    and Skillsoft (no industry, 1 engagement);
+  - his run `88f6a6e1…` 200;
+  - header-only 401; logout 200; `me` after logout 401; the cookie file was
+    deleted.
+- **Gate C, read-only, as `lvrf_app`:**
+  - HEAD is `75e92c3`, level with origin. Health reports `configured` / `off`.
+  - The curl session `9fc5c12f…` (14:27:22.58) was revoked at 14:27:22.67.
+  - The only live session is the browser session `4e6011a2…` (12:58:12).
+  - **No audit rows and no refusals since the restart; the last audit id is still
+    202.**
+  - 84 triggers, 1 tenant, 2 accounts, 1 credential.
+  - Both accounts carry the one tenant, so the P3 filter hides nothing on prod.
+
+## Sign-in P1–P3 complete — what protects prod now — 11 October 2026
+
+1. **Only a signed-in person acts.** argon2id passwords and server-side sessions
+   (HttpOnly, SameSite=Lax, Secure); every `/api` read and write needs a session.
+2. **The header cannot act in production.** `LVRF_ALLOW_ACTOR_HEADER=1` refuses to
+   start there, health reports `actor_header`, and the deploy fails unless it is
+   `off`.
+3. **Every write must be JSON and same-origin** (`LVRF_PUBLIC_ORIGIN`), and the API
+   listens on `127.0.0.1` only, behind Caddy's TLS and basic_auth.
+4. **Every route answers for the actor's tenant only.** Another tenant's id reads
+   as not found and is logged. A coverage guard fails any new route without a
+   tenant case.
+5. **The database still enforces the rest.** Audit triggers record the session's
+   person as actor, deletes are blocked, the audit log is append-only, and the
+   nightly `pg_dump` runs.
