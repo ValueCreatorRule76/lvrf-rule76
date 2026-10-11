@@ -211,6 +211,13 @@
       "when": 1791743666227,
       "tag": "0029_access_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791748891681,
+      "tag": "0030_supports_check",
+      "breakpoints": true
     }
   ]
 }

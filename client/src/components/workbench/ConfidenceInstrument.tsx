@@ -19,7 +19,9 @@ const FACTOR_LABEL: Record<ConfidenceFactorKey, string> = {
   impact_basis_evidenced: 'Impact basis stated and evidenced',
   metric_definition_confirmed: "Metric's calculation method known",
   actual_evidence_verified: 'Measured actual source-verified',
-  human_commit_of_record: 'Named human sponsor of record',
+  // L2 (hygiene, 11 Oct 2026): was 'sponsor' — the factor reads
+  // value_outcomes.committed_by_person_id, and its note says "Committed by".
+  human_commit_of_record: 'Named human committer of record',
   human_verifier_of_record: 'Named human verifier of record',
 };
 

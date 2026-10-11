@@ -869,9 +869,18 @@ export const valueOutcomes = pgTable('value_outcomes', {
 export const valueOutcomeEvidence = pgTable('value_outcome_evidence', {
   valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
   evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
-  /** Does this evidence support the baseline, the actual, or the impact basis? */
+  /**
+   * Does this evidence support the baseline, the actual, or the impact basis?
+   * 0030 (hygiene L3): held to those three by a CHECK. lvrf_block_ai_actual
+   * compares this column to 'actual', so a typo ('Actual', 'actuals') used
+   * to skip the gate silently; the route validated it, the database did not.
+   */
   supports: text('supports').notNull().default('baseline'),
-}, (t) => [primaryKey({ columns: [t.valueOutcomeId, t.evidenceId] })]);
+}, (t) => [
+  primaryKey({ columns: [t.valueOutcomeId, t.evidenceId] }),
+  check('value_outcome_evidence_supports_known',
+    sql`${t.supports} IN ('baseline', 'actual', 'impact_basis')`),
+]);
 
 /* ================================================================== */
 /* Value Run — the immutable snapshot                                 */

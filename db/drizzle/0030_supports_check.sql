@@ -1,0 +1,18 @@
+-- ------------------------------------------------------------------
+-- Hygiene L3: value_outcome_evidence.supports held to its three values.
+--
+-- WHAT IT CHANGES. One CHECK: supports IN ('baseline', 'actual',
+-- 'impact_basis'). lvrf_block_ai_actual (hardening.sql 5a) compares this
+-- column to 'actual'; until now only the route held the value to the list,
+-- so a direct write with a typo ('Actual', 'actuals') skipped the gate
+-- silently. The route keeps its own list, for a clear 422.
+--
+-- WHAT IT COULD ORPHAN. Nothing. Checked before writing it (11 October
+-- 2026): prod 8 rows (3 baseline, 2 actual, 3 impact_basis), local lvrf 109
+-- rows — every one already one of the three. No trigger change: 87 stays
+-- 87. BACK UP FIRST (CLAUDE.md rule 8).
+--
+-- Generated with `drizzle-kit generate --name supports_check`; statements
+-- are drizzle-kit's own output, unedited.
+-- ------------------------------------------------------------------
+ALTER TABLE "value_outcome_evidence" ADD CONSTRAINT "value_outcome_evidence_supports_known" CHECK ("value_outcome_evidence"."supports" IN ('baseline', 'actual', 'impact_basis'));

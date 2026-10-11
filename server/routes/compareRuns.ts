@@ -69,6 +69,20 @@ interface ComparedFactor {
   status: 'present' | 'added' | 'removed';
 }
 
+/**
+ * What a payload lacks for a factor-by-factor comparison, or null: the
+ * confidence block (score, band, factors[]) and the health block.
+ */
+function payloadGap(payload: Record<string, unknown>): string | null {
+  const c = payload.confidence as Record<string, unknown> | null | undefined;
+  if (!c || typeof c !== 'object') return 'the confidence block';
+  if (typeof c.score !== 'number' || typeof c.band !== 'string') return 'the confidence score and band';
+  if (!Array.isArray(c.factors)) return 'the confidence factors';
+  const h = payload.health as Record<string, unknown> | null | undefined;
+  if (!h || typeof h !== 'object') return 'the health block';
+  return null;
+}
+
 // GET /api/value-runs/:baselineRunId/compare/:comparisonRunId — compares two
 // locked value runs factor by factor. A read; writes nothing.
 export function compareRunsRouter(pool: Pool): Router {
@@ -136,6 +150,22 @@ export function compareRunsRouter(pool: Pool): Router {
           message: `value runs ${baselineRunId} and ${comparisonRunId} belong to different engagements; cannot compare`,
         });
         return;
+      }
+
+      // L5 (hygiene, 11 Oct 2026): a run whose payload predates the
+      // confidence block — or lacks its factors or the health block — cannot
+      // be compared factor by factor. Until this check, reading
+      // payload.confidence.modelVersion on such a run threw and answered
+      // 500. Now it is a 422 naming the run and what it lacks. No prod run
+      // lacks them (checked 11 Oct: 0 of 23); two local test runs do.
+      for (const run of [baseline, comparison]) {
+        const gap = payloadGap(run.payload);
+        if (gap) {
+          res.status(422).json({
+            message: `value run ${run.id} predates ${gap} in its payload; it cannot be compared factor by factor`,
+          });
+          return;
+        }
       }
 
       const bp = baseline.payload;
