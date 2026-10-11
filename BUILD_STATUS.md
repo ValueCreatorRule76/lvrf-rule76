@@ -6606,3 +6606,36 @@ skipping Caddy's TLS and basic_auth. Checked before deciding: Caddy proxies to
 `http://localhost:3001`. On macOS `localhost` can resolve to `::1` first, the
 trap CLAUDE.md already records for Caddy. Deliberately not changed in the P1
 commit.
+
+**Deployed — 11 October 2026.** `366a20f` went to production. The migration was run
+by hand before the deploy:
+
+- **Backup:** `~/lvrf_pre_0027_20261011_045238.dump`, 537,396 bytes, mode `600`,
+  425 TOC entries.
+- `git pull --ff-only` (`06c60a3..366a20f`) → `drizzle-kit migrate` applied 0027 →
+  `hardening.sql` exit 0. The two "does not exist, skipping" notices are the new
+  `_no_delete` triggers' DROP IF EXISTS.
+- `\d person_credentials` shows the `one_current` partial unique index, the
+  `hash_is_argon2id` CHECK, `_no_delete`, and no `_audit`. `\d sessions` shows
+  `token_hash_key`, `expiry_is_bounded`, `person_idx`, `_no_delete`, and no
+  `_audit`.
+- `lvrf-deploy.sh` reported deploy OK; service up since 04:55:53 UTC. The bundle
+  is unchanged (`index-2YI_7srW.js`, `index-D3ophAUX.css`).
+- **argon2 loads from `prebuilds/linux-x64/argon2.glibc.node`.** There is no
+  `build/` directory, so nothing was compiled on the box.
+
+**Gate C, read-only** (as `lvrf_app`, and via 127.0.0.1:3001):
+
+- Newest migration is 0027 (`1791634775340`). **84 triggers.** The new tables
+  carry exactly `person_credentials_no_delete` and `sessions_no_delete`.
+- Both tables are empty, with 0 `audit_log` rows for them.
+- `GET /api/auth/me` with no cookie returns **401**. `GET /api/cohort` with the
+  `X-Actor-Person-Id` header returns **200**: P1 is additive. `/api/health`
+  returns 200.
+- **One POST, not part of the spec:** a login for `nobody@example.invalid`, sent
+  to confirm the uniform answer on the live box. It returned 401 "Email or
+  password is incorrect.", wrote no rows (sessions and refusals both 0), and left
+  one entry in the in-memory limiter, which clears on restart or after 15
+  minutes. Its temp file was removed from the box.
+- Prod has **1** current vendor-staff person, still on the placeholder email.
+  Setting a real sign-in email comes next, through `scripts/set_email.ts`.
