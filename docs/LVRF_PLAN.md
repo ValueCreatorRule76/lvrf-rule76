@@ -107,7 +107,7 @@ on institution routes (P3).
 | L21 | Docs drift: `LVRF_Local_Setup.md` Phase 10 says "82 triggers" (now 84); `BUILD_STATUS.md`'s amendment table is stale on AMENDMENT-004; `CLAUDE.md`'s in-force list omits AMENDMENT-005 | read 11 Oct | Q3 hygiene (first two); `CLAUDE.md` edit is a decision (D7) |
 | L22 | Emblem gradient off-system; "STUDIO"/™ absent; raw ISO timestamp on the index; PNG weight | 1.0 *Deferred*; **unverified** whether still true | out of scope under the reference-implementation rule (*Roster cut to four*) unless a demo needs it |
 | L23 | Cathedral repo items: LVAF→LVRF across ~17 documents; Compass hierarchy contradiction; readiness percentages; CDS-001 unratified; Stone III | *Open Cathedral items* | outside this repo |
-| L24 | **Confidence weights as data** (the unfinished half of 2.0 item 1): `CONFIDENCE_FACTOR_WEIGHTS` and the band cut-offs are constants in `server/spine/confidenceModel.ts` | every run records `modelVersion` and the computed `modelFingerprint`, and `compareRuns` already flags a cross-fingerprint delta | **Tied to D6.** The choice: build weights as data, or decide that constants + the recorded fingerprint suffice, since the fingerprint already flags any change |
+| L24 | **Confidence weights as data** (the unfinished half of 2.0 item 1): `CONFIDENCE_FACTOR_WEIGHTS` and the band cut-offs are constants in `server/spine/confidenceModel.ts` | every run records `modelVersion` and the computed `modelFingerprint`, and `compareRuns` already flags a cross-fingerprint delta | **Optional, per D6** (Brad Piver, 11 Oct 2026). Model versions and thresholds change by commit and deploy; constants + the recorded `modelFingerprint` suffice, since the fingerprint already flags any change. Build weights as data only if a later need asks for it |
 
 ---
 
@@ -123,17 +123,14 @@ on institution routes (P3).
 | P4 | **Keep Caddy basic_auth**; revisit after 3.0 item 2, with the five prerequisites (L14) | Brad Piver, 11 Oct 2026 |
 | — | Customers do not sign in; 3.0 is research under Provenance, Truth and Governance | Author, 3.0 draft revision 2 |
 | — | P3: a tenant mismatch is a 404; it is logged, not recorded as a refusal; reads are in scope | Brad Piver, 11 Oct 2026 |
+| D3 | **Rejecting a research result is Brad-only.** Classify, offerings, validate, pack-basis and claims are authorized-user acts | Brad Piver, 11 Oct 2026 |
+| D4 | **`tenants.steward_person_id` identifies Brad** (the existing column) | Brad Piver, 11 Oct 2026 |
+| D5 | **Grants are made by a box script that records Brad as actor**, plus an **in-app change-password route**; no in-app grant screen | Brad Piver, 11 Oct 2026 |
+| D6 | **Model versions and thresholds change by commit and deploy** (the commit author is the decider). Weights as data is **optional** (L24) | Brad Piver, 11 Oct 2026 |
 
 ### Open: blocks the next item (Band A)
 
-Recommendations are recorded as **PROPOSED, pending Brad**. None is decided.
-
-| # | Decision | Options | Blocks | Recommendation |
-|---|---|---|---|---|
-| D3 | Q3 flags: is *reject* Brad-only? Are classify, offerings, validate, pack-basis and claims authorized-user acts? | as listed in the 3.0 draft revision note | 3.0 item 2 | **PROPOSED, pending Brad:** rejecting a research result is **Brad-only** (one review decision with accept); classify, offerings, validate, pack-basis and claims are **authorized-user** acts |
-| D4 | How the system knows who Brad is | `tenants.steward_person_id` (exists, NULL today); a role in `person_roles`; a new column | 3.0 items 1 and 2 | **PROPOSED, pending Brad:** `tenants.steward_person_id` = Brad, using the existing column |
-| D5 | Grant/revoke path | an audited API route behind item 2's check; or the SSH scripts made to record Brad as actor | 3.0 item 1 | **PROPOSED, pending Brad:** a **box script** that records the grant with Brad as actor (SSH is the trust root), plus an **in-app change-password route**, so a granted user replaces the starting password. No in-app grant screen yet |
-| D6 | Model versions and thresholds are changed by commit and deploy | accept git + deploy as the governance path (the commit author is the decider); or route them | 3.0 item 2's completeness; item 16; L24 | **PROPOSED, pending Brad:** model versions and thresholds change **by commit and deploy**, and the commit author is the decider; weights as data (L24) becomes optional |
+None. D3–D6 were decided on 11 October 2026 (above).
 
 ### Open: everything else
 
@@ -158,8 +155,8 @@ placement is a judgement.
 | # | Item | Depends on | Why here |
 |---|---|---|---|
 | ~~Q1~~ | ~~**Fact supersession**: deploy (0028, backup first), then Brad's LVAF → "LVRF (value realization records)" correction, then Gate C~~ **DONE 11 Oct 2026.** Deployed `cb666e9`; corrected by Brad at 18:16 UTC; Gate C clean | — | 2.0's last item is closed |
-| Q2 | **3.0 item 1 — an access grant is a record** | D4, D5 | Band A first: the next user must be granted by an act that names Brad |
-| Q3 | **3.0 item 2 — Brad-only acts, one shared check** | Q2; D3, D4, D6 | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
+| Q2 | **3.0 item 1 — an access grant is a record** | D4, D5 (decided) | Band A first: the next user must be granted by an act that names Brad |
+| Q3 | **3.0 item 2 — Brad-only acts, one shared check** | Q2; D3, D4, D6 (decided) | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
 | Q3a | Hygiene batch: L5 (compare 500 → 422), L2 (panel label), L3 (`supports` CHECK), L21 (two doc fixes) | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |
 | Q4 | **D2–D4 drift checks**, with L16 (what governance each composite table owes) | — | Band B adds migrations (entity, regime, addressable population, sources). D2 guards exactly that; D4 guards the supersession chains facts (Q1) and entities (item 3) now use. Cheapest before the schema grows |
 | Q5 | **Recons: 3.0 item 9** (the pack prompt is composed from live rows; the parser validates the same definition). Item 10's recon is done (no fact is a run input today) | — | the draft puts recons before item 6 |
