@@ -6984,7 +6984,88 @@ change on the box was one line in `/srv/lvrf/.env`.
     window, both his.
 - **The value was mistyped as `LVAF`.** It is left in place by decision and listed
   as the first correction for the fact supersession writer (Still outstanding).
-- **The sign-in after signing out does not appear on the server.** Sessions hold
-  only the 05:11 curl test and `8f40e4da…`, with nothing after 12:50:20. A
-  failed sign-in (wrong password, or the 429) creates no session. Open; to be
-  explained.
+- ~~**The sign-in after signing out does not appear on the server.**~~ Resolved:
+  Gate C's query ran before he signed in again. A read-only check afterwards
+  found the session, created at **12:58:12 UTC** and still live. Nothing was
+  wrong.
+
+## npm audit fix, and the deploy script re-runs itself — 11 October 2026
+
+Two commits, one deploy.
+
+### The non-forced audit fix (lockfiles only)
+
+`npm audit fix` was run without `--force` in the server and the client. Only the
+two lockfiles changed; both `package.json` files are byte-identical (`cmp`).
+
+- Server: `proxy-addr` 2.0.7 → 2.0.8 (**clears the critical**), `qs` 6.15.3 → 6.16.0,
+  and `drizzle-kit` 0.31.10 → 0.31.11.
+- Client: `nanoid` 3.3.16 → 3.3.20, `source-map-js` 1.2.1 → 1.2.2.
+
+**What remains, all accepted:**
+
+- **Server, 4 moderate:** `esbuild` through `drizzle-kit`
+  (`@esbuild-kit/core-utils`, `@esbuild-kit/esm-loader`). This is a dev tool, and
+  this repo never runs an esbuild dev server.
+- **Client, 7 (5 high, 2 moderate):** `braces`, `chokidar`, `fast-glob`, `micromatch`,
+  `postcss-nested`, `postcss-selector-parser`, `tailwindcss`. All are build-time
+  only, and clearing them needs Tailwind 4, which is a deliberate upgrade rather
+  than an audit fix.
+
+**Regression:** all 11 verify scripts pass, 0 failed:
+
+| Script | Passed |
+|---|---|
+| `signin_p2a` | 49 |
+| `signin_p1` | 35 |
+| `set_email` | 29 |
+| `commit_before_response` | 17 |
+| `account_workbench` | 28 |
+| `cohort` | 27 |
+| `engagement_retire` | 17 |
+| `frozen_outcomes` | 21 |
+| `refusal_attribution` | 13 |
+| `pack_review` | 17 |
+| `exclusions` | 27 |
+
+The client `tsc` and build pass, with bundle `index-Bq_62G2h.js` unchanged. Lint
+shows only the existing `only-export-components` warning on `useActor`.
+
+### The deploy script re-runs itself when the pull changed it
+
+This fixes the P2a deploy's false failure. After `git pull`, `lvrf-deploy.sh`
+compares its own `git hash-object` from before and after the pull. If the hash
+changed, it runs `exec` on the new file with `LVRF_DEPLOY_REEXEC=1`, the old HEAD and
+the pull time. The re-run then:
+
+- skips the clean-tree check and the pull;
+- logs the range `old..new` from the first run;
+- carries on from `npm ci`.
+
+The re-run refuses in two cases:
+
+- it starts without the old HEAD or the pull time (the mode exists only for the
+  script's own re-run);
+- the file on disk is not HEAD's copy of the script. Its hash is still checked
+  against `HEAD:scripts/lvrf-deploy.sh`, so a second re-exec cannot happen.
+
+**Verified by `scripts/verify_deploy_reexec.sh`: 13 passed, 0 failed.** The setup
+touches no database, service or network:
+
+- a throwaway bare "origin" repo and a "box" clone;
+- the real script, with only `REPO_DIR` repointed;
+- a stub `npm` on PATH that stops each run at step 3.
+
+| Case | Result |
+|---|---|
+| A. A pull that changes the script | Exactly one re-exec. The new version runs once, `git pull` runs once, the old HEAD is carried, and the run reaches `npm ci`. |
+| B. A pull that does not change the script | No re-exec. |
+| C. `LVRF_DEPLOY_REEXEC=1` with no old HEAD | Refused, nothing built. |
+| D. A re-run whose file was edited after the pull | "refusing a second re-exec", nothing built. |
+
+**This deploy does not exercise the re-exec.** Bash on the box has already
+started reading the old script by the time the pull brings in the new one, so
+this deploy runs entirely on the old script. The old script's smoke test already
+expects 401, so it should pass. The first deploy that runs with the new script
+already on the box is the first that can re-exec, and it only does so if that
+pull changes the script again.

@@ -17,6 +17,15 @@
 #     open, and anything else that it is not up;
 #   - the vhost -> 401, Caddy's basic_auth in front of everything.
 # 127.0.0.1, never localhost: the API binds IPv4 loopback only.
+#
+# SELF-UPDATE. Bash keeps executing the file it started with, even after the
+# `git pull` below replaces it on disk — so a deploy that changes this
+# script used to run the OLD version's checks (seen at P2a, 11 October). Now,
+# if the pull changed this file, the script re-runs itself with `exec`: the
+# new version, with LVRF_DEPLOY_REEXEC=1, the old HEAD and the pull time
+# passed on. The re-run skips the clean-tree check and the pull (both done),
+# and it runs only if the file on disk is exactly HEAD's copy of this
+# script — so it can never re-exec a second time or run anything else.
 
 set -euo pipefail
 
@@ -38,20 +47,44 @@ if [ "$(id -u)" -eq 0 ]; then
   die "do not run this script as root or under sudo"
 fi
 
+# This file's absolute path, resolved before the cd below.
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+SELF_REL="scripts/lvrf-deploy.sh"
+
 cd "$REPO_DIR"
 
-# 1. Refuse to run if the working tree is dirty.
-if [ -n "$(git status --porcelain)" ]; then
-  die "working tree is dirty — commit, stash, or discard before deploying"
+if [ "${LVRF_DEPLOY_REEXEC:-}" = "1" ]; then
+  # Second pass: the first run has already checked the tree and pulled.
+  OLD_HEAD="${LVRF_DEPLOY_OLD_HEAD:-}"
+  PULL_TIME="${LVRF_DEPLOY_PULL_TIME:-}"
+  [ -n "$OLD_HEAD" ] && [ -n "$PULL_TIME" ] \
+    || die "LVRF_DEPLOY_REEXEC=1 without LVRF_DEPLOY_OLD_HEAD and LVRF_DEPLOY_PULL_TIME — this mode is only for the script's own re-run"
+  [ "$(git hash-object "$SELF")" = "$(git rev-parse "HEAD:${SELF_REL}")" ] \
+    || die "refusing a second re-exec: the running lvrf-deploy.sh is not HEAD's copy (the tree changed after the pull)"
+  NEW_HEAD="$(git rev-parse HEAD)"
+  log "re-running the updated lvrf-deploy.sh; pulled ${OLD_HEAD}..${NEW_HEAD} by the first run"
+else
+  # 1. Refuse to run if the working tree is dirty.
+  if [ -n "$(git status --porcelain)" ]; then
+    die "working tree is dirty — commit, stash, or discard before deploying"
+  fi
+
+  OLD_HEAD="$(git rev-parse HEAD)"
+  SELF_HASH_BEFORE="$(git hash-object "$SELF")"
+
+  # 2. Pull, capture old and new HEAD, print the range.
+  PULL_TIME="$(date +%s)"
+  git pull || die "git pull failed"
+  NEW_HEAD="$(git rev-parse HEAD)"
+  log "pulled ${OLD_HEAD}..${NEW_HEAD}"
+
+  # 2a. If this pull changed this script, run the new version instead.
+  if [ "$(git hash-object "$SELF")" != "$SELF_HASH_BEFORE" ]; then
+    log "lvrf-deploy.sh changed in this pull; re-running the new version"
+    exec env LVRF_DEPLOY_REEXEC=1 LVRF_DEPLOY_OLD_HEAD="$OLD_HEAD" LVRF_DEPLOY_PULL_TIME="$PULL_TIME" \
+      bash "$SELF" "$@"
+  fi
 fi
-
-OLD_HEAD="$(git rev-parse HEAD)"
-
-# 2. Pull, capture old and new HEAD, print the range.
-PULL_TIME="$(date +%s)"
-git pull || die "git pull failed"
-NEW_HEAD="$(git rev-parse HEAD)"
-log "pulled ${OLD_HEAD}..${NEW_HEAD}"
 
 # 3. Server build.
 npm ci || die "npm ci (server) failed"
