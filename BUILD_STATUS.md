@@ -7511,3 +7511,25 @@ was no migration and no backup step.
 5. **The database still enforces the rest.** Audit triggers record the session's
    person as actor, deletes are blocked, the audit log is append-only, and the
    nightly `pg_dump` runs.
+
+## P4 — Caddy basic_auth is kept (decision, 11 October 2026)
+
+**Decided by Brad Piver: keep basic_auth in front of everything.** It costs one
+extra prompt for the one person who signs in, and it keeps unauthenticated internet
+traffic off Express while sign-in is new and has no MFA.
+
+**When it is revisited:** when a second person needs access, and per the 3.0 draft
+(revision 3), only after its item 2 (the acts that are Brad's alone) is built.
+
+**Before removal, all of these, through the usual gates:**
+
+1. a per-email sign-in throttle across all IPs (today it is 5 failures per IP and
+   email per 15 minutes), plus an alarm on global failures;
+2. security headers: HSTS and a CSP;
+3. the `www` → apex redirect in Caddy (one origin, one cookie), then drop `www`
+   from `LVRF_PUBLIC_ORIGIN`;
+4. TOTP as an option for vendor staff;
+5. a flip of `lvrf-deploy.sh`'s vhost check, from "401 (basic_auth)" to "the
+   sign-in page is served, and `/api/*` without a session is 401".
+
+Removal itself is then one Caddy change plus that script change.
