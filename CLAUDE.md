@@ -80,12 +80,15 @@ Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
 **Installed:** Drizzle ORM 0.45.2 + Drizzle Kit 0.31.11, Express, `pg`. Migration
 `0000_far_praxagora.sql` applied locally; 18 heartbeats seeded; 24 triggers active.
 
-**Sign-in, P1 done (0027):** argon2id credentials for vendor staff, server-side
-sessions (`/api/auth/login|logout|me`), `scripts/set_password.ts`. **P2 and P3 remain:**
-P2 makes the session the actor; P3 adds a tenant check to every mutating route.
-**Until P2 ships, the `X-Actor-Person-Id` header in `actorContext.ts` is still the
-actor and still spoofable** — it must fail closed outside development, and Caddy
-basic_auth stays in front of everything.
+**Sign-in, P1–P2 done:** argon2id credentials for vendor staff (0027), server-side
+sessions (`/api/auth/login|logout|me`), `scripts/set_password.ts`. **The session is
+the only actor.** The `X-Actor-Person-Id` header is read only with
+`LVRF_ALLOW_ACTOR_HEADER=1` outside production, for the verify scripts; production
+with that flag refuses to start (`server/lib/actorHeader.ts`). Do not add another
+way to name the actor. Every mutating request must be JSON and same-origin
+(`server/lib/origin.ts`, `LVRF_PUBLIC_ORIGIN`); new routes inherit this and must not
+bypass it. **P3 remains:** a tenant check on every mutating route. Caddy basic_auth
+stays in front of everything until P4 decides otherwise.
 
 **Not yet:** React/Vite + Tailwind · WeasyPrint 69.0 on the VPS (`pip install weasyprint
 --break-system-packages`, fonts into `~/.fonts`, then **`fc-cache -f`** — skip it and

@@ -35,10 +35,12 @@ trap cleanup EXIT
 q() { psql -At -d "$VERIFY_DB" -c "$1"; }
 
 # start_server [ENV=VALUE ...] — env is passed through `env`, so an unset
-# LVRF_PUBLIC_ORIGIN / NODE_ENV stays unset unless named here.
+# LVRF_PUBLIC_ORIGIN / NODE_ENV stays unset unless named here. From P2b the
+# header this script exercises needs LVRF_ALLOW_ACTOR_HEADER=1; it is set
+# by default and overridden (last one wins) where production is simulated.
 start_server() {
   stop_server
-  env -u LVRF_PUBLIC_ORIGIN -u NODE_ENV DATABASE_URL="$VERIFY_URL" PORT="$PORT" "$@" npx tsx server/index.ts > /tmp/lvrf_p2a_server.log 2>&1 &
+  env -u LVRF_PUBLIC_ORIGIN -u NODE_ENV DATABASE_URL="$VERIFY_URL" PORT="$PORT" LVRF_ALLOW_ACTOR_HEADER=1 "$@" npx tsx server/index.ts > /tmp/lvrf_p2a_server.log 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && return 0; sleep 0.5; done
   return 1
@@ -99,7 +101,7 @@ BEFORE="$(q "SELECT count(*) FROM industry_measure_exclusions")"
 C="$(code POST "$X" "${JSON[@]}" -d "$(excl)")"; [ "$C" = "401" ] && ok "POST, no actor -> 401" || bad "no-actor write -> $C"
 [ "$(q "SELECT count(*) FROM industry_measure_exclusions")" = "$BEFORE" ] && ok "  ...and nothing was written" || bad "an unauthenticated write landed"
 
-step "6. The header, still accepted in P2a — vendor staff only"
+step "6. The header (LVRF_ALLOW_ACTOR_HEADER=1, as in P2a) — vendor staff only"
 C="$(code GET /api/cohort -H "x-actor-person-id: $STAFF")"; [ "$C" = "200" ] && ok "header, vendor staff -> 200" || bad "header staff -> $C"
 C="$(code GET /api/cohort -H "x-actor-person-id: $CUSTOMER")"; [ "$C" = "401" ] && ok "header, customer-side person -> 401 (customers do not act)" || bad "header customer -> $C"
 C="$(code GET /api/cohort -H "x-actor-person-id: $SIMULATED")"; [ "$C" = "401" ] && ok "header, simulated person -> 401" || bad "header simulated -> $C"
@@ -156,11 +158,13 @@ else
 fi
 
 step "12. Production with LVRF_PUBLIC_ORIGIN missing: fallback, loud, still guarded"
-start_server NODE_ENV=production && ok "server up (NODE_ENV=production, no LVRF_PUBLIC_ORIGIN)" || bad "server did not start"
+start_server NODE_ENV=production LVRF_ALLOW_ACTOR_HEADER=0 && ok "server up (NODE_ENV=production, no LVRF_PUBLIC_ORIGIN)" || bad "server did not start"
 code GET /api/health > /dev/null; [ "$(rj .origin_check)" = "fallback" ] && ok "health origin_check fallback (lvrf-deploy.sh fails on this)" || bad "health: $(rj .origin_check)"
 grep -q "LVRF_PUBLIC_ORIGIN is not set in production" /tmp/lvrf_p2a_server.log && ok "startup log says so" || bad "no startup warning"
-C="$(code POST "$X" "${JSON[@]}" -H "x-actor-person-id: $STAFF" -H "origin: http://127.0.0.1:$PORT" -d "$(excl)")"; [ "$C" = "201" ] && ok "Origin = the request's own origin -> 201 (the site still works)" || bad "own-origin write -> $C $(msg)"
-C="$(code POST "$X" "${JSON[@]}" -H "x-actor-person-id: $STAFF" -H 'origin: https://evil.example' -d "$(excl)")"; [ "$C" = "403" ] && ok "foreign Origin -> 403 (writes are not opened)" || bad "foreign origin in fallback -> $C"
+# Production takes no header (P2b): these writes come through a session.
+code POST /api/auth/login "${JSON[@]}" -c "$JAR" -d "{\"email\":\"$STAFF_EMAIL\",\"password\":\"$PW\"}" > /dev/null
+C="$(code POST "$X" "${JSON[@]}" -b "$JAR" -H "origin: http://127.0.0.1:$PORT" -d "$(excl)")"; [ "$C" = "201" ] && ok "Origin = the request's own origin -> 201 (the site still works)" || bad "own-origin write -> $C $(msg)"
+C="$(code POST "$X" "${JSON[@]}" -b "$JAR" -H 'origin: https://evil.example' -d "$(excl)")"; [ "$C" = "403" ] && ok "foreign Origin -> 403 (writes are not opened)" || bad "foreign origin in fallback -> $C"
 stop_server
 
 step "13. Unchanged"

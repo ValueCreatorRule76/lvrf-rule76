@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
+import type { ActorHeaderMode } from '../lib/actorHeader.js';
 import { resolveActor } from '../lib/session.js';
 
 /**
@@ -11,10 +12,12 @@ import { resolveActor } from '../lib/session.js';
  *
  * Mounted after /api/health and /api/auth, before actorContext. Sets
  * req.actor; actorContext and every route read it instead of the header.
+ * From P2b the actor is the session; the header counts only in headerMode
+ * 'on' (lib/actorHeader.ts).
  */
-export function requireActor(pool: Pool) {
+export function requireActor(pool: Pool, headerMode: ActorHeaderMode) {
   return function requireActorMiddleware(req: Request, res: Response, next: NextFunction): void {
-    resolveActor(pool, req)
+    resolveActor(pool, req, headerMode)
       .then((actor) => {
         if (!actor) {
           res.status(401).json({ message: 'Sign in to continue.' });

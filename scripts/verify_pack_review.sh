@@ -46,7 +46,7 @@ DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /tmp/lvrf_review_migrate.lo
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_review_hardening.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"
-DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_review_server.log 2>&1 &
+LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_review_server.log 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
 curl -s -o /dev/null "$BASE/api/health" && ok "server up" || { bad "server did not start"; exit 1; }

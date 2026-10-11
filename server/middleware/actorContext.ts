@@ -9,8 +9,9 @@ import type { Pool, PoolClient } from 'pg';
  * bind parameters.
  *
  * THE ACTOR COMES FROM req.actor (sign-in P2a), set by requireActor before
- * this middleware runs: the signed-in session, or — still, in P2a — the
- * X-Actor-Person-Id header. Either way resolveActor has already confirmed
+ * this middleware runs: the signed-in session, or — for the verify scripts
+ * only, outside production (P2b) — the X-Actor-Person-Id header. Either way
+ * resolveActor has already confirmed
  * a current, non-simulated vendor-staff person, so nothing here re-reads
  * the header or re-checks the person.
  */

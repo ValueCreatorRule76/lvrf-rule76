@@ -61,7 +61,7 @@ SQL
 ok "clone-only deferred trigger installed"
 
 step "3. API against the clone, port ${PORT}"
-DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_commit_server.log 2>&1 &
+LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_commit_server.log 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
 curl -s -o /dev/null "$BASE/api/health" && ok "server up" || { bad "server did not start"; exit 1; }

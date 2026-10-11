@@ -7094,3 +7094,103 @@ pull changes the script again.
     holds a credential or a session.
 - **The first deploy that can re-exec** is the next one after this, and only if
   its pull changes `lvrf-deploy.sh`.
+
+## Sign-in P2b — the header is off; the session is the only actor — 11 October 2026
+
+From P2b, the only way to act in production is a signed-in session.
+
+### What P2b changes
+
+- **`server/lib/actorHeader.ts`** reads `LVRF_ALLOW_ACTOR_HEADER`:
+
+  | Value | Result |
+  |---|---|
+  | unset, `''` or `0` | off |
+  | `1` | on, outside production only |
+  | anything else | the server refuses to start |
+
+  **The startup guard:** `NODE_ENV=production` with the flag set to `1` refuses to
+  start. The flag is not quietly ignored: a production `.env` asking for the
+  header is a mistake to fix.
+- **`resolveActor`** reads the header only when the mode is `on`. When it's off, a
+  request with a header and no session gets 401 like any other. A session still
+  wins over a header in every mode.
+- **`/api/health`** reports `actor_header`, and the startup log names the mode. With
+  the header on, it also logs a warning.
+- **`lvrf-deploy.sh`** step 7 now also fails unless:
+  - `actor_header` is `off`;
+  - a header naming a current vendor-staff person with no session gets 401. The id
+    comes from a `SELECT` as `lvrf_app`, via `.env`'s `DATABASE_URL`.
+- **The verify scripts that drive the API with the header** set
+  `LVRF_ALLOW_ACTOR_HEADER=1` on their own throwaway server: account_workbench,
+  cohort, commit_before_response, engagement_retire, exclusions, frozen_outcomes,
+  pack_review, refusal_attribution, signin_p1, signin_p2a. `set_email` sends no
+  header and doesn't set it.
+  - In `signin_p2a`, the flag is set by default, and its simulated-production
+    step signs in instead of using the header.
+- **The client is unchanged.** It has sent no header since P2a. Local use is through
+  the sign-in page: `LVRF_Local_Setup.md` Phase 11. Local `lvrf` is at 0026 (82
+  triggers) and needs 0027 before anyone can sign in there; that phase gives the
+  backup, migrate and `set_password` steps.
+
+There is no migration and no schema change; triggers stay at 84.
+
+### The way back
+
+The startup guard means **no `.env` setting re-opens the header in production.**
+That is deliberate.
+
+- **The way back from P2b is reverting its commit and redeploying:**
+
+  ```
+  git revert <P2b sha> && git push
+  ./scripts/lvrf-deploy.sh
+  ```
+
+  `lvrf-deploy.sh` will re-exec, because the revert changes it, and run the P2a
+  checks. P2a accepted the header for current vendor staff, so it is a working state
+  to fall back to.
+- **If sign-in itself breaks** (a lost password, or a bad credential):
+  - SSH to the box is unaffected;
+  - `npx tsx scripts/set_password.ts <email>` from `/srv/lvrf` sets a new password
+    directly. It needs no session and no running server.
+
+  These two are the backstops; neither needs the header.
+
+### Gate A
+
+- **`verify_signin_p2b.sh` passes 44/0**, on a throwaway clone:
+  - dev, flag unset and flag `0`: health `off`; a header naming staff → 401 for a
+    GET and for a write, with nothing written. Sign-in works, and a session write
+    is audited as the signed-in person even with a header naming someone else.
+  - dev, flag `1`: health `on`, with the warning logged; header GET 200; header write
+    audited as the header's person; a session still beats the header.
+  - **production + flag `1`**: refuses to start, and nothing listens.
+  - **malformed (`true`, `yes`)**: refuses to start, in dev and in production.
+  - production, flag unset or `0`: starts, `off`, header 401, and the session works.
+  - 84 triggers, unchanged.
+- **Four deliberate breaks, each caught, then restored byte-identical:**
+
+  | Break | Result |
+  |---|---|
+  | The header always read | 10 FAIL |
+  | `requireActor` forcing `on` | 10 FAIL |
+  | No startup guard | 2 FAIL |
+  | Malformed values accepted | 4 FAIL |
+
+  **The no-guard break first hung the script instead of failing it.** A server
+  that wrongly starts never exits, and `must_refuse` waited on it. `must_refuse`
+  now gives a refused start 20 seconds and fails on a server that is still running.
+- **The deploy smoke block was run against a local clone:**
+  - production, flag unset: passes (health `off`, 401, header 401);
+  - dev, flag `1`: fails with `header=200`, as it should.
+- **Regression:**
+  - all 13 verify scripts pass, 0 failed: p2b 44, deploy_reexec 13, p2a 49, p1 35,
+    set_email 29, commit_before_response 17, account_workbench 28, cohort 27,
+    engagement_retire 17, frozen_outcomes 21, refusal_attribution 13,
+    pack_review 17, exclusions 27;
+  - the client `tsc` and build pass, with bundle `index-Bq_62G2h.js`;
+  - lint shows only the existing warning.
+- **The P2b deploy is the first to exercise the re-exec.** The pull changes
+  `lvrf-deploy.sh`, so the old script should log "changed in this pull; re-running
+  the new version". The new step 7 checks then run.

@@ -2,10 +2,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from '../routes/params.js';
+import type { ActorHeaderMode } from './actorHeader.js';
 
 /**
- * Sign-in sessions (0027). Shared by routes/auth.ts (P1) and, from P2, by
- * the middleware that replaces the X-Actor-Person-Id header.
+ * Sign-in sessions (0027). Shared by routes/auth.ts (P1) and by
+ * requireActor (P2), which makes the session the actor.
  *
  * The browser holds a random 32-byte token in an HttpOnly cookie; the
  * database holds only its SHA-256 (sessions.token_hash), so a read of the
@@ -134,7 +135,7 @@ export interface Actor {
   personId: string;
   tenantId: string;
   fullName: string;
-  /** How the actor was established — a session, or the P1 header. */
+  /** How the actor was established — a session, or (scripts only) the header. */
   via: 'session' | 'header';
 }
 
@@ -152,9 +153,10 @@ declare global {
  *   1. A valid session cookie. If present, it is the actor, and any
  *      X-Actor-Person-Id header is ignored — a signed-in tab cannot be
  *      steered by a header.
- *   2. Otherwise the X-Actor-Person-Id header — still accepted everywhere
- *      in P2a. P2b accepts it only with LVRF_ALLOW_ACTOR_HEADER=1 outside
- *      production.
+ *   2. Otherwise the X-Actor-Person-Id header, ONLY when headerMode is
+ *      'on' — LVRF_ALLOW_ACTOR_HEADER=1 outside production, for the verify
+ *      scripts (lib/actorHeader.ts). Off, the header is never read: a
+ *      request carrying it and no session is a 401 like any other.
  *
  * Either way the actor must be CURRENT, NON-SIMULATED VENDOR STAFF.
  * Customer-side people are subjects of the record and can be named in a
@@ -163,11 +165,12 @@ declare global {
  * but they do not act. Checked against prod before P2a: no customer-side
  * or simulated person has ever been the actor on an audit_log row.
  */
-export async function resolveActor(pool: Pool, req: Request): Promise<Actor | null> {
+export async function resolveActor(pool: Pool, req: Request, headerMode: ActorHeaderMode): Promise<Actor | null> {
   const session = await resolveSession(pool, req);
   if (session) {
     return { personId: session.person_id, tenantId: session.tenant_id, fullName: session.full_name, via: 'session' };
   }
+  if (headerMode !== 'on') return null;
   const header = req.get('x-actor-person-id');
   if (!header || !isUuid(header)) return null;
   const { rows: [p] } = await pool.query<{ id: string; tenant_id: string; full_name: string }>(

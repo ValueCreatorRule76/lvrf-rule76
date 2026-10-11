@@ -12,9 +12,15 @@
 #   - GET /api/health on 127.0.0.1 -> 200, and it must report
 #     origin_check "configured": a missing LVRF_PUBLIC_ORIGIN fails the
 #     deploy here rather than passing silently (server/lib/origin.ts);
+#   - ...and it must report actor_header "off" (sign-in P2b): the
+#     X-Actor-Person-Id header is not accepted in production
+#     (server/lib/actorHeader.ts);
 #   - GET /api/runs/:id on 127.0.0.1 with no session -> 401. Since sign-in
 #     P2a every read needs an actor, so a 200 here would mean the app is
 #     open, and anything else that it is not up;
+#   - the same GET with an X-Actor-Person-Id header naming a CURRENT
+#     vendor-staff person (read from the database, a SELECT as lvrf_app)
+#     and no session -> 401. A 200 would mean the header still acts;
 #   - the vhost -> 401, Caddy's basic_auth in front of everything.
 # 127.0.0.1, never localhost: the API binds IPv4 loopback only.
 #
@@ -119,15 +125,26 @@ log "$SERVICE is active"
 HEALTH_BODY="$(curl -s -w '\n%{http_code}' "http://127.0.0.1:3001/api/health")"
 HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1)"
 ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4)"
+ACTOR_HEADER="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"actor_header":"[a-z]+"' | cut -d'"' -f4)"
 API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
+DB_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
+STAFF_ID="$(psql -X -At "$DB_URL" -c "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")" \
+  || die "could not read a vendor-staff id for the header check"
+[ -n "$STAFF_ID" ] || die "no current vendor-staff person to name in the header check"
+HEADER_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -H "X-Actor-Person-Id: ${STAFF_ID}" "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
 VHOST_STATUS="$(curl -sIk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/")"
 
 log "GET http://127.0.0.1:3001/api/health -> ${HEALTH_STATUS} (expect 200), origin_check=${ORIGIN_MODE:-<none>} (expect configured)"
+log "health actor_header=${ACTOR_HEADER:-<none>} (expect off)"
 log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} with no session -> ${API_STATUS} (expect 401: up and fail-closed)"
+log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} with X-Actor-Person-Id (vendor staff), no session -> ${HEADER_STATUS} (expect 401: the header does not act)"
 log "GET https://${DOMAIN}/ -> ${VHOST_STATUS} (expect 401, basic_auth)"
 
-if [ "$HEALTH_STATUS" != "200" ] || [ "$API_STATUS" != "401" ] || [ "$VHOST_STATUS" != "401" ]; then
-  die "unexpected response (health=${HEALTH_STATUS}, api=${API_STATUS}, vhost=${VHOST_STATUS})"
+if [ "$HEALTH_STATUS" != "200" ] || [ "$API_STATUS" != "401" ] || [ "$HEADER_STATUS" != "401" ] || [ "$VHOST_STATUS" != "401" ]; then
+  die "unexpected response (health=${HEALTH_STATUS}, api=${API_STATUS}, header=${HEADER_STATUS}, vhost=${VHOST_STATUS})"
+fi
+if [ "$ACTOR_HEADER" != "off" ]; then
+  die "actor_header is '${ACTOR_HEADER:-<none>}', not 'off' (the server should have refused to start with the header on in production)"
 fi
 if [ "$ORIGIN_MODE" != "configured" ]; then
   die "origin_check is '${ORIGIN_MODE:-<none>}', not 'configured': set LVRF_PUBLIC_ORIGIN in /srv/lvrf/.env (writes are still checked against the request's own origin meanwhile)"

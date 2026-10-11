@@ -85,7 +85,7 @@ FACT_TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT string_agg(DISTINCT trigger
 
 # ---------------------------------------------------------------------
 step "4. API server against the copy, port ${PORT}"
-DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_server.log 2>&1 &
+LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_server.log 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do
   curl -s -o /dev/null "$BASE/api/health" && break

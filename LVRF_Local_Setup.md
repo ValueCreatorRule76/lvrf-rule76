@@ -360,6 +360,60 @@ cd client && npm run dev
 Governed rows cannot be deleted. Anything written to `lvrf_prodcopy` stays until
 the next restore. Rerun the script to reset it.
 
+## Phase 11 — Signing in locally (sign-in P2b)
+
+**Use the app locally through the sign-in page, as on prod.** The client has
+sent no actor header since P2a. From P2b the server ignores the header unless
+`LVRF_ALLOW_ACTOR_HEADER=1`, and that flag is **for the verify scripts only**.
+Each verify script sets it on its own throwaway server. **Do not put it in
+`.env`.** If you do, `curl` with a header acts locally, which prod never
+allows, and the "flag unset" steps of `verify_signin_p2b.sh` have to stand in
+`0` for it.
+
+**1. Bring local `lvrf` up to 0027.** It needs `person_credentials` and
+`sessions`. Check where it is:
+
+```bash
+psql -At -d lvrf -c "SELECT count(*) FROM drizzle.__drizzle_migrations"   # 28 = through 0027
+```
+
+If it is short, back up first (CLAUDE.md rule 8), then migrate and harden:
+
+```bash
+pg_dump -Fc lvrf > ~/lvrf-backups/lvrf_local_pre0027_$(date +%Y%m%d_%H%M%S).dump
+npx drizzle-kit migrate
+psql -d lvrf -f db/hardening.sql
+psql -At -d lvrf -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema='public'"
+```
+
+The trigger count must equal the `Total: N distinct triggers` line in
+`db/hardening.sql`.
+
+**2. Give the local vendor-staff person a password.** There is no sign-up route.
+`scripts/set_password.ts` is the only writer of credentials, and it reads
+`DATABASE_URL` from `.env`, which is local `lvrf`. Find the email:
+
+```bash
+psql -At -d lvrf -c "SELECT email FROM persons WHERE tenant_id IS NOT NULL AND NOT simulated AND deleted_at IS NULL AND superseded_by_id IS NULL"
+npx tsx scripts/set_password.ts <that email>
+```
+
+It prompts twice, without echo, and needs at least 12 characters. Use a
+local-only password, never the prod one.
+
+**3. Run and sign in:**
+
+```bash
+npm run dev                  # API on 127.0.0.1:3001; logs "actor header: off"
+cd client && npm run dev     # open http://localhost:5173 and sign in
+```
+
+The same steps work against `lvrf_prodcopy` (Phase 10). Point `set_password.ts`
+at it the way the server is pointed, with the `DATABASE_URL=...lvrf_prodcopy`
+prefix. A snapshot taken after sign-in P1 carries prod's credential hash, so
+prod's password also works on the copy. A local one replaces it there until
+the next restore.
+
 ---
 
 # Appendix — Claude Code kickoff prompt
