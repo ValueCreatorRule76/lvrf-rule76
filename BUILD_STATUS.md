@@ -8185,3 +8185,41 @@ score.
   the L26 commit, including `verify_drift` and `verify_runs_list`). The client `tsc`,
   build and lint pass, with bundle **`index-B5F5IDzI.js`** (the runs table and the
   run page changed).
+
+### Deployed — 11 October 2026
+
+`177eb49..384e0bc` (`150e7a1` D2–D4, `b610dc9` L16, `9c007f3` L26, `384e0bc` docs)
+went to production. There was no migration; `hardening.sql` added section 17.
+
+- **Backup:** `~/lvrf_pre_q4_20261011_224814.dump` (569,093 bytes, `-rw-------`, 451
+  TOC entries), taken with the box at `177eb49`.
+- **Hardening:**
+  - exit 0, with the 8 expected "does not exist, skipping" notices;
+  - **95 triggers**;
+  - 0030 still newest (row 31);
+  - all four link tables have `_audit` and `_no_delete` (`value_outcome_evidence`
+    also `_no_ai_actual`).
+- **Deploy:**
+  - **No re-exec.** That was correct: paste 2 had already pulled, so the deploy
+    started on the new script with nothing to pull. The plan's "expect the re-exec
+    line" was wrong for this sequence: a re-exec happens only when the deploy's own
+    pull changes the script.
+  - Pre-check 0.
+  - **Step 5c, before the restart:** "schema drift: none (journal 31 migrations, newest
+    0030_supports_check; 706 schema objects match 0030_snapshot.json)" and "drift
+    checks D1, D3, D4: no findings".
+  - Every smoke check passed; deploy OK, exit 0; HEAD `384e0bc`; bundle
+    **`index-B5F5IDzI.js`**. Up since **22:50:13 UTC**.
+- **The browser:** Brad's report left this line as a placeholder ("[Runs 2–21 show
+  Curia + RETIRED ENGAGEMENT / or describe]"), so it is **not confirmed from the
+  browser**. Server side:
+  - the served bundle contains "retired engagement";
+  - the runs-list query, run read-only on prod exactly as `runsIndex.ts` now builds
+    it, returns **Curia with `engagement_retired` true for runs 1–21** of the
+    reference example;
+  - Curia's lot-acceptance run 1 and Customer Zero's run come back with their
+    accounts and `engagement_retired` false.
+- **Gate C, read-only, as `lvrf_app`, on the box:**
+  - `check_schema_drift.mjs`: none. `drift_report.ts`: no findings.
+  - 95 triggers; `hardening_manifest` holds 95 rows.
+  - No audit rows or refusals since the restart; the last audit id is still 207.
