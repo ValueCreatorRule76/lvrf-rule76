@@ -13,10 +13,14 @@
 | `AMENDMENT-001` — Chapel reorientation, LVAF→LVRF, Learning ROI struck | **Ratified** |
 | `AMENDMENT-002` — Heartbeat Register extension, HB-0013..0018 | **Ratified** |
 | `AMENDMENT-003` — Financial as seventh health dimension | **Ratified** |
-| `AMENDMENT-004` — Pack as Cathedral canonical object | Not drafted |
+| `AMENDMENT-004` — UI semantic status palette | **Ratified** |
+| `AMENDMENT-005` — Deep Research, governed evidence acquisition | **In force** (Cathedral: Canonical; listed in `CLAUDE.md` by decision D7, 11 Oct 2026) |
 
-All three ratified amendments are implemented in code. Governance and implementation are
-in step — no drift outstanding.
+All five are implemented in code; AMENDMENT-005's evidence columns since migration 0002.
+*(Corrected 11 October 2026, hygiene L21. This row used to read "AMENDMENT-004 — Pack
+as Cathedral canonical object — Not drafted", and the line read "All three ratified
+amendments". Both were stale: `CLAUDE.md` A11 and the Cathedral record AMENDMENT-004
+as the UI semantic palette, ratified.)*
 
 ---
 
@@ -7935,3 +7939,71 @@ There was no migration.
 
 **3.0 Band A is complete:** item 1 (an access grant is a record) and item 2 (the acts
 that are Brad's alone, through one shared check) are both in production.
+
+## Q3a — the hygiene batch — 11 October 2026
+
+Four loose ends from `docs/LVRF_PLAN.md` §2, in one batch. Spine stages: L5 is
+`verify`, L2 `commit`, L3 `measure`, L21 documentation.
+
+- **L5: compare's 500 on old runs is now a 422.** `compareRuns.ts` read
+  `payload.confidence.modelVersion` without checking the block existed. A new
+  `payloadGap()` check covers the confidence block (score, band, factors) and the
+  health block, and answers **422** naming the run: *"value run X predates the
+  confidence block in its payload; it cannot be compared factor by factor"*. No prod
+  run lacks them (0 of 23); two local test runs do.
+- **L2: the panel label.** *"Named human sponsor of record"* now reads **"Named human
+  committer of record"**. The factor reads `committed_by_person_id`, and its note says
+  "Committed by". That was the last stale name in that family.
+- **L3: migration `0030_supports_check`.** A CHECK,
+  `value_outcome_evidence_supports_known`, requires `supports` to be one of
+  `baseline`, `actual`, `impact_basis`. `lvrf_block_ai_actual` compares this column
+  with `'actual'`, so a direct write with a typo used to skip the gate silently.
+  - Every existing value already passed: prod 8 rows, local 109.
+  - No trigger change (87). **Back up first.**
+  - The route keeps its own list, for its clear 422.
+- **L21: docs.**
+  - The constitutional table at the top of this file: the AMENDMENT-004 row,
+    "all five", and AMENDMENT-005 (D7).
+  - `LVRF_Local_Setup.md`'s stale "82 triggers" had already been fixed in Band A
+    deploy B.
+
+**Band B decisions** (Brad Piver, 11 Oct 2026) are recorded in `docs/LVRF_PLAN.md` §3
+and the 3.0 draft:
+- D1: research runs in LVRF, behind a declared Compass seam.
+- D2: the five-level derived vocabulary.
+- D7: AMENDMENT-005 is in force.
+- D8: spine stages for every 3.0 item.
+- D11: no amendment.
+- 3.0 revision 3 is adopted as the working plan, not ratified.
+
+D13 (the first real account for item 6) stays open and blocks item 6 only.
+
+### Gate A
+
+- **`verify_hygiene.sh`: 19 passed, 0 failed**, on a clone migrated to 0030.
+  - L2: the label, by source.
+  - L3:
+    - the CHECK is present and every existing row passed it;
+    - by SQL, `'Actual'`, `'actuals'` and `''` are refused, and so is an UPDATE to
+      `'Actual'`;
+    - `baseline` and `impact_basis` are accepted;
+    - the route still gives its own 422.
+  - L5: two locked, block-less runs → **422** with the message. Two freshly produced
+    and locked runs → **200**, scored by the same model.
+
+- **Two deliberate breaks, then restored byte-identical:**
+
+  | Break | Result |
+  |---|---|
+  | The compare guard removed | 1 FAIL: the old runs → **500** "Cannot read properties of undefined (reading 'modelVersion')", the defect itself |
+  | The CHECK removed from 0030 | 5 FAIL: `'Actual'` and `'actuals'` were accepted |
+
+- **Prod-copy equivalence:**
+  - A clone of `lvrf_prodcopy` took 0029 and 0030 cleanly, so the CHECK passes on
+    prod-shaped data.
+  - HEAD `06f95f3` and the hygiene tree, side by side: **99 GET requests across all
+    14 routes, 40 compare pairs among them: 0 differences.**
+- **Browser:** a run produced on a clone, signed in by session, shows the panel row
+  **"Named human committer of record — No committer of record has been named."**
+- **Regression:** all 19 verify scripts pass, 0 failed. The client `tsc`, build and
+  lint pass, with bundle `index-PSJT4mn6.js`.

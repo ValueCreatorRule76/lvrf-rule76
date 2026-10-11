@@ -1,7 +1,8 @@
 ## LVRF 3.0 — DRAFT, not ratified — 11 October 2026 (revision 3)
 
-**Status: proposed.** Nothing below is committed until it is ratified and moved into
-`BUILD_STATUS.md`. Where this draft and `CLAUDE.md` disagree, `CLAUDE.md` wins and the
+**Status: adopted as the working plan, not ratified.** *[rev 3: decided by Brad
+Piver, 11 October 2026; was "proposed". Q1, the doctrine source, stays open, so the
+draft is not ratified. The forward order lives in `docs/LVRF_PLAN.md`.]* Where this draft and `CLAUDE.md` disagree, `CLAUDE.md` wins and the
 conflict is named under *Open before ratification*.
 
 **Revision 3 changes only what the build has overtaken.** Every change is marked
@@ -286,52 +287,29 @@ unless this is decided first.
   `evidence.kind`, plus `source_verified`, `ai_sourced`, `citation_resolved`,
   `simulated` and the attester where needed. Nothing is stored beside it, so there
   is nothing to drift.
-- **The proposed mapping, for Brad to confirm.** *[rev 3: proposal only; not
-  built.]* Rules are applied in order, and the first that matches decides:
+- **The mapping, DECIDED by Brad Piver, 11 October 2026 (plan D2).** *[rev 3: this
+  replaced a proposal with five flagged kinds.]* Five levels, strongest first:
+  **system of record > published > client-stated > inferred > assumed** (the floor).
+  The five-level order is a **product decision citing AMENDMENT-005**, not a new
+  evidence class: the basis is derived and nothing new is stored (D11: no
+  amendment). Rules are applied in order, and the first that matches decides:
 
   | # | Condition | Basis |
   |---|---|---|
   | 1 | `simulated = true` | **assumed**, always |
-  | 2 | `ai_sourced = true` and `citation_resolved = false` | **assumed** until a person opens the citation, whatever the kind. A model's claim that a source says something is not yet the source |
-  | 3 | `public_filing` | **published** |
-  | 4 | `attestation` **with** a non-simulated, customer-side `attested_by` and `attested_at` | **client-stated** (named person, dated) |
-  | 5 | `attestation` without a customer-side attester | **assumed**: a vendor's report that the client said it |
-  | 6 | `system_export` | **client-stated**. ⚠ See flag A |
-  | 7 | `observation` | **inferred**: a named person's judgment from what they saw. ⚠ See flag B |
-  | 8 | `vendor_publication` | ⚠ See flag C |
-  | 9 | `artifact` | ⚠ See flag D |
-  | 10 | `assessment_result` | ⚠ See flag E |
+  | 2 | `ai_sourced = true` and `citation_resolved = false` | **assumed** until a person opens the citation, whatever the kind |
+  | 3 | `system_export` | **system of record** (A) — the customer's own system, where the governing AI principle says actuals come from |
+  | 4 | `public_filing` | **published** |
+  | 5 | `attestation` **with** a non-simulated, customer-side `attested_by` and `attested_at` | **client-stated** (named person, dated) |
+  | 6 | `attestation` without a customer-side attester | **assumed**: a vendor's report that the client said it |
+  | 7 | `vendor_publication` | **published** for facts about the tenant itself; **inferred** for facts about a customer (C) |
+  | 8 | `artifact` | **client-stated** with a customer-side attester; otherwise **inferred** (D) |
+  | 9 | `observation` | **assumed**, unless it carries a source reference, then **inferred** (B). **Self-declared confidence never raises the basis** |
+  | 10 | `assessment_result` | **outside the account-fact vocabulary — no basis** (E). A measurement of learners; its strength is the instrument's |
 
   `source_verified` does not raise the basis. It is the disclosure gate (Rule 6) and
   stays separate from it: a published figure can be unverified, and the record says
   both.
-
-  **Kinds that do not map cleanly (flagged, not decided):**
-
-  - **A. `system_export`.** This is the customer's own system of record, which is
-    where the governing AI principle says actuals must come from. It is stronger
-    than a statement, and the four-level vocabulary has no level for it.
-    *client-stated* undersells it, and *published* is wrong because it is not
-    public. Either add a level above client-stated (e.g. *system of record*), or
-    accept *client-stated* and let `source_verified` carry the rest.
-  - **B. `observation`.** Today it is also how the workbench records an author's
-    own assertion: the classification note and the pack basis note, both
-    "Asserted at … by", confidence low. Some of those are closer to *assumed*
-    than *inferred*. Either keep *inferred* for all, or split assertions out by a
-    rule (e.g. low confidence and no source reference → *assumed*).
-  - **C. `vendor_publication`.** It is published, but by the vendor, not the
-    account. About the vendor itself (the tenant-self institution) it is
-    *published*. About a customer (e.g. a case study) it is the vendor's account
-    of the customer, so propose *inferred*. The gap register and `produceRun`
-    already treat it separately (`vendor_published`).
-  - **D. `artifact`.** A document of unstated authorship. If the customer produced
-    and shared it, it is *client-stated*; if it is public, *published*; otherwise
-    *inferred*. The kind alone cannot say which. Propose *client-stated* only with
-    a customer-side attester, else *inferred*.
-  - **E. `assessment_result`.** A measurement of learners, not a statement about
-    the account. It belongs to the capability side, and its strength is the
-    instrument's. Propose that it is outside the account-fact vocabulary (no
-    basis), rather than forced into one of the four levels.
 - **Published is not client-stated.** A figure from a 10-K is published. The same
   figure confirmed in a meeting with a named person is client-stated, and carries
   that person and date as its evidence. They are two facts, not one fact upgraded.
@@ -538,18 +516,25 @@ named. These are the ones found on 11 October:
    Cathedral marks it `status: Canonical`, and code has implemented its evidence
    columns since migration 0002. But `CLAUDE.md`'s *Amended and in force* list
    names only AMENDMENT-001 to 004. Until `CLAUDE.md` lists it, `CLAUDE.md`'s list
-   is the authority, and the conflict stands.
+   is the authority, and the conflict stands. *[rev 3: RESOLVED by decision D7,
+   Brad Piver, 11 October 2026: AMENDMENT-005 is added to `CLAUDE.md`'s in-force
+   list, in the hygiene batch's docs commit.]*
 2. **The working convention requires a value-spine stage for every feature.**
    `CLAUDE.md` says: *"Before proposing a feature, name which value spine stage it
    serves. If none, it is out of scope."* Items 3, 4, 6 and 7 name or imply
    `baseline`/`attach`. Items 1, 2, 5, 8, 9, 11 and 15 name none. Each needs a stage
-   (or *cross-cutting*, with its reason) before ratification.
+   (or *cross-cutting*, with its reason) before ratification. *[rev 3: RESOLVED by
+   decision D8, Brad Piver, 11 October 2026: baseline — 3, 4, 6, 7, 8; attach — 9;
+   measure/verify — 10; verify — 12, 13; measure — 14; return — 15; cross-cutting
+   — 1, 2 (Band A, as built), 5 (the evidence basis) and 11 (tooling
+   reliability).]*
 3. **The `BUILD_STATUS.md` amendment table is stale.** This confirms open item 5
    below. Its row reads *"AMENDMENT-004 — Pack as Cathedral canonical object — Not
    drafted"*, and the line after it says *"All three ratified amendments"*.
    `CLAUDE.md` (A11) and the Cathedral record AMENDMENT-004 as the UI semantic
    palette, ratified and implemented. `BUILD_STATUS.md` is the stale side; it is
-   not edited by this revision.
+   not edited by this revision. *[rev 3: fixed in `BUILD_STATUS.md` by the hygiene
+   batch (L21).]*
 4. **Overtaken by the build, and corrected above:** P3 deferred (items 2 and *Not in
    3.0*), and the item 10 recon. Nothing in revision 3 changes `CLAUDE.md`.
 
@@ -575,14 +560,14 @@ named. These are the ones found on 11 October:
 4. ~~**The basis vocabulary** (item 5): derived from `evidence.kind`, or stored?~~
    **DECIDED by Brad Piver, 11 October 2026: DERIVED** from `evidence.kind`, plus
    `source_verified` / `ai_sourced` (and `citation_resolved`, `simulated`, the
-   attester) where needed. Not stored. The mapping in item 5 is a **proposal
-   awaiting his confirmation**, with five flagged kinds. Not built. *[rev 3]*
-5. **`AMENDMENT-004` drift.** `BUILD_STATUS.md` says *Pack as Cathedral canonical
-   object, not drafted*. `CLAUDE.md` and the Cathedral's `06-governance/AMENDMENT-004.md`
-   say *UI semantic palette, ratified*. The `BUILD_STATUS.md` table is stale.
-6. **Does account research need an amendment?** AMENDMENT-005 already governs where
-   research is permitted. Items 3 and 5 (entity, basis vocabulary) may be
-   constitutional rather than product decisions.
+   attester) where needed. Not stored. *[rev 3]* **The mapping is DECIDED too (plan
+   D2, Brad Piver, 11 October 2026):** five levels, system of record > published >
+   client-stated > inferred > assumed; see item 5. Not built.
+5. ~~**`AMENDMENT-004` drift.**~~ *[rev 3: fixed — `BUILD_STATUS.md`'s table now
+   reads UI semantic palette, ratified (hygiene batch, L21).]*
+6. ~~**Does account research need an amendment?**~~ **DECIDED by Brad Piver,
+   11 October 2026 (plan D11): no amendment** for the entity record (product
+   schema) or the vocabulary (derived; no new stored class). *[rev 3]*
 7. **`record_documents` stays provisional** until the Repository Constitution
    ratifies. That is acceptable while no record leaves Skillsoft. Restate it if one
    does.
@@ -590,4 +575,12 @@ named. These are the ones found on 11 October:
    Open since 2.0 item 5, 30 August.]* Compass OS's boundary claims Deep Research as
    substrate (HB-0010's producer is Compass). LVRF building its own risks the
    three-copies-diverge failure the Studios architecture exists to prevent. **Must be
-   decided before item 6.**
+   decided before item 6.** **DECIDED by Brad Piver, 11 October 2026 (plan D1):**
+   research runs in **LVRF's own pipeline now, behind a declared seam** — one module
+   boundary for research intake — and **migrates to Compass OS once Compass exists
+   as code.** `CLAUDE.md` names the research-intake module as a Compass seam. *[rev 3]*
+9. **The first real account for item 6, with an independent hand-built baseline
+   (item 12).** *[rev 3: added; plan D13.]* **Open, pending Brad.** Recommended: the
+   first real Skillsoft engagement an authorized user is working — not Curia, a
+   read-only reference built from published material — with the hand-built baseline
+   done before the research runs. **Blocks item 6 only.**

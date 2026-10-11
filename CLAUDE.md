@@ -181,12 +181,24 @@ not resolved silently.
 
 **Amended and in force:** `AMENDMENT-001` (Chapel reorientation, LVAF→LVRF, Learning ROI
 struck), `AMENDMENT-002` (register extension), `AMENDMENT-003` (seventh health dimension),
-`AMENDMENT-004` (UI semantic palette). All four ratified; all four implemented in code.
+`AMENDMENT-004` (UI semantic palette), `AMENDMENT-005` (Deep Research — governed evidence
+acquisition; Cathedral status Canonical; its evidence columns implemented since migration
+0002). All five in force and implemented in code.
 
 **Unresolved — do not build against either side:** Compass is **above** the Canonical
 Object Constitution in `HEARTBEAT-REGISTER` §3 and a **sibling** of the Chapels in
 `COMPASS-INHERITANCE-AUDIT` §4 — parent in one diagram, peer in another. The **Repository
 Constitution** is IN PROGRESS; `record_documents` is **provisional** until it ratifies.
+
+**Research intake is a Compass OS seam (decision D1, 11 Oct 2026).** Research runs in
+LVRF's own pipeline — prompt → a person runs it → parse → a person accepts or rejects per
+field — behind one module boundary: today `server/routes/industryResearch.ts`,
+`server/routes/researchPrompt.ts` and the `research_results` staging table; consolidated
+as `server/research/` when 3.0 item 6 begins. **No code calls a research tool** — a person
+runs the prompt. **Only `industryResearch.ts` writes `research_results`** (verify scripts
+excepted, on throwaway clones); other code may read accepted results (e.g. the pack view).
+When Compass OS exists as code, research moves there and this boundary becomes its client.
+Do not build a second research path.
 
 ---
 

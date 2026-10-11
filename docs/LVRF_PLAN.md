@@ -127,6 +127,12 @@ on institution routes (P3).
 | D4 | **`tenants.steward_person_id` identifies Brad** (the existing column) | Brad Piver, 11 Oct 2026 |
 | D5 | **Grants are made by a box script that records Brad as actor**, plus an **in-app change-password route**; no in-app grant screen | Brad Piver, 11 Oct 2026 |
 | — | **The trust root: SSH to the box plus the postgres superuser are trusted.** Break-glass `set_password.ts` can reset the steward's password, and postgres can bypass every trigger. Accepted and stated, not hidden; the steward's own password is the proof of every grant, revocation and reset on top of SSH (BUILD_STATUS, *3.0 Band A*) | Brad Piver, 11 Oct 2026 |
+| D1 | **Research runs in LVRF's own pipeline now, behind a declared seam** — one module boundary for research intake — **migrating to Compass OS once Compass exists as code.** `CLAUDE.md` names the research-intake module as a Compass seam | Brad Piver, 11 Oct 2026 |
+| D2 | **The derived basis vocabulary, strongest first: system of record > published > client-stated > inferred > assumed (the floor).** (A) `system_export` = system of record; (B) `observation` = **assumed** unless it carries a source reference, then **inferred** — self-declared confidence never raises the basis; (C) `vendor_publication` = published for facts about the tenant itself, inferred for facts about a customer; (D) `artifact` = client-stated with a customer-side attester, otherwise inferred; (E) `assessment_result` = outside the account-fact vocabulary (no basis). The five-level order is a **product decision citing AMENDMENT-005**, not a new evidence class | Brad Piver, 11 Oct 2026 |
+| D7 | **AMENDMENT-005 is added to `CLAUDE.md`'s in-force list** | Brad Piver, 11 Oct 2026 |
+| D8 | **Spine stages for the 3.0 items:** baseline — 3, 4, 6, 7, 8; attach — 9; measure/verify — 10; verify — 12, 13; measure — 14; return — 15; cross-cutting — 5 (the evidence basis) and 11 (tooling reliability). Items 1 and 2 (Band A) are cross-cutting, as built | Brad Piver, 11 Oct 2026 |
+| D11 | **No amendment** for the entity record (product schema) or the vocabulary (derived, no new stored class) | Brad Piver, 11 Oct 2026 |
+| — | **3.0 revision 3 is adopted as the working plan.** Not ratified; Q1 (the doctrine source) stays open | Brad Piver, 11 Oct 2026 |
 | D6 | **Model versions and thresholds change by commit and deploy** (the commit author is the decider). Weights as data is **optional** (L24) | Brad Piver, 11 Oct 2026 |
 
 ### Open: blocks the next item (Band A)
@@ -137,14 +143,11 @@ None. D3–D6 were decided on 11 October 2026 (above).
 
 | # | Decision | Options | Blocks |
 |---|---|---|---|
-| D1 | **Where does research run: LVRF's own pipeline or Compass OS?** (2.0 item 5, open since 30 Aug) | (a) LVRF's pipeline, as packs already use, with the seam declared; (b) Compass OS, LVRF consuming it (HB-0010's producer is Compass); (c) LVRF now, migrated to Compass when it exists | **3.0 item 6**, and 9, 11 |
-| D2 | Confirm the Q4 mapping, and the five flagged kinds (`system_export`, `observation`, `vendor_publication`, `artifact`, `assessment_result`) | as written in the 3.0 draft item 5 | 3.0 item 5, therefore 6 |
-| D7 | `CLAUDE.md`'s in-force list omits AMENDMENT-005 (Cathedral: Canonical) | add it; or record why not | 3.0 ratification |
-| D8 | A value-spine stage for every 3.0 item (`CLAUDE.md` working convention) | name one, or *cross-cutting* with a reason | 3.0 ratification |
 | D9 | Must a run locked at `claimed` state that it is a hypothesis? (L18) | require the statement; or low confidence suffices | nothing urgent |
 | D10 | WeasyPrint on the VPS, or rendering stays on the Mac | — | 3.0 item 15 |
-| D11 | 3.0 draft Q1, Q5–Q7: Rule76 doctrine source; AMENDMENT-004 drift; whether entity/vocabulary need an amendment; `record_documents` provisional | see the draft | ratification; Q6 may gate items 3 and 5 |
+| D11 (rest) | 3.0 draft Q1 (Rule76 doctrine source) and Q7 (`record_documents` provisional). Q5 (AMENDMENT-004 drift) is fixed by the hygiene batch's L21; Q6 decided (no amendment) | see the draft | ratification only |
 | D12 | DB-level tenant backstop: trigger or RLS (L15) | — | L15 |
+| **D13** | **The first real account for 3.0 item 6, with an independent hand-built baseline (item 12)** | Recommended: the first real Skillsoft engagement an authorized user is working — not Curia (a read-only reference built from published material); the hand-built baseline done before the research runs | **3.0 item 6 only** — pending Brad |
 
 ---
 
@@ -158,14 +161,14 @@ placement is a judgement.
 | ~~Q1~~ | ~~**Fact supersession**: deploy (0028, backup first), then Brad's LVAF → "LVRF (value realization records)" correction, then Gate C~~ **DONE 11 Oct 2026.** Deployed `cb666e9`; corrected by Brad at 18:16 UTC; Gate C clean | — | 2.0's last item is closed |
 | ~~Q2~~ | ~~**3.0 item 1 — an access grant is a record**~~ **DONE 11 Oct 2026**: deploys A (`da00660`, 0029) and B (`7c7e90e`); steward set (audit 206), bootstrap grant (207); sign-in requires a grant | D4, D5 (decided) | Band A first: the next user must be granted by an act that names Brad |
 | ~~Q3~~ | ~~**3.0 item 2 — Brad-only acts, one shared check**~~ **DONE 11 Oct 2026**: deploy C (`9560bfd`); four steward-only routes; coverage guard. **3.0 Band A complete.** | Q2; D3, D4, D6 (decided) | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
-| Q3a | Hygiene batch: L5 (compare 500 → 422), L2 (panel label), L3 (`supports` CHECK), L21 (two doc fixes) | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |
+| Q3a | Hygiene batch: L5 (compare 500 → 422), L2 (panel label), L3 (`supports` CHECK, 0030), L21 (doc fixes) — **built, Gate A 11 Oct; deploy pending** | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |
 | Q4 | **D2–D4 drift checks**, with L16 (what governance each composite table owes) | — | Band B adds migrations (entity, regime, addressable population, sources). D2 guards exactly that; D4 guards the supersession chains facts (Q1) and entities (item 3) now use. Cheapest before the schema grows |
 | Q5 | **Recons: 3.0 item 9** (the pack prompt is composed from live rows; the parser validates the same definition). Item 10's recon is done (no fact is a run input today) | — | the draft puts recons before item 6 |
-| Q6 | Decide D1 (Compass), D2 (mapping), D7, D8; ratify or revise the 3.0 draft | — | Band B cannot start without D1 and D2 |
+| ~~Q6~~ | ~~Decide D1 (Compass), D2 (mapping), D7, D8; ratify or revise the 3.0 draft~~ **DONE 11 Oct 2026**: all decided; revision 3 adopted as the working plan (not ratified). D13 remains, blocking item 6 only | — | — |
 | Q7 | **3.0 item 3 — the entity is pinned**, with L4 (the run seals its entity and account name) and L9 (`website` into the entity record) | Q6 | 3 → 4 → 5 before 6, per the draft |
 | Q8 | **3.0 item 4 — disclosure regime** | Q7 | — |
 | Q9 | **3.0 item 5 — one trust vocabulary (derived)** | D2 | — |
-| Q10 | **3.0 item 6 — account research intake**, with L6 (period on every accepted fact) and L8 (parse refusals on record); item 10 becomes binding here (a run seals the fact ids and values it used) | Q7–Q9, D1 | — |
+| Q10 | **3.0 item 6 — account research intake** (needs D13), with L6 (period on every accepted fact) and L8 (parse refusals on record); item 10 becomes binding here (a run seals the fact ids and values it used) | Q7–Q9, D1 | — |
 | Q11 | 3.0 items 7 (total vs addressable) and 8 (sources as entities) | alongside Q10 | — |
 | Q12 | 3.0 items 11 (research reliability) and 12 (a human-derived oracle) | the first account researched under Q10 | — |
 | Q13 | 3.0 Band C: item 13 (incl. L10), 14 (after 6), 15 (incl. L7, D10) | as engagements need them | — |
