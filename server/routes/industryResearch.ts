@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
+import { INDUSTRY_MEASURE_CONTRACT, contractColumns, validateMeasure } from '../research/contracts.js';
 
 /**
  * 2.0 item 5, industry packs — pack parse-and-review.
@@ -105,39 +106,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// The phrase used on every MISSING (not merely malformed) required field
-// in the measure contract — see the VERSION DRIFT comment above. A field
-// that is present but the wrong shape is a different failure (bad data,
-// not an old response) and gets its own message below.
-function versionDriftMessage(path: string): string {
-  return (
-    `${path} is missing. This response predates the current contract and ` +
-    'must be re-run — a reviewer may not supply it at accept time.'
-  );
-}
-
-// Accumulates into `issues` rather than throwing on the first failure, so
-// every bad field across every measure is reported in one 422. Returns
-// undefined on failure; callers only use the parsed value once `issues`
-// comes back empty.
-function requireMeasureString(
-  obj: Record<string, unknown>,
-  field: string,
-  path: string,
-  issues: string[],
-): string | undefined {
-  const v = obj[field];
-  if (v === undefined) {
-    issues.push(versionDriftMessage(`${path}.${field}`));
-    return undefined;
-  }
-  if (typeof v !== 'string' || v.trim() === '') {
-    issues.push(`${path}.${field} must be a non-empty string`);
-    return undefined;
-  }
-  return v;
-}
-
 interface ParsedMeasure {
   /** Becomes research_results.field_name. */
   name: string;
@@ -145,57 +113,7 @@ interface ParsedMeasure {
   raw: Record<string, unknown>;
 }
 
-function validateMeasure(
-  raw: unknown,
-  index: number,
-  validDirections: string[],
-  issues: string[],
-): ParsedMeasure | null {
-  const path = `measures[${index}]`;
-  if (!isRecord(raw)) {
-    issues.push(`${path} must be an object`);
-    return null;
-  }
-
-  const name = requireMeasureString(raw, 'name', path, issues);
-  requireMeasureString(raw, 'unit', path, issues);
-  const direction = requireMeasureString(raw, 'direction', path, issues);
-  if (direction !== undefined && !validDirections.includes(direction)) {
-    issues.push(`${path}.direction must be one of: ${validDirections.join(', ')}`);
-  }
-  requireMeasureString(raw, 'definition', path, issues);
-  requireMeasureString(raw, 'why_it_pays', path, issues);
-  requireMeasureString(raw, 'confounders', path, issues);
-  requireMeasureString(raw, 'citation', path, issues);
-
-  const addressable = raw['addressable_by_workforce_capability'];
-  if (addressable === undefined) {
-    issues.push(versionDriftMessage(`${path}.addressable_by_workforce_capability`));
-  } else if (!isRecord(addressable)) {
-    issues.push(`${path}.addressable_by_workforce_capability must be an object`);
-  } else {
-    const value = addressable['value'];
-    if (value === undefined) {
-      issues.push(versionDriftMessage(`${path}.addressable_by_workforce_capability.value`));
-    } else if (typeof value !== 'boolean') {
-      issues.push(`${path}.addressable_by_workforce_capability.value must be a boolean`);
-    }
-    const why = addressable['why'];
-    if (why === undefined) {
-      issues.push(versionDriftMessage(`${path}.addressable_by_workforce_capability.why`));
-    } else if (typeof why !== 'string' || why.trim() === '') {
-      issues.push(`${path}.addressable_by_workforce_capability.why must be a non-empty string`);
-    }
-  }
-
-  // name is the only piece of the measure this endpoint needs on its own
-  // (field_name); everything else is validated above and then carried
-  // whole into raw_response — see the NO PER-FIELD COLUMNS comment above.
-  if (name === undefined) return null;
-  return { name, raw };
-}
-
-// Same accumulate-rather-than-throw shape as requireMeasureString, for the
+// Accumulates into `issues` rather than throwing (as validateMeasure does), for the
 // envelope fields (body.industry, body.research_query, etc). Not version-
 // drift framed — see the file comment.
 function requireEnvelopeString(
@@ -305,8 +223,15 @@ export function industryResearchRouter(pool: Pool): Router {
       if (!Array.isArray(measuresRaw) || measuresRaw.length === 0) {
         issues.push('body.measures is required and must contain at least one measure');
       } else {
+        // The ONE contract (server/research/contracts.ts), in parse mode:
+        // a missing field means the response predates the contract.
         parsedMeasures = measuresRaw
-          .map((m, i) => validateMeasure(m, i, validDirections, issues))
+          .map((m, i): ParsedMeasure | null => {
+            const columns = validateMeasure(INDUSTRY_MEASURE_CONTRACT, m, {
+              mode: 'parse', path: `measures[${i}]`, validDirections, issues,
+            });
+            return columns ? { name: columns.name as string, raw: m as Record<string, unknown> } : null;
+          })
           .filter((m): m is ParsedMeasure => m !== null);
       }
 
@@ -454,136 +379,15 @@ export function researchResultsReviewRouter(pool: Pool): Router {
     );
   }
 
-  // The keys this endpoint knows how to carry from raw_response into
-  // industry_measures. See the file-level comment on the accept route
-  // below for why an unrecognised key refuses rather than being dropped.
-  const MAPPED_MEASURE_KEYS = new Set([
-    'name', 'unit', 'direction', 'definition', 'why_it_pays',
-    'confounders', 'citation', 'addressable_by_workforce_capability',
-  ]);
-  const MAPPED_ADDRESSABLE_KEYS = new Set(['value', 'why']);
-
-  interface MappedMeasure {
-    name: string; unit: string; direction: string; definition: string;
-    whyItPays: string; confounders: string; citation: string;
-    addressable: boolean; addressableReasoning: string;
-  }
-
-  // Accumulates into `issues` rather than throwing on the first failure —
-  // same shape as requireMeasureString above, so an accept that fails
-  // reports every problem in raw_response at once, not one round trip
-  // per field.
-  function requireRawString(raw: Record<string, unknown>, field: string, issues: string[]): string | undefined {
-    const v = raw[field];
-    if (v === undefined) {
-      issues.push(
-        `raw_response.${field} is missing. This raw_response predates the accept mapping ` +
-        'contract and must be re-parsed from a conforming research response.',
-      );
-      return undefined;
-    }
-    if (typeof v !== 'string' || v.trim() === '') {
-      issues.push(`raw_response.${field} must be a non-empty string`);
-      return undefined;
-    }
-    return v;
-  }
-
-  /**
-   * THE MAPPING IS THE ONLY PLACE THE TWO SHAPES MEET.
-   *
-   * raw_response holds the research object verbatim; industry_measures has
-   * columns. This function is the seam, and it is deliberately exhaustive
-   * in both directions: every industry_measures column it fills is read
-   * from a named raw_response key (never invented, never defaulted), and
-   * every raw_response key is checked against the known list — a key this
-   * function does not recognise is refused with a 422 naming it, not
-   * silently dropped. A silently dropped field is a fact the research
-   * established and the pack forgot; the reviewer accepting this row
-   * would have no way to know a field existed and vanished.
-   *
-   * This is a SECOND gate, not a restatement of the parse route's. The
-   * parse route validates raw_response's shape at parse time, against
-   * whatever the measure contract was then; this validates it again at
-   * accept time, against whatever the contract is NOW. Nothing mutates
-   * raw_response between those two moments, so the only way for this gate
-   * to fire is a contract change in between — exactly the case it exists
-   * to catch.
-   */
-  function mapRawResponseToIndustryMeasure(
-    rawResponse: unknown,
-    validDirections: string[],
-    issues: string[],
-  ): MappedMeasure | null {
-    if (!isRecord(rawResponse)) {
-      issues.push('raw_response must be an object');
-      return null;
-    }
-
-    for (const key of Object.keys(rawResponse)) {
-      if (!MAPPED_MEASURE_KEYS.has(key)) {
-        issues.push(
-          `raw_response has an unrecognised key "${key}". The accept mapping only knows: ` +
-          `${[...MAPPED_MEASURE_KEYS].join(', ')}. Refusing rather than silently dropping it.`,
-        );
-      }
-    }
-
-    const name = requireRawString(rawResponse, 'name', issues);
-    const unit = requireRawString(rawResponse, 'unit', issues);
-    const direction = requireRawString(rawResponse, 'direction', issues);
-    if (direction !== undefined && !validDirections.includes(direction)) {
-      issues.push(`raw_response.direction must be one of: ${validDirections.join(', ')}`);
-    }
-    const definition = requireRawString(rawResponse, 'definition', issues);
-    const whyItPays = requireRawString(rawResponse, 'why_it_pays', issues);
-    const confounders = requireRawString(rawResponse, 'confounders', issues);
-    const citation = requireRawString(rawResponse, 'citation', issues);
-
-    let addressable: boolean | undefined;
-    let addressableReasoning: string | undefined;
-    const addressableRaw = rawResponse['addressable_by_workforce_capability'];
-    if (addressableRaw === undefined) {
-      issues.push(
-        'raw_response.addressable_by_workforce_capability is missing. This raw_response ' +
-        'predates the accept mapping contract and must be re-parsed from a conforming research response.',
-      );
-    } else if (!isRecord(addressableRaw)) {
-      issues.push('raw_response.addressable_by_workforce_capability must be an object');
-    } else {
-      for (const key of Object.keys(addressableRaw)) {
-        if (!MAPPED_ADDRESSABLE_KEYS.has(key)) {
-          issues.push(
-            `raw_response.addressable_by_workforce_capability has an unrecognised key "${key}". ` +
-            `The accept mapping only knows: ${[...MAPPED_ADDRESSABLE_KEYS].join(', ')}. ` +
-            'Refusing rather than silently dropping it.',
-          );
-        }
-      }
-      const value = addressableRaw['value'];
-      if (typeof value !== 'boolean') {
-        issues.push('raw_response.addressable_by_workforce_capability.value must be a boolean');
-      } else {
-        addressable = value;
-      }
-      const why = addressableRaw['why'];
-      if (typeof why !== 'string' || why.trim() === '') {
-        issues.push('raw_response.addressable_by_workforce_capability.why must be a non-empty string');
-      } else {
-        addressableReasoning = why;
-      }
-    }
-
-    if (issues.length > 0) return null;
-
-    // Safe only because issues is empty here: every field above that could
-    // have left its result undefined also pushed an issue onto `issues`.
-    return {
-      name: name!, unit: unit!, direction: direction!, definition: definition!,
-      whyItPays: whyItPays!, confounders: confounders!, citation: citation!,
-      addressable: addressable!, addressableReasoning: addressableReasoning!,
-    };
-  }
+  // THE MAPPING IS THE ONLY PLACE THE TWO SHAPES MEET — raw_response holds
+  // the research object verbatim; industry_measures has columns. Since Q4b
+  // both the field list and the mapping are server/research/contracts.ts,
+  // read here in 'accept' mode: a SECOND gate, against the contract as it
+  // is NOW (nothing mutates raw_response between parse and accept, so it
+  // fires only on a contract change in between), exhaustive in both
+  // directions — every column is read from a named key, and a key the
+  // contract does not know is refused with a 422 rather than silently
+  // dropped.
 
   // POST /api/research-results/:id/accept — turns one pending
   // industry_measure result into a proposed industry_measures row, in the
@@ -646,7 +450,9 @@ export function researchResultsReviewRouter(pool: Pool): Router {
       );
       const validDirections = directionRows.map((r) => r.enumlabel);
 
-      const measure = mapRawResponseToIndustryMeasure(candidate.rawResponse, validDirections, issues);
+      const measure = validateMeasure(INDUSTRY_MEASURE_CONTRACT, candidate.rawResponse, {
+        mode: 'accept', path: 'raw_response', validDirections, issues,
+      });
 
       if (issues.length > 0) {
         throw new ValidationError(issues);
@@ -666,29 +472,26 @@ export function researchResultsReviewRouter(pool: Pool): Router {
            FROM industry_measure_exclusions x
            JOIN persons p ON p.id = x.excluded_by_person_id
           WHERE x.industry_id = $1 AND x.name = $2`,
-        [candidate.industryId, measure!.name],
+        [candidate.industryId, measure!.name as string],
       );
       if (excluded) {
         res.status(409).json({
           message:
-            `"${measure!.name}" was excluded from this pack by ${excluded.excluded_by} on ` +
+            `"${measure!.name as string}" was excluded from this pack by ${excluded.excluded_by} on ` +
             `${new Date(excluded.excluded_at).toISOString().slice(0, 10)}; a measure cannot be both in the ` +
             'pack and excluded from it. Reject this result — there is no route that reverses an exclusion.',
         });
         return;
       }
 
+      // The columns come from the contract — never from input — so every
+      // field the contract defines lands, and nothing else does.
+      const columns = contractColumns(INDUSTRY_MEASURE_CONTRACT);
       const { rows: [insertedMeasure] } = await client.query<{ id: string }>(
-        `INSERT INTO industry_measures (
-           tenant_id, industry_id, name, unit, direction, definition, why_it_pays,
-           addressable, addressable_reasoning, confounders, citation, status
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'proposed')
+        `INSERT INTO industry_measures (tenant_id, industry_id, ${columns.join(', ')}, status)
+         VALUES ($1, $2, ${columns.map((_, i) => `$${i + 3}`).join(', ')}, 'proposed')
          RETURNING id`,
-        [
-          candidate.tenantId, candidate.industryId, measure!.name, measure!.unit, measure!.direction,
-          measure!.definition, measure!.whyItPays, measure!.addressable, measure!.addressableReasoning,
-          measure!.confounders, measure!.citation,
-        ],
+        [candidate.tenantId, candidate.industryId, ...columns.map((c) => measure![c])],
       );
 
       // status is 'proposed', never 'ratified' — ratification means
