@@ -77,7 +77,7 @@ Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
 > **Caddy is pinned to IPv4 deliberately.** `localhost` resolved to `::1` while
 > Express binds IPv4, which 502s. Do not "simplify" it back to `localhost`.
 
-**Installed:** Drizzle ORM 0.45.2 + Drizzle Kit 0.31.10, Express, `pg`. Migration
+**Installed:** Drizzle ORM 0.45.2 + Drizzle Kit 0.31.11, Express, `pg`. Migration
 `0000_far_praxagora.sql` applied locally; 18 heartbeats seeded; 24 triggers active.
 
 **Sign-in, P1 done (0027):** argon2id credentials for vendor staff, server-side
