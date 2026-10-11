@@ -43,6 +43,14 @@ import type { Finding } from './findingsModel.js';
  *    declared-but-missing, not applied-but-undeclared.
  */
 export async function runDriftChecks(client: PoolClient): Promise<Finding[]> {
+  // Q4 (11 Oct 2026): D1, D3 and D4 each report independently; one check's
+  // finding never hides another's. D2 (migration journal and schema versus
+  // the repo's snapshot) needs the repo, so it is not here — it runs before
+  // the restart in lvrf-deploy.sh (scripts/check_schema_drift.mjs).
+  return [...(await checkD1(client)), ...(await checkD3(client)), ...(await checkD4(client))];
+}
+
+async function checkD1(client: PoolClient): Promise<Finding[]> {
   const { rows: [manifest] } = await client.query<{
     row_count: number;
     newest_applied_at: Date | null;
@@ -132,3 +140,137 @@ export async function runDriftChecks(client: PoolClient): Promise<Finding[]> {
   // returned at all is what tells the caller the checks ran.
   return [];
 }
+
+/*
+ * ---------------------------------------------------------------------
+ * D3 — governed tables missing their governance triggers (Q4, 11 Oct 2026)
+ * ---------------------------------------------------------------------
+ * Reads the catalog, every public base table, and applies four rules:
+ *
+ *   updated_at column        => <table>_touch
+ *   superseded_by_id column  => <table>_supersession_sane
+ *   every table              => <table>_no_delete   (unless exempt below)
+ *   every table              => <table>_audit       (unless exempt below)
+ *
+ * The exemptions are declared here, each with its reason, so a table that
+ * is deliberately ungoverned in one respect says why rather than slipping
+ * through. A NEW table — any table not listed — owes all four, so an
+ * ungoverned table added later is a finding the first time a run is
+ * produced. Severity warning: a governance gap, not a false record.
+ */
+const NO_DELETE_EXEMPT: Record<string, string> = {
+  audit_log: 'append-only by revoked UPDATE/DELETE/TRUNCATE privileges (hardening.sql section 6)',
+  heartbeat_events: 'append-only by revoked UPDATE/DELETE/TRUNCATE privileges (hardening.sql section 6)',
+  hardening_manifest: 'TRUNCATEd and repopulated by every hardening.sql run (section 14), by design',
+};
+const AUDIT_EXEMPT: Record<string, string> = {
+  ...NO_DELETE_EXEMPT,
+  person_credentials: 'holds password hashes; audit_log is permanent, so hashes stay out of it (0027)',
+  sessions: 'holds session-token hashes, and is high-volume; the row is the record (0027)',
+  refusals: 'the row IS the record of the refused attempt; an audit row would duplicate it (section 8)',
+};
+
+async function checkD3(client: PoolClient): Promise<Finding[]> {
+  const { rows } = await client.query<{
+    table_name: string; has_updated_at: boolean; has_superseded: boolean; triggers: string[];
+  }>(
+    `SELECT c.relname AS table_name,
+            EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'updated_at' AND NOT a.attisdropped) AS has_updated_at,
+            EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'superseded_by_id' AND NOT a.attisdropped) AS has_superseded,
+            coalesce(array_agg(t.tgname) FILTER (WHERE t.tgname IS NOT NULL), '{}') AS triggers
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+       LEFT JOIN pg_trigger t ON t.tgrelid = c.oid AND NOT t.tgisinternal
+      WHERE c.relkind = 'r'
+      GROUP BY c.oid, c.relname
+      ORDER BY c.relname`,
+  );
+  const gaps: string[] = [];
+  for (const r of rows) {
+    const has = (suffix: string) => r.triggers.includes(`${r.table_name}_${suffix}`);
+    const missing: string[] = [];
+    if (r.has_updated_at && !has('touch')) missing.push('_touch');
+    if (r.has_superseded && !has('supersession_sane')) missing.push('_supersession_sane');
+    if (!(r.table_name in NO_DELETE_EXEMPT) && !has('no_delete')) missing.push('_no_delete');
+    if (!(r.table_name in AUDIT_EXEMPT) && !has('audit')) missing.push('_audit');
+    if (missing.length > 0) gaps.push(`${r.table_name} (${missing.join(', ')})`);
+  }
+  if (gaps.length === 0) return [];
+  return [{
+    code: 'D3',
+    severity: 'warning',
+    subject: 'instrument',
+    message:
+      `${gaps.length} table(s) lack governance triggers the schema implies: ${gaps.join('; ')}. ` +
+      'A governed table without them can be edited or deleted without trace.',
+  }];
+}
+
+/*
+ * ---------------------------------------------------------------------
+ * D4 — supersession pointers (Q4, 11 Oct 2026)
+ * ---------------------------------------------------------------------
+ * For every table with superseded_by_id:
+ *   - its self-referencing FOREIGN KEY must exist. It is what makes a
+ *     pointer to a row that does not exist impossible; without it the
+ *     chain can dangle. Missing => critical.
+ *   - no successor may be retired (deleted_at set). _supersession_sane
+ *     refuses linking to a retired row, but a successor can be retired
+ *     later, leaving the "current" version of a fact retired. => warning.
+ *   - no successor may be claimed by two rows (a fork). _supersession_sane
+ *     refuses it at write time, so one here means the trigger was bypassed.
+ *     => critical.
+ */
+async function checkD4(client: PoolClient): Promise<Finding[]> {
+  const { rows: tables } = await client.query<{ table_name: string; has_self_fk: boolean; has_deleted_at: boolean }>(
+    `SELECT c.relname AS table_name,
+            EXISTS (SELECT 1 FROM pg_constraint k
+                     WHERE k.conrelid = c.oid AND k.contype = 'f' AND k.confrelid = c.oid
+                       AND k.conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = c.oid AND attname = 'superseded_by_id')]) AS has_self_fk,
+            EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'deleted_at' AND NOT a.attisdropped) AS has_deleted_at
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+      WHERE c.relkind = 'r'
+        AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'superseded_by_id' AND NOT a.attisdropped)
+      ORDER BY c.relname`,
+  );
+  const noFk: string[] = [];
+  const retired: string[] = [];
+  const forks: string[] = [];
+  for (const t of tables) {
+    if (!t.has_self_fk) noFk.push(t.table_name);
+    // Identifiers come from pg_class, not from input; quoted all the same.
+    const tbl = `"${t.table_name.replace(/"/g, '""')}"`;
+    if (t.has_deleted_at) {
+      const { rows: [{ n }] } = await client.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM ${tbl} o JOIN ${tbl} s ON s.id = o.superseded_by_id WHERE s.deleted_at IS NOT NULL`,
+      );
+      if (n > 0) retired.push(`${t.table_name} (${n})`);
+    }
+    const { rows: [{ f }] } = await client.query<{ f: number }>(
+      `SELECT count(*)::int AS f FROM (SELECT superseded_by_id FROM ${tbl} WHERE superseded_by_id IS NOT NULL GROUP BY 1 HAVING count(*) > 1) x`,
+    );
+    if (f > 0) forks.push(`${t.table_name} (${f})`);
+  }
+  const findings: Finding[] = [];
+  if (noFk.length > 0 || forks.length > 0) {
+    findings.push({
+      code: 'D4',
+      severity: 'critical',
+      subject: 'instrument',
+      message: [
+        noFk.length > 0 ? `superseded_by_id without its self-referencing foreign key: ${noFk.join(', ')} — a pointer to a row that does not exist is no longer refused` : '',
+        forks.length > 0 ? `forked supersession chains (one successor claimed by two rows): ${forks.join(', ')} — _supersession_sane was bypassed` : '',
+      ].filter(Boolean).join('. ') + '.',
+    });
+  }
+  if (retired.length > 0) {
+    findings.push({
+      code: 'D4',
+      severity: 'warning',
+      subject: 'instrument',
+      message: `superseded rows whose successor has since been retired: ${retired.join(', ')}. The chain ends in a retired row, so the "current" version is not current.`,
+    });
+  }
+  return findings;
+}
+

@@ -11,6 +11,10 @@
 # Step 5b (Band A, deploy B) refuses to restart if any tenant's steward lacks
 # a current access grant or password — the lockout pre-check.
 #
+# Step 5c (Q4) refuses to restart against an unmigrated database or a schema
+# that differs from the newest snapshot (D2), or on a critical drift finding
+# (D1/D3/D4).
+#
 # Step 7 checks the app is UP and FAIL-CLOSED, then the vhost:
 #   - GET /api/health on 127.0.0.1 -> 200, and it must report
 #     origin_check "configured": a missing LVRF_PUBLIC_ORIGIN fails the
@@ -126,6 +130,18 @@ LOCKED_OUT="$(psql -X -At "$DB_URL" -f scripts/precheck_steward_grants.sql)" \
 [ "$LOCKED_OUT" = "0" ] \
   || die "steward-grant pre-check: ${LOCKED_OUT} tenant(s) would be locked out (steward without a current grant or password); not restarting. Grant the steward first: npx tsx scripts/grant_access.ts <steward email> --reason \"...\""
 log "steward-grant pre-check: 0 tenants locked out"
+
+# 5c. Drift, before the restart (Q4). D2: never run new code against an
+#     unmigrated database — every migration this checkout ships must be
+#     applied — and the live schema must match the newest snapshot
+#     (scripts/check_schema_drift.mjs; read-only). Then the SQL drift checks
+#     D1/D3/D4 (scripts/drift_report.ts; read-only): warnings are printed,
+#     a critical finding stops the deploy. Either stop leaves the running
+#     service untouched.
+node scripts/check_schema_drift.mjs \
+  || die "D2: the database is not what this code expects (see above); not restarting. Apply the migrations and db/hardening.sql first."
+npx tsx scripts/drift_report.ts \
+  || die "a critical drift finding (see above); not restarting"
 
 # 6. Restart the service and confirm it came up.
 sudo systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed"

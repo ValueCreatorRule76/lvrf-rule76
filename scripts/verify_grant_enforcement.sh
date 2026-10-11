@@ -76,7 +76,8 @@ step "4. The lockout pre-check (scripts/precheck_steward_grants.sql)"
 mkdir -p "$W/box/scripts"; cp scripts/precheck_steward_grants.sql "$W/box/scripts/"
 echo "DATABASE_URL=$VERIFY_URL" > "$W/box/.env"
 { echo 'set -euo pipefail; die(){ echo "DEPLOY FAILED: $*"; exit 1; }; log(){ echo "==> $*"; }'
-  sed -n '/^# 5b\. The lockout pre-check/,/^# 6\. Restart/p' scripts/lvrf-deploy.sh; echo 'echo "WOULD RESTART"'; } > "$W/box/step5b.sh"
+  # Step 5b alone: from its header to the next step's (5c since Q4, else 6).
+  awk '/^# 5b\. The lockout pre-check/{on=1} on && /^# (5c|6)\./{exit} on' scripts/lvrf-deploy.sh; echo 'echo "WOULD RESTART"'; } > "$W/box/step5b.sh"
 grep -q 'precheck_steward_grants.sql' "$W/box/step5b.sh" || bad "step 5b not found in lvrf-deploy.sh"
 L5B="$(grep -n '^# 5b\.' scripts/lvrf-deploy.sh | cut -d: -f1)"; LRS="$(grep -n '^sudo systemctl restart' scripts/lvrf-deploy.sh | cut -d: -f1)"
 [ -n "$L5B" ] && [ "$L5B" -lt "$LRS" ] && ok "lvrf-deploy.sh runs the pre-check (line $L5B) before the restart (line $LRS)" || bad "pre-check is not before the restart"
