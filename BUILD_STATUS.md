@@ -4829,6 +4829,22 @@ check to self-diagnose.
   not-addressable Healthcare entry. See *Case mix index promoted*.
 - ~~**Write routes respond before COMMIT.**~~ Closed 10 October 2026 — see *Commit
   before the response*.
+- **Next after P2b: a supersession writer for institution facts.** Moved up from
+  the workbench's own list on 11 October, because a real fact now needs
+  correcting.
+  - The column, its `_supersession_sane` trigger and `_no_delete` exist; the route
+    does not. A wrong fact today can only be outnumbered by a newer `as_of`.
+  - **The first correction to make with it:** Skillsoft's `system` fact
+    `c966ef3b-e9b3-423e-9026-dfcb07781b0c`. It was recorded on prod on
+    11 October as the sign-in P2a verification write, with the value typed as
+    `LVAF` instead of `LVRF (value realization records)`. Its evidence
+    (`1e85f541…`) and provenance correctly say LVRF.
+  - **The correction must supersede, not edit.** It needs a new fact with the
+    right value, and the old row's `superseded_by_id` pointing at it, with the
+    reason stated: *"Typed LVAF for LVRF at capture; the provenance says LVRF."*
+    The typo stays in history.
+  - **Until then it is deliberately left as is.** It is not edited in the
+    database, and there is no second `system` fact alongside it.
 - **Rejecting a research result does not create an exclusion.** A rejection is
   narrower than a standing industry-wide judgement
 - ~~**The account WORKBENCH does not exist.**~~ Closed by `680dd29`: website,
@@ -5350,7 +5366,8 @@ hand, in order, because `lvrf-deploy.sh` does not migrate.
 - **No update path for `website`.** Same as `name` and `industry`: a wrong one means
   superseding the institution. Deliberate, but it will chafe first.
 - **No supersession writer for facts.** The column and its trigger exist; the route
-  does not. A wrong fact today can only be outnumbered by a newer `as_of`.
+  does not. **Moved up to the main Still outstanding list on 11 October** (next
+  after P2b), with its first real correction: Skillsoft's `LVAF` → LVRF.
 - **Fact verification has no route.** `source_verified` is set at capture or not at
   all, same as outcome evidence; a later *I opened it and it says this* act does not
   exist for either.
@@ -6929,3 +6946,45 @@ Both hosts Caddy serves can write.
   the actor. Never let a customer act.
 - **Cosmetic:** the nav links show on the sign-in page (they lead back to it), and
   while the expiry overlay is open the bar still reads "Signed in as".
+
+### Deployed — 11 October 2026
+
+`27f6e39` went to production. There was no migration and no backup step: the only
+change on the box was one line in `/srv/lvrf/.env`.
+
+- **`.env`:** `LVRF_PUBLIC_ORIGIN=https://lvrf-rule76.com,https://www.lvrf-rule76.com`
+  was added, after a copy of the file was taken
+  (`~/env_pre_p2a_20261011_123738.bak`, mode `600`). There is exactly one such
+  line, and `NODE_ENV=production` is still present.
+- **The first deploy run reported DEPLOY FAILED. That came from the deploy
+  script, not the app.** Bash had already started reading the old
+  `lvrf-deploy.sh` before the script's own `git pull` replaced it on disk, so the
+  run kept executing the old file and applied the old smoke test ("expect 200").
+  An unauthenticated `/api/runs/:id` now correctly returns 401, so the old check
+  failed. **The second run, now executing the new file, passed:** health 200 with
+  `origin_check: configured`, `/api/runs/:id` with no session 401, the vhost 401,
+  deploy OK. The service has been up since 12:40:48 UTC, with bundle
+  `index-Bq_62G2h.js`.
+- **Gate C, read-only:**
+  - `/api/health` reports `origin_check: "configured"`. An unauthenticated
+    `/api/cohort` gets **401**.
+  - The API listens on **`127.0.0.1:3001`** only (`ss -ltn`).
+  - 84 triggers and 1 current credential. No refusals since the deploy.
+- **The browser verification write came through the session.** Brad Piver signed
+  in at https://lvrf-rule76.com, browsed, and recorded a `system` fact on Skillsoft:
+  - fact `c966ef3b…` and evidence `1e85f541…`, both `captured_by` =
+    `b6da352c-…`;
+  - audit rows **201** (evidence) and **202** (fact), both with actor
+    `b6da352c-…`;
+  - written at 12:47:54.513902, inside browser session `8f40e4da…` (12:42:56 →
+    revoked 12:50:20 by the sign-out). That session's `last_seen_at` is
+    **12:47:54.512403**, its resolution on the write request itself, 1.5 ms
+    before the insert.
+  - The client sends no header. Those were the only 2 audit rows written in the
+    window, both his.
+- **The value was mistyped as `LVAF`.** It is left in place by decision and listed
+  as the first correction for the fact supersession writer (Still outstanding).
+- **The sign-in after signing out does not appear on the server.** Sessions hold
+  only the 05:11 curl test and `8f40e4da…`, with nothing after 12:50:20. A
+  failed sign-in (wrong password, or the 429) creates no session. Open; to be
+  explained.
