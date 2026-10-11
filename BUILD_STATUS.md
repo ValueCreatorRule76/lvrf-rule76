@@ -6639,3 +6639,69 @@ by hand before the deploy:
   minutes. Its temp file was removed from the box.
 - Prod has **1** current vendor-staff person, still on the placeholder email.
   Setting a real sign-in email comes next, through `scripts/set_email.ts`.
+
+---
+
+## set_email — a vendor-staff sign-in email, changed by audited UPDATE — 11 October 2026
+
+`scripts/set_email.ts <current email> <new email>`. This is the only writer of
+`persons.email` after a person is created. It exists so prod's one vendor-staff
+person can sign in with a real address instead of the placeholder. No migration;
+the trigger count is unchanged at 84.
+
+**Why an audited UPDATE, not supersession.** 44 foreign keys reference
+`persons.id`:
+
+- runs (`walked_by`, `locked_by`);
+- outcome sign-offs (`committed_by`, `verified_by`);
+- evidence (`captured_by`, `attested_by`);
+- the actor on `audit_log`, `refusals` and `heartbeat_events`;
+- research reviews and exclusions;
+- since 0027, `person_credentials` and `sessions`.
+
+Superseding the person would issue a new id and leave all of that attached to the
+old one. A superseded person also cannot sign in. An email is a contact attribute
+of the same person. `persons` is governed: `persons_audit` records the full
+`old_row` and `new_row` with the actor, and `persons_touch` stamps `updated_at`.
+No trigger or CHECK freezes `email`.
+
+**What it does, in one transaction:**
+
+- Refuses unless exactly one current, non-simulated vendor-staff person has the
+  current email. Matching is case-insensitive, with `FOR UPDATE`.
+- Refuses unless *no* person (current, retired or superseded) has the new email,
+  also case-insensitively. `persons_email_key` is case-sensitive and covers every
+  row, so the script checks both cases itself.
+- Refuses an implausible address or a no-op change.
+- **The actor is self-attested.** `lvrf.actor_person_id` is set to the person,
+  exactly as `actorContext` sets it, so the audit row names them. There is no
+  `--actor` flag, by decision.
+- Updates the row, then **reads the audit row back and checks it**: `update`, old
+  email, new email, actor. If anything differs, it rolls back.
+- Prints the person id and the audit row id. The id, credential and sessions are
+  untouched; a signed-in session belongs to the person, not the address.
+
+**Gate A.**
+
+- **A bug caught by its own safety check.** The audit lookup selected
+  `id::text AS id` and sorted `ORDER BY id DESC`. Postgres sorted by the *output*
+  column, as text, so `'94'` came first and the script read an old, unrelated
+  persons update. The read-back check refused and rolled back. It now sorts by
+  `a.id`, the bigint.
+- **`verify_set_email.sh`: 29 passed, 0 failed,** on a throwaway clone. Every
+  address in it is a placeholder.
+  - **Refusals, writing nothing:** unknown current email; customer-side;
+    simulated vendor-staff; new email taken in another case; implausible; same
+    email in another case. No person row changed and no audit row was written.
+  - **The change:** one audit row, `update`, old → new, actor = the person,
+    record = the person. Same person id, `updated_at` advanced, no person added or
+    superseded, and the credential is unchanged (same id, still current). The old
+    email no longer resolves.
+  - **Sign-in:** the new email signs in (200, `/me` is the same person id); the
+    old email gets 401.
+  - **The P1 gap is closed.** A **simulated vendor-staff person** with a valid
+    credential gets 401, and `set_email` refuses them.
+- **`verify_signin_p1.sh`:** 35 passed, 0 failed.
+- **The real address is in no committed file.** On prod it will be in `persons`,
+  in `audit_log.new_row` permanently (append-only), and in the shell history of
+  whoever runs the command.
