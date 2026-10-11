@@ -3,6 +3,7 @@ import './env.js';
 import express from 'express';
 import { pool } from './db/pool.js';
 import { actorContext } from './middleware/actorContext.js';
+import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { personsRouter } from './routes/persons.js';
 import { engagementsRouter } from './routes/engagements.js';
@@ -34,8 +35,16 @@ import { industryPackRouter } from './routes/industryPack.js';
 import { capabilityClaimsRouter } from './routes/capabilityClaims.js';
 
 const app = express();
+// Caddy is the only client of this process and connects from 127.0.0.1.
+// Trusting the loopback proxy makes req.ip the browser's address (from
+// X-Forwarded-For) and req.secure true behind HTTPS — the sign-in rate
+// limit and the Secure cookie flag both depend on it (routes/auth.ts).
+app.set('trust proxy', 'loopback');
 
 app.use(express.json());
+// Before actorContext: signing in is how a person becomes an actor, so it
+// cannot require the actor header (routes/auth.ts).
+app.use('/api/auth', authRouter(pool));
 app.use(actorContext(pool));
 app.use('/api/health', healthRouter(pool));
 app.use('/api/persons', personsRouter(pool));

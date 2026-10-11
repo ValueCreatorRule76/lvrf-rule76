@@ -6470,3 +6470,139 @@ derived from `.env` and leaving `.env` itself unchanged.
   are the same, but the picker does not make the difference obvious.
 - Card 02's member label reads *Curia · Curia — lot acceptance…*, because the
   engagement's own name already begins with the account name. Cosmetic.
+
+## Sign-in P1 — credentials, sessions, auth routes (0027)
+
+**Decision (approved):** only vendor staff (persons with a `tenant_id`, not
+simulated, current) can sign in. Password hashed with argon2id; session is
+server-side, cookie holds only a random token, the database holds only its
+SHA-256. The `X-Actor-Person-Id` header keeps working in P1. P2 makes the session the
+actor and refuses the header in production unless `LVRF_ALLOW_ACTOR_HEADER=1`
+outside production (the server will refuse to start otherwise). P3 adds a tenant
+check to every mutating route through one shared helper. Caddy basic_auth stays
+through P1–P3; P4 decides whether to remove it.
+
+**What P1 adds**
+
+- `person_credentials`: one current argon2id hash per person (partial unique
+  index; a CHECK refuses any hash not starting `$argon2id$`). Rotation is revoke +
+  insert. `set_via` records how it was set (`cli:<os user>`).
+- `sessions`: token hash (unique), person, idle expiry 12 h, absolute expiry 7 d
+  (CHECK `expires_at <= absolute_expires_at`), revoked_at, user agent.
+- Neither table is audited, deliberately: audit rows would copy hashes into an
+  append-only log. Both get `_no_delete` (hardening section 15). Triggers 82 → 84.
+- `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, mounted
+  before `actorContext`. JSON only (415 otherwise). One message for every failure
+  ("Email or password is incorrect."), including customer-side people, and a
+  dummy hash is verified when no credential exists so timing does not reveal
+  which emails exist. 5 failures per (IP, email) in 15 min → 429 (in memory;
+  resets on restart; recorded as a known limit).
+- Cookie `lvrf_session`: HttpOnly, SameSite=Lax, Path=/, Secure when the request
+  arrived over HTTPS (`trust proxy` set to loopback, so Caddy's
+  X-Forwarded-Proto is believed only from 127.0.0.1).
+- `scripts/set_password.ts <email>`: run on the box. Refuses unless exactly one
+  current tenant-staff person has that email. Prompts twice without echo,
+  minimum 12 characters, revokes the old credential and all of that person's
+  sessions in the same transaction. Never prints the password or hash.
+- `scripts/verify_signin_p1.sh`: clone, migrate, harden, 84 triggers, table
+  guards, credential CHECK and uniqueness, the full login/me/logout path, cookie
+  flags over HTTP and HTTPS, stored hash = sha256(token), forged cookie refused,
+  header path still works, rate limit, DELETE refused, no audit rows.
+
+**Not yet:** the session is not the actor (P2); no sign-in page; no tenant
+check on mutating routes (P3).
+
+**Gate A — local, 11 October 2026.**
+
+- **Dependency.** `argon2@0.45.1` is a runtime dependency. `package.json` gains
+  only it; the lockfile adds argon2 and 11 transitive packages, and removes or
+  changes none. npm 11 did **not** run argon2's install script (no allow-scripts
+  approval). It loads anyway from its shipped prebuilds, which include
+  `linux-x64` with glibc and musl builds, so prod must not need a compiler.
+- **Fixed in `auth.ts`: the rate limiter grew without bound.** Every attempt
+  created a Map key, and only a successful sign-in removed one. Now:
+  - only a *failed* attempt creates a key;
+  - reads drop expired keys;
+  - a timer (unref'd) sweeps every window;
+  - the map is capped at 10,000 keys, evicting the oldest.
+
+  Each key holds at most 5 timestamps. Eviction under a flood larger than the
+  cap can reset an older key early, and that is stated in the code.
+- **Fixed in `auth.ts`: login requires exactly one matching person.**
+  `persons.email` is UNIQUE case-sensitively, but login matches
+  case-insensitively, so two people whose emails differ only by case could
+  both match. That now goes through the same uniform 401, with the dummy
+  verify.
+- **Fixed in `set_password.ts`: the prompt was written before raw mode.**
+  Input arriving the instant the prompt appeared was echoed in the clear and
+  then lost. A pty driver answering immediately hung on "Again:". Raw mode and
+  the listener now come first, the prompt after.
+- **`set_password.ts` was never typechecked.** The server's tsconfig includes
+  only `server/`, `db/` and `drizzle.config.ts`. It typechecks clean through a
+  temporary config, which was then deleted.
+- **Fixed in this section:** the header is `X-Actor-Person-Id`, not
+  `X-LVRF-Actor`.
+- **Migration matches schema.** `drizzle-kit generate` on a throwaway copy of
+  the repo reports "No schema changes, nothing to migrate".
+- **`verify_signin_p1.sh`: 35 passed, 0 failed.** Its step 9 had a test bug: it
+  checked the first session's token after signing out the third one. It now
+  re-reads the token it signs out.
+- **Four mutations, each caught, code restored byte-identical:**
+
+  | Mutation | Run | Caught by |
+  |---|---|---|
+  | Drop `HttpOnly` | 34/1 | "cookie not HttpOnly" |
+  | Different message for an unknown email | 34/1 | "wrong password" no longer matches the unknown-email message |
+  | Remove the tenant filter | 34/1 | "customer login -> 200" |
+  | Make logout a no-op | 33/2 | old token still works; session not revoked |
+
+- **Trigger counts are read from `hardening.sql`, not restated.** Five scripts
+  hardcoded 82 and broke at 84. `verify_exclusions.sh` and
+  `verify_account_workbench.sh` failed on it in the regression run. All five now
+  read the "Total: N distinct triggers" line in `hardening.sql`.
+- **`restore_prod_copy.sh` applies newer migrations before hardening.** A 0026
+  snapshot could no longer be restored, because `hardening.sql` section 15
+  references 0027's tables. It now applies any newer migrations as `lvrf_app`
+  first and says so: on the 12:10 snapshot, 16/0, "applied 1 migration(s) newer
+  than the snapshot".
+- **Regression:**
+
+  | Script | Result |
+  |---|---|
+  | `verify_commit_before_response.sh` | 17/0 |
+  | `verify_exclusions.sh` | 27/0 |
+  | `verify_pack_review.sh` | 17/0 |
+  | `verify_cohort.sh` | 27/0 |
+  | `verify_account_workbench.sh` | 28/0 |
+  | `verify_refusal_attribution.sh` | 13/0 |
+
+- **`set_password.ts`, driven through a pty on a throwaway clone:**
+  - Refuses an unknown email, a customer-side email, a simulated person (a
+    customer-side fixture), a short password, and mismatched entries, writing
+    nothing.
+  - A first set reports "First password set".
+  - A second set reports "Previous password revoked. 2 active session(s)
+    signed out". That leaves 2 credentials (1 revoked, 1 current, both
+    argon2id, `set_via cli:<user>`), 2 sessions revoked and none deleted, and
+    0 audit rows.
+  - No run echoed the password or a hash.
+- **Not changed, recorded:**
+  - The API listens on all interfaces (`app.listen(port)`, `*:3001` on the box).
+    Port 3001 is not reachable from outside: a probe from the Mac timed out, so
+    the firewall holds. Binding to 127.0.0.1 would be cheap defence in depth.
+  - `isHttps()` also trusts a raw `X-Forwarded-Proto` header from any source.
+    The only effect is adding `Secure`, so it is harmless.
+  - A simulated vendor-staff person is not exercised by any test, because
+    local `lvrf` has none. The login query and `set_password` both check
+    `simulated`.
+
+**Recorded for P2: bind the API to 127.0.0.1.** `server/index.ts` calls
+`app.listen(port)` with no host, so the API listens on every interface (`*:3001`
+on the box). Only the firewall keeps it off the internet, and that would mean
+skipping Caddy's TLS and basic_auth. Checked before deciding: Caddy proxies to
+`reverse_proxy 127.0.0.1:3001` in both `/etc/caddy/Caddyfile` on the box and
+`ops/Caddyfile`, so `app.listen(port, '127.0.0.1')` keeps the proxy working.
+**The same change must update `client/vite.config.ts`**, whose dev proxy targets
+`http://localhost:3001`. On macOS `localhost` can resolve to `::1` first, the
+trap CLAUDE.md already records for Caddy. Deliberately not changed in the P1
+commit.

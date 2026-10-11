@@ -11,6 +11,12 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The expected trigger total is read from db/hardening.sql's Verification
+# block — the one place it is declared (CLAUDE.md: no file restates a
+# canonical value). A migration that adds triggers updates that line, and
+# every script follows.
+EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
+[ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -50,7 +56,7 @@ DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate
   && ok "partial unique index exists" || bad "partial unique index missing"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_0026.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$T" = "82" ] && ok "82 distinct triggers (unchanged)" || bad "triggers: $T"
+[ "$T" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "triggers: $T (expected $EXPECT_TRIGGERS)"
 
 step "3. API against the clone, port ${PORT}"
 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_excl_server.log 2>&1 &

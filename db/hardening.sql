@@ -859,6 +859,42 @@ CREATE TRIGGER capability_industry_measures_no_delete
   );
 
 -- ------------------------------------------------------------------
+-- 15. Sign-in P1 (0027) — person_credentials and sessions
+--     (placed before section 14 so the manifest, which reads back every
+--     trigger this run created, includes these two)
+-- ------------------------------------------------------------------
+-- Both tables are insert + revoke: a credential is rotated by marking the
+-- current row revoked_at and inserting a new one; a session ends by
+-- revoked_at or by expiry. Neither has deleted_at, so the generic "Set
+-- deleted_at instead" remedy would be false — each gets its own text,
+-- same pattern as refusals (8), industries (11), exclusions (12).
+--
+--   _audit      NO, deliberately. lvrf_audit() copies whole rows into
+--               audit_log, which is append-only and can never be cleaned;
+--               auditing these tables would put password hashes and
+--               session-token hashes into it permanently.
+--   _touch      NO. Neither table has updated_at.
+--   _no_delete  YES, both.
+--
+-- CONSEQUENCE: trigger count goes 82 -> 84. Two new triggers —
+-- person_credentials_no_delete, sessions_no_delete. Reconciled by LIST in
+-- the Verification block below, not by total.
+
+DROP TRIGGER IF EXISTS person_credentials_no_delete ON person_credentials;
+CREATE TRIGGER person_credentials_no_delete
+  BEFORE DELETE ON person_credentials
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A credential is never deleted. To replace a password, revoke the current credential (set revoked_at) and insert a new one — scripts/set_password.ts does both.'
+  );
+
+DROP TRIGGER IF EXISTS sessions_no_delete ON sessions;
+CREATE TRIGGER sessions_no_delete
+  BEFORE DELETE ON sessions
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A session is never deleted. To end it, set revoked_at; an expired session is already unusable.'
+  );
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -936,16 +972,17 @@ COMMIT;
 --   industry_measure_exclusions_no_delete — 2
 --   13: capability_industry_measures_audit,
 --   capability_industry_measures_no_delete — 2
---   Total: 82 distinct triggers. (0024 took it 78 -> 82: institution_facts
---   _audit, _touch, _no_delete, _supersession_sane.)
+--   15: person_credentials_no_delete, sessions_no_delete — 2
+--   Total: 84 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 82.
+-- TRUNCATE in section 14 fail. Total stays 84.
 --
--- Expect 123 rows here: information_schema.triggers emits one row per event
+-- Expect 125 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -959,8 +996,9 @@ COMMIT;
 -- industry_measure_exclusions_audit fires on INSERT and UPDATE (+2),
 -- industry_measure_exclusions_no_delete on DELETE only (+1);
 -- capability_industry_measures_audit fires on INSERT and UPDATE (+2),
--- capability_industry_measures_no_delete on DELETE only (+1).
--- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 = 123.
+-- capability_industry_measures_no_delete on DELETE only (+1);
+-- person_credentials_no_delete and sessions_no_delete on DELETE only (+2).
+-- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 = 125.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

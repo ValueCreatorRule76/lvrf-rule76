@@ -15,6 +15,12 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The expected trigger total is read from db/hardening.sql's Verification
+# block — the one place it is declared (CLAUDE.md: no file restates a
+# canonical value). A migration that adds triggers updates that line, and
+# every script follows.
+EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
+[ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
 APPLY_LOCAL=false
 [ "${1:-}" = "--apply-local" ] && APPLY_LOCAL=true
@@ -71,7 +77,7 @@ psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_harde
   && ok "hardening.sql applied" || { bad "hardening.sql failed — see /tmp/lvrf_hardening_0024.log"; exit 1; }
 
 TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$TRIGGERS" = "82" ] && ok "82 distinct triggers" || bad "expected 82 distinct triggers, found $TRIGGERS"
+[ "$TRIGGERS" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "expected $EXPECT_TRIGGERS distinct triggers, found $TRIGGERS"
 FACT_TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_facts'")"
 [ "$FACT_TRIGGERS" = "institution_facts_audit,institution_facts_no_delete,institution_facts_supersession_sane,institution_facts_touch" ] \
   && ok "institution_facts has _audit, _no_delete, _supersession_sane, _touch" \
@@ -191,6 +197,6 @@ if $APPLY_LOCAL; then
   npx drizzle-kit migrate
   psql -v ON_ERROR_STOP=1 -q -d lvrf -f db/hardening.sql > /tmp/lvrf_hardening_local.log 2>&1
   LOCAL_TRIGGERS="$(psql -At -d lvrf -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-  echo "  local lvrf distinct triggers: $LOCAL_TRIGGERS (expect 82)"
-  [ "$LOCAL_TRIGGERS" = "82" ] || exit 1
+  echo "  local lvrf distinct triggers: $LOCAL_TRIGGERS (expect $EXPECT_TRIGGERS)"
+  [ "$LOCAL_TRIGGERS" = "$EXPECT_TRIGGERS" ] || exit 1
 fi

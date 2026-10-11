@@ -12,6 +12,12 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The expected trigger total is read from db/hardening.sql's Verification
+# block — the one place it is declared (CLAUDE.md: no file restates a
+# canonical value). A migration that adds triggers updates that line, and
+# every script follows.
+EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
+[ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -40,7 +46,7 @@ DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate
   && ok "refusals.value_outcome_id exists" || { bad "column missing after migrate"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_0025.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$T" = "82" ] && ok "82 distinct triggers (unchanged)" || bad "triggers: $T (expected 82)"
+[ "$T" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "triggers: $T (expected $EXPECT_TRIGGERS)"
 LEGACY_NULLS="$(q "SELECT count(*) FROM refusals WHERE value_outcome_id IS NULL")"
 [ "$LEGACY_NULLS" = "$(q "SELECT count(*) FROM refusals")" ] && ok "no back-fill: all $LEGACY_NULLS existing refusals have NULL value_outcome_id" || bad "existing refusals were back-filled"
 

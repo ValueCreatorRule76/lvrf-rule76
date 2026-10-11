@@ -39,6 +39,12 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# The expected trigger total is read from db/hardening.sql's Verification
+# block — the one place it is declared (CLAUDE.md: no file restates a
+# canonical value). A migration that adds triggers updates that line, and
+# every script follows.
+EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
+[ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
 TARGET=lvrf_prodcopy
 DUMP="${1:-}"
@@ -114,13 +120,27 @@ END $$;
 SQL
 ok "ownership transferred"
 
+echo "==> Migrations newer than the snapshot, applied as lvrf_app (as on prod)"
+# A snapshot taken before the repo's latest migration would leave tables
+# that hardening.sql's later sections reference missing (0027's
+# person_credentials and sessions, for one). Applying the pending
+# migrations makes the copy prod's data on the repo's current schema —
+# what testing unreleased code against real data needs. Printed, so it is
+# never silent.
+BEFORE_MIG="$(q "SELECT count(*) FROM drizzle.__drizzle_migrations")"
+COPY_URL="${LOCAL_URL%/*}/$TARGET"
+DATABASE_URL="$COPY_URL" npx drizzle-kit migrate > /tmp/lvrf_prodcopy_migrate.log 2>&1 \
+  || { bad "drizzle-kit migrate failed — see /tmp/lvrf_prodcopy_migrate.log"; exit 1; }
+AFTER_MIG="$(q "SELECT count(*) FROM drizzle.__drizzle_migrations")"
+if [ "$AFTER_MIG" = "$BEFORE_MIG" ]; then ok "snapshot was already at the repo's latest migration"; else ok "applied $((AFTER_MIG - BEFORE_MIG)) migration(s) newer than the snapshot"; fi
+
 echo "==> hardening.sql (re-applies triggers, REVOKEs and GRANTs that --no-acl dropped)"
 psql -X -v ON_ERROR_STOP=1 -q -d "$TARGET" -f db/hardening.sql > /tmp/lvrf_prodcopy_hardening.log 2>&1 \
   && ok "hardening.sql applied" || { bad "hardening.sql failed — see /tmp/lvrf_prodcopy_hardening.log"; exit 1; }
 
 echo "==> Checks"
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$T" = "82" ] && ok "82 distinct triggers" || bad "triggers: $T (expected 82)"
+[ "$T" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "triggers: $T (expected $EXPECT_TRIGGERS)"
 
 for tbl in audit_log heartbeat_events; do
   P="$(q "SELECT has_table_privilege('lvrf_app', '$tbl', 'UPDATE')::text || has_table_privilege('lvrf_app', '$tbl', 'DELETE')::text || has_table_privilege('lvrf_app', '$tbl', 'TRUNCATE')::text || '|' || has_table_privilege('lvrf_app', '$tbl', 'INSERT')::text || has_table_privilege('lvrf_app', '$tbl', 'SELECT')::text")"

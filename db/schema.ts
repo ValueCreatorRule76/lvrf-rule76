@@ -1741,3 +1741,67 @@ export const capabilityIndustryMeasures = pgTable('capability_industry_measures'
   unique('capability_industry_measures_pair_key').on(t.capabilityId, t.industryMeasureId),
   index('capability_industry_measures_measure_idx').on(t.industryMeasureId),
 ]);
+
+/* ================================================================== */
+/* Sign-in — credentials and sessions (0027, phase P1)                */
+/* ================================================================== */
+
+/**
+ * A vendor staff member's password, as an argon2id hash. Only persons
+ * with a tenant_id (vendor staff) who are not simulated may have one —
+ * enforced by the only writer, scripts/set_password.ts, and by the login
+ * route, which ignores credentials on anyone else. Customer-side persons
+ * are subjects of the record, not users of the system.
+ *
+ * ROTATION IS INSERT + REVOKE, NEVER UPDATE OR DELETE. Setting a new
+ * password marks the current row revoked and inserts a new one; the
+ * partial unique index allows one current credential per person.
+ * _no_delete is installed by hardening.sql (section 15).
+ *
+ * DELIBERATELY NOT AUDITED. lvrf_audit() copies whole rows into
+ * audit_log; for this table that would copy password hashes into a log
+ * that is append-only and can never be cleaned. The fact that a password
+ * was set is recorded by the row itself (created_at, set_via).
+ */
+export const personCredentials = pgTable('person_credentials', {
+  id: id(),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  passwordHash: text('password_hash').notNull(),
+  /** How it was set — 'cli:<os user>' from scripts/set_password.ts. */
+  setVia: text('set_via').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('person_credentials_one_current')
+    .on(t.personId)
+    .where(sql`${t.revokedAt} IS NULL`),
+  check('person_credentials_hash_is_argon2id',
+    sql`${t.passwordHash} LIKE '$argon2id$%'`),
+]);
+
+/**
+ * A signed-in browser. The token itself is never stored — only its
+ * SHA-256 — so a read of this table cannot be replayed as a login.
+ *
+ * Signing out, expiry and password rotation set revoked_at or are judged
+ * by expires_at; no row is ever deleted (_no_delete, hardening.sql
+ * section 15). Not audited: high volume, and the row already is the
+ * record. expires_at slides forward on use (12 hours of inactivity) and
+ * never passes absolute_expires_at (7 days after sign-in).
+ */
+export const sessions = pgTable('sessions', {
+  id: id(),
+  tokenHash: text('token_hash').notNull(),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  userAgent: text('user_agent'),
+}, (t) => [
+  unique('sessions_token_hash_key').on(t.tokenHash),
+  index('sessions_person_idx').on(t.personId),
+  check('sessions_expiry_is_bounded',
+    sql`${t.expiresAt} <= ${t.absoluteExpiresAt}`),
+]);
