@@ -156,8 +156,8 @@ placement is a judgement.
 | # | Item | Depends on | Why here |
 |---|---|---|---|
 | ~~Q1~~ | ~~**Fact supersession**: deploy (0028, backup first), then Brad's LVAF → "LVRF (value realization records)" correction, then Gate C~~ **DONE 11 Oct 2026.** Deployed `cb666e9`; corrected by Brad at 18:16 UTC; Gate C clean | — | 2.0's last item is closed |
-| Q2 | **3.0 item 1 — an access grant is a record** | D4, D5 (decided) | Band A first: the next user must be granted by an act that names Brad |
-| Q3 | **3.0 item 2 — Brad-only acts, one shared check** | Q2; D3, D4, D6 (decided) | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
+| ~~Q2~~ | ~~**3.0 item 1 — an access grant is a record**~~ **DONE 11 Oct 2026**: deploys A (`da00660`, 0029) and B (`7c7e90e`); steward set (audit 206), bootstrap grant (207); sign-in requires a grant | D4, D5 (decided) | Band A first: the next user must be granted by an act that names Brad |
+| ~~Q3~~ | ~~**3.0 item 2 — Brad-only acts, one shared check**~~ **DONE 11 Oct 2026**: deploy C (`9560bfd`); four steward-only routes; coverage guard. **3.0 Band A complete.** | Q2; D3, D4, D6 (decided) | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
 | Q3a | Hygiene batch: L5 (compare 500 → 422), L2 (panel label), L3 (`supports` CHECK), L21 (two doc fixes) | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |
 | Q4 | **D2–D4 drift checks**, with L16 (what governance each composite table owes) | — | Band B adds migrations (entity, regime, addressable population, sources). D2 guards exactly that; D4 guards the supersession chains facts (Q1) and entities (item 3) now use. Cheapest before the schema grows |
 | Q5 | **Recons: 3.0 item 9** (the pack prompt is composed from live rows; the parser validates the same definition). Item 10's recon is done (no fact is a run input today) | — | the draft puts recons before item 6 |

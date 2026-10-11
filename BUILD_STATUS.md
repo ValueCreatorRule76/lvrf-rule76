@@ -7833,3 +7833,105 @@ password**.
   `frozen_outcomes`) name their actor steward.
   - In `signin_p2b`, the header-write case now acts as the steward. The point it
     proves is unchanged: with no session, the header's person is the actor.
+
+### Deployed — Band A deploy A, 11 October 2026
+
+`cb666e9..da00660` went to production on its own; B (`7c7e90e`) and C (`9560bfd`)
+were held back.
+
+- **Backup:** `~/lvrf_pre_0029_20261011_192211.dump` (551,068 bytes,
+  `-rw-------`), taken at 19:22, before the migration.
+- **Migration:**
+  - `0029` applied (row 30, `1791743666227`); `hardening.sql` exited 0, with the
+    three expected "does not exist, skipping" notices for the new triggers.
+  - **87 triggers.**
+  - Before anything was written: 0 grants, 0 `must_change`, 0 stewards.
+  - `\d access_grants`: the 4 CHECKs, `access_grants_one_current`,
+    `access_grants_tenant_idx`, and `_audit`, `_no_delete`, `_steward_only`.
+    `\d person_credentials`: `must_change boolean not null default false`.
+  - Run `\d` with `psql -P pager=off` from now on; the output went missing twice
+    without it.
+- **Deploy:** deploy OK, exit 0, `da00660`, bundle `index-BUilSvpx.js`. Up since
+  **19:24:16 UTC**.
+- **The steward named:** `set_steward.ts` was run with Brad's own password. Audit
+  row **206** (tenants, update, actor = Brad) shows `steward_person_id` moving from
+  NULL to Brad.
+- **The bootstrap grant:** `grant_access.ts` was run with Brad's password. The result
+  is grant **`240cc895…`**, self-granted, with the reason "Bootstrap: the steward's
+  own grant", at 19:26:09. Audit row **207** records it (access_grants, insert,
+  actor = Brad). "Password unchanged."
+- **Cookie curl (19:26):** login 200, `me` 200 with `"must_change":false`, logout
+  200, and the cookie file deleted. The session `1e0f4a0a…` was revoked by the
+  logout.
+- **Gate C, read-only, as `lvrf_app`:**
+  - The steward is Brad; audit 206 is old NULL → new Brad, actor Brad.
+  - The grant is Brad's only grant: self-granted, not revoked; audit 207, actor
+    Brad.
+  - **Brad's credential is untouched:** the single row `54152804…`, `cli:brad`,
+    `must_change` false, not revoked, created 05:10:55.
+  - 206 and 207 are the only audit rows since the deploy. No refusals; 87 triggers;
+    0029 newest.
+  - **The deploy-B pre-check, run read-only from the B commit's SQL, reads 0.** Deploy
+    B's restart will be allowed.
+
+### Deployed — Band A deploy B, 11 October 2026
+
+`da00660..7c7e90e` went to production on its own; C (`9560bfd`) was held back.
+There was no migration.
+
+- **The deploy re-exec'd, because `lvrf-deploy.sh` changed.** Brad's terminal output
+  was cut off above the build, so the re-exec line itself isn't visible. But
+  **"steward-grant pre-check: 0 tenants locked out"** appeared before the restart,
+  and that line exists only in the new script. On the box, step 5b is at line 117,
+  before the restart at line 131.
+- **Smoke:** every check passed; deploy OK, exit 0, HEAD `7c7e90e`; bundle
+  `index-BUilSvpx.js` / `index-CN-_xKm8.css` (unchanged: B has no client change).
+  Up since **19:45:36 UTC**. The final pre-check printed 0.
+- **Cookie curl (19:46), the first sign-in that needed a grant:** login 200, cookie
+  `-rw-------`, `me` 200 with `"must_change":false`, `/api/cohort` 200, logout
+  200, and the cookie file deleted.
+- **Gate C, read-only, as `lvrf_app`:**
+  - The curl session `b5481a5a…` (19:46:30.76) was revoked at 19:46:30.82.
+  - No audit rows or refusals since the restart; the last audit id is still 207.
+  - 1 current grant, 1 current credential, **0 people with a password but no
+    grant**; 87 triggers.
+  - **Brad's browser session `4e6011a2…`** has `last_seen_at` 18:16:11. A reload
+    after the deploy should have refreshed it, so no browser request reached the
+    API with it after 19:45. That is not a fault in B (the curl proved sign-in
+    through the grant), and it is re-checked at deploy C.
+
+### Deployed — Band A deploy C, 11 October 2026: Band A complete
+
+`7c7e90e..9560bfd` went to production. There was no migration, and no re-exec
+(`lvrf-deploy.sh` is unchanged in C, checked with `git diff`).
+
+- **Deploy:** pre-check 0 tenants locked out; every smoke check passed; deploy OK, exit
+  0, HEAD `9560bfd`; bundle **`index-DOn1-W7X.js`** / `index-DH8ocVX5.css`. Up since
+  **19:53:32 UTC**.
+- **Cookie curl (19:54):** login 200 and `me` 200, both with `"must_change":false`,
+  `"is_steward":true`, `"steward_name":"Brad Piver"`; `/api/cohort` 200; logout
+  200; the cookie file deleted.
+- **Browser, after a hard reload:** the bar reads *Signed in as Brad Piver ·
+  bradpiver@icloud.com · STEWARD*, with *Change password*. Accounts → Curia loaded.
+- **Gate C, read-only, as `lvrf_app`:**
+  - The box's code has `requireSteward(pool)` on all four steward routes.
+  - The curl session `8902ad18…` was revoked by the logout.
+  - No audit rows or refusals since the restart (the last audit id is still 207); 87
+    triggers; 1 current grant.
+  - **The browser is on a new session, `74635ee8…`.** It was created at 19:52:08,
+    between deploys B and C: a fresh sign-in that passed the grant check. It was
+    last seen at 19:55:01, the Curia load.
+  - **The old session `4e6011a2…` was never sent again after 18:16:11.** It is not
+    revoked and expires by idle at 06:16 UTC. The server would have accepted it
+    (Brad's grant was current throughout); the browser simply no longer uses that
+    cookie. A sign-in at 19:52, or the cookie belonging to the other host (`www` vs
+    apex: the redirect is on the P4 list), would explain it.
+  - **This closes B's open point.** The browser signs in and works through the
+    grant check.
+- **Not exercised on prod, deliberately:** the four steward-only routes (each call
+  writes governed rows) and a non-steward's 403 (it needs a second granted person;
+  granting one is Brad's call). Both are covered locally: `verify_steward_acts`
+  27/0, with four breaks caught.
+
+**3.0 Band A is complete:** item 1 (an access grant is a record) and item 2 (the acts
+that are Brad's alone, through one shared check) are both in production.
