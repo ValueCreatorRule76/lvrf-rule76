@@ -7069,3 +7069,28 @@ this deploy runs entirely on the old script. The old script's smoke test already
 expects 401, so it should pass. The first deploy that runs with the new script
 already on the box is the first that can re-exec, and it only does so if that
 pull changes the script again.
+
+### Deployed — 11 October 2026
+
+`27f6e39..020f39b` went to production. There was no migration and no backup step.
+
+- **The deploy passed on its first run: deploy OK, exit 0.** It ran the old script
+  start to finish, as expected. There was no re-exec line: bash had loaded the old
+  file before the pull. Its checks all passed: health 200 with
+  `origin_check: configured`, then the run and the vhost each returned 401 without
+  a session. The service has been up since **13:06:28 UTC**, and the bundle is
+  still `index-Bq_62G2h.js`.
+- **`npm ci` on the box** reports what was accepted: server 4 moderate; client 7
+  (5 high, 2 moderate). The installed versions are `proxy-addr` 2.0.8, `qs` 6.16.0
+  and `drizzle-kit` 0.31.11.
+- **Gate C, read-only, as `lvrf_app`:**
+  - HEAD is `020f39b` and level with origin. Health reports `origin_check:
+    configured`, an unauthenticated `/api/cohort` gets 401, and the API listens on
+    `127.0.0.1:3001` only.
+  - 84 triggers, 1 current credential, 1 live session.
+  - No audit rows and no refusals since the deploy; the last audit id is still
+    202. Since the P2a deploy, every audit actor has been staff (2 rows).
+  - **The P2b prerequisite holds:** no customer-side, simulated or retired person
+    holds a credential or a session.
+- **The first deploy that can re-exec** is the next one after this, and only if
+  its pull changes `lvrf-deploy.sh`.
