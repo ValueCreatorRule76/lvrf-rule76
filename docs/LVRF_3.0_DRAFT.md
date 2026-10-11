@@ -73,8 +73,13 @@ The roster is otherwise unchanged and not acted on.
 ## Why a 3.0 now
 
 The 2.0 roster of 30 August is delivered: model versioning, the gap register, cohort
-roll-up, self-drift detection, research intake, draft-and-refuse. What remains on it
-is the fact supersession writer.
+roll-up, self-drift detection, research intake, draft-and-refuse. *[rev 3: this said
+"What remains on it is the fact supersession writer". That was not the whole of it.
+Open from 2.0 are the fact supersession writer (built 11 October, deploy pending),
+drift checks D2–D4 (only D1 is built), and account research (2.0 item 5 shipped
+packs only; it is item 6 here). Model versioning also records a version and a
+fingerprint, but weights are still constants rather than data. See
+`docs/LVRF_PLAN.md`.]*
 
 **The 23 August release structure has been overtaken by the build.** It named, as out
 of scope for all three tiers: multi-tenancy, user management, dashboards,
@@ -581,3 +586,8 @@ named. These are the ones found on 11 October:
 7. **`record_documents` stays provisional** until the Repository Constitution
    ratifies. That is acceptable while no record leaves Skillsoft. Restate it if one
    does.
+8. **Where does research run: LVRF's own pipeline, or Compass OS?** *[rev 3: added.
+   Open since 2.0 item 5, 30 August.]* Compass OS's boundary claims Deep Research as
+   substrate (HB-0010's producer is Compass). LVRF building its own risks the
+   three-copies-diverge failure the Studios architecture exists to prevent. **Must be
+   decided before item 6.**

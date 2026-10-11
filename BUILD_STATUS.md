@@ -2,6 +2,8 @@
 
 **28 July 2026.** Build officially commenced.
 
+**Forward plan:** [`docs/LVRF_PLAN.md`](docs/LVRF_PLAN.md) — the one ordered plan (status ledger, loose ends, decisions, queue). DRAFT until approved.
+
 ---
 
 ## Constitutional state
