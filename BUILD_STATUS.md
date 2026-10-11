@@ -8007,3 +8007,62 @@ D13 (the first real account for item 6) stays open and blocks item 6 only.
   **"Named human committer of record — No committer of record has been named."**
 - **Regression:** all 19 verify scripts pass, 0 failed. The client `tsc`, build and
   lint pass, with bundle `index-PSJT4mn6.js`.
+
+### Deployed — 11 October 2026
+
+`9560bfd..177eb49` (`372914f` hygiene, `177eb49` docs) went to production, with
+migration 0030.
+
+- **Backup:** `~/lvrf_pre_0030_20261011_204117.dump` (568,754 bytes, `-rw-------`, 451
+  TOC entries), taken with the box at `9560bfd`.
+- **Migration:**
+  - `supports` before the migration: actual 2, baseline 3, impact_basis 3, all
+    valid.
+  - `0030` applied (row 31, `1791748891681`); `hardening.sql` exited 0; **87
+    triggers**.
+  - `\d value_outcome_evidence` (`-P pager=off`) shows
+    `value_outcome_evidence_supports_known` and `value_outcome_evidence_no_ai_actual`.
+- **Deploy:** deploy OK, exit 0, `177eb49`; pre-check 0; bundle **`index-PSJT4mn6.js`**
+  / `index-DH8ocVX5.css`. Up since **20:43:13 UTC**.
+- **The label:**
+  - Brad's browser report left the confidence-panel line as a placeholder ("[confirm
+    or correct]"), so it is **not confirmed from the browser**.
+  - Server side, the served bundle contains "Named human committer of record" once
+    and "Named human sponsor of record" zero times.
+- **Gate C, read-only, as `lvrf_app`:**
+  - 0030 newest; the CHECK is present; 0 invalid `supports` values; 87 triggers.
+  - No audit rows or refusals since the restart; the last audit id is still 207.
+- **D1 claim, confirmed before `177eb49` was committed:** only
+  `server/routes/industryResearch.ts` writes `research_results`.
+  - One exception: `scripts/verify_exclusions.sh:136`, a direct SQL UPDATE on a
+    throwaway clone, proving the unique index.
+  - `server/routes/industryPack.ts` reads it.
+  - No code anywhere calls a research tool or AI API.
+  - The CLAUDE.md paragraph was scoped to exactly that.
+
+### Why the Runs list shows "no institution" for runs 1–21 of the Curia reference example
+
+Investigated read-only; not fixed. **This predates the hygiene batch and P3, by design,
+and does not come from missing data:**
+
+- **Which runs.** Runs 1–21 belong to the engagement *"Curia — reference example, not
+  an engagement"*, **retired on 10 October 2026 at 04:29 UTC**. Curia's other
+  engagement, *"Curia — lot acceptance, pack-grounded hypothesis"*, is current, and
+  its run 1 shows Curia. That is the "only run 1" in the list. Customer Zero's run
+  also shows Skillsoft.
+- **The data is complete.** Every one of those engagements has `institution_id`
+  set to Curia, and Curia is not deleted.
+- **The cause is the list query.** `runsIndex.ts` LEFT JOINs the engagement with
+  `e.deleted_at IS NULL` in the ON clause, then joins the institution through it.
+  So a run under a **retired** engagement renders with `institution_name` null.
+  The file's own comment calls this deliberate: a run whose engagement was retired
+  stays in the list rather than vanishing.
+- **Not the L4 gap.** The list never reads the payload. (The payload carries no
+  institution either, which is L4, but that is a separate thing.)
+- **It predates P3 and hygiene.** The prod-copy snapshot was taken after the
+  retirement, and HEAD versus P3, and HEAD versus hygiene, were byte-identical on
+  `GET /api/runs`.
+- **The defect in the design:** "no institution" conflates *the engagement is
+  retired* with *the account is unknown*. The account is known. A better list would
+  join the institution regardless and mark the engagement retired. This is recorded
+  as loose end L26, not fixed.
