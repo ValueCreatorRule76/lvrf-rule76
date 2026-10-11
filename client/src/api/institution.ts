@@ -41,6 +41,29 @@ export interface InstitutionFact {
   ai_sourced: boolean;
   captured_by: string;
   created_at: string;
+  /** Earlier values this fact replaced, newest first (fact supersession, 0028). */
+  history: InstitutionFactHistoryEntry[];
+}
+
+/**
+ * A superseded fact: kept exactly as recorded, never current. superseded_at
+ * and superseded_by are the correction's own time and person (the successor
+ * row's created_at and captured_by); supersession_reason is why.
+ */
+export interface InstitutionFactHistoryEntry {
+  id: string;
+  value_numeric: string | null;
+  value_text: string | null;
+  unit: string | null;
+  as_of: string;
+  provenance: string;
+  evidence_kind: string;
+  source_verified: boolean;
+  captured_by: string;
+  created_at: string;
+  superseded_at: string;
+  superseded_by: string;
+  supersession_reason: string;
 }
 
 export interface InstitutionPackMeasure {

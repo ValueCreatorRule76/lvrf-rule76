@@ -182,6 +182,61 @@ export function institutionViewRouter(pool: Pool): Router {
         [institutionId],
       );
 
+      // Fact supersession (0028): each current fact's earlier values, newest
+      // first — walked back down the chain from the current row. Every
+      // ancestor is returned with WHY it was replaced (its own
+      // supersession_reason), and by whom and when (the successor that
+      // replaced it: its captured_by and created_at, written in the same
+      // transaction). The old rows are shown as history, never as current.
+      const { rows: historyRows } = await pool.query<{
+        current_id: string;
+        id: string;
+        value_numeric: string | null;
+        value_text: string | null;
+        unit: string | null;
+        as_of: string;
+        provenance: string;
+        evidence_kind: string;
+        source_verified: boolean;
+        captured_by: string;
+        created_at: string;
+        superseded_at: string;
+        superseded_by: string;
+        supersession_reason: string;
+        depth: number;
+      }>(
+        `WITH RECURSIVE chain AS (
+           SELECT f.id AS current_id, f.id, 0 AS depth
+             FROM institution_facts f
+            WHERE f.institution_id = $1 AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
+           UNION ALL
+           SELECT c.current_id, prev.id, c.depth + 1
+             FROM chain c
+             JOIN institution_facts prev ON prev.superseded_by_id = c.id
+         )
+         SELECT c.current_id, f.id, f.value_numeric, f.value_text, f.unit,
+                to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
+                e.provenance, e.kind AS evidence_kind, e.source_verified,
+                p.full_name AS captured_by, f.created_at,
+                succ.created_at AS superseded_at, sp.full_name AS superseded_by,
+                f.supersession_reason, c.depth
+           FROM chain c
+           JOIN institution_facts f ON f.id = c.id
+           JOIN evidence e ON e.id = f.evidence_id
+           JOIN persons p ON p.id = f.captured_by_person_id
+           JOIN institution_facts succ ON succ.id = f.superseded_by_id
+           JOIN persons sp ON sp.id = succ.captured_by_person_id
+          WHERE c.depth > 0
+          ORDER BY c.current_id, c.depth`,
+        [institutionId],
+      );
+      const historyOf = new Map<string, Omit<(typeof historyRows)[number], 'current_id' | 'depth'>[]>();
+      for (const { current_id, depth: _depth, ...h } of historyRows) {
+        const list = historyOf.get(current_id) ?? [];
+        list.push(h);
+        historyOf.set(current_id, list);
+      }
+
       const { rows: engagementRows } = await pool.query<{ id: string; name: string }>(
         `SELECT id, name FROM engagements
           WHERE institution_id = $1 AND deleted_at IS NULL
@@ -223,7 +278,7 @@ export function institutionViewRouter(pool: Pool): Router {
           website: institution.website,
           is_tenant_self: institution.is_tenant_self,
         },
-        facts,
+        facts: facts.map((f) => ({ ...f, history: historyOf.get(f.id) ?? [] })),
         pack,
         metrics,
         gap,

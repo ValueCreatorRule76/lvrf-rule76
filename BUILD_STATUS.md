@@ -4831,7 +4831,9 @@ check to self-diagnose.
   before the response*.
 - ~~**Sign-in P3, the tenant check on every route.**~~ **Deployed 11 October 2026.**
   Sign-in P1–P3 are complete; see *Sign-in P3* at the end of this file.
-- **Next: a supersession writer for institution facts.** Moved up from
+- **Next: a supersession writer for institution facts.** Built 11 October (0028);
+  see *Fact supersession* at the end of this file. Deploy pending; the LVAF
+  correction is Brad's to make in the browser. Moved up from
   the workbench's own list on 11 October, because a real fact now needs
   correcting.
   - The column, its `_supersession_sane` trigger and `_no_delete` exist; the route
@@ -7533,3 +7535,101 @@ traffic off Express while sign-in is new and has no MFA.
    sign-in page is served, and `/api/*` without a session is 401".
 
 Removal itself is then one Caddy change plus that script change.
+
+## Fact supersession — a fact is corrected by a new fact — 11 October 2026
+
+**Spine stage:** `baseline`. The last item of 2.0. Its first use is Skillsoft's
+`system` fact `c966ef3b…`, `LVAF` → "LVRF (value realization records)". That
+correction is Brad's to make in the browser after deploy.
+
+### Before building: does an old run read facts live? (3.0 draft item 10)
+
+**No. Facts are not an input to runs or records at all.**
+
+- `produceRun` builds its payload from the outcome, metric, capability, evidence
+  and heartbeat events, and stores it with its hash. No fact id or value is in it.
+- `GET /api/runs/:id` returns that stored payload, with only the account *name*
+  joined live.
+- Record documents are produced from the run payload.
+
+So superseding a fact cannot change an old run or record, and this did not need
+to wait for item 10. Item 10 becomes binding when research (3.0 item 6) feeds
+facts into runs.
+
+### What was built
+
+- **Migration `0028_fact_supersession`**: `institution_facts.supersession_reason`
+  plus `CHECK institution_facts_supersession_reason`. A fact is superseded
+  exactly when it carries a reason of at least 12 characters.
+  - The CHECK holds against every existing row: prod 1 fact / 0 superseded,
+    `lvrf_prodcopy` 0 / 0, local `lvrf` 0 / 0.
+  - Verify scripts create facts only through the route, and every clone migrates
+    cleanly.
+  - No new trigger; 84 stays 84. `_supersession_sane`, `_audit`, `_touch` and
+    `_no_delete` already covered the table.
+  - **Back up before applying it on prod** (rule 8).
+- **`POST /api/institutions/:institutionId/facts/:factId/supersede`**, in
+  `institutionFacts.ts` beside the create route. The two share one parser and one
+  insert, so that file is still the one writer of `institution_facts`.
+  - The fact must be on that account; otherwise, or for another tenant's fact, the
+    answer is 404 (the P3 helper).
+  - Only the current fact can be corrected: correcting an earlier one gets 409,
+    naming the current one.
+  - The kind cannot change (422). The reason must be at least 12 characters
+    (422; the CHECK is the backstop).
+  - The new fact carries its own evidence. The old row is updated with
+    `superseded_by_id` and the reason, guarded on `superseded_by_id IS NULL`, so
+    a second, racing correction gets 409 and its rows roll back.
+- **`GET /api/institutions/:id/view`**: each current fact carries `history`,
+  newest first, from a recursive walk down the chain. Each entry gives the earlier
+  value, its source, who recorded it, **who replaced it, when, and why**.
+- **The account card**:
+  - "Correct…" on each fact opens a form headed *Correcting: …*. The kind is
+    locked, the value and as-of date are pre-filled, and the source and reason are
+    required.
+  - A corrected fact shows "Corrected <when> by <who> · N earlier value(s)".
+    Expanded, each earlier value is labelled **Superseded**, in `--ink-45`.
+  - Checked at desktop and 390 px.
+- **Coverage guard.** The new route raised the count to 36, and its case was
+  required. `verify_tenant_scope`: B gets 404 on A's fact; A gets 201.
+
+### Gate A
+
+- **`verify_fact_supersession.sh`: 38 passed, 0 failed**, on a clone migrated to
+  0028.
+  - The correction mirrors the real one, LVAF → LVRF (value realization records).
+  - Refused before any write: no reason, a short reason, a kind change, a short
+    provenance, another account's path, an unknown fact.
+  - The old row keeps `LVAF`, points at its successor and carries the reason. The
+    new fact is the same kind, current, with its own evidence.
+  - Audit rows: the UPDATE and the INSERT, both with the corrector as actor.
+  - Re-correcting the old fact → 409 naming the current one.
+  - The view lists only the current fact. A chain of two shows its history newest
+    first.
+  - A correction to 0 is stored as 0.
+  - **A deterministic race:** a held row lock makes both requests queue on the
+    UPDATE. The result is 201 / 409, one new fact, one current fact.
+  - By SQL, the CHECK refuses: a successor without a reason, a reason under 12
+    characters, a reason on a current fact. The same UPDATE with a reason is
+    accepted.
+  - The superseded row cannot be deleted.
+- **Five deliberate breaks, then restored byte-identical:**
+
+  | Break | Result |
+  |---|---|
+  | The race guard removed | 3 FAIL: 201 / 201, two current facts. The first, timing-based race test let this pass, and was made deterministic |
+  | The "already corrected" check removed | 1 FAIL (wrong 409) |
+  | History removed from the view | 2 FAIL |
+  | The tenant check removed | 3 FAIL in `verify_tenant_scope` |
+  | The route's reason check removed | **still refused**: the CHECK returned the 422. This is the constraint doing its job |
+
+- **Browser check**, on a throwaway clone, signed in by session:
+  - an LVAF fact → "Correct…" → the form → a correction is recorded;
+  - the card shows the corrected value, the "Corrected … · 1 earlier value"
+    line, and the expanded *Superseded LVAF* entry with the reason;
+  - checked at 390 px;
+  - the "Correcting" summary was moved above the provenance block after the
+    first screenshot showed it read last.
+- **Regression:** all 15 verify scripts pass, 0 failed. The client `tsc`, build and
+  lint pass. The bundle is now `index-CUeqTSHI.js`; the client changed.
+

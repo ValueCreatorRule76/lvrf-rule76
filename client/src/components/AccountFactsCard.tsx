@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
-import type { InstitutionFact, InstitutionFactKind } from '../api/institution';
+import type { InstitutionFact, InstitutionFactHistoryEntry, InstitutionFactKind } from '../api/institution';
 
 const LABEL_CLASS = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const INPUT_CLASS =
@@ -36,6 +36,9 @@ interface AddFactResponse {
   evidence_id: string;
 }
 
+const BUTTON_CLASS =
+  'border border-silver px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ';
+
 // value_numeric arrives as pg's numeric string. Grouped for reading, never
 // parsed to a float — a revenue figure must not lose digits on the way to
 // the screen. "0" renders as 0: zero is data.
@@ -45,11 +48,20 @@ function formatNumeric(v: string): string {
   return frac && !/^0+$/.test(frac) ? `${grouped}.${frac.replace(/0+$/, '')}` : grouped;
 }
 
-function factValue(f: InstitutionFact): string {
+function factValue(
+  kind: InstitutionFactKind,
+  f: Pick<InstitutionFact, 'value_text' | 'value_numeric' | 'unit'>,
+): string {
   if (f.value_text !== null) return f.value_text;
   if (f.value_numeric === null) return '';
   const n = formatNumeric(f.value_numeric);
-  return f.kind === 'headcount' ? `${n} people` : `${n} ${f.unit ?? ''}`.trim();
+  return kind === 'headcount' ? `${n} people` : `${n} ${f.unit ?? ''}`.trim();
+}
+
+// A timestamp as a date and minute, in the reader's zone — enough to place
+// a correction, without seconds that read as precision.
+function when(ts: string): string {
+  return new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 // Calls `fn` once when it mounts. Rendered inside renderSuccess so the page
@@ -62,12 +74,27 @@ function OnMount({ fn }: { fn: () => void }) {
   return null;
 }
 
-function AddFactForm({ institutionId, onRecorded }: { institutionId: string; onRecorded: () => void }) {
-  const [kind, setKind] = useState<InstitutionFactKind | ''>('');
-  const [valueNumeric, setValueNumeric] = useState('');
-  const [valueText, setValueText] = useState('');
-  const [currency, setCurrency] = useState('');
-  const [asOf, setAsOf] = useState('');
+/**
+ * Records a new fact, or — with `correcting` — a correction of a current
+ * one (fact supersession). A correction keeps the fact's kind, starts from
+ * its value and as-of date, and needs its own source and a stated reason;
+ * the earlier value is kept as history, never overwritten.
+ */
+function FactForm({
+  institutionId,
+  onRecorded,
+  correcting,
+}: {
+  institutionId: string;
+  onRecorded: () => void;
+  correcting?: InstitutionFact;
+}) {
+  const [kind, setKind] = useState<InstitutionFactKind | ''>(correcting?.kind ?? '');
+  const [valueNumeric, setValueNumeric] = useState(correcting?.value_numeric ?? '');
+  const [valueText, setValueText] = useState(correcting?.value_text ?? '');
+  const [currency, setCurrency] = useState(correcting?.kind === 'revenue' ? (correcting.unit ?? '') : '');
+  const [asOf, setAsOf] = useState(correcting?.as_of ?? '');
+  const [reason, setReason] = useState('');
   const [evidenceKind, setEvidenceKind] = useState('');
   const [provenance, setProvenance] = useState('');
   const [sourceReference, setSourceReference] = useState('');
@@ -99,16 +126,23 @@ function AddFactForm({ institutionId, onRecorded }: { institutionId: string; onR
     confidence !== '' &&
     sourceVerified !== '' &&
     aiSourced !== '' &&
-    aiFieldsValid;
+    aiFieldsValid &&
+    (!correcting || reason.trim().length >= 12);
 
   return (
     <GovernedForm<AddFactResponse>
-      path={`/api/institutions/${institutionId}/facts`}
-      provenanceLabel="Provenance — where this fact came from"
-      submitLabel="Record fact"
+      path={
+        correcting
+          ? `/api/institutions/${institutionId}/facts/${correcting.id}/supersede`
+          : `/api/institutions/${institutionId}/facts`
+      }
+      provenanceLabel={
+        correcting ? 'Provenance — where the corrected value came from' : 'Provenance — where this fact came from'
+      }
+      submitLabel={correcting ? 'Record correction' : 'Record fact'}
       canSubmit={canSubmit}
       buildBody={() => ({
-        kind,
+        ...(correcting ? { supersession_reason: reason } : { kind }),
         ...(numeric
           ? {
               value_numeric: Number(valueNumeric),
@@ -127,7 +161,11 @@ function AddFactForm({ institutionId, onRecorded }: { institutionId: string; onR
       renderSuccess={() => (
         <>
           <OnMount fn={onRecorded} />
-          <p className="m-0">Fact recorded with its evidence.</p>
+          <p className="m-0">
+            {correcting
+              ? 'Correction recorded with its evidence. The earlier value is kept in the history.'
+              : 'Fact recorded with its evidence.'}
+          </p>
         </>
       )}
       provenance={
@@ -209,19 +247,37 @@ function AddFactForm({ institutionId, onRecorded }: { institutionId: string; onR
       }
       fields={
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block">
-            <span className={LABEL_CLASS}>Fact</span>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as InstitutionFactKind)}
-              className={INPUT_CLASS}
-            >
-              <option value="" disabled>— choose —</option>
-              {KIND_ORDER.map((k) => (
-                <option key={k} value={k}>{KIND_LABEL[k]}</option>
-              ))}
-            </select>
-          </label>
+          {correcting ? null : (
+            <label className="block">
+              <span className={LABEL_CLASS}>Fact</span>
+              <select
+                value={kind}
+                onChange={(e) => setKind(e.target.value as InstitutionFactKind)}
+                className={INPUT_CLASS}
+              >
+                <option value="" disabled>— choose —</option>
+                {KIND_ORDER.map((k) => (
+                  <option key={k} value={k}>{KIND_LABEL[k]}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {correcting && (
+            <label className="block sm:col-span-2">
+              <span className={LABEL_CLASS}>Why it is being corrected (required)</span>
+              <textarea
+                required
+                minLength={12}
+                rows={2}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className={INPUT_CLASS}
+              />
+              <p className={HELP_CLASS}>
+                Kept with the earlier value — e.g. "Typed LVAF for LVRF at capture; the provenance says LVRF."
+              </p>
+            </label>
+          )}
           <label className="block">
             <span className={LABEL_CLASS}>As of</span>
             <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={INPUT_CLASS} />
@@ -273,6 +329,31 @@ function AddFactForm({ institutionId, onRecorded }: { institutionId: string; onR
 }
 
 /**
+ * A fact's earlier values, newest first. Labelled "Superseded" and set in
+ * muted text so none can be read as current; each says why it was replaced,
+ * by whom and when. Kept exactly as recorded — typos included.
+ */
+function FactHistory({ kind, entries }: { kind: InstitutionFactKind; entries: InstitutionFactHistoryEntry[] }) {
+  return (
+    <ol className="m-0 mt-2 list-none border-l-2 border-rule-soft p-0 pl-3">
+      {entries.map((h) => (
+        <li key={h.id} className="py-1.5 text-[11.5px] text-ink-45">
+          <span className="mr-1.5 text-[9.5px] font-semibold uppercase tracking-[.13em]">Superseded</span>
+          <span className="text-ink-45">{factValue(kind, h)}</span>
+          <span className="block">
+            As of {h.as_of} · {h.provenance} · {h.evidence_kind} · {h.source_verified ? 'verified' : 'unverified'} ·
+            recorded by {h.captured_by}, {when(h.created_at)}
+          </span>
+          <span className="block">
+            Replaced {when(h.superseded_at)} by {h.superseded_by}: “{h.supersession_reason}”
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
  * Account workbench — the company inputs a baseline is argued against.
  * Every row shows its evidence's verification state: a fact is exactly as
  * verified as the evidence behind it, and an unverified figure renders as
@@ -290,6 +371,15 @@ export function AccountFactsCard({
   onRecorded: () => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [correctingId, setCorrectingId] = useState<string | null>(null);
+  const [openHistory, setOpenHistory] = useState<Set<string>>(new Set());
+  const toggleHistory = (id: string) =>
+    setOpenHistory((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const grouped = KIND_ORDER.map((k) => ({ kind: k, rows: facts.filter((f) => f.kind === k) }));
 
   return (
@@ -307,7 +397,7 @@ export function AccountFactsCard({
                 {rows.map((f) => (
                   <li key={f.id} className="border-b border-rule-soft py-2 last:border-b-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-[13.5px] font-semibold text-ink">{factValue(f)}</span>
+                      <span className="text-[13.5px] font-semibold text-ink">{factValue(f.kind, f)}</span>
                       <span className="flex items-center gap-1.5">
                         {f.ai_sourced && <Badge tone="warning">AI-sourced</Badge>}
                         <Badge tone={f.source_verified ? 'healthy' : 'warning'}>
@@ -321,6 +411,57 @@ export function AccountFactsCard({
                     <span className="block font-mono text-[10.5px] text-ink-45">
                       {f.evidence_kind} · {f.confidence} confidence · {f.captured_by}
                     </span>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                      {f.history.length > 0 && (
+                        <button
+                          type="button"
+                          aria-expanded={openHistory.has(f.id)}
+                          onClick={() => toggleHistory(f.id)}
+                          className={'text-[11px] text-gold-ink underline-offset-2 hover:underline ' + FOCUS_RING}
+                        >
+                          Corrected {when(f.created_at)} by {f.captured_by} · {f.history.length} earlier{' '}
+                          {f.history.length === 1 ? 'value' : 'values'} {openHistory.has(f.id) ? '▴' : '▾'}
+                        </button>
+                      )}
+                      {correctingId !== f.id && (
+                        <button type="button" onClick={() => setCorrectingId(f.id)} className={BUTTON_CLASS + FOCUS_RING}>
+                          Correct…
+                        </button>
+                      )}
+                    </span>
+                    {openHistory.has(f.id) && <FactHistory kind={f.kind} entries={f.history} />}
+                    {correctingId === f.id && (
+                      <div className="mt-3 border-l-2 border-rule pl-3">
+                        {/* What is being corrected, read first — GovernedForm
+                            draws its provenance block ahead of its fields. */}
+                        <div className="mb-3">
+                          <span className={LABEL_CLASS}>Correcting</span>
+                          <p className="m-0 text-[13px] text-ink">
+                            {KIND_LABEL[f.kind]}: {factValue(f.kind, f)}{' '}
+                            <span className="text-ink-45">(as of {f.as_of})</span>
+                          </p>
+                          <p className={HELP_CLASS}>
+                            The kind stays {KIND_LABEL[f.kind].toLowerCase()}. This value is kept in the history, not
+                            overwritten.
+                          </p>
+                        </div>
+                        <FactForm
+                          institutionId={institutionId}
+                          correcting={f}
+                          onRecorded={() => {
+                            setCorrectingId(null);
+                            onRecorded();
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCorrectingId(null)}
+                          className={'mt-2 text-[11px] text-ink-45 hover:text-ink ' + FOCUS_RING}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -333,15 +474,12 @@ export function AccountFactsCard({
         {adding ? (
           // key remounts the form after each recorded fact, so the next one
           // starts blank instead of on a spent, disabled form.
-          <AddFactForm key={facts.length} institutionId={institutionId} onRecorded={onRecorded} />
+          <FactForm key={facts.length} institutionId={institutionId} onRecorded={onRecorded} />
         ) : (
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className={
-              'border border-silver px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ' +
-              FOCUS_RING
-            }
+            className={BUTTON_CLASS + FOCUS_RING}
           >
             Add a fact
           </button>

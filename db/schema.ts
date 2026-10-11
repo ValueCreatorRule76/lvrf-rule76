@@ -706,10 +706,22 @@ export const institutionFacts = pgTable('institution_facts', {
   asOf: date('as_of').notNull(),
   evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
   capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  /**
+   * 0028, fact supersession. WHY this row was replaced, stated by the person
+   * who replaced it. Set in the same UPDATE as superseded_by_id, on the row
+   * being replaced, and only then. The CHECK below holds both together:
+   * a superseded fact always carries its reason, and a current fact never
+   * carries one. Who and when are the audit log's UPDATE row and the
+   * successor's captured_by / created_at; they are not restated here.
+   */
+  supersessionReason: text('supersession_reason'),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'institution_facts_superseded_by_fk' }).onDelete('restrict'),
+  check('institution_facts_supersession_reason',
+    sql`(${t.supersededById} IS NULL) = (${t.supersessionReason} IS NULL)
+        AND (${t.supersessionReason} IS NULL OR length(btrim(${t.supersessionReason})) >= 12)`),
   unique('institution_facts_evidence_key').on(t.evidenceId),
   check('institution_facts_numeric_shape',
     sql`${t.kind} NOT IN ('revenue', 'headcount')
