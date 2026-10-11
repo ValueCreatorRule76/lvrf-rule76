@@ -346,7 +346,7 @@ in the repo.
     make the app role own the audit function).
 - **The `vector` extension is left out.** It is installed and unused on prod,
   and not installed on the Mac.
-- **Checks:** 82 triggers; UPDATE, DELETE and TRUNCATE revoked from `lvrf_app` on
+- **Checks:** the trigger total in `hardening.sql`; UPDATE, DELETE and TRUNCATE revoked from `lvrf_app` on
   `audit_log` and `heartbeat_events`; ownership; and the newest migration equals
   the repo's latest.
 
@@ -374,7 +374,7 @@ allows, and the "flag unset" steps of `verify_signin_p2b.sh` have to stand in
 `sessions`. Check where it is:
 
 ```bash
-psql -At -d lvrf -c "SELECT count(*) FROM drizzle.__drizzle_migrations"   # 28 = through 0027
+psql -At -d lvrf -c "SELECT count(*) FROM drizzle.__drizzle_migrations"   # 30 = through 0029
 ```
 
 If it is short, back up first (CLAUDE.md rule 8), then migrate and harden:
@@ -389,17 +389,23 @@ psql -At -d lvrf -c "SELECT count(DISTINCT trigger_name) FROM information_schema
 The trigger count must equal the `Total: N distinct triggers` line in
 `db/hardening.sql`.
 
-**2. Give the local vendor-staff person a password.** There is no sign-up route.
-`scripts/set_password.ts` is the only writer of credentials, and it reads
+**2. Give the local vendor-staff person a password, name them steward, and
+grant them access** (3.0 Band A: sign-in needs a current grant). There is no
+sign-up route. Local `lvrf` must be at 0029 or later. The scripts read
 `DATABASE_URL` from `.env`, which is local `lvrf`. Find the email:
 
 ```bash
 psql -At -d lvrf -c "SELECT email FROM persons WHERE tenant_id IS NOT NULL AND NOT simulated AND deleted_at IS NULL AND superseded_by_id IS NULL"
-npx tsx scripts/set_password.ts <that email>
+npx tsx scripts/set_password.ts <that email>      # initial setup: allowed while the tenant has no steward
+npx tsx scripts/set_steward.ts <that email>       # proves that person's password; names them steward
+npx tsx scripts/grant_access.ts <that email> --reason "Local development: the steward's own grant"
 ```
 
-It prompts twice, without echo, and needs at least 12 characters. Use a
-local-only password, never the prod one.
+Each prompts without echo. Passwords need at least 12 characters. Use a
+local-only password, never the prod one. Once a steward exists,
+`set_password.ts` works only as break-glass for the steward; everyone else
+gets access through `grant_access.ts` and a reset through `reset_password.ts`,
+both of which need the steward's own password.
 
 **3. Run and sign in:**
 

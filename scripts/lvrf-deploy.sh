@@ -8,6 +8,9 @@
 #   run-id  id of a run used to smoke-test GET /api/runs/:id
 #           (default: 88f6a6e1-d99b-4cee-a4a6-ea954361de71)
 #
+# Step 5b (Band A, deploy B) refuses to restart if any tenant's steward lacks
+# a current access grant or password — the lockout pre-check.
+#
 # Step 7 checks the app is UP and FAIL-CLOSED, then the vhost:
 #   - GET /api/health on 127.0.0.1 -> 200, and it must report
 #     origin_check "configured": a missing LVRF_PUBLIC_ORIGIN fails the
@@ -111,6 +114,19 @@ if [ "$INDEX_MTIME" -lt "$PULL_TIME" ]; then
   die "$INDEX_HTML mtime ($INDEX_MTIME) is older than the pull ($PULL_TIME) — client build did not run or did not write output"
 fi
 
+# 5b. The lockout pre-check (3.0 Band A, deploy B). Sign-in needs a current
+#     access grant; a restart into a state where a tenant's steward has no
+#     current grant or password would leave nobody able to sign in to grant
+#     one except over SSH. scripts/precheck_steward_grants.sql prints the
+#     number of such tenants; anything but 0 stops the deploy HERE, before the
+#     restart, with the running service untouched. Read-only, as lvrf_app.
+DB_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
+LOCKED_OUT="$(psql -X -At "$DB_URL" -f scripts/precheck_steward_grants.sql)" \
+  || die "the steward-grant pre-check could not run (is 0029 applied?); not restarting"
+[ "$LOCKED_OUT" = "0" ] \
+  || die "steward-grant pre-check: ${LOCKED_OUT} tenant(s) would be locked out (steward without a current grant or password); not restarting. Grant the steward first: npx tsx scripts/grant_access.ts <steward email> --reason \"...\""
+log "steward-grant pre-check: 0 tenants locked out"
+
 # 6. Restart the service and confirm it came up.
 sudo systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed"
 sleep 2
@@ -127,7 +143,6 @@ HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1)"
 ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4)"
 ACTOR_HEADER="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"actor_header":"[a-z]+"' | cut -d'"' -f4)"
 API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
-DB_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 STAFF_ID="$(psql -X -At "$DB_URL" -c "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")" \
   || die "could not read a vendor-staff id for the header check"
 [ -n "$STAFF_ID" ] || die "no current vendor-staff person to name in the header check"

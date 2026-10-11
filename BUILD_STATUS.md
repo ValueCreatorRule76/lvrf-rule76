@@ -7768,3 +7768,25 @@ password**.
   - `tsconfig.scripts.json`, so the scripts are type-checked by the verify suite;
   - `scripts/lib/pty_answer.py`, which drives the scripts' hidden prompts and fails
     any run that echoes an answer or an argon2 hash.
+
+### Deploy B — sign-in requires a current grant
+
+- **`resolveSession` and `POST /api/auth/login`** both require a current access grant,
+  as well as a current credential.
+  - At sign-in, no grant gets the same 401 and the same message as a wrong password.
+  - Revoking a grant ends every session at its next request. The session row
+    itself is untouched; the check is on every request.
+  - The test-only header path is unchanged. It is off in production (P2b).
+- **The lockout pre-check.** `scripts/precheck_steward_grants.sql` counts the tenants
+  that have people with current passwords but whose steward lacks a current grant
+  or a current password.
+  - `lvrf-deploy.sh` step **5b** runs it as `lvrf_app` **before the restart**, and
+    stops the deploy unless it reads 0. The running service is left untouched.
+  - The deploy script changed in this commit, so the deploy re-execs into the new
+    version (as at P2b), and the check runs.
+- **The fixtures.** The verify scripts that sign in by session (`signin_p1`, `p2a`,
+  `p2b`, `set_email`, `tenant_scope`) now name their staff person steward and grant
+  them access, in the bootstrap shape the trigger allows.
+  - `verify_access_grants` flips one assertion: a person with no grant now gets 401.
+- **Local development:** `LVRF_Local_Setup.md` Phase 11 now gives `set_password`
+  (initial setup) → `set_steward` → `grant_access` for local `lvrf` (needs 0029).

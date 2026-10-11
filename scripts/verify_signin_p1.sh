@@ -61,7 +61,12 @@ CUSTOMER="$(q "SELECT id FROM persons WHERE tenant_id IS NULL AND institution_id
 CUSTOMER_EMAIL="$(q "SELECT email FROM persons WHERE id = '$CUSTOMER'")"
 PW="verification-password-$(date +%s)"
 HASH="$(node -e "import('argon2').then(a=>a.default.hash(process.argv[1],{type:a.default.argon2id})).then(h=>console.log(h))" "$PW")"
-q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$STAFF', '$HASH', 'verify')" > /dev/null && ok "staff credential inserted"
+q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$STAFF', '$HASH', 'verify')" > /dev/null
+# Band A deploy B: sign-in needs a current access grant. Name the staff person the
+# tenant's steward (if none) and grant them access — the steward's own
+# grant, the bootstrap shape access_grants_steward_only allows.
+q "UPDATE tenants SET steward_person_id = '$STAFF' WHERE id = (SELECT tenant_id FROM persons WHERE id = '$STAFF') AND steward_person_id IS NULL" > /dev/null
+q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT p.id, p.tenant_id, t.steward_person_id, 'Verification fixture grant' FROM persons p JOIN tenants t ON t.id = p.tenant_id WHERE p.id = '$STAFF'" > /dev/null && ok "staff credential inserted"
 [ -n "$CUSTOMER" ] && q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$CUSTOMER', '$HASH', 'verify')" > /dev/null && ok "customer-side credential inserted (the login must ignore it)"
 if q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$STAFF', 'plaintext', 'verify')" > /dev/null 2>&1; then
   bad "a non-argon2id hash was accepted"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # 3.0 Band A item 1, deploy A — access grants are records; the scripts that
-# write them; must_change and change-password. NO sign-in enforcement yet
-# (that is deploy B, verify_grant_enforcement.sh). Local verification.
+# write them; must_change and change-password. Sign-in enforcement (deploy
+# B) is covered by verify_grant_enforcement.sh. Local verification.
 #
 #   ./scripts/verify_access_grants.sh
 #
@@ -165,7 +165,7 @@ case "$OUT" in *"never deleted"*) ok "deleting a grant -> refused" ;; *) bad "de
 OUT="$(qerr "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) VALUES ('$N', '$TEN', '$S', 'Verification: a second current grant')")"
 case "$OUT" in *access_grants_one_current*) ok "a second current grant -> refused (one current per person)" ;; *) bad "second current: $OUT" ;; esac
 
-step "11. Server (deploy A: no grant enforcement)"
+step "11. Server"
 env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=0 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
@@ -174,7 +174,9 @@ code() { local jar="$1" m="$2" p="$3"; shift 3; curl -s -o "$W/r.json" -w '%{htt
 rj() { node -e "try{const v=require('$W/r.json');console.log(String(v$1))}catch{console.log('')}"; }
 JSON=(-H 'content-type: application/json')
 login() { code "$1" POST /api/auth/login "${JSON[@]}" -d "{\"email\":\"$2\",\"password\":\"$3\"}"; }
-C="$(login "$W/y.jar" "$Y_EMAIL" "$PW_Y")"; [ "$C" = "200" ] && ok "Y, with a password and NO grant, still signs in — enforcement is deploy B" || bad "Y login -> $C"
+# Deploy B enforces a grant at sign-in (verify_grant_enforcement.sh covers
+# it fully); here, the one consequence for this script's people.
+C="$(login "$W/y.jar" "$Y_EMAIL" "$PW_Y")"; [ "$C" = "401" ] && ok "Y, with a password and NO grant -> 401 (deploy B: a grant is required)" || bad "Y login -> $C"
 
 step "12. must_change: a starting password reaches only me / change-password / logout"
 C="$(login "$W/n1.jar" "$NEW_EMAIL" "$PW_N0")"; [ "$C" = "200" ] && [ "$(rj .person.must_change)" = "true" ] && ok "N signs in with the starting password; login says must_change" || bad "N login -> $C"

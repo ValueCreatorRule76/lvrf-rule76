@@ -81,6 +81,14 @@ MEASURE_OTHER="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name,
 PW="verification-password-$TS"
 HASH="$(node -e "import('argon2').then(a=>a.default.hash(process.argv[1],{type:a.default.argon2id})).then(h=>console.log(h))" "$PW")"
 q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$STAFF_A', '$HASH', 'verify'), ('$STAFF_B', '$HASH', 'verify')" > /dev/null
+# Band A deploy B: sign-in needs a current access grant. Name A's staff person the
+# tenant's steward (if none) and grant them access — the steward's own
+# grant, the bootstrap shape access_grants_steward_only allows.
+q "UPDATE tenants SET steward_person_id = '$STAFF_A' WHERE id = (SELECT tenant_id FROM persons WHERE id = '$STAFF_A') AND steward_person_id IS NULL" > /dev/null
+q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT p.id, p.tenant_id, t.steward_person_id, 'Verification fixture grant' FROM persons p JOIN tenants t ON t.id = p.tenant_id WHERE p.id = '$STAFF_A'" > /dev/null
+# And B's staff person, the same way, for tenant B.
+q "UPDATE tenants SET steward_person_id = '$STAFF_B' WHERE id = (SELECT tenant_id FROM persons WHERE id = '$STAFF_B') AND steward_person_id IS NULL" > /dev/null
+q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT p.id, p.tenant_id, t.steward_person_id, 'Verification fixture grant' FROM persons p JOIN tenants t ON t.id = p.tenant_id WHERE p.id = '$STAFF_B'" > /dev/null
 
 # Tenant A's rows, each the kind a route takes by id.
 A1() { q "$1" | head -1; }

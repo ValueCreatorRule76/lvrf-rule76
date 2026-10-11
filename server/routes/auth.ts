@@ -20,7 +20,8 @@ import {
  * the session the actor and refuses the header in production.
  *
  * WHO CAN SIGN IN: vendor staff only — a current, non-simulated person
- * with a tenant_id and a current credential. Customer-side persons are
+ * with a tenant_id, a current credential and (Band A, deploy B) a current
+ * access grant. Customer-side persons are
  * subjects of the record, not users. Every failure, whatever its cause
  * (unknown email, customer-side person, no credential, wrong password),
  * gets the same 401 and the same message, and an argon2 verify runs even
@@ -133,7 +134,11 @@ export function authRouter(pool: Pool): Router {
             AND p.tenant_id IS NOT NULL
             AND p.simulated = false
             AND p.deleted_at IS NULL
-            AND p.superseded_by_id IS NULL`,
+            AND p.superseded_by_id IS NULL
+            -- Band A deploy B: sign-in needs a current access grant as
+            -- well as a current credential. No grant is the same 401 and
+            -- the same message as a wrong password.
+            AND EXISTS (SELECT 1 FROM access_grants g WHERE g.person_id = p.id AND g.revoked_at IS NULL)`,
         [email],
       );
       // Exactly one, or nobody. persons.email is UNIQUE case-sensitively but

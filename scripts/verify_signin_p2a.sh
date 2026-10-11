@@ -75,6 +75,11 @@ RUN="$(q "SELECT id FROM value_runs WHERE deleted_at IS NULL ORDER BY walked_at 
 PW="verification-password-$(date +%s)"
 HASH="$(node -e "import('argon2').then(a=>a.default.hash(process.argv[1],{type:a.default.argon2id})).then(h=>console.log(h))" "$PW")"
 q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$STAFF', '$HASH', 'verify')" > /dev/null
+# Band A deploy B: sign-in needs a current access grant. Name the staff person the
+# tenant's steward (if none) and grant them access — the steward's own
+# grant, the bootstrap shape access_grants_steward_only allows.
+q "UPDATE tenants SET steward_person_id = '$STAFF' WHERE id = (SELECT tenant_id FROM persons WHERE id = '$STAFF') AND steward_person_id IS NULL" > /dev/null
+q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT p.id, p.tenant_id, t.steward_person_id, 'Verification fixture grant' FROM persons p JOIN tenants t ON t.id = p.tenant_id WHERE p.id = '$STAFF'" > /dev/null
 [ -n "$STAFF2" ] && [ -n "$CUSTOMER" ] && [ -n "$SIMULATED" ] && [ -n "$IND" ] && [ -n "$RUN" ] && ok "staff with a credential, a second staff person, a customer-side and a simulated person, an industry, a run" || bad "fixtures"
 X="/api/industries/$IND/exclusions"
 N=0; excl() { N=$((N + 1)); printf '{"name":"P2a verification %s %s","reason":"Verification: P2a session and guard checks."}' "$N" "$(date +%s%N)"; }

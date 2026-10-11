@@ -118,7 +118,11 @@ export async function resolveSession(pool: Pool, req: Request): Promise<SessionP
         AND p.tenant_id IS NOT NULL
         AND p.simulated = false
         AND p.deleted_at IS NULL
-        AND p.superseded_by_id IS NULL`,
+        AND p.superseded_by_id IS NULL
+        -- Band A deploy B: a current access grant, as well as a current
+        -- credential. Revoking the grant ends every session at its next
+        -- request, before anything reads or writes.
+        AND EXISTS (SELECT 1 FROM access_grants g WHERE g.person_id = p.id AND g.revoked_at IS NULL)`,
     [tokenHash, REFRESH_EVERY_SECONDS],
   );
   if (!row) return null;
