@@ -1779,8 +1779,19 @@ export const personCredentials = pgTable('person_credentials', {
   id: id(),
   personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   passwordHash: text('password_hash').notNull(),
-  /** How it was set — 'cli:<os user>' from scripts/set_password.ts. */
+  /**
+   * How it was set: 'cli:<os user>' (set_password.ts, break-glass or
+   * initial setup), 'grant' (grant_access.ts), 'reset' (reset_password.ts),
+   * 'self' (POST /api/auth/change-password).
+   */
   setVia: text('set_via').notNull(),
+  /**
+   * 0029, Band A item 1. A starting password chosen by the steward (grant
+   * or reset) must be replaced by its holder: while true, a session may
+   * reach only /api/auth/me, /change-password and /logout (requireActor
+   * answers every other /api route 403 password_change_required).
+   */
+  mustChange: boolean('must_change').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 }, (t) => [
@@ -1789,6 +1800,49 @@ export const personCredentials = pgTable('person_credentials', {
     .where(sql`${t.revokedAt} IS NULL`),
   check('person_credentials_hash_is_argon2id',
     sql`${t.passwordHash} LIKE '$argon2id$%'`),
+]);
+
+/**
+ * 0029, 3.0 Band A item 1 — an access grant is a record.
+ *
+ * Who may use LVRF is decided by the tenant's steward (tenants.
+ * steward_person_id; Brad Piver for Skillsoft — 3.0 draft Q2/D4) and by
+ * nobody else. A grant names the person, the steward who granted it, when
+ * and why; a revocation names who revoked it, when and why. Sign-in
+ * requires a current grant as well as a current credential (enforced from
+ * Band A deploy B).
+ *
+ * Insert + revoke, never deleted (_no_delete) and audited (_audit; no
+ * secrets here, unlike person_credentials). access_grants_steward_only
+ * (hardening.sql section 16) holds the rest in the database: the grantor
+ * and the revoker must be the person's tenant's steward, the grant must
+ * match the person's own tenant, and an UPDATE may only fill in the
+ * revocation, once. The steward's own first grant (grantor = grantee) is
+ * the bootstrap and is allowed by the same rule.
+ */
+export const accessGrants = pgTable('access_grants', {
+  id: id(),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  grantedByPersonId: uuid('granted_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+  reason: text('reason').notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedByPersonId: uuid('revoked_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  revocationReason: text('revocation_reason'),
+}, (t) => [
+  uniqueIndex('access_grants_one_current')
+    .on(t.personId)
+    .where(sql`${t.revokedAt} IS NULL`),
+  index('access_grants_tenant_idx').on(t.tenantId),
+  check('access_grants_reason_stated', sql`length(btrim(${t.reason})) >= 12`),
+  check('access_grants_revocation_complete',
+    sql`(${t.revokedAt} IS NULL) = (${t.revokedByPersonId} IS NULL)
+        AND (${t.revokedAt} IS NULL) = (${t.revocationReason} IS NULL)`),
+  check('access_grants_revocation_reason_stated',
+    sql`${t.revocationReason} IS NULL OR length(btrim(${t.revocationReason})) >= 12`),
+  check('access_grants_revoked_after_granted',
+    sql`${t.revokedAt} IS NULL OR ${t.revokedAt} >= ${t.grantedAt}`),
 ]);
 
 /**

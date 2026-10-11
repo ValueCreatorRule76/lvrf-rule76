@@ -895,6 +895,111 @@ CREATE TRIGGER sessions_no_delete
   );
 
 -- ------------------------------------------------------------------
+-- 16. 3.0 Band A item 1 (0029) — access_grants: only the steward grants
+--     (placed before section 14 so the manifest includes these three)
+-- ------------------------------------------------------------------
+-- An access grant is a record of a decision that is Brad's alone (3.0
+-- draft Q2, D4: tenants.steward_person_id). Insert + revoke, no
+-- deleted_at, no updated_at, no superseded_by_id — declared individually,
+-- like sections 11-13 and 15:
+--
+--   _audit              yes. Unlike person_credentials (15), nothing secret
+--                       is in the row; who granted whom, when and why is
+--                       exactly what the audit log is for.
+--   _touch              NO. There is no updated_at column.
+--   _no_delete          yes, with its own remedy text.
+--   _steward_only       NEW. The rule "only the steward grants" held by
+--                       the database, not by the scripts alone:
+--                         INSERT — the grantee is current, non-simulated
+--                           vendor staff of NEW.tenant_id; the tenant has
+--                           a steward; granted_by IS that steward; no
+--                           revocation fields yet.
+--                         UPDATE — nothing changes but the revocation,
+--                           written once (OLD.revoked_at IS NULL), and
+--                           revoked_by IS the steward.
+--                       The steward's own first grant (grantor = grantee)
+--                       passes the same rule: it is the bootstrap.
+--
+-- TRUST ROOT, stated rather than hidden: the postgres superuser can
+-- disable or bypass any trigger, and SSH to the box reaches it. That is
+-- accepted (BUILD_STATUS, Band A). This guards the app role and every
+-- script that connects as lvrf_app.
+--
+-- CONSEQUENCE: trigger count goes 84 -> 87. Three new triggers —
+-- access_grants_audit, access_grants_no_delete,
+-- access_grants_steward_only. Reconciled by LIST in the Verification
+-- block below, not by total.
+
+CREATE OR REPLACE FUNCTION lvrf_access_grant_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  grantee_tenant uuid;
+  grantee_ok boolean;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF steward IS NULL THEN
+    RAISE EXCEPTION 'LVRF: access_grants: tenant % has no steward; set one (scripts/set_steward.ts) before granting access.', NEW.tenant_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    SELECT p.tenant_id,
+           (p.simulated = false AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
+      INTO grantee_tenant, grantee_ok
+      FROM persons p WHERE p.id = NEW.person_id;
+    IF grantee_tenant IS DISTINCT FROM NEW.tenant_id OR NOT coalesce(grantee_ok, false) THEN
+      RAISE EXCEPTION 'LVRF: access_grants: % is not current, non-simulated vendor staff of tenant %.', NEW.person_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.granted_by_person_id IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: access_grants: only the tenant''s steward may grant access (granted_by % is not the steward).', NEW.granted_by_person_id
+        USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.revoked_at IS NOT NULL OR NEW.revoked_by_person_id IS NOT NULL OR NEW.revocation_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: access_grants: a grant is inserted unrevoked; revocation is a later act.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- UPDATE: only the revocation, once, by the steward.
+  IF OLD.revoked_at IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: access_grants: grant % is already revoked; a revocation is not amended.', OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.person_id IS DISTINCT FROM OLD.person_id
+     OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+     OR NEW.granted_by_person_id IS DISTINCT FROM OLD.granted_by_person_id
+     OR NEW.granted_at IS DISTINCT FROM OLD.granted_at OR NEW.reason IS DISTINCT FROM OLD.reason THEN
+    RAISE EXCEPTION 'LVRF: access_grants: only the revocation may be written after a grant is made.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.revoked_at IS NOT NULL AND NEW.revoked_by_person_id IS DISTINCT FROM steward THEN
+    RAISE EXCEPTION 'LVRF: access_grants: only the tenant''s steward may revoke access (revoked_by % is not the steward).', NEW.revoked_by_person_id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS access_grants_steward_only ON access_grants;
+CREATE TRIGGER access_grants_steward_only
+  BEFORE INSERT OR UPDATE ON access_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_access_grant_steward_only();
+
+DROP TRIGGER IF EXISTS access_grants_audit ON access_grants;
+CREATE TRIGGER access_grants_audit
+  AFTER INSERT OR UPDATE ON access_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS access_grants_no_delete ON access_grants;
+CREATE TRIGGER access_grants_no_delete
+  BEFORE DELETE ON access_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'An access grant is never deleted. To end access, revoke it (scripts/revoke_access.ts), which records who revoked it and why.'
+  );
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -973,16 +1078,19 @@ COMMIT;
 --   13: capability_industry_measures_audit,
 --   capability_industry_measures_no_delete — 2
 --   15: person_credentials_no_delete, sessions_no_delete — 2
---   Total: 84 distinct triggers. (0024 took it 78 -> 82: institution_facts
---   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.)
+--   16: access_grants_audit, access_grants_no_delete,
+--   access_grants_steward_only — 3
+--   Total: 87 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
+--   0029 took it 84 -> 87.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 84.
+-- TRUNCATE in section 14 fail. Total stays 87.
 --
--- Expect 125 rows here: information_schema.triggers emits one row per event
+-- Expect 130 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -997,8 +1105,10 @@ COMMIT;
 -- industry_measure_exclusions_no_delete on DELETE only (+1);
 -- capability_industry_measures_audit fires on INSERT and UPDATE (+2),
 -- capability_industry_measures_no_delete on DELETE only (+1);
--- person_credentials_no_delete and sessions_no_delete on DELETE only (+2).
--- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 = 125.
+-- person_credentials_no_delete and sessions_no_delete on DELETE only (+2);
+-- access_grants_steward_only and access_grants_audit on INSERT and UPDATE
+-- (+4), access_grants_no_delete on DELETE only (+1).
+-- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 = 130.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

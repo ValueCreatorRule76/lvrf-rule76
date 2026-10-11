@@ -97,6 +97,7 @@ function recordFailure(key: string): void {
 setInterval(() => pruneFailures(Date.now()), FAIL_WINDOW_MS).unref();
 
 const BAD_LOGIN = 'Email or password is incorrect.';
+const MIN_PASSWORD_LENGTH = 12;
 
 export function authRouter(pool: Pool): Router {
   const router = Router();
@@ -123,8 +124,9 @@ export function authRouter(pool: Pool): Router {
 
       const { rows: candidates } = await pool.query<{
         person_id: string; full_name: string; email: string; tenant_id: string; password_hash: string;
+        must_change: boolean;
       }>(
-        `SELECT p.id AS person_id, p.full_name, p.email, p.tenant_id, c.password_hash
+        `SELECT p.id AS person_id, p.full_name, p.email, p.tenant_id, c.password_hash, c.must_change
            FROM persons p
            JOIN person_credentials c ON c.person_id = p.id AND c.revoked_at IS NULL
           WHERE lower(p.email) = lower($1)
@@ -162,6 +164,7 @@ export function authRouter(pool: Pool): Router {
           full_name: candidate.full_name,
           email: candidate.email,
           tenant_id: candidate.tenant_id,
+          must_change: candidate.must_change,
         },
       });
     } catch (err) {
@@ -204,11 +207,92 @@ export function authRouter(pool: Pool): Router {
           full_name: person.full_name,
           email: person.email,
           tenant_id: person.tenant_id,
+          must_change: person.must_change,
         },
       });
     } catch (err) {
       console.error('LVRF: session lookup failed with a server error.', err);
       res.status(500).json({ message: 'Session lookup failed with a server error.' });
+    }
+  });
+
+  // Band A item 1. The signed-in person replaces their own password: the
+  // starting password a grant or reset gave them (must_change), or any
+  // time. The current password is required and throttled like sign-in. In
+  // one transaction the old credential is revoked, the new one inserted
+  // (set_via 'self', must_change false), and every OTHER session of the
+  // person ends — this one stays signed in. person_credentials is not
+  // audited (P1); its rows are the record.
+  router.post('/change-password', async (req, res) => {
+    try {
+      if (!req.is('application/json')) {
+        res.status(415).json({ message: 'Content-Type must be application/json.' });
+        return;
+      }
+      const person = await resolveSession(pool, req);
+      if (!person) {
+        res.status(401).json({ message: 'Sign in to continue.' });
+        return;
+      }
+      const body = req.body as Record<string, unknown> | undefined;
+      const current = typeof body?.current_password === 'string' ? body.current_password : '';
+      const next = typeof body?.new_password === 'string' ? body.new_password : '';
+      if (current === '' || next === '') {
+        res.status(422).json({ message: 'The current and the new password are both required.' });
+        return;
+      }
+      const key = failureKey(req, person.email);
+      if (recentFailures(key) >= FAIL_LIMIT) {
+        res.status(429).json({ message: 'Too many failed attempts. Try again in 15 minutes.' });
+        return;
+      }
+      const { rows: [cred] } = await pool.query<{ id: string; password_hash: string }>(
+        'SELECT id, password_hash FROM person_credentials WHERE person_id = $1 AND revoked_at IS NULL',
+        [person.person_id],
+      );
+      if (!cred || !(await argon2.verify(cred.password_hash, current))) {
+        recordFailure(key);
+        res.status(401).json({ message: 'The current password is not correct.' });
+        return;
+      }
+      failures.delete(key);
+      if (next.length < MIN_PASSWORD_LENGTH) {
+        res.status(422).json({ message: `The new password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+        return;
+      }
+      if (next === current) {
+        res.status(422).json({ message: 'The new password must differ from the current one.' });
+        return;
+      }
+      const hash = await argon2.hash(next, { type: argon2.argon2id });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const revoked = await client.query(
+          'UPDATE person_credentials SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL',
+          [cred.id],
+        );
+        if (revoked.rowCount !== 1) throw new Error('the credential changed underneath this request');
+        await client.query(
+          `INSERT INTO person_credentials (person_id, password_hash, set_via, must_change)
+           VALUES ($1, $2, 'self', false)`,
+          [person.person_id, hash],
+        );
+        const others = await client.query(
+          'UPDATE sessions SET revoked_at = now() WHERE person_id = $1 AND id <> $2 AND revoked_at IS NULL',
+          [person.person_id, person.session_id],
+        );
+        await client.query('COMMIT');
+        res.status(200).json({ changed: true, other_sessions_ended: others.rowCount ?? 0 });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error('LVRF: password change failed with a server error.', err);
+      res.status(500).json({ message: 'Password change failed with a server error.' });
     }
   });
 

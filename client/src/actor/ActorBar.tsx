@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useActor } from './ActorContext';
+import { ChangePasswordDialog } from './ChangePassword';
 
 // Always visible, above the routed content. Attribution is not something a
 // visitor discovers in an audit log after the fact — this bar shows, before
@@ -12,6 +14,7 @@ const FOCUS_RING =
 
 export function ActorBar() {
   const { actor, status, signOut } = useActor();
+  const [changing, setChanging] = useState(false);
 
   if (status === 'loading') {
     return (
@@ -36,6 +39,18 @@ export function ActorBar() {
         <span className="font-display text-[15px] tracking-[.03em] text-ink">{actor.full_name}</span>
         <span className="text-xs text-ink-45">{actor.email}</span>
       </div>
+      <span className="flex items-center gap-2">
+      {status === 'signed_in' && (
+        <button
+          type="button"
+          onClick={() => setChanging(true)}
+          className={
+            'px-2 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:text-ink ' + FOCUS_RING
+          }
+        >
+          Change password
+        </button>
+      )}
       <button
         type="button"
         onClick={() => void signOut()}
@@ -47,6 +62,8 @@ export function ActorBar() {
       >
         Sign out
       </button>
+      </span>
+      {changing && <ChangePasswordDialog onClose={() => setChanging(false)} />}
     </div>
   );
 }

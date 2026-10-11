@@ -7674,3 +7674,97 @@ to production, with migration 0028.
   - **Nothing else.** No refusals; 84 triggers; 0028 newest; the CHECK is present
     with 0 violations.
 
+
+## 3.0 Band A — access is granted, and the grant is a record — 11 October 2026
+
+**Spine stage:** cross-cutting. Band A decides who may act at all (item 1), and who
+may perform the acts that are Brad's alone (item 2). Decisions Q2–Q4 and D3–D6 were
+made by Brad Piver on 11 October 2026 (`docs/LVRF_PLAN.md` §3).
+
+It ships in three deploys, so that nobody can be locked out:
+
+| Deploy | Contents |
+|---|---|
+| **A** | The record, the scripts and change-password. Sign-in is **not** yet gated on a grant |
+| **B** | Sign-in requires a current grant, plus the deploy-script pre-check |
+| **C** | Brad-only acts, through one shared check |
+
+### The trust root, stated rather than hidden
+
+**SSH to the box, and the postgres superuser, are trusted.** Everything below
+guards the app role (`lvrf_app`) and the scripts that connect as it. It does not
+guard against those two:
+
+- **Break-glass `set_password.ts` can reset the steward's own password** for anyone
+  with SSH. That is its purpose: the steward's password, lost.
+- **The postgres superuser can bypass everything**: it can disable
+  `access_grants_steward_only`, write `tenants.steward_person_id`, or read and write
+  any row.
+
+Both are accepted. What the scripts add on top of SSH is the **steward's own
+password** (argon2, against their current credential) as the proof of every
+grant, revocation and reset. Naming the steward needs **the named person's own
+password**.
+
+### Deploy A — what was built
+
+- **Migration `0029_access_grants`:**
+  - **`access_grants`:** person, tenant, granted_by, granted_at, a reason of at least
+    12 characters; then revoked_at, revoked_by and a revocation reason, all or none,
+    the reason at least 12 characters, and never before the grant. One current grant
+    per person (partial unique index).
+  - **`person_credentials.must_change`:** default false; every existing credential
+    is unaffected.
+- **`hardening.sql` section 16:** `access_grants_audit`, `access_grants_no_delete`,
+  and **`access_grants_steward_only`**. Triggers 84 → 87.
+  - On INSERT, the grantee must be current, non-simulated vendor staff of
+    `NEW.tenant_id`. That tenant must have a steward, and `granted_by` must be that
+    steward. The revocation fields must be empty.
+  - On UPDATE, only the revocation may be written, once, and `revoked_by` must be the
+    steward.
+  - The steward's own first grant (grantor = grantee) passes the same rule: it is
+    the bootstrap.
+- **The scripts.** They share `scripts/lib/cli.ts`: the hidden prompt, the staff
+  lookup, `provePassword` (three tries, argon2) and the audit read-back.
+  - **`set_steward.ts <email>`:**
+    - proves the **named person's** password first;
+    - refuses if a steward is already set;
+    - self-attested, like `set_email`;
+    - `tenants_audit` is read back and checked.
+  - **`grant_access.ts <email> --reason … [--name …]`:**
+    - proves the steward's password;
+    - creates a new vendor-staff person if needed (audited, actor = the steward). The
+      email must be **plausible** and **unique case-insensitively across all persons**,
+      as `set_email` requires;
+    - refuses a second current grant;
+    - prompts twice for a **starting password**, never printed, stored with
+      `must_change`. Any earlier credential and session of the person is revoked;
+    - the bootstrap self-grant keeps the steward's own password.
+  - **`revoke_access.ts <email> --reason …`:**
+    - proves the steward's password;
+    - refuses the steward's own grant;
+    - in one transaction, revokes the grant, the credential and every session.
+  - **`reset_password.ts <email>`:**
+    - proves the steward's password;
+    - the person must hold a current grant (a reset is not a way in);
+    - not for the steward;
+    - sets a new starting password with `must_change` and ends their sessions.
+  - **`set_password.ts`** now covers only **break-glass** (the steward) and **initial
+    setup** (a tenant with no steward yet). It refuses anyone else and points at
+    `grant_access` and `reset_password`. Until Band A, anyone with SSH could set any
+    staff password this way, bypassing every grant.
+- **must_change and change-password:**
+  - A session now stands on a current credential. Revoking the credential ends it.
+  - The session carries `must_change`. **`requireActor` answers 403
+    `password_change_required` on every `/api` route past it, reads included**, so
+    no route can forget the gate.
+  - **`POST /api/auth/change-password`** requires the current password (throttled like
+    sign-in), at least 12 characters and a different password. In one transaction it
+    revokes the old credential, inserts the new one (`set_via self`, `must_change`
+    false), and **ends every other session**, keeping this one.
+  - The client shows a forced "Choose a new password" page while `must_change` holds,
+    and a "Change password" dialog from the bar at any time.
+- **Supporting files:**
+  - `tsconfig.scripts.json`, so the scripts are type-checked by the verify suite;
+  - `scripts/lib/pty_answer.py`, which drives the scripts' hidden prompts and fails
+    any run that echoes an answer or an argon2 hash.

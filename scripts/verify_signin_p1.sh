@@ -45,7 +45,10 @@ createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
 DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_signin.log 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$T" = "$EXPECT_TRIGGERS" ] && [ "$T" = "84" ] && ok "84 distinct triggers (82 + 2; matches the hardening.sql total)" || bad "triggers: $T (expected 84, hardening.sql says $EXPECT_TRIGGERS)"
+# P1's own two triggers, by name; the total is whatever hardening.sql now
+# declares (P1 took it 82 -> 84; later migrations add more).
+P1T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public' AND trigger_name IN ('person_credentials_no_delete','sessions_no_delete')")"
+[ "$T" = "$EXPECT_TRIGGERS" ] && [ "$P1T" = "2" ] && ok "$T distinct triggers (the hardening.sql total), P1's two present" || bad "triggers: $T (hardening.sql says $EXPECT_TRIGGERS), P1's present: $P1T"
 for t in person_credentials sessions; do
   [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE event_object_table = '$t' AND trigger_name = '${t}_no_delete'")" = "1" ] && ok "$t has _no_delete" || bad "$t missing _no_delete"
   [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE event_object_table = '$t' AND trigger_name = '${t}_audit'")" = "0" ] && ok "$t is not audited (hashes stay out of audit_log)" || bad "$t is audited"

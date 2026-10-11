@@ -75,6 +75,8 @@ export interface SessionPerson {
   full_name: string;
   email: string;
   tenant_id: string;
+  /** 0029: the current credential is a starting password (grant/reset). */
+  must_change: boolean;
 }
 
 /** Don't rewrite last_seen_at / expires_at more often than this (P2a). */
@@ -100,9 +102,15 @@ export async function resolveSession(pool: Pool, req: Request): Promise<SessionP
   const tokenHash = hashToken(token);
   const { rows: [row] } = await pool.query<SessionPerson & { stale: boolean }>(
     `SELECT s.id AS session_id, p.id AS person_id, p.full_name, p.email, p.tenant_id,
+            c.must_change,
             s.last_seen_at < now() - make_interval(secs => $2) AS stale
        FROM sessions s
        JOIN persons p ON p.id = s.person_id
+       -- Band A: a session stands on a current credential. Revoking the
+       -- credential (revoke_access, reset_password) ends it even before
+       -- its own revoked_at is written, and the credential says whether
+       -- the password is a starting one (must_change).
+       JOIN person_credentials c ON c.person_id = p.id AND c.revoked_at IS NULL
       WHERE s.token_hash = $1
         AND s.revoked_at IS NULL
         AND s.expires_at > now()
@@ -137,6 +145,12 @@ export interface Actor {
   fullName: string;
   /** How the actor was established — a session, or (scripts only) the header. */
   via: 'session' | 'header';
+  /**
+   * Band A: the session's password is a starting one. requireActor then
+   * answers 403 password_change_required on every route past it; only
+   * /api/auth/me, /change-password and /logout (mounted before it) work.
+   */
+  mustChange: boolean;
 }
 
 declare global {
@@ -168,7 +182,10 @@ declare global {
 export async function resolveActor(pool: Pool, req: Request, headerMode: ActorHeaderMode): Promise<Actor | null> {
   const session = await resolveSession(pool, req);
   if (session) {
-    return { personId: session.person_id, tenantId: session.tenant_id, fullName: session.full_name, via: 'session' };
+    return {
+      personId: session.person_id, tenantId: session.tenant_id, fullName: session.full_name,
+      via: 'session', mustChange: session.must_change,
+    };
   }
   if (headerMode !== 'on') return null;
   const header = req.get('x-actor-person-id');
@@ -179,5 +196,5 @@ export async function resolveActor(pool: Pool, req: Request, headerMode: ActorHe
         AND deleted_at IS NULL AND superseded_by_id IS NULL`,
     [header],
   );
-  return p ? { personId: p.id, tenantId: p.tenant_id, fullName: p.full_name, via: 'header' } : null;
+  return p ? { personId: p.id, tenantId: p.tenant_id, fullName: p.full_name, via: 'header', mustChange: false } : null;
 }

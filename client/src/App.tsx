@@ -8,6 +8,7 @@ import { InstitutionPage } from './pages/InstitutionPage';
 import { ActorProvider, useActor } from './actor/ActorContext';
 import { ActorBar } from './actor/ActorBar';
 import { SignInOverlay, SignInPage } from './actor/SignIn';
+import { ChangePasswordPage } from './actor/ChangePassword';
 import { NavBar } from './components/NavBar';
 
 // Sign-in P2a. Nobody signed in: the sign-in page, in place of the routes —
@@ -18,6 +19,8 @@ function SignedInRoutes() {
   const { status } = useActor();
   if (status === 'loading') return null;
   if (status === 'signed_out') return <SignInPage />;
+  // Band A: a starting password is replaced before anything else is shown.
+  if (status === 'must_change') return <ChangePasswordPage forced />;
   return (
     <>
       <Routes>

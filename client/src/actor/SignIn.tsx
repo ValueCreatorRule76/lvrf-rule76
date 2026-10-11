@@ -10,8 +10,8 @@ const INPUT_CLASS = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px
  * Sign-in P2a. Vendor staff only — the server decides; this form only
  * asks. The error is the server's own sentence, unchanged: one message for
  * every failed sign-in, so this page cannot say which emails exist. There
- * is no "forgot password": a password is set on the box with
- * scripts/set_password.ts.
+ * is no "forgot password": the steward grants access and resets a password
+ * on the box (scripts/grant_access.ts, reset_password.ts — Band A).
  */
 function SignInForm({ intro }: { intro: string }) {
   const { signIn } = useActor();

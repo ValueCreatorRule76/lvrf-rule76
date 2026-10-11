@@ -1,11 +1,22 @@
 /**
- * Set or replace a vendor staff member's sign-in password (0027, P1).
+ * Set or replace a vendor staff member's sign-in password (0027, P1) —
+ * from Band A (0029), ONLY in two cases:
+ *
+ *   - BREAK-GLASS for the tenant's steward: the steward's own password is
+ *     lost, and SSH to the box is the trust root that recovers it. Stated,
+ *     not hidden (BUILD_STATUS, Band A): anyone with SSH can do this.
+ *   - INITIAL SETUP: the person's tenant has no steward yet, so the first
+ *     password can be set before set_steward.ts names one.
+ *
+ * Anyone else is refused, and pointed at grant_access.ts or
+ * reset_password.ts, which require the steward's own password. Until Band
+ * A this script let anyone with SSH set any staff password, which by-passed
+ * every grant.
  *
  *   npx tsx scripts/set_password.ts <email>
  *
  * Run on the box from /srv/lvrf (it reads DATABASE_URL from .env, like the
- * server), or locally against a dev database. There is no sign-up route:
- * this script is the only writer of person_credentials.
+ * server), or locally against a dev database.
  *
  * - Refuses unless exactly one CURRENT person has that email AND is vendor
  *   staff (tenant_id set), not simulated, not retired or superseded.
@@ -99,8 +110,20 @@ async function main(): Promise<void> {
       console.error(`Refused: ${person.full_name} is a simulated person.`);
       process.exit(1);
     }
+    const { rows: [tenant] } = await client.query<{ steward_person_id: string | null }>(
+      'SELECT steward_person_id FROM tenants WHERE id = $1',
+      [person.tenant_id],
+    );
+    if (tenant.steward_person_id !== null && tenant.steward_person_id !== person.id) {
+      console.error(
+        `Refused: ${person.full_name} is not the steward. A password is set by grant_access.ts or ` +
+        'reset_password.ts, which need the steward\'s own password; this script is break-glass for the steward only.',
+      );
+      process.exit(1);
+    }
+    const mode = tenant.steward_person_id === null ? 'initial setup (no steward yet)' : 'break-glass (the steward)';
 
-    console.log(`Setting the sign-in password for ${person.full_name} <${email}>.`);
+    console.log(`Setting the sign-in password for ${person.full_name} <${email}> — ${mode}.`);
     const first = await promptHidden('New password: ');
     if (first.length < MIN_LENGTH) {
       console.error(`Refused: the password must be at least ${MIN_LENGTH} characters.`);

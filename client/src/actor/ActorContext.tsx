@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { UNAUTHORIZED_EVENT } from '../api/http';
+import { PASSWORD_CHANGE_EVENT, UNAUTHORIZED_EVENT } from '../api/http';
 
 /**
  * Sign-in P2a: the actor is the SIGNED-IN PERSON. There is no picker.
@@ -31,15 +31,21 @@ export interface Actor {
   institution_name: null;
 }
 
-export type AuthStatus = 'loading' | 'signed_out' | 'signed_in' | 'expired';
+/**
+ * must_change (Band A): signed in on a starting password; the app shows only
+ * the change-password page until it is replaced.
+ */
+export type AuthStatus = 'loading' | 'signed_out' | 'signed_in' | 'expired' | 'must_change';
 
 export type SignInResult = { ok: true } | { ok: false; message: string };
+export type ChangePasswordResult = { ok: true } | { ok: false; message: string };
 
 interface ActorContextValue {
   actor: Actor | null;
   status: AuthStatus;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<ChangePasswordResult>;
 }
 
 const ActorContext = createContext<ActorContextValue | null>(null);
@@ -48,6 +54,7 @@ interface MePerson {
   id: string;
   full_name: string;
   email: string;
+  must_change?: boolean;
 }
 
 function toActor(p: MePerson): Actor {
@@ -66,7 +73,7 @@ export function ActorProvider({ children }: { children: ReactNode }) {
         if (res.ok) {
           const body = (await res.json()) as { person: MePerson };
           setActor(toActor(body.person));
-          setStatus('signed_in');
+          setStatus(body.person.must_change ? 'must_change' : 'signed_in');
         } else {
           setStatus('signed_out');
         }
@@ -85,8 +92,13 @@ export function ActorProvider({ children }: { children: ReactNode }) {
     const onUnauthorized = () => {
       setStatus((s) => (s === 'signed_in' ? 'expired' : s === 'loading' ? 'signed_out' : s));
     };
+    const onMustChange = () => setStatus((s) => (s === 'signed_in' ? 'must_change' : s));
     window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    window.addEventListener(PASSWORD_CHANGE_EVENT, onMustChange);
+    return () => {
+      window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+      window.removeEventListener(PASSWORD_CHANGE_EVENT, onMustChange);
+    };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string): Promise<SignInResult> => {
@@ -107,8 +119,9 @@ export function ActorProvider({ children }: { children: ReactNode }) {
       // its own message for 429 — never mapped to a friendlier string.
       return { ok: false, message: body?.message ?? `HTTP ${res.status}` };
     }
-    setActor(toActor((body as { person: MePerson }).person));
-    setStatus('signed_in');
+    const person = (body as { person: MePerson }).person;
+    setActor(toActor(person));
+    setStatus(person.must_change ? 'must_change' : 'signed_in');
     return { ok: true };
   }, []);
 
@@ -128,14 +141,33 @@ export function ActorProvider({ children }: { children: ReactNode }) {
   // placeholder when there is no actor would otherwise unmount, and a
   // half-filled form would lose its fields. The sign-in panel covers the
   // page meanwhile, and any write that slips through gets a 401 anyway.
+  const changePassword = useCallback(async (current: string, next: string): Promise<ChangePasswordResult> => {
+    let res: Response;
+    try {
+      res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      });
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : 'network error' };
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, message: body?.message ?? `HTTP ${res.status}` };
+    setStatus('signed_in');
+    return { ok: true };
+  }, []);
+
   const value = useMemo<ActorContextValue>(
     () => ({
-      actor: status === 'signed_in' || status === 'expired' ? actor : null,
+      actor: status === 'signed_in' || status === 'expired' || status === 'must_change' ? actor : null,
       status,
       signIn,
       signOut,
+      changePassword,
     }),
-    [actor, status, signIn, signOut],
+    [actor, status, signIn, signOut, changePassword],
   );
 
   return <ActorContext.Provider value={value}>{children}</ActorContext.Provider>;

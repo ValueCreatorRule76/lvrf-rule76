@@ -23,6 +23,16 @@ export function requireActor(pool: Pool, headerMode: ActorHeaderMode) {
           res.status(401).json({ message: 'Sign in to continue.' });
           return;
         }
+        // Band A: a starting password (grant or reset) is replaced before
+        // anything else — reads included. One check here, so no route can
+        // forget it; /api/auth/* is mounted ahead of this middleware.
+        if (actor.mustChange) {
+          res.status(403).json({
+            code: 'password_change_required',
+            message: 'Choose a new password before continuing. The one you were given is a starting password.',
+          });
+          return;
+        }
         req.actor = actor;
         next();
       })
