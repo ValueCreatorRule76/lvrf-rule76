@@ -82,10 +82,10 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 <td className="border-b border-rule-soft px-3 py-[9px] font-semibold">
                   {/* The account view, not the run — a different destination from the
                       row's own click-through, so this link stops the click from also
-                      bubbling into the row's navigate(`/runs/${r.id}`) above. Null when
-                      the owning engagement or institution has since been retired — the
-                      run still shows, with no owner to link to; same phrasing ActorBar
-                      already uses for the same absence. */}
+                      bubbling into the row's navigate(`/runs/${r.id}`) above. Null only
+                      when the owning institution has since been retired (L26: a
+                      retired ENGAGEMENT keeps its account, marked below) — the run
+                      still shows, with no owner to link to. */}
                   {r.institution_id && r.institution_name ? (
                     <Link
                       to={`/accounts/${r.institution_id}`}
@@ -96,6 +96,13 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                     </Link>
                   ) : (
                     <span className="text-ink-45">no institution</span>
+                  )}
+                  {/* L26: the account stays shown for a retired engagement's runs,
+                      marked — "retired" is not "unknown account". */}
+                  {r.engagement_retired && (
+                    <span className="ml-2 border border-silver px-1 py-px text-[9px] font-semibold uppercase tracking-[.12em] text-ink-45">
+                      retired engagement
+                    </span>
                   )}
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px] font-mono">

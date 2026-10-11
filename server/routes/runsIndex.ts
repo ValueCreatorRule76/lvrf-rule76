@@ -34,9 +34,14 @@ export function runsIndexRouter(pool: Pool): Router {
           vr.health_coverage_pct,
           vr.source_fixture,
           vr.locked_at,
-          vr.walked_at
+          vr.walked_at,
+          (e.deleted_at IS NOT NULL OR e.superseded_by_id IS NOT NULL) AS engagement_retired
         FROM value_runs vr
-        LEFT JOIN engagements e ON e.id = vr.engagement_id AND e.deleted_at IS NULL
+        -- L26 (11 Oct 2026): the engagement is joined WHATEVER its state, so a
+        -- run under a retired engagement still shows its account, with
+        -- engagement_retired true. Until then a retired engagement blanked
+        -- the account, and "retired" and "unknown account" looked the same.
+        LEFT JOIN engagements e ON e.id = vr.engagement_id
         LEFT JOIN institutions i ON i.id = e.institution_id AND i.deleted_at IS NULL
         WHERE vr.deleted_at IS NULL AND vr.tenant_id = $1
         ORDER BY vr.walked_at DESC

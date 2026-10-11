@@ -36,8 +36,9 @@ export function RunPage() {
       {/* The account back-link — the header naming whose engagement this
           is. Added here rather than in Topbar/Workbench, which this
           change doesn't touch. Rendered only when the owner join actually
-          resolved; null means the owning engagement or institution was
-          retired, and that absence is not papered over with a stand-in. */}
+          resolved; null means the owning institution was retired, and that
+          absence is not papered over with a stand-in. L26: a retired
+          ENGAGEMENT keeps the account, and says so beside it. */}
       {run.institution_id && run.institution_name && (
         <div className="border-b border-rule bg-white px-[30px] py-2">
           <Link
@@ -46,6 +47,11 @@ export function RunPage() {
           >
             ← {run.institution_name}
           </Link>
+          {run.engagement_retired && (
+            <span className="ml-2 text-[10px] font-semibold uppercase tracking-[.12em] text-ink-45">
+              · retired engagement
+            </span>
+          )}
         </div>
       )}
       <Workbench run={run} />

@@ -4,9 +4,11 @@
 
 export interface RunListItem {
   id: string;
-  /** null if the owning engagement or institution has since been retired — the run itself still shows. */
+  /** null only if the owning institution has since been retired — the run itself still shows. */
   institution_id: string | null;
   institution_name: string | null;
+  /** L26: the run's engagement has been retired or superseded; the account still shows. */
+  engagement_retired: boolean;
   run_number: number;
   terminal_value_stage: string;
   confidence_score: string;

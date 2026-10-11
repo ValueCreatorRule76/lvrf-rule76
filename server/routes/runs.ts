@@ -29,9 +29,11 @@ export function runsRouter(pool: Pool): Router {
     }
     try {
       const { rows: [run] } = await pool.query(
-        `SELECT vr.*, i.id AS institution_id, i.name AS institution_name
+        `SELECT vr.*, i.id AS institution_id, i.name AS institution_name,
+                (e.deleted_at IS NOT NULL OR e.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_runs vr
-           LEFT JOIN engagements e ON e.id = vr.engagement_id AND e.deleted_at IS NULL
+           -- L26: the engagement whatever its state (see runsIndex.ts).
+           LEFT JOIN engagements e ON e.id = vr.engagement_id
            LEFT JOIN institutions i ON i.id = e.institution_id AND i.deleted_at IS NULL
           WHERE vr.id = $1 AND vr.deleted_at IS NULL`,
         [req.params.id],

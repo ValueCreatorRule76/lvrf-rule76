@@ -204,5 +204,7 @@ export interface Run {
   // name or anything else in its place; render the absence.
   institution_id: string | null;
   institution_name: string | null;
+  /** L26: the run's engagement has been retired or superseded. */
+  engagement_retired: boolean;
   payload: RunPayload;
 }
