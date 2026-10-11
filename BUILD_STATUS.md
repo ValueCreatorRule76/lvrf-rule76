@@ -8210,9 +8210,10 @@ went to production. There was no migration; `hardening.sql` added section 17.
     checks D1, D3, D4: no findings".
   - Every smoke check passed; deploy OK, exit 0; HEAD `384e0bc`; bundle
     **`index-B5F5IDzI.js`**. Up since **22:50:13 UTC**.
-- **The browser:** Brad's report left this line as a placeholder ("[Runs 2–21 show
-  Curia + RETIRED ENGAGEMENT / or describe]"), so it is **not confirmed from the
-  browser**. Server side:
+- **The browser, confirmed by Brad:** the reference example's runs show **Curia with
+  a RETIRED ENGAGEMENT tag** (his screenshot shows 8–21). Curia's other run 1, the
+  lot-acceptance run, shows Curia untagged, which is correct: its engagement is
+  current. Server side, the same:
   - the served bundle contains "retired engagement";
   - the runs-list query, run read-only on prod exactly as `runsIndex.ts` now builds
     it, returns **Curia with `engagement_retired` true for runs 1–21** of the
