@@ -6705,3 +6705,38 @@ No trigger or CHECK freezes `email`.
 - **The real address is in no committed file.** On prod it will be in `persons`,
   in `audit_log.new_row` permanently (append-only), and in the shell history of
   whoever runs the command.
+
+**Deployed and used — 11 October 2026.** `e19347d` went out via `lvrf-deploy.sh`
+(`366a20f..e19347d`, deploy OK; service up since 05:08:24 UTC). There was no
+migration and the bundle is unchanged (`index-2YI_7srW.js`).
+
+- **Backup first:** `~/lvrf_pre_set_email_20261011_050711.dump`, 548,285 bytes,
+  mode `600`, 438 TOC entries.
+- **`set_email.ts` on prod.** It moved the one vendor-staff person
+  (`b6da352c-…`) from the placeholder to Brad Piver's real address. The address
+  is deliberately not restated in this file. The person id is unchanged.
+  Audit row **200** shows `update`, old `brad.piver@skillsoft.example` → new
+  address, with actor = record = `b6da352c-…` (self-attested).
+  `persons.updated_at` is 2026-10-11 05:09:40Z.
+- **`set_password.ts` on prod.** "First password set. 0 active session(s) signed
+  out."
+- **The curl sign-in test,** run from the box against 127.0.0.1:3001. The password
+  was read with `read -s` and sent on stdin, so it stayed out of shell history and
+  the process list. Login 200 with the right person; the cookie file was
+  `-rw-------`; `/me` 200; logout 200; `/me` afterwards 401. The cookie file was
+  then deleted.
+
+**Gate C, read-only:**
+
+| Check | Result |
+|---|---|
+| Vendor-staff person | 1. The real address is set and the placeholder is gone. Not superseded; 6 persons in total, unchanged. |
+| Audit row 200 | As above. No later persons audit rows for that person. |
+| Credentials | 1 current of 1, argon2id, `set_via cli:brad`, for that person |
+| Sessions | 1 total, 1 revoked, 0 live |
+| `audit_log` rows for credentials or sessions | 0 |
+| Triggers | 84; newest migration 0027 |
+| `/api/auth/me` with no cookie | 401 |
+| `/api/cohort` with the header | 200 (still additive in P1) |
+| Health | 200 |
+| Leftovers on the box | No cookie file, no `lvrf_*` temp files |
