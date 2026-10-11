@@ -95,7 +95,9 @@ json() { node -e "console.log(JSON.stringify(require('/tmp/lvrf_cohort.json')$1)
 
 step "4. Rules hold on the clone's existing data"
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/cohort")"
-[ "$CODE" = "422" ] && ok "no actor header -> 422" || bad "no actor header -> $CODE"
+# Since sign-in P2a every /api read needs an actor: 401 from requireActor
+# (it was the cohort route's own 422 in P1).
+[ "$CODE" = "401" ] && ok "no actor -> 401" || bad "no actor -> $CODE"
 check
 echo "  book composite: $(json .book.composite.score) $(json .book.composite.band) floor=$(json .book.composite.floor) · $(json .book.measured_count)/$(json .book.member_count) measured · comparable=$(json .book.model.comparable)"
 UNCLASSIFIED_BEFORE="$(json .unclassified_account_count)"

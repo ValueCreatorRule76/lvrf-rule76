@@ -242,14 +242,14 @@ export function industryResearchRouter(pool: Pool): Router {
     let refusalTenantId: string | null = null;
 
     try {
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything
         // wrong — thrown inside try so it falls through to the 500 below
         // rather than becoming an unhandled rejection in this async handler.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       // Resolves the requesting actor's own tenant (persons.tenant_id for
@@ -606,10 +606,10 @@ export function researchResultsReviewRouter(pool: Pool): Router {
     let refusalTenantId: string | null = null;
 
     try {
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // Same broken-guarantee case as the parse route above.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const body = req.body;
@@ -763,9 +763,9 @@ export function researchResultsReviewRouter(pool: Pool): Router {
     let refusalTenantId: string | null = null;
 
     try {
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const body = req.body;

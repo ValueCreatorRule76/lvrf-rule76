@@ -62,7 +62,7 @@ export function GovernedForm<T>({
     e.preventDefault();
     if (!actor || !canSubmit || submitting) return;
     setSubmitting(true);
-    const r = await postGoverned<T>(path, buildBody(), actor.id);
+    const r = await postGoverned<T>(path, buildBody());
     setSubmitting(false);
     setResult(r);
   }
@@ -80,9 +80,9 @@ export function GovernedForm<T>({
       {!actor && (
         <div className="mb-4 border-l-[3px] border-gold bg-offwhite px-3.5 py-3">
           <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
-            Actor required
+            Sign-in required
           </span>
-          <p className="m-0 mt-1 text-[12.5px] text-ink">Select who is acting before writing.</p>
+          <p className="m-0 mt-1 text-[12.5px] text-ink">Sign in before writing.</p>
         </div>
       )}
 
@@ -106,7 +106,7 @@ export function GovernedForm<T>({
 
       {!actor && (
         <p className="m-0 mb-2 mt-4 text-[11px] text-ink-45">
-          Select who is acting before writing.
+          Sign in before writing — every write names the signed-in person.
         </p>
       )}
 

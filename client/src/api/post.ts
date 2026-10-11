@@ -13,41 +13,27 @@
  * product makes.
  */
 
+import { apiFetch } from './http';
+
 export type PostResult<T> =
   | { status: 'ok'; data: T }
   | { status: 'refused'; message: string }
   | { status: 'conflict'; message: string }
   | { status: 'error'; message: string };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export async function postGoverned<T>(
-  path: string,
-  body: unknown,
-  actorPersonId: string,
-): Promise<PostResult<T>> {
-  // A write with no actor is refused by the server anyway — actorContext
-  // requires X-Actor-Person-Id on every mutating request. Failing here
-  // makes the reason legible instead of arriving as a generic 422 from a
-  // request that was never going to succeed. actorPersonId is a required
-  // argument on purpose: no module-level constant, no localStorage, no
-  // ambient default — that hidden default is the exact hole the server
-  // middleware was fixed to close, and this helper must not reopen it.
-  if (!UUID_RE.test(actorPersonId)) {
-    return {
-      status: 'error',
-      message: `actorPersonId must be a valid UUID, got: ${actorPersonId || '(empty)'}`,
-    };
-  }
-
+// Sign-in P2a: the actor is the signed-in person, carried by the session
+// cookie — there is no actor argument and no header. A write with no
+// session is refused by the server (401) before any transaction opens, so
+// it saved nothing; apiFetch announces the 401 and the sign-in panel opens
+// over the page. The write is never replayed: the person submits again.
+export async function postGoverned<T>(path: string, body: unknown): Promise<PostResult<T>> {
   let res: Response;
   try {
-    res = await fetch(path, {
+    // Content-Type: application/json on every write — the server refuses
+    // anything else (415, server/lib/origin.ts).
+    res = await apiFetch(path, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Actor-Person-Id': actorPersonId,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -58,6 +44,12 @@ export async function postGoverned<T>(
   // it surfaces as 'error' with a fallback message, same as runs.ts.
   const parsed = await res.json().catch(() => null);
 
+  if (res.status === 401) {
+    return {
+      status: 'error',
+      message: 'Your sign-in has ended, so nothing was saved. Sign in again and submit once more.',
+    };
+  }
   if (res.status === 422) {
     // err.message exactly as the server sent it — never prefixed, wrapped,
     // appended, or mapped to a friendlier string. That sentence is the

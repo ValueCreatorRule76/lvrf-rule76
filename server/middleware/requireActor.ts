@@ -1,0 +1,28 @@
+import type { NextFunction, Request, Response } from 'express';
+import type { Pool } from 'pg';
+import { resolveActor } from '../lib/session.js';
+
+/**
+ * Sign-in P2a: every /api route except /api/health and /api/auth/* needs
+ * an actor — GETs included. Until P2a a read needed nothing, or the header
+ * for tenant scoping; now an unauthenticated read is a 401, so the app is
+ * fail-closed for reads as well as writes (lvrf-deploy.sh checks exactly
+ * that).
+ *
+ * Mounted after /api/health and /api/auth, before actorContext. Sets
+ * req.actor; actorContext and every route read it instead of the header.
+ */
+export function requireActor(pool: Pool) {
+  return function requireActorMiddleware(req: Request, res: Response, next: NextFunction): void {
+    resolveActor(pool, req)
+      .then((actor) => {
+        if (!actor) {
+          res.status(401).json({ message: 'Sign in to continue.' });
+          return;
+        }
+        req.actor = actor;
+        next();
+      })
+      .catch(next);
+  };
+}

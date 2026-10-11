@@ -97,7 +97,9 @@ C="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: applicatio
 [ "$C" = "409" ] && ok "duplicate -> 409" || bad "duplicate -> $C"
 [ "$(q "SELECT count(*) FROM industry_measure_exclusions WHERE name = 'Verification normal'")" = "1" ] && ok "exactly one row" || bad "row count wrong"
 C="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' "$BASE$X" -d '{}')"
-[ "$C" = "422" ] && ok "no actor header -> 422 (middleware's own response, through the same path)" || bad "no actor -> $C"
+# Since sign-in P2a, requireActor answers a request with no actor (401)
+# before actorContext opens a transaction; it was actorContext's 422 in P1.
+[ "$C" = "401" ] && ok "no actor -> 401 (requireActor, before any transaction)" || bad "no actor -> $C"
 
 step "6. SUPPORTING: read-after-write, 25 times"
 MISSES=0

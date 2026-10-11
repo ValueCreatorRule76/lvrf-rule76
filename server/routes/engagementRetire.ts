@@ -81,9 +81,9 @@ export function engagementRetireRouter(pool: Pool): Router {
         );
       }
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const { rows: [engagement] } = await client.query<{

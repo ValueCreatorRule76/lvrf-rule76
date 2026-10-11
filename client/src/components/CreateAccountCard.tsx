@@ -48,7 +48,7 @@ export function CreateAccountCard() {
     let cancelled = false;
     setIndustries(null);
     setIndustriesError(null);
-    fetchIndustries(actor.id).then((r) => {
+    fetchIndustries().then((r) => {
       if (cancelled) return;
       if (r.status === 'ok') setIndustries(r.industries);
       else setIndustriesError(r.message);

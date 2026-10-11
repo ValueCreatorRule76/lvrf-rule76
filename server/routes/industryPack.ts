@@ -30,34 +30,18 @@ import { isUuid } from './params.js';
 // same header validation actorContext.ts performs for mutating requests,
 // reimplemented here because GET never reaches that middleware's checks.
 async function resolveActorTenantId(
-  pool: Pool,
+  _pool: Pool,
   req: Request,
   res: Response,
 ): Promise<string | null> {
-  const actorPersonId = req.get('x-actor-person-id');
-  if (!actorPersonId) {
-    res.status(422).json({
-      message: 'X-Actor-Person-Id header is required to resolve a tenant scope.',
-    });
+  // Sign-in P2a: requireActor has already established a current vendor-staff
+  // actor (session, or the header while P2a still accepts it), with its
+  // tenant. The 401 below is unreachable unless the middleware order breaks.
+  if (!req.actor) {
+    res.status(401).json({ message: 'Sign in to continue.' });
     return null;
   }
-  if (!isUuid(actorPersonId)) {
-    res.status(422).json({ message: 'X-Actor-Person-Id is not a valid UUID.' });
-    return null;
-  }
-
-  const { rows: [actor] } = await pool.query<{ tenant_id: string | null }>(
-    `SELECT COALESCE(p.tenant_id, i.tenant_id) AS tenant_id
-       FROM persons p
-       LEFT JOIN institutions i ON i.id = p.institution_id
-      WHERE p.id = $1 AND p.deleted_at IS NULL`,
-    [actorPersonId],
-  );
-  if (!actor || !actor.tenant_id) {
-    res.status(422).json({ message: 'Actor is not a person of record.' });
-    return null;
-  }
-  return actor.tenant_id;
+  return req.actor.tenantId;
 }
 
 export function industryPackRouter(pool: Pool): Router {

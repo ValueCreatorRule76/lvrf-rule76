@@ -3,6 +3,8 @@ import './env.js';
 import express from 'express';
 import { pool } from './db/pool.js';
 import { actorContext } from './middleware/actorContext.js';
+import { requireActor } from './middleware/requireActor.js';
+import { originCheck, originGuard } from './lib/origin.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { personsRouter } from './routes/persons.js';
@@ -41,12 +43,28 @@ const app = express();
 // limit and the Secure cookie flag both depend on it (routes/auth.ts).
 app.set('trust proxy', 'loopback');
 
+// Throws on a malformed LVRF_PUBLIC_ORIGIN: a bad value refuses to start
+// rather than guess (lib/origin.ts).
+const origins = originCheck();
+if (origins.mode === 'fallback') {
+  console.error(
+    'LVRF: LVRF_PUBLIC_ORIGIN is not set in production. Writes are checked against the ' +
+    "request's own origin (fallback) — cross-site writes are still refused. Set it in .env.",
+  );
+}
+
 app.use(express.json());
-// Before actorContext: signing in is how a person becomes an actor, so it
-// cannot require the actor header (routes/auth.ts).
+// Every mutating /api request, sign-in included: JSON only, and no
+// cross-site or foreign-origin write (lib/origin.ts).
+app.use('/api', originGuard(origins));
+// Before requireActor: signing in is how a person becomes an actor, and
+// health must answer without one (routes/auth.ts, lvrf-deploy.sh).
 app.use('/api/auth', authRouter(pool));
+app.use('/api/health', healthRouter(pool, origins.mode));
+// Sign-in P2a: every other /api route needs an actor — a session, or the
+// header while P2a still accepts it — reads included.
+app.use('/api', requireActor(pool));
 app.use(actorContext(pool));
-app.use('/api/health', healthRouter(pool));
 app.use('/api/persons', personsRouter(pool));
 app.use('/api/engagements', engagementsRouter(pool));
 app.use('/api/runs', runsIndexRouter(pool));
@@ -80,6 +98,10 @@ app.use('/api/cohort', cohortRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 
-app.listen(port, () => {
-  console.log(`LVRF API listening on port ${port}`);
+// Loopback only (sign-in P2a). Caddy proxies to 127.0.0.1:3001 (ops/Caddyfile
+// and the live /etc/caddy/Caddyfile), and the Vite dev proxy targets
+// 127.0.0.1:3001 — never 'localhost', which can resolve to ::1 first.
+const HOST = '127.0.0.1';
+app.listen(port, HOST, () => {
+  console.log(`LVRF API listening on ${HOST}:${port} (origin check: ${origins.mode})`);
 });

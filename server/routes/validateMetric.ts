@@ -156,12 +156,12 @@ export function validateMetricRouter(pool: Pool): Router {
       const confirmedByPersonId = requireUuidString(body, 'confirmed_by_person_id', 'body');
       const supersessionReason = requireString(body, 'supersession_reason', 'body');
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything wrong.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const { rows: [oldMetric] } = await client.query<{

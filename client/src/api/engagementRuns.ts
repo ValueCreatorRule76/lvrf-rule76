@@ -1,6 +1,8 @@
 // Shape of GET /api/engagements/:id/runs — one row per value_run on this
 // engagement, snake_case, exactly the columns that route selects.
 
+import { apiFetch } from './http';
+
 export interface EngagementRun {
   id: string;
   run_number: number;
@@ -22,7 +24,7 @@ export type FetchEngagementRunsResult =
 export async function fetchEngagementRuns(engagementId: string): Promise<FetchEngagementRunsResult> {
   let res: Response;
   try {
-    res = await fetch(`/api/engagements/${engagementId}/runs`);
+    res = await apiFetch(`/api/engagements/${engagementId}/runs`);
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

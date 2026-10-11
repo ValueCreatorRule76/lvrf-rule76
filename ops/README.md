@@ -161,7 +161,7 @@ hard deletes is the worst version of this failure.
 
 | | |
 |---|---|
-| `/srv/lvrf/.env` | `DATABASE_URL`, `SESSION_SECRET`. Mode `600`. |
+| `/srv/lvrf/.env` | `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`, `LVRF_PUBLIC_ORIGIN` (sign-in P2a: comma-separated origins allowed to write, e.g. `https://lvrf-rule76.com`; missing → the request's-own-origin fallback, reported by `/api/health` and failed by `lvrf-deploy.sh`). Mode `600`. |
 | Caddy bcrypt hash | redacted above |
 | `/etc/cron.d/lvrf-backup` | one line, documented above |
 | `~/.ssh/deploy_lvrf` | read-only deploy key, VPS only |

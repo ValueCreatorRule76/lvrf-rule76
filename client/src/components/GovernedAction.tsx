@@ -39,7 +39,7 @@ export function GovernedAction<T>({
   async function handleClick() {
     if (blockedLocally || !actor || submitting) return;
     setSubmitting(true);
-    const r = await postGoverned<T>(path, body, actor.id);
+    const r = await postGoverned<T>(path, body);
     setSubmitting(false);
     setResult(r);
   }

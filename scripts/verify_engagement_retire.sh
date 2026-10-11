@@ -79,7 +79,7 @@ post "/api/engagements/$ENG/retire" '{"retirement_reason":"Verification: retirin
 EV="$(node -e 'console.log(require("/tmp/lvrf_r.json").evidence_id)')"
 [ "$(q "SELECT captured_by_person_id = '$ACTOR' AND kind = 'observation' AND source_verified = false FROM evidence WHERE id = '$EV'")" = "t" ] && ok "reason recorded as an unverified observation by the actor" || bad "evidence row wrong"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'engagements' AND record_id = '$ENG' AND operation = 'soft_delete' AND actor_person_id = '$ACTOR'")" -ge 1 ] && ok "audit_log records a soft_delete with the actor" || bad "no attributed audit row"
-curl -s "$BASE/api/engagements" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.exit(JSON.parse(s).some(e=>e.id==='$ENG')?1:0))" \
+curl -s -H "x-actor-person-id: $ACTOR" "$BASE/api/engagements" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.exit(JSON.parse(s).some(e=>e.id==='$ENG')?1:0))" \
   && ok "gone from /api/engagements" || bad "still listed in /api/engagements"
 curl -s -H "x-actor-person-id: $ACTOR" "$BASE/api/cohort" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.exit(JSON.parse(s).book.members.some(m=>m.engagement_id==='$ENG')?1:0))" \
   && ok "gone from the cohort" || bad "still a cohort member"

@@ -4,6 +4,7 @@
 // from a description — see its own comment on why state and path are two
 // independent fields, not one three-value field.
 
+import { apiFetch } from './http';
 import type { ConfidenceFactorKey } from '../types/run';
 
 export type AskType = 'definition' | 'document' | 'person';
@@ -46,7 +47,7 @@ export type FetchGapsResult =
 export async function fetchGaps(outcomeId: string): Promise<FetchGapsResult> {
   let res: Response;
   try {
-    res = await fetch(`/api/value-outcomes/${outcomeId}/gaps`);
+    res = await apiFetch(`/api/value-outcomes/${outcomeId}/gaps`);
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

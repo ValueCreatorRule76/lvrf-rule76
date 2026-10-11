@@ -1,6 +1,8 @@
 // GET /api/cohort — snake_case, exactly the shape server/routes/cohort.ts
-// returns. Tenant-scoped by the actor, so actorPersonId is required (same
-// reasoning as packs.ts: no ambient default actor).
+// returns. Tenant-scoped by the signed-in actor (sign-in P2a): the session
+// cookie carries it, so there is no actor argument.
+
+import { apiFetch } from './http';
 
 export type CohortMemberStatus = 'run_of_record' | 'no_locked_run' | 'never_run' | 'no_engagement';
 
@@ -57,10 +59,10 @@ export type FetchCohortResult =
   | { status: 'ok'; view: CohortView }
   | { status: 'error'; message: string };
 
-export async function fetchCohort(actorPersonId: string): Promise<FetchCohortResult> {
+export async function fetchCohort(): Promise<FetchCohortResult> {
   let res: Response;
   try {
-    res = await fetch('/api/cohort', { headers: { 'X-Actor-Person-Id': actorPersonId } });
+    res = await apiFetch('/api/cohort');
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

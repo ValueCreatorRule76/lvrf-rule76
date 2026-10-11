@@ -113,12 +113,12 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const committedAt = requireTimestamp(body, 'committed_at', 'body');
       const commitmentNote = requireString(body, 'commitment_note', 'body');
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything wrong.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       // tenant_id comes via institutions, same as outcomeEvidence.ts's
@@ -333,12 +333,12 @@ export function outcomeWalkRouter(pool: Pool): Router {
       // dropped without acknowledgment — this comment is that acknowledgment.
       optionalNullableString(body, 'note', 'body');
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything wrong.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const { rows: [outcome] } = await client.query<{
@@ -499,9 +499,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const verifiedAt = requireTimestamp(body, 'verified_at', 'body');
       const attestationNote = requireString(body, 'attestation_note', 'body');
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       const { rows: [outcome] } = await client.query<{

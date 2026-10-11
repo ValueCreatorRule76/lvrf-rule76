@@ -2,11 +2,12 @@
 // exactly the columns those routes select (same convention as
 // types/runsIndex.ts's RunListItem).
 //
-// Both endpoints are tenant-scoped by the actor, so both take
-// actorPersonId as a required argument — no module-level constant, no
-// ambient default, same reasoning as post.ts's postGoverned: a hidden
-// default actor is the exact hole ActorContext's "no persistence" design
-// exists to close, and a read must not reopen it any more than a write may.
+// Both endpoints are tenant-scoped by the signed-in actor (sign-in P2a):
+// the session cookie carries it, so neither takes an actor argument — and
+// there is still no ambient default to fall back on, because without a
+// session the server answers 401.
+
+import { apiFetch } from './http';
 
 export interface IndustryListItem {
   id: string;
@@ -67,12 +68,10 @@ export type FetchIndustryPackResult =
   | { status: 'not_found'; message: string }
   | { status: 'error'; message: string };
 
-export async function fetchIndustries(actorPersonId: string): Promise<FetchIndustriesResult> {
+export async function fetchIndustries(): Promise<FetchIndustriesResult> {
   let res: Response;
   try {
-    res = await fetch('/api/industries', {
-      headers: { 'X-Actor-Person-Id': actorPersonId },
-    });
+    res = await apiFetch('/api/industries');
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }
@@ -86,15 +85,10 @@ export async function fetchIndustries(actorPersonId: string): Promise<FetchIndus
   return { status: 'ok', industries };
 }
 
-export async function fetchIndustryPack(
-  slug: string,
-  actorPersonId: string,
-): Promise<FetchIndustryPackResult> {
+export async function fetchIndustryPack(slug: string): Promise<FetchIndustryPackResult> {
   let res: Response;
   try {
-    res = await fetch(`/api/industries/${encodeURIComponent(slug)}/pack`, {
-      headers: { 'X-Actor-Person-Id': actorPersonId },
-    });
+    res = await apiFetch(`/api/industries/${encodeURIComponent(slug)}/pack`);
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

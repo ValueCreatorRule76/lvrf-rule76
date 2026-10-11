@@ -2,6 +2,8 @@
 // columns that route selects. institution_id/institution_name are null for
 // a person with no institution (vendor staff) — see server/routes/persons.ts.
 
+import { apiFetch } from './http';
+
 export interface Person {
   id: string;
   full_name: string;
@@ -26,7 +28,7 @@ export async function fetchPersons(
 
   let res: Response;
   try {
-    res = await fetch(`/api/persons${qs ? `?${qs}` : ''}`);
+    res = await apiFetch(`/api/persons${qs ? `?${qs}` : ''}`);
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

@@ -1,15 +1,18 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
-import { isUuid } from '../routes/params.js';
 
 /**
  * hardening.sql's audit trigger reads lvrf.actor_person_id via
  * current_setting(..., true) inside the same transaction as the write. Set it
  * with SELECT set_config(...) — a normal parameterized query — rather than
  * interpolating the value into a SET LOCAL statement, since SET does not take
- * bind parameters. There is no auth/session layer yet, so the actor comes
- * from an X-Actor-Person-Id header; wire this to the real session once one
- * exists.
+ * bind parameters.
+ *
+ * THE ACTOR COMES FROM req.actor (sign-in P2a), set by requireActor before
+ * this middleware runs: the signed-in session, or — still, in P2a — the
+ * X-Actor-Person-Id header. Either way resolveActor has already confirmed
+ * a current, non-simulated vendor-staff person, so nothing here re-reads
+ * the header or re-checks the person.
  */
 
 declare global {
@@ -118,31 +121,12 @@ export function actorContext(pool: Pool) {
         try {
           await client.query('BEGIN');
 
-          const actorPersonId = req.get('x-actor-person-id');
+          // requireActor is mounted ahead of this middleware; reaching here
+          // without req.actor means that ordering broke — refuse, never write
+          // unattributed.
+          const actorPersonId = req.actor?.personId;
           if (!actorPersonId) {
-            res.status(422).json({
-              message: 'X-Actor-Person-Id header is required for mutating requests.',
-            });
-            return;
-          }
-          if (!isUuid(actorPersonId)) {
-            res.status(422).json({ message: 'X-Actor-Person-Id is not a valid UUID.' });
-            return;
-          }
-
-          const { rows } = await client.query(
-            'SELECT deleted_at, simulated FROM persons WHERE id = $1',
-            [actorPersonId],
-          );
-          const person = rows[0];
-          if (!person || person.deleted_at !== null) {
-            res.status(422).json({ message: 'Actor is not a person of record.' });
-            return;
-          }
-          if (person.simulated) {
-            res.status(422).json({
-              message: 'A simulated person may not write. Attestation requires a real person of record.',
-            });
+            res.status(401).json({ message: 'Sign in to continue.' });
             return;
           }
 

@@ -163,12 +163,12 @@ export function institutionInputsRouter(pool: Pool): Router {
         requireUuidString(assessmentInput, 'owner_or_learner_person_id', `assessments[${i}]`);
       }
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything wrong.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       // Widened to include tenant_id — needed to scope HB-0018 below.

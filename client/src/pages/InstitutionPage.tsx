@@ -347,7 +347,7 @@ export function InstitutionPage() {
     if (!id || !actor) return;
     let cancelled = false;
     setResult(null);
-    fetchInstitutionView(id, actor.id).then((r) => {
+    fetchInstitutionView(id).then((r) => {
       if (!cancelled) setResult(r);
     });
     return () => {
@@ -361,13 +361,13 @@ export function InstitutionPage() {
   // it in an effect keyed on it.
   const refresh = useCallback(() => {
     if (!id || !actor) return;
-    fetchInstitutionView(id, actor.id).then(setResult);
+    fetchInstitutionView(id).then(setResult);
   }, [id, actor]);
 
   if (!actor) {
     return (
       <p className="p-8 text-ink-45">
-        Select an actor above to view this account — the view is scoped to the actor's own
+        Sign in to view this account — the view is scoped to the signed-in person's own
         tenant, and there is no default to fall back to.
       </p>
     );

@@ -206,7 +206,7 @@ export function IndustryPackPage() {
     if (!slug || !actor) return;
     let cancelled = false;
     setResult(null);
-    fetchIndustryPack(slug, actor.id).then((r) => {
+    fetchIndustryPack(slug).then((r) => {
       if (!cancelled) setResult(r);
     });
     return () => {
@@ -217,8 +217,8 @@ export function IndustryPackPage() {
   if (!actor) {
     return (
       <p className="p-8 text-ink-45">
-        Select an actor above to view this industry's pack — the list is scoped to the
-        actor's own tenant, and there is no default to fall back to.
+        Sign in to view this industry's pack — the list is scoped to the signed-in
+        person's own tenant, and there is no default to fall back to.
       </p>
     );
   }

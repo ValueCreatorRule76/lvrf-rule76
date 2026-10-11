@@ -104,7 +104,7 @@ export function CohortCard({ n }: { n: string }) {
     if (!actor) return;
     let cancelled = false;
     setResult(null);
-    fetchCohort(actor.id).then((r) => {
+    fetchCohort().then((r) => {
       if (!cancelled) setResult(r);
     });
     return () => {
@@ -116,7 +116,7 @@ export function CohortCard({ n }: { n: string }) {
     <Card n={n} title="Book confidence — weakest link">
       {!actor ? (
         <p className="m-0 text-[12.5px] text-ink-45">
-          Select an actor above — the roll-up is scoped to the actor's tenant.
+          Sign in — the roll-up is scoped to the signed-in person's tenant.
         </p>
       ) : !result ? (
         <p className="m-0 text-[12.5px] text-ink-45">loading</p>

@@ -8,11 +8,15 @@
 #   run-id  id of a run used to smoke-test GET /api/runs/:id
 #           (default: 88f6a6e1-d99b-4cee-a4a6-ea954361de71)
 #
-# Step 7 checks two distinct paths rather than one URL: the vhost has
-# basic_auth in front of its handle blocks, so an unauthenticated
-# request to https://lvrf-rule76.com/ correctly returns 401 — that is
-# not a failed deploy. The API is checked directly on its local port,
-# bypassing Caddy and its auth, to confirm the app itself is up.
+# Step 7 checks the app is UP and FAIL-CLOSED, then the vhost:
+#   - GET /api/health on 127.0.0.1 -> 200, and it must report
+#     origin_check "configured": a missing LVRF_PUBLIC_ORIGIN fails the
+#     deploy here rather than passing silently (server/lib/origin.ts);
+#   - GET /api/runs/:id on 127.0.0.1 with no session -> 401. Since sign-in
+#     P2a every read needs an actor, so a 200 here would mean the app is
+#     open, and anything else that it is not up;
+#   - the vhost -> 401, Caddy's basic_auth in front of everything.
+# 127.0.0.1, never localhost: the API binds IPv4 loopback only.
 
 set -euo pipefail
 
@@ -79,14 +83,21 @@ log "$SERVICE is active"
 
 # 7. Smoke-test two paths: the API directly (bypasses Caddy's
 #    basic_auth) and the public vhost (which requires it).
-API_STATUS="$(curl -sI -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
+HEALTH_BODY="$(curl -s -w '\n%{http_code}' "http://127.0.0.1:3001/api/health")"
+HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1)"
+ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4)"
+API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
 VHOST_STATUS="$(curl -sIk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/")"
 
-log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} -> ${API_STATUS} (expect 200)"
+log "GET http://127.0.0.1:3001/api/health -> ${HEALTH_STATUS} (expect 200), origin_check=${ORIGIN_MODE:-<none>} (expect configured)"
+log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} with no session -> ${API_STATUS} (expect 401: up and fail-closed)"
 log "GET https://${DOMAIN}/ -> ${VHOST_STATUS} (expect 401, basic_auth)"
 
-if [ "$API_STATUS" != "200" ] || [ "$VHOST_STATUS" != "401" ]; then
-  die "unexpected response (api=${API_STATUS}, vhost=${VHOST_STATUS})"
+if [ "$HEALTH_STATUS" != "200" ] || [ "$API_STATUS" != "401" ] || [ "$VHOST_STATUS" != "401" ]; then
+  die "unexpected response (health=${HEALTH_STATUS}, api=${API_STATUS}, vhost=${VHOST_STATUS})"
+fi
+if [ "$ORIGIN_MODE" != "configured" ]; then
+  die "origin_check is '${ORIGIN_MODE:-<none>}', not 'configured': set LVRF_PUBLIC_ORIGIN in /srv/lvrf/.env (writes are still checked against the request's own origin meanwhile)"
 fi
 
 # 8. Summary.

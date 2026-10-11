@@ -189,12 +189,12 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         attestedAt = requireTimestamp(body, 'attested_at', 'body');
       }
 
-      const actorPersonId = req.get('x-actor-person-id');
+      const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
         // header before this handler could run. Reaching here without it
         // means that guarantee broke, not that this caller did anything wrong.
-        throw new Error('x-actor-person-id missing on a request past actorContext');
+        throw new Error('req.actor missing on a request past requireActor');
       }
 
       // 404, not 422: a missing, soft-deleted or superseded outcome is not

@@ -6740,3 +6740,192 @@ migration and the bundle is unchanged (`index-2YI_7srW.js`).
 | `/api/cohort` with the header | 200 (still additive in P1) |
 | Health | 200 |
 | Leftovers on the box | No cookie file, no `lvrf_*` temp files |
+
+---
+
+## Sign-in P2a — the session is the actor; reads need sign-in; the write guard — 11 October 2026
+
+P2 ships as two deploys. **P2a is additive**: the session becomes the actor and the
+client signs in, while the `X-Actor-Person-Id` header **still works**, for vendor
+staff only. **P2b** refuses the header unless `LVRF_ALLOW_ACTOR_HEADER=1` outside
+production, and adds the startup guard. P2b comes only after a session-made write on
+prod has been confirmed read-only. No migration; still 84 triggers.
+
+### Actor versus attribution (checked before building)
+
+**The actor** is who made the request: `audit_log.actor_person_id`, and through
+`actorContext` the `lvrf.actor_person_id` setting. **Attribution columns** name
+people in the record. Routes split cleanly into two groups:
+
+- **The actor is written into a domain column.**
+  - `captured_by_person_id`, the evidence and facts writer: `validateMetric`,
+    `offeringAttachment`, `engagementRetire`, `outcomeEvidence`,
+    `metricPackBasis`, `outcomeWalk` (commit, measure, verify),
+    `institutionFacts`, `classifyInstitution` (through `institutionClassify` and
+    `accountInputs`), and `valueOutcomes`.
+  - `assessed_by_person_id`: `institutionInputs` and `accountInputs`.
+  - `walked_by`, `locked_by`, `claimed_by`, `rendered_by`, `excluded_by`, and
+    `parsed_by`/`reviewed_by`.
+- **A chosen value in the request body, validated as a person at the account's
+  institution:** `committed_by`, `verified_by`, `attested_by`, `confirmed_by`,
+  `owner_person_id`, and the assessment learner. This is where customer
+  verification and attestation live. P2 does not touch them. Customer-side people
+  stay nameable there, as chosen values, never as the actor.
+
+**Prod, read-only:**
+
+- No customer-side or simulated person has ever been the actor. `audit_log` has
+  183 rows by vendor staff and 6 system rows; refusals are by staff only.
+- Every actor-written column is vendor staff only. The exceptions are one
+  simulated `assessed_by` and four simulated heartbeat actors, which come from the
+  seeded simulation and not the API; `actorContext` already refused simulated
+  actors.
+- Customer-side people appear only in the body-chosen columns: `committed_by` ×1,
+  `attested_by` ×2, `definition_confirmed_by` ×2, and owners.
+
+**So P2a lets only current, non-simulated vendor staff act, by session or by
+header.** One column to watch: `assessed_by_person_id` is the actor. If a
+customer-side assessor of record is ever needed, it becomes a body-chosen value,
+like `committed_by`, and is not tied to the actor.
+
+### What P2a changes
+
+- **`resolveActor`** (`server/lib/session.ts`). A valid session is the actor, and
+  any header is then ignored. Otherwise the header is accepted, for vendor staff
+  only (P2a). Anything else is a 401. The session refresh is throttled to once a
+  minute.
+- **`requireActor`** covers every `/api` route except `/api/health` and
+  `/api/auth/*`, reads included. `actorContext` and all 24 routes read `req.actor`;
+  `resolveActor` is the only reader of the header. The three
+  `resolveActorTenantId` helpers return `req.actor.tenantId`.
+- **`originGuard`** (`server/lib/origin.ts`) covers every mutating `/api` request,
+  sign-in included:
+  - JSON only, or 415;
+  - `Sec-Fetch-Site: cross-site` is a 403;
+  - an `Origin`, when present, must be allowed, or 403. With no `Origin` the
+    client is not a browser.
+
+  **Allowed origins come from `LVRF_PUBLIC_ORIGIN`, a comma-separated list.**
+  - **Missing in production:** the `Origin` must equal the request's own scheme
+    and Host. Cross-site writes stay refused and the site keeps working. It is
+    logged at startup, reported as `origin_check: "fallback"` by `/api/health`, and
+    `lvrf-deploy.sh` fails on it.
+  - **Missing outside production:** `http://localhost:5173` and
+    `http://127.0.0.1:5173`.
+  - **Malformed:** the server refuses to start.
+- **The API binds 127.0.0.1**, and the Vite proxy targets `127.0.0.1:3001`. Caddy
+  already proxies to `127.0.0.1:3001`.
+- **`lvrf-deploy.sh`'s smoke test** now requires `/api/health` 200 with
+  `origin_check: "configured"`, then `/api/runs/:id` with no session → **401**
+  (the app is up and fail-closed), then the vhost → 401, all on 127.0.0.1.
+- **Client.**
+  - `ActorContext` is now the auth provider, keeping the `useActor` name; the
+    picker is gone. `/api/auth/me` runs on load. With no session, the sign-in
+    page shows and the URL is kept.
+  - Every call goes through `api/http.ts`'s `apiFetch`, which sends the cookie and
+    no header.
+  - A 401 mid-task opens a sign-in overlay over the still-mounted page, so a
+    half-filled form keeps its fields. **Nothing is replayed**; the person
+    resubmits.
+  - Sign-out POSTs `{}` as JSON.
+- **The only body-less mutating route** is `POST /api/auth/logout`. There are no
+  PUT, PATCH or DELETE routes. Every client write goes through `postGoverned`,
+  which sends `application/json`.
+
+### The two hosts
+
+Caddy serves **`lvrf-rule76.com, www.lvrf-rule76.com`** from one site block, with
+no redirect between them. This was found when confirming the origin; it is not a
+single host. Whichever host is used, `LVRF_PUBLIC_ORIGIN` must list it, or writes
+from it get a 403. The session cookie is host-only, so a sign-in on one host does
+not carry to the other.
+
+### Gate A
+
+- **Typecheck:** server and client clean. **Client lint:** clean, apart from the
+  one pre-existing fast-refresh warning, now in `ActorContext.tsx`. **Build:**
+  clean.
+- **`verify_signin_p2a.sh`: 49 passed, 0 failed,** covering:
+  - the loopback bind;
+  - 401 with no actor, for reads, writes and `/api/runs/:id`;
+  - the header for staff only (customer, simulated and unknown ids are 401);
+  - the session as actor, in both `audit_log` and `excluded_by`;
+  - the session winning over a header naming someone else;
+  - 415 for text/plain and form bodies, 403 for a foreign `Origin`, for
+    cross-site, and for a foreign-origin sign-in;
+  - the throttled refresh, the sliding expiry, expiry → 401, sign-out → 401;
+  - configured origins (both hosts 201, localhost 403);
+  - a malformed value refusing to start;
+  - the production fallback (reported, own origin 201, foreign 403).
+- **Four breaks, each caught, code restored byte-identical:**
+
+  | Break | Result | Caught by |
+  |---|---|---|
+  | Header beats session | 48/1 | — |
+  | No JSON check | 47/2 | text/plain and form reached the route |
+  | GETs skip `requireActor` | 47/2 | `/api/runs/:id` returned 200; also fails tsc |
+  | Binds all interfaces | 48/1 | `*:3089` |
+
+- **Three scripts updated for intended behaviour.** A request with no actor is now
+  401 from `requireActor`, not 422; this affects `verify_cohort.sh` and
+  `verify_commit_before_response.sh`. `verify_engagement_retire.sh` now sends the
+  header on its `/api/engagements` read.
+- **Regression:**
+
+  | Script | Result |
+  |---|---|
+  | `verify_commit_before_response.sh` | 17/0 |
+  | `verify_account_workbench.sh` | 28/0 |
+  | `verify_cohort.sh` | 27/0 |
+  | `verify_engagement_retire.sh` | 17/0 |
+  | `verify_frozen_outcomes.sh` | 21/0 |
+  | `verify_refusal_attribution.sh` | 13/0 |
+  | `verify_pack_review.sh` | 17/0 |
+  | `verify_exclusions.sh` | 27/0 |
+  | `verify_signin_p1.sh` | 35/0 |
+  | `verify_set_email.sh` | 29/0 |
+
+- **The browser flow, in headless Chrome on a throwaway clone:**
+  1. The sign-in page, with no picker.
+  2. A wrong password gives the server's own sentence, and the password field is
+     cleared.
+  3. Signed in, the bar reads "Signed in as …" with a Sign out button.
+  4. Text was typed into Create account, the session was expired in the database,
+     and Submit was pressed. The overlay opened, the typed text was still there,
+     and nothing was written.
+  5. Signed in again through the overlay: it closed, the text was kept, and nothing
+     was resubmitted.
+  6. Signing out returns to the sign-in page.
+- **Noted, not changed:**
+  - The nav links still show on the sign-in page; they lead back to it.
+  - While the overlay is open, the bar still reads "Signed in as".
+  - The Vite dev server listens on `localhost`, so open `http://localhost:5173`,
+    which is in the dev-default origins.
+
+**Decided at Gate A:** `LVRF_PUBLIC_ORIGIN=https://lvrf-rule76.com,https://www.lvrf-rule76.com`.
+Both hosts Caddy serves can write.
+
+**Checked before committing: nothing calls our own `/api` over HTTP without an actor.**
+
+- **Server:** no outbound HTTP anywhere. There is no `fetch`, `http.request` or
+  child process, and no PDF renderer yet.
+- **Heartbeat writers** (`emitHeartbeat`, `walkSpine` and the routes) write to the
+  database in-process.
+- **`scripts/`:** the verify scripts send the header (P2a accepts it).
+  `lvrf-deploy.sh` calls only `/api/health` and the deliberately unauthenticated
+  `/api/runs/:id`. `restore_prod_copy.sh` mentions `/api` only in its printed
+  instructions.
+- **`ops/`:** only Caddy proxies to the API.
+- **On the box:** brad has no crontab. `/etc/cron.d` holds `lvrf-backup` (a
+  `pg_dump`) and two system jobs. There are no lvrf systemd timers.
+
+### Later items, recorded at P2a
+
+- **Redirect `www` to the apex in Caddy.** That gives one origin and one session
+  cookie, after which `LVRF_PUBLIC_ORIGIN` can drop the `www` entry. It is a manual
+  Caddy change, outside `lvrf-deploy.sh`.
+- **`assessed_by_person_id` is the actor.** If a customer-side assessor of record
+  is ever needed, make it a body-chosen value like `committed_by` and keep it off
+  the actor. Never let a customer act.
+- **Cosmetic:** the nav links show on the sign-in page (they lead back to it), and
+  while the expiry overlay is open the bar still reads "Signed in as".

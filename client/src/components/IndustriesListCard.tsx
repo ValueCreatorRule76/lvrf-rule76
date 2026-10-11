@@ -21,7 +21,7 @@ export function IndustriesListCard() {
       return;
     }
     let cancelled = false;
-    fetchIndustries(actor.id).then((r) => {
+    fetchIndustries().then((r) => {
       if (!cancelled) setResult(r);
     });
     return () => {
@@ -33,7 +33,7 @@ export function IndustriesListCard() {
     return (
       <Card n="00" title="Industries">
         <p className="m-0 text-[12.5px] text-ink-45">
-          Select an actor above to see this tenant's industries.
+          Sign in to see this tenant's industries.
         </p>
       </Card>
     );

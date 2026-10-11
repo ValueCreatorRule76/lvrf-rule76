@@ -8,7 +8,7 @@ interface RecordDocumentResponse {
   content_hash: string;
 }
 
-const ACTOR_REQUIRED_NOTE = 'Select who is acting before writing.';
+const ACTOR_REQUIRED_NOTE = 'Sign in before writing.';
 
 export function Topbar({ run }: { run: Run }) {
   const verified = run.payload.realization === 'verified';

@@ -1,7 +1,8 @@
 // GET /api/institutions/:id/view — snake_case, exactly the shape that
-// route assembles. Tenant-scoped by the actor, same reasoning as
-// packs.ts's fetchIndustryPack: no module-level actor default, so
-// actorPersonId is a required argument here too.
+// route assembles. Tenant-scoped by the signed-in actor (sign-in P2a): the
+// session cookie carries it, so there is no actor argument.
+
+import { apiFetch } from './http';
 
 export interface InstitutionViewInstitution {
   id: string;
@@ -100,13 +101,10 @@ export type FetchInstitutionViewResult =
 
 export async function fetchInstitutionView(
   institutionId: string,
-  actorPersonId: string,
 ): Promise<FetchInstitutionViewResult> {
   let res: Response;
   try {
-    res = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/view`, {
-      headers: { 'X-Actor-Person-Id': actorPersonId },
-    });
+    res = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/view`);
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

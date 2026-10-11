@@ -1,6 +1,7 @@
 // GET /api/institutions — snake_case, exactly the columns
-// institutionsIndex.ts selects. Flat and unscoped, same shape as
-// runsIndex.ts's fetchRuns — no actor header, no params.
+// institutionsIndex.ts selects. Flat, no params; signed-in (sign-in P2a).
+
+import { apiFetch } from './http';
 
 export interface InstitutionListItem {
   id: string;
@@ -17,7 +18,7 @@ export type FetchInstitutionsResult =
 export async function fetchInstitutions(): Promise<FetchInstitutionsResult> {
   let res: Response;
   try {
-    res = await fetch('/api/institutions');
+    res = await apiFetch('/api/institutions');
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

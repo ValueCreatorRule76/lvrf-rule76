@@ -1,3 +1,4 @@
+import { apiFetch } from './http';
 import type { RunListItem } from '../types/runsIndex';
 
 export type FetchRunsResult =
@@ -7,7 +8,7 @@ export type FetchRunsResult =
 export async function fetchRuns(): Promise<FetchRunsResult> {
   let res: Response;
   try {
-    res = await fetch('/api/runs');
+    res = await apiFetch('/api/runs');
   } catch (err) {
     return { status: 'error', message: err instanceof Error ? err.message : 'network error' };
   }

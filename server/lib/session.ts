@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { isUuid } from '../routes/params.js';
 
 /**
  * Sign-in sessions (0027). Shared by routes/auth.ts (P1) and, from P2, by
@@ -75,6 +76,9 @@ export interface SessionPerson {
   tenant_id: string;
 }
 
+/** Don't rewrite last_seen_at / expires_at more often than this (P2a). */
+const REFRESH_EVERY_SECONDS = 60;
+
 /**
  * The signed-in person for this request, or null. A session counts only
  * if it is not revoked, not past expires_at or absolute_expires_at, and
@@ -83,29 +87,94 @@ export interface SessionPerson {
  * sessions without touching the sessions table.
  *
  * On success it slides expires_at forward (never past the absolute cap)
- * and stamps last_seen_at. That UPDATE runs on the pool, outside any
- * request transaction, because a sign-in's freshness is not part of the
- * write the request is making.
+ * and stamps last_seen_at — at most once a minute (P2a: every API request
+ * now resolves the session, and an UPDATE per request is churn with no
+ * information in it). Those writes run on the pool, outside any request
+ * transaction, because a sign-in's freshness is not part of the write the
+ * request is making.
  */
 export async function resolveSession(pool: Pool, req: Request): Promise<SessionPerson | null> {
   const token = readSessionToken(req);
   if (!token) return null;
-  const { rows: [row] } = await pool.query<SessionPerson>(
-    `UPDATE sessions s
-        SET last_seen_at = now(),
-            expires_at = LEAST(now() + make_interval(hours => $2), s.absolute_expires_at)
-       FROM persons p
+  const tokenHash = hashToken(token);
+  const { rows: [row] } = await pool.query<SessionPerson & { stale: boolean }>(
+    `SELECT s.id AS session_id, p.id AS person_id, p.full_name, p.email, p.tenant_id,
+            s.last_seen_at < now() - make_interval(secs => $2) AS stale
+       FROM sessions s
+       JOIN persons p ON p.id = s.person_id
       WHERE s.token_hash = $1
         AND s.revoked_at IS NULL
         AND s.expires_at > now()
         AND s.absolute_expires_at > now()
-        AND p.id = s.person_id
         AND p.tenant_id IS NOT NULL
         AND p.simulated = false
         AND p.deleted_at IS NULL
-        AND p.superseded_by_id IS NULL
-      RETURNING s.id AS session_id, p.id AS person_id, p.full_name, p.email, p.tenant_id`,
-    [hashToken(token), IDLE_HOURS],
+        AND p.superseded_by_id IS NULL`,
+    [tokenHash, REFRESH_EVERY_SECONDS],
   );
-  return row ?? null;
+  if (!row) return null;
+  if (row.stale) {
+    await pool.query(
+      `UPDATE sessions
+          SET last_seen_at = now(),
+              expires_at = LEAST(now() + make_interval(hours => $2), absolute_expires_at)
+        WHERE id = $1 AND revoked_at IS NULL`,
+      [row.session_id, IDLE_HOURS],
+    );
+  }
+  const { stale: _stale, ...person } = row;
+  return person;
+}
+
+/**
+ * Who is making this request (P2a). Set on req.actor by requireActor for
+ * every /api route except /api/health and /api/auth/*.
+ */
+export interface Actor {
+  personId: string;
+  tenantId: string;
+  fullName: string;
+  /** How the actor was established — a session, or the P1 header. */
+  via: 'session' | 'header';
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      actor?: Actor;
+    }
+  }
+}
+
+/**
+ * The actor for this request, or null.
+ *
+ *   1. A valid session cookie. If present, it is the actor, and any
+ *      X-Actor-Person-Id header is ignored — a signed-in tab cannot be
+ *      steered by a header.
+ *   2. Otherwise the X-Actor-Person-Id header — still accepted everywhere
+ *      in P2a. P2b accepts it only with LVRF_ALLOW_ACTOR_HEADER=1 outside
+ *      production.
+ *
+ * Either way the actor must be CURRENT, NON-SIMULATED VENDOR STAFF.
+ * Customer-side people are subjects of the record and can be named in a
+ * request body (committed_by, verified_by, attested_by, confirmed_by,
+ * owner) — chosen values, validated against the account's institution —
+ * but they do not act. Checked against prod before P2a: no customer-side
+ * or simulated person has ever been the actor on an audit_log row.
+ */
+export async function resolveActor(pool: Pool, req: Request): Promise<Actor | null> {
+  const session = await resolveSession(pool, req);
+  if (session) {
+    return { personId: session.person_id, tenantId: session.tenant_id, fullName: session.full_name, via: 'session' };
+  }
+  const header = req.get('x-actor-person-id');
+  if (!header || !isUuid(header)) return null;
+  const { rows: [p] } = await pool.query<{ id: string; tenant_id: string; full_name: string }>(
+    `SELECT id, tenant_id, full_name FROM persons
+      WHERE id = $1 AND tenant_id IS NOT NULL AND simulated = false
+        AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+    [header],
+  );
+  return p ? { personId: p.id, tenantId: p.tenant_id, fullName: p.full_name, via: 'header' } : null;
 }

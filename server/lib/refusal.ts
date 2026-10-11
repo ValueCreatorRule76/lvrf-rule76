@@ -94,7 +94,7 @@ async function recordRefusal(
   message: string,
 ): Promise<void> {
   try {
-    const actorPersonId = req.get('x-actor-person-id') ?? null;
+    const actorPersonId = req.actor?.personId ?? null;
     if (!actorPersonId) {
       // actor_person_id is NOT NULL on refusals, and actorContext already
       // refuses any mutating request without this header before a handler
@@ -102,7 +102,7 @@ async function recordRefusal(
       // same broken-guarantee case every route already throws on. There is
       // no person to attribute this row to, so no row is written; this is
       // a write failure, handled exactly like any other below.
-      throw new Error('x-actor-person-id missing on a request past actorContext');
+      throw new Error('req.actor missing on a request past requireActor');
     }
 
     await pool.query(
