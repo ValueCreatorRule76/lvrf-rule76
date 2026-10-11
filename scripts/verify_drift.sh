@@ -35,11 +35,9 @@ q() { psql -At -d "$VERIFY_DB" -c "$1"; }
 d2() { DATABASE_URL="$1" node scripts/check_schema_drift.mjs 2>&1; }
 # Exits 2 on a critical finding — the deploy's signal; read, not fatal here.
 report() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/drift_report.ts 2>&1 || true; }
-# The L16 tables: before the L16 commit, D3 names exactly these four.
-L16_GAPS='offering_capabilities (_no_delete, _audit); person_roles (_no_delete, _audit); reflection_evidence (_no_delete, _audit); value_outcome_evidence (_no_delete, _audit)'
+# Since L16 (hardening.sql section 17) the clean state has no findings at all.
 baseline_ok() {  # the drift report in its expected clean state
-  local R; R="$(report)"
-  echo "$R" | grep -q "^D3 warning: 4 table(s) lack governance triggers the schema implies: $L16_GAPS\." && [ "$(echo "$R" | grep -c '^D[0-9]')" = "1" ]
+  [ "$(report)" = "drift checks D1, D3, D4: no findings" ]
 }
 
 step "1. Typecheck"
@@ -54,7 +52,7 @@ psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 
 
 step "3. Clean state"
 OUT="$(d2 "$VERIFY_URL")"; case "$OUT" in "schema drift: none"*) ok "D2: $OUT" ;; *) bad "D2 on a clean clone: $OUT" ;; esac
-baseline_ok && ok "D1/D3/D4: only D3, naming exactly the four L16 tables (the known gap)" || bad "baseline report: $(report)"
+baseline_ok && ok "D1/D3/D4: no findings (L16 closed: the four link tables are governed)" || bad "baseline report: $(report)"
 
 step "4. D2 — never new code against an unmigrated database"
 dropdb --if-exists "$BEHIND_DB"; createdb -T lvrf -O lvrf_app "$BEHIND_DB"
@@ -99,7 +97,7 @@ q "CREATE TABLE drift_probe (id uuid PRIMARY KEY, updated_at timestamptz)" > /de
 R="$(report)"; echo "$R" | grep -q "drift_probe (_touch, _no_delete, _audit)" && ok "a new ungoverned table -> D3 names it, owing all three" || bad "new table: $R"
 q "DROP TABLE drift_probe" > /dev/null
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1
-baseline_ok && ok "  ...restored (hardening.sql re-run): back to the known gap only" || bad "D3 restore: $(report)"
+baseline_ok && ok "  ...restored (hardening.sql re-run): no findings" || bad "D3 restore: $(report)"
 
 step "7. D4 — supersession pointers"
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND NOT simulated AND deleted_at IS NULL ORDER BY created_at LIMIT 1")"
@@ -131,7 +129,20 @@ ENG="$(q "SELECT e.id FROM engagements e WHERE e.deleted_at IS NULL AND e.supers
 C="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $STAFF" -d '{"source_fixture":"drift","note":"Drift wiring check"}' "$BASE/api/engagements/$ENG/produce-run")"
 RUN="$(node -e "console.log(require('$W/r.json').value_run_id ?? '')")"
 CODES="$(q "SELECT string_agg(f->>'code', ',' ORDER BY f->>'code') FROM value_runs, jsonb_array_elements(payload->'findings') f WHERE id = '$RUN' AND f->>'subject' = 'instrument'")"
-[ "$C" = "201" ] && echo ",$CODES," | grep -q ",D3," && echo ",$CODES," | grep -q ",D4," && ok "a run produced now carries D3 and D4 on its findings ($CODES)" || bad "run findings: $C '$CODES'"
+[ "$C" = "201" ] && echo ",$CODES," | grep -q ",D4," && ! echo ",$CODES," | grep -q ",D3," && ok "a run produced now carries the D4 fork on its findings, and no D3 ($CODES)" || bad "run findings: $C '$CODES'"
+
+step "9. L16 — the four link tables are audited and never deleted"
+EV="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'observation', 'L16 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
+VO="$(q "SELECT id FROM value_outcomes WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1")"
+psql -At -d "$VERIFY_DB" -c "SELECT set_config('lvrf.actor_person_id', '$STAFF', false); INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$VO', '$EV', 'baseline')" > /dev/null
+A="$(q "SELECT record_id || '|' || operation || '|' || (actor_person_id = '$STAFF')::text || '|' || (new_row->>'supports') FROM audit_log WHERE table_name = 'value_outcome_evidence' ORDER BY id DESC LIMIT 1")"
+[ "$A" = "$VO|$EV|insert|true|baseline" ] && ok "an insert is audited: record_id = '<value_outcome_id>|<evidence_id>', the actor, the row in new_row" || bad "composite audit row: $A"
+for t in value_outcome_evidence offering_capabilities person_roles reflection_evidence; do
+  OUT2="$(psql -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -c "DELETE FROM $t WHERE ctid = (SELECT ctid FROM $t LIMIT 1)" 2>&1 || true)"
+  N="$(q "SELECT count(*) FROM $t")"
+  if [ "$N" = "0" ]; then ok "$t: empty here; _no_delete present: $(q "SELECT count(*) FROM pg_trigger WHERE tgname = '${t}_no_delete'")"
+  else case "$OUT2" in *"hard DELETE is prohibited"*) ok "$t: DELETE -> refused by ${t}_no_delete" ;; *) bad "$t delete: $OUT2" ;; esac; fi
+done
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"

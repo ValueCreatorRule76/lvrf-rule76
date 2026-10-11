@@ -517,6 +517,9 @@ END $$;
 -- ------------------------------------------------------------------
 -- Known ungoverned tables — not closed by this change
 -- ------------------------------------------------------------------
+-- CLOSED 11 October 2026 by section 17 (L16): lvrf_audit_composite and
+-- _no_delete on all four. The note below is kept as the reason it was open.
+--
 -- value_outcome_evidence, offering_capabilities, person_roles, and
 -- reflection_evidence carry no _audit/_touch/_no_delete triggers. All four
 -- are composite-key junction tables with no id column, and lvrf_audit()
@@ -1000,6 +1003,100 @@ CREATE TRIGGER access_grants_no_delete
   );
 
 -- ------------------------------------------------------------------
+-- 17. L16 (Q4, 11 Oct 2026) — the four composite-key link tables
+--     (placed before section 14 so the manifest includes these eight)
+-- ------------------------------------------------------------------
+-- value_outcome_evidence, offering_capabilities, person_roles and
+-- reflection_evidence: link rows with a two-column primary key and no id,
+-- which is why lvrf_audit() (NEW.id::text) could not be attached — see the
+-- "Known ungoverned tables" note after section 5e, now closed by this
+-- section. Every write to them in the code is an INSERT (checked by grep,
+-- 11 Oct 2026: routes, walkSpine, seeds); nothing UPDATEs or DELETEs them.
+--
+--   _audit      via lvrf_audit_composite(<key columns>): record_id is the
+--               primary-key values joined with '|', in key-column order
+--               (e.g. '<value_outcome_id>|<evidence_id>'). audit_log.
+--               record_id is text NOT NULL, so this needs no migration and
+--               coerces nothing; the full row, key included, is in
+--               new_row / old_row as always.
+--   _no_delete  yes, with its own remedy text: a link is a fact that was
+--               recorded; there is no deleted_at to set.
+--
+-- CONSEQUENCE: trigger count goes 87 -> 95. Eight new triggers — <table>
+-- _audit and <table>_no_delete for each of the four. Reconciled by LIST in
+-- the Verification block below, not by total. D3 (driftChecks.ts) then
+-- finds no gap.
+
+CREATE OR REPLACE FUNCTION lvrf_audit_composite() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  j_old jsonb;
+  j_new jsonb;
+  rid text := '';
+  i int;
+BEGIN
+  IF TG_NARGS = 0 THEN
+    RAISE EXCEPTION 'LVRF: lvrf_audit_composite on % needs its key columns as trigger arguments.', TG_TABLE_NAME;
+  END IF;
+  j_new := to_jsonb(NEW);
+  IF TG_OP = 'UPDATE' THEN j_old := to_jsonb(OLD); END IF;
+  FOR i IN 0 .. TG_NARGS - 1 LOOP
+    IF NOT jsonb_exists(j_new, TG_ARGV[i]) THEN
+      RAISE EXCEPTION 'LVRF: lvrf_audit_composite on %: % is not a column.', TG_TABLE_NAME, TG_ARGV[i];
+    END IF;
+    rid := rid || CASE WHEN i > 0 THEN '|' ELSE '' END || (j_new ->> TG_ARGV[i]);
+  END LOOP;
+  INSERT INTO audit_log (table_name, record_id, operation, actor_person_id, old_row, new_row)
+  VALUES (TG_TABLE_NAME, rid, CASE WHEN TG_OP = 'INSERT' THEN 'insert' ELSE 'update' END::audit_operation,
+          lvrf_current_actor(), j_old, j_new);
+  RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcome_evidence_audit ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_audit
+  AFTER INSERT OR UPDATE ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit_composite('value_outcome_id', 'evidence_id');
+DROP TRIGGER IF EXISTS value_outcome_evidence_no_delete ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_no_delete
+  BEFORE DELETE ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A link between an outcome and its evidence is never deleted; it records what the evidence was offered to support.'
+  );
+
+DROP TRIGGER IF EXISTS offering_capabilities_audit ON offering_capabilities;
+CREATE TRIGGER offering_capabilities_audit
+  AFTER INSERT OR UPDATE ON offering_capabilities
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit_composite('offering_id', 'capability_id');
+DROP TRIGGER IF EXISTS offering_capabilities_no_delete ON offering_capabilities;
+CREATE TRIGGER offering_capabilities_no_delete
+  BEFORE DELETE ON offering_capabilities
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A link between an offering and a capability is never deleted. To withdraw it, supersede the capability.'
+  );
+
+DROP TRIGGER IF EXISTS person_roles_audit ON person_roles;
+CREATE TRIGGER person_roles_audit
+  AFTER INSERT OR UPDATE ON person_roles
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit_composite('person_id', 'role');
+DROP TRIGGER IF EXISTS person_roles_no_delete ON person_roles;
+CREATE TRIGGER person_roles_no_delete
+  BEFORE DELETE ON person_roles
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A role assignment is never deleted; it records that the person held the role. To end it, supersede the person.'
+  );
+
+DROP TRIGGER IF EXISTS reflection_evidence_audit ON reflection_evidence;
+CREATE TRIGGER reflection_evidence_audit
+  AFTER INSERT OR UPDATE ON reflection_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit_composite('reflection_id', 'evidence_id');
+DROP TRIGGER IF EXISTS reflection_evidence_no_delete ON reflection_evidence;
+CREATE TRIGGER reflection_evidence_no_delete
+  BEFORE DELETE ON reflection_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A link between a reflection and its evidence is never deleted.'
+  );
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1080,17 +1177,19 @@ COMMIT;
 --   15: person_credentials_no_delete, sessions_no_delete — 2
 --   16: access_grants_audit, access_grants_no_delete,
 --   access_grants_steward_only — 3
---   Total: 87 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   17: <t>_audit, <t>_no_delete for value_outcome_evidence,
+--   offering_capabilities, person_roles, reflection_evidence — 8
+--   Total: 95 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
---   0029 took it 84 -> 87.)
+--   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 87.
+-- TRUNCATE in section 14 fail. Total stays 95.
 --
--- Expect 130 rows here: information_schema.triggers emits one row per event
+-- Expect 142 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -1107,8 +1206,10 @@ COMMIT;
 -- capability_industry_measures_no_delete on DELETE only (+1);
 -- person_credentials_no_delete and sessions_no_delete on DELETE only (+2);
 -- access_grants_steward_only and access_grants_audit on INSERT and UPDATE
--- (+4), access_grants_no_delete on DELETE only (+1).
--- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 = 130.
+-- (+4), access_grants_no_delete on DELETE only (+1); section 17's four
+-- _audit triggers on INSERT and UPDATE (+8) and four _no_delete on DELETE
+-- only (+4).
+-- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 = 142.
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'
