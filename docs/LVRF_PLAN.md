@@ -49,7 +49,7 @@ headings.
 | 6. Draft-and-refuse | **done** | *2.0 item 6 closed — the shopping list* | gap register's requirement text |
 | Industry packs (pulled from 3.0 into 2.0) | **done**, none ratified | *Industry packs — the shape / the schema*; *Item (b)* | `industry_measures` (all `proposed`) |
 | The account workbench | **done** | *The account workbench — 9 Oct* | `institutionView.ts`, `institutionFacts.ts` |
-| Fact supersession writer (2.0's last item) | **built, Gate A passed; deploy pending** | *Fact supersession — 11 Oct* | `0028`, `institutionFacts.ts` `/supersede` |
+| Fact supersession writer (2.0's last item) | **done**: deployed 11 Oct (0028); first use, the LVAF → "LVRF (value realization records)" correction, made by Brad on 11 Oct | *Fact supersession — 11 Oct*, and its *Deployed* note | `0028`, `institutionFacts.ts` `/supersede`; prod facts `c966ef3b…` → `f1e2385e…`, audit 203–205 |
 | The earned pack (`capability_metric_links` on `lifecycle_status`) | **moved to 3.0 item 17** | *2.0, scoped for a platform* | — |
 | Portfolio learning | **moved to 3.0 item 18** (ruled out of 2.0: meaningless with two institutions) | *RULED OUT* | — |
 | Authentication | **done as sign-in P1–P3** (filed 2.x, platform) | *Sign-in P1 … P3*; *Sign-in P1–P3 complete* | `server/lib/session.ts`, `actorHeader.ts`, `tenantScope.ts` |
@@ -157,7 +157,7 @@ placement is a judgement.
 
 | # | Item | Depends on | Why here |
 |---|---|---|---|
-| Q1 | **Fact supersession** — deploy (0028, backup first), then **Brad's LVAF → "LVRF (value realization records)" correction** in the browser, then Gate C | Gate A passed | 2.0's last item; a real fact is wrong |
+| ~~Q1~~ | ~~**Fact supersession**: deploy (0028, backup first), then Brad's LVAF → "LVRF (value realization records)" correction, then Gate C~~ **DONE 11 Oct 2026.** Deployed `cb666e9`; corrected by Brad at 18:16 UTC; Gate C clean | — | 2.0's last item is closed |
 | Q2 | **3.0 item 1 — an access grant is a record** | D4, D5 | Band A first: the next user must be granted by an act that names Brad |
 | Q3 | **3.0 item 2 — Brad-only acts, one shared check** | Q2; D3, D4, D6 | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
 | Q3a | Hygiene batch: L5 (compare 500 → 422), L2 (panel label), L3 (`supports` CHECK), L21 (two doc fixes) | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |

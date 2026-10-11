@@ -4833,9 +4833,11 @@ check to self-diagnose.
   before the response*.
 - ~~**Sign-in P3, the tenant check on every route.**~~ **Deployed 11 October 2026.**
   Sign-in P1–P3 are complete; see *Sign-in P3* at the end of this file.
-- **Next: a supersession writer for institution facts.** Built 11 October (0028);
-  see *Fact supersession* at the end of this file. Deploy pending; the LVAF
-  correction is Brad's to make in the browser. Moved up from
+- ~~**A supersession writer for institution facts.**~~ **Deployed 11 October 2026
+  (0028)**, and its first use is done: Skillsoft's `LVAF` was corrected to "LVRF
+  (value realization records)" by Brad in the browser. See *Fact supersession* at
+  the end of this file. **2.0's last roster item is closed.** What comes next is
+  in `docs/LVRF_PLAN.md`, §4: Band A, once D3–D6 are confirmed. Moved up from
   the workbench's own list on 11 October, because a real fact now needs
   correcting.
   - The column, its `_supersession_sane` trigger and `_no_delete` exist; the route
@@ -7634,4 +7636,41 @@ facts into runs.
     first screenshot showed it read last.
 - **Regression:** all 15 verify scripts pass, 0 failed. The client `tsc`, build and
   lint pass. The bundle is now `index-CUeqTSHI.js`; the client changed.
+
+### Deployed — 11 October 2026, and the LVAF correction made
+
+`75e92c3..cb666e9` (`3e691c8` fact supersession; `50306d5` and `cb666e9` docs) went
+to production, with migration 0028.
+
+- **Backup first:** `~/lvrf_pre_0028_20261011_180905.dump` (549,997 bytes,
+  `-rw-------`, 438 TOC entries), taken with the box at `75e92c3`.
+- **Migration:**
+  - `0028` applied cleanly; `hardening.sql` exited 0; 84 triggers.
+  - The newest migration is `1791729812829`, row 29.
+  - Facts before the correction: 1 / 0 superseded / 0 reasons.
+  - `\d institution_facts` shows the `supersession_reason` column, the
+    `institution_facts_supersession_reason` CHECK and the same four triggers.
+- **Deploy:** deploy OK, exit 0, HEAD `cb666e9`, bundle **`index-CUeqTSHI.js`** /
+  `index-D8pRZG-E.css` (the account card changed). Up since **18:12:50 UTC**.
+- **The correction, made by Brad Piver in the browser at 18:16:11 UTC.** The card
+  shows "LVRF (value realization records)", his new provenance, Unverified, and
+  "Corrected Oct 11, 2026, 2:16 PM by Brad Piver · 1 earlier value".
+- **Gate C, read-only, as `lvrf_app`:**
+  - **The chain.** `c966ef3b…` still reads **`LVAF`** (the typo stays in history).
+    It now points at `f1e2385e…` with the reason *"Typed LVAF for LVRF at capture;
+    the provenance says LVRF."*, and its `updated_at` is the correction's
+    moment. `f1e2385e…` reads "LVRF (value realization records)", is current,
+    and has no reason of its own. Both were captured by Brad.
+  - **Separate evidence.** The original evidence `1e85f541…` is unchanged. The new
+    fact's own evidence is `f41102bc…`: observation, high confidence,
+    unverified, not AI-sourced. Its provenance: *"Stated by Brad Piver: Skillsoft
+    records value realization in LVRF. Correcting the value typed at capture on
+    11 October 2026."*
+  - **Audit.** Rows **203** (evidence insert), **204** (fact insert) and **205**
+    (the old fact's update) are the only rows since the deploy, and **all three
+    have Brad as actor**, at one transaction time, 18:16:11.091796.
+  - **The session.** It came through browser session `4e6011a2…` (from 12:58),
+    whose `last_seen_at` of 18:16:11.0877 is the resolution on that request.
+  - **Nothing else.** No refusals; 84 triggers; 0028 newest; the CHECK is present
+    with 0 violations.
 
