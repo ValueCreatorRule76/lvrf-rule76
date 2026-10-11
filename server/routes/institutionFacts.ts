@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -197,7 +198,7 @@ export function institutionFactsRouter(pool: Pool): Router {
           WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [institutionId],
       );
-      if (!institution) {
+      if (!institution || isOtherTenant(req, institution.tenant_id, { table: 'institutions', id: institutionId })) {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }

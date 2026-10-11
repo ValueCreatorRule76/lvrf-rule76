@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * 2.0 item 5, industry packs — pack parse-and-review.
@@ -252,21 +253,16 @@ export function industryResearchRouter(pool: Pool): Router {
         throw new Error('req.actor missing on a request past requireActor');
       }
 
-      // Resolves the requesting actor's own tenant (persons.tenant_id for
-      // a vendor-side actor, or via their institution for a customer-side
-      // one) and requires the industry to belong to it, in one predicate —
-      // see the 404 comment above for why "missing" and "wrong tenant"
-      // deliberately produce the same empty result.
+      // Requires the industry to belong to the actor's tenant — see the 404
+      // comment above for why "missing" and "wrong tenant" deliberately
+      // produce the same answer. Sign-in P3: checked by the shared helper
+      // after the lookup (it was a predicate in the WHERE), so a mismatch
+      // is logged.
       const { rows: [industry] } = await client.query<{ id: string; tenant_id: string }>(
-        `SELECT ind.id, ind.tenant_id
-           FROM industries ind
-           JOIN persons p ON p.id = $2
-           LEFT JOIN institutions i ON i.id = p.institution_id
-          WHERE ind.id = $1
-            AND ind.tenant_id = COALESCE(p.tenant_id, i.tenant_id)`,
-        [industryId, actorPersonId],
+        'SELECT id, tenant_id FROM industries WHERE id = $1',
+        [industryId],
       );
-      if (!industry) {
+      if (!industry || isOtherTenant(req, industry.tenant_id, { table: 'industries', id: industryId })) {
         res.status(404).json({ message: `industry ${industryId} not found` });
         return;
       }
@@ -415,7 +411,6 @@ export function researchResultsReviewRouter(pool: Pool): Router {
   async function findReviewCandidate(
     client: PoolClient,
     resultId: string,
-    actorPersonId: string,
   ): Promise<ReviewCandidate | null> {
     const { rows: [row] } = await client.query<{
       id: string; tenant_id: string; industry_id: string | null; result_kind: string;
@@ -426,12 +421,9 @@ export function researchResultsReviewRouter(pool: Pool): Router {
               rr.reviewed_by_person_id, rr.reviewed_at, reviewer.full_name AS reviewer_name,
               rr.raw_response
          FROM research_results rr
-         JOIN persons p ON p.id = $2
-         LEFT JOIN institutions i ON i.id = p.institution_id
          LEFT JOIN persons reviewer ON reviewer.id = rr.reviewed_by_person_id
-        WHERE rr.id = $1
-          AND rr.tenant_id = COALESCE(p.tenant_id, i.tenant_id)`,
-      [resultId, actorPersonId],
+        WHERE rr.id = $1`,
+      [resultId],
     );
     if (!row) return null;
     return {
@@ -622,8 +614,10 @@ export function researchResultsReviewRouter(pool: Pool): Router {
       // required, free text, NOT content-validated — presence only.
       const reviewNote = requireEnvelopeString(body, 'review_note', issues);
 
-      const candidate = await findReviewCandidate(client, resultId, actorPersonId);
-      if (!candidate) {
+      const candidate = await findReviewCandidate(client, resultId);
+      // Sign-in P3: the tenant check (a WHERE predicate in findReviewCandidate
+      // until P3) — by the shared helper, so a mismatch is logged.
+      if (!candidate || isOtherTenant(req, candidate.tenantId, { table: 'research_results', id: resultId })) {
         res.status(404).json({ message: `research result ${resultId} not found` });
         return;
       }
@@ -785,8 +779,10 @@ export function researchResultsReviewRouter(pool: Pool): Router {
         return;
       }
 
-      const candidate = await findReviewCandidate(client, resultId, actorPersonId);
-      if (!candidate) {
+      const candidate = await findReviewCandidate(client, resultId);
+      // Sign-in P3: the tenant check (a WHERE predicate in findReviewCandidate
+      // until P3) — by the shared helper, so a mismatch is logged.
+      if (!candidate || isOtherTenant(req, candidate.tenantId, { table: 'research_results', id: resultId })) {
         res.status(404).json({ message: `research result ${resultId} not found` });
         return;
       }

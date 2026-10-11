@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { classifyInstitution } from '../lib/classifyInstitution.js';
+import { actorTenantId } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -157,16 +158,11 @@ export function accountInputsRouter(pool: Pool): Router {
         throw new Error('req.actor missing on a request past requireActor');
       }
 
-      const { rows: tenantRows } = await client.query<{ id: string }>(
-        'SELECT id FROM tenants WHERE deleted_at IS NULL',
-      );
-      if (tenantRows.length !== 1) {
-        res.status(422).json({
-          message: `Expected exactly one tenant, found ${tenantRows.length}. Not guessing which one.`,
-        });
-        return;
-      }
-      const tenantId = tenantRows[0].id;
+      // Sign-in P3: the account is created in the ACTOR'S tenant. Until P3
+      // this read `SELECT id FROM tenants` and refused unless there was
+      // exactly one — which held, but would have put a second tenant's
+      // staff on a 422, and was never a statement of whose account it is.
+      const tenantId = actorTenantId(req);
       refusalTenantId = tenantId;
 
       const { rows: insertedInstitution } = await client.query<{ id: string }>(
@@ -212,7 +208,7 @@ export function accountInputsRouter(pool: Pool): Router {
         evidence_id: string;
       } | null = null;
       if (hasSlug && hasNote) {
-        const result = await classifyInstitution(client, {
+        const result = await classifyInstitution(client, req, {
           institutionId,
           industrySlug: industrySlug!,
           classificationNote: classificationNote!,

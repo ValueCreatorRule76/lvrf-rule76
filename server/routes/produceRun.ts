@@ -17,6 +17,7 @@ import { runDriftChecks } from '../spine/driftChecks.js';
 import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -133,7 +134,7 @@ export function produceRunRouter(pool: Pool): Router {
            FROM engagements WHERE id = $1 AND deleted_at IS NULL`,
         [engagementId],
       );
-      if (!engagement) {
+      if (!engagement || isOtherTenant(req, engagement.tenant_id, { table: 'engagements', id: engagementId })) {
         res.status(404).json({ message: `engagement ${engagementId} not found` });
         return;
       }

@@ -1,4 +1,6 @@
+import type { Request } from 'express';
 import type { PoolClient } from 'pg';
+import { isOtherTenant } from './tenantScope.js';
 
 /**
  * The classification act, shared by its two callers:
@@ -17,8 +19,12 @@ import type { PoolClient } from 'pg';
  *     (kind 'observation', confidence 'low', source_verified false)
  *   - a classified institution is never reclassified — 409, supersede the
  *     institution instead
- *   - the slug must name an industry in the institution's own tenant
- *     (404 unknown, 422 cross-tenant)
+ *   - the institution must be in the actor's tenant (sign-in P3: 404
+ *     otherwise, as for an unknown id)
+ *   - the slug must name an industry in the institution's own tenant —
+ *     404 otherwise. Until P3 a slug that existed only in ANOTHER tenant
+ *     got a 422 saying so, which told the caller what another tenant's
+ *     taxonomy contains; it is now the same 404 as an unknown slug.
  *   - the UPDATE is race-guarded on industry_id IS NULL
  *   - institutions.industry (the free-text statement) is never touched
  *
@@ -42,6 +48,7 @@ export type ClassifyResult =
 
 export async function classifyInstitution(
   client: PoolClient,
+  req: Request,
   args: {
     institutionId: string;
     industrySlug: string;
@@ -76,7 +83,7 @@ export async function classifyInstitution(
       WHERE i.id = $1 AND i.deleted_at IS NULL`,
     [institutionId],
   );
-  if (!institution) {
+  if (!institution || isOtherTenant(req, institution.tenant_id, { table: 'institutions', id: institutionId })) {
     return { ok: false, status: 404, message: `institution ${institutionId} not found` };
   }
   const tenantId = institution.tenant_id;
@@ -99,33 +106,15 @@ export async function classifyInstitution(
     };
   }
 
-  // Scoped by tenant_id first — this is the well-formed path, and if it
-  // hits, the institution and industry already share a tenant by
-  // construction. Only on a miss do we check whether the slug exists at
-  // all (for any tenant), which is what tells apart the two distinct
-  // failure modes the caller can hit: a slug that names nothing in this
-  // taxonomy (404), versus a slug that names something, just not for
-  // this institution's tenant (422 — a cross-tenant mismatch is a
-  // caller error, not a missing-resource one).
+  // Scoped by tenant_id: industries are tenant-owned, and a slug is unique
+  // only within a tenant. On a hit, the institution and industry share a
+  // tenant by construction. A miss is one 404 whether or not some other
+  // tenant uses the slug (sign-in P3 — see the header).
   const { rows: [industry] } = await client.query<{ id: string; name: string; slug: string }>(
     'SELECT id, name, slug FROM industries WHERE tenant_id = $1 AND slug = $2',
     [tenantId, industrySlug],
   );
   if (!industry) {
-    const { rows: [elsewhere] } = await client.query<{ tenant_id: string }>(
-      'SELECT tenant_id FROM industries WHERE slug = $1 LIMIT 1',
-      [industrySlug],
-    );
-    if (elsewhere) {
-      return {
-        ok: false,
-        status: 422,
-        tenantId,
-        message:
-          `industry_slug '${industrySlug}' does not belong to tenant ${tenantId}; ` +
-          `institution and industry must share a tenant`,
-      };
-    }
     return {
       ok: false,
       status: 404,

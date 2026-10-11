@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -178,7 +179,7 @@ export function institutionInputsRouter(pool: Pool): Router {
         'SELECT id, tenant_id FROM institutions WHERE id = $1 AND deleted_at IS NULL',
         [institutionId],
       );
-      if (!institution) {
+      if (!institution || isOtherTenant(req, institution.tenant_id, { table: 'institutions', id: institutionId })) {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }

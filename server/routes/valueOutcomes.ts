@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant, personTenantId } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -183,11 +184,22 @@ export function valueOutcomesRouter(pool: Pool): Router {
         'SELECT id, tenant_id FROM institutions WHERE id = $1 AND deleted_at IS NULL',
         [institutionId],
       );
-      if (!institution) {
+      if (!institution || isOtherTenant(req, institution.tenant_id, { table: 'institutions', id: institutionId })) {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }
       refusalTenantId = institution.tenant_id;
+
+      // Sign-in P3: metric.owner_person_id is chosen in the body and nothing
+      // else ties it to this account, so it is checked against the actor's
+      // tenant here; one of another tenant reads as an unknown id.
+      if (metricOwnerPersonId !== undefined) {
+        const ownerTenant = await personTenantId(client, metricOwnerPersonId);
+        if (ownerTenant === null || isOtherTenant(req, ownerTenant, { table: 'persons', id: metricOwnerPersonId })) {
+          res.status(422).json({ message: `body.metric.owner_person_id not found: ${metricOwnerPersonId}` });
+          return;
+        }
+      }
 
       // Read from the database rather than hardcoding the enum's members —
       // a future migration that adds or renames a direction should not
@@ -209,11 +221,13 @@ export function valueOutcomesRouter(pool: Pool): Router {
       let engagementIdResolved: string;
       let engagementCreated: boolean;
       if (engagementId !== undefined) {
-        const { rows: [engagement] } = await client.query<{ id: string; institution_id: string }>(
-          'SELECT id, institution_id FROM engagements WHERE id = $1 AND deleted_at IS NULL',
+        const { rows: [engagement] } = await client.query<{ id: string; institution_id: string; tenant_id: string }>(
+          'SELECT id, institution_id, tenant_id FROM engagements WHERE id = $1 AND deleted_at IS NULL',
           [engagementId],
         );
-        if (!engagement) {
+        // Sign-in P3: another tenant's engagement is an unknown id — checked
+        // before the institution comparison, whose message would confirm it.
+        if (!engagement || isOtherTenant(req, engagement.tenant_id, { table: 'engagements', id: engagementId })) {
           res.status(422).json({ message: `engagement_id not found: ${engagementId}` });
           return;
         }

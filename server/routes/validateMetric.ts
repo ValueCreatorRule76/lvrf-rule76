@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant, personTenantId } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -177,12 +178,23 @@ export function validateMetricRouter(pool: Pool): Router {
           WHERE bm.id = $1 AND bm.deleted_at IS NULL`,
         [metricId],
       );
-      if (!oldMetric) {
+      if (!oldMetric || isOtherTenant(req, oldMetric.tenant_id, { table: 'business_metrics', id: metricId })) {
         res.status(404).json({ message: `business metric ${metricId} not found` });
         return;
       }
       refusalTenantId = oldMetric.tenant_id;
       refusalInstitutionId = oldMetric.institution_id;
+
+      // Sign-in P3: metric.owner_person_id is chosen in the body and nothing
+      // else ties it to this account, so it is checked against the actor's
+      // tenant here; one of another tenant reads as an unknown id.
+      if (metricOwnerPersonId !== undefined) {
+        const ownerTenant = await personTenantId(client, metricOwnerPersonId);
+        if (ownerTenant === null || isOtherTenant(req, ownerTenant, { table: 'persons', id: metricOwnerPersonId })) {
+          res.status(422).json({ message: `body.metric.owner_person_id not found: ${metricOwnerPersonId}` });
+          return;
+        }
+      }
 
       // lvrf_supersession_is_sane's rule 3 would catch this as a forked
       // chain, but a clear 409 naming the existing successor beats a

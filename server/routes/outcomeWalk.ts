@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -145,7 +146,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
           WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
-      if (!outcome) {
+      if (!outcome || isOtherTenant(req, outcome.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
@@ -357,7 +358,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
           WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
-      if (!outcome) {
+      if (!outcome || isOtherTenant(req, outcome.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
@@ -520,7 +521,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
           WHERE vo.id = $1 AND vo.deleted_at IS NULL`,
         [outcomeId],
       );
-      if (!outcome) {
+      if (!outcome || isOtherTenant(req, outcome.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }

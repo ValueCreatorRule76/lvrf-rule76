@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -96,16 +97,13 @@ export function industryExclusionsRouter(pool: Pool): Router {
         throw new Error('req.actor missing on a request past requireActor');
       }
 
+      // Sign-in P3: looked up by id, then tenant-checked by the shared
+      // helper (it was a predicate in the WHERE), so a mismatch is logged.
       const { rows: [industry] } = await client.query<{ id: string; tenant_id: string; name: string }>(
-        `SELECT ind.id, ind.tenant_id, ind.name
-           FROM industries ind
-           JOIN persons p ON p.id = $2
-           LEFT JOIN institutions i ON i.id = p.institution_id
-          WHERE ind.id = $1
-            AND ind.tenant_id = COALESCE(p.tenant_id, i.tenant_id)`,
-        [industryId, actorPersonId],
+        'SELECT id, tenant_id, name FROM industries WHERE id = $1',
+        [industryId],
       );
-      if (!industry) {
+      if (!industry || isOtherTenant(req, industry.tenant_id, { table: 'industries', id: industryId })) {
         res.status(404).json({ message: `industry ${industryId} not found` });
         return;
       }

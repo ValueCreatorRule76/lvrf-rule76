@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -106,13 +107,13 @@ export function engagementRetireRouter(pool: Pool): Router {
            FROM engagements e
            JOIN institutions i ON i.id = e.institution_id
            JOIN persons actor ON actor.id = $2
-           LEFT JOIN institutions actor_inst ON actor_inst.id = actor.institution_id
           WHERE e.id = $1
-            AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
-            AND e.tenant_id = COALESCE(actor.tenant_id, actor_inst.tenant_id)`,
+            AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL`,
         [engagementId, actorPersonId],
       );
-      if (!engagement) {
+      // Sign-in P3: the tenant is checked after the lookup, by the shared
+      // helper (it was a predicate in the WHERE), so a mismatch is logged.
+      if (!engagement || isOtherTenant(req, engagement.tenant_id, { table: 'engagements', id: engagementId })) {
         res.status(404).json({
           message: `engagement ${engagementId} not found, already retired, or superseded`,
         });

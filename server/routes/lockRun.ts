@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -93,7 +94,7 @@ export function lockRunRouter(pool: Pool): Router {
           WHERE vr.id = $1 AND vr.deleted_at IS NULL`,
         [runId],
       );
-      if (!run) {
+      if (!run || isOtherTenant(req, run.tenant_id, { table: 'value_runs', id: runId })) {
         res.status(404).json({ message: `value run ${runId} not found` });
         return;
       }

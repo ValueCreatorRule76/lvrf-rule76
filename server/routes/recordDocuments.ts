@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * Two routers, not one: the POST is run-scoped
@@ -89,7 +90,7 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
           WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [runId],
       );
-      if (!run) {
+      if (!run || isOtherTenant(req, run.tenant_id, { table: 'value_runs', id: runId })) {
         res.status(404).json({ message: `value run ${runId} not found` });
         return;
       }

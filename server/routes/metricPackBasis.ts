@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -116,7 +117,7 @@ export function metricPackBasisRouter(pool: Pool): Router {
           WHERE bm.id = $1 AND bm.deleted_at IS NULL AND bm.superseded_by_id IS NULL`,
         [metricId],
       );
-      if (!metric) {
+      if (!metric || isOtherTenant(req, metric.tenant_id, { table: 'business_metrics', id: metricId })) {
         res.status(404).json({ message: `business metric ${metricId} not found` });
         return;
       }
@@ -144,14 +145,18 @@ export function metricPackBasisRouter(pool: Pool): Router {
         name: string;
         industry_id: string;
         industry_name: string;
+        tenant_id: string;
       }>(
-        `SELECT im.id, im.name, im.industry_id, ind.name AS industry_name
+        `SELECT im.id, im.name, im.industry_id, ind.name AS industry_name, im.tenant_id
            FROM industry_measures im
            JOIN industries ind ON ind.id = im.industry_id
           WHERE im.id = $1 AND im.deleted_at IS NULL AND im.superseded_by_id IS NULL`,
         [industryMeasureId],
       );
-      if (!measure) {
+      // Sign-in P3: a measure of another tenant's pack is, here, a measure
+      // that does not exist — checked before the industry comparison below,
+      // whose message would otherwise name the other tenant's industry.
+      if (!measure || isOtherTenant(req, measure.tenant_id, { table: 'industry_measures', id: industryMeasureId })) {
         res.status(404).json({ message: `industry measure ${industryMeasureId} not found` });
         return;
       }

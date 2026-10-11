@@ -90,7 +90,7 @@ export function institutionClassifyRouter(pool: Pool): Router {
       // The act itself lives in server/lib/classifyInstitution.ts, shared
       // with POST /api/account-inputs so the create form can classify in
       // the same transaction. Behaviour here is unchanged.
-      const result = await classifyInstitution(client, {
+      const result = await classifyInstitution(client, req, {
         institutionId,
         industrySlug,
         classificationNote,
