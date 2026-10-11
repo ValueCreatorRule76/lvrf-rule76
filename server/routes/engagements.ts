@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
 
 export function engagementsRouter(pool: Pool): Router {
   const router = Router();
 
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     try {
       const { rows } = await pool.query(`
         SELECT
@@ -24,10 +25,11 @@ export function engagementsRouter(pool: Pool): Router {
         -- Current rows only is the house default; a superseded engagement is an
         -- ancestor, and showing it here would duplicate the row with a split
         -- run_count. History gets a separate mechanism when someone needs it.
-        WHERE e.deleted_at IS NULL AND e.superseded_by_id IS NULL
+        -- Sign-in P3: the actor's tenant only.
+        WHERE e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND e.tenant_id = $1
         GROUP BY e.id, e.name, i.name, t.name, e.value_stage, e.renewal_date
         ORDER BY most_recent_run_at DESC NULLS LAST
-      `);
+      `, [actorTenantId(req)]);
       res.json(rows);
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
@@ -42,11 +44,11 @@ export function engagementsRouter(pool: Pool): Router {
       return;
     }
     try {
-      const { rows: [engagement] } = await pool.query(
-        `SELECT id FROM engagements WHERE id = $1 AND deleted_at IS NULL`,
+      const { rows: [engagement] } = await pool.query<{ id: string; tenant_id: string }>(
+        `SELECT id, tenant_id FROM engagements WHERE id = $1 AND deleted_at IS NULL`,
         [req.params.id],
       );
-      if (!engagement) {
+      if (!engagement || isOtherTenant(req, engagement.tenant_id, { table: 'engagements', id: req.params.id })) {
         res.status(404).json({ message: `engagement ${req.params.id} not found` });
         return;
       }

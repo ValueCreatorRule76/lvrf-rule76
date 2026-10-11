@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * GET, not a mutating method — actorContext's MUTATING_METHODS set does not
@@ -92,12 +93,13 @@ export function compareRunsRouter(pool: Pool): Router {
     try {
       const { rows } = await pool.query<{
         id: string;
+        tenant_id: string;
         engagement_id: string;
         locked_at: Date | null;
         terminal_value_stage: string;
         payload: Record<string, unknown>;
       }>(
-        `SELECT id, engagement_id, locked_at, terminal_value_stage, payload
+        `SELECT id, tenant_id, engagement_id, locked_at, terminal_value_stage, payload
            FROM value_runs
           WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
         [[baselineRunId, comparisonRunId]],
@@ -105,11 +107,13 @@ export function compareRunsRouter(pool: Pool): Router {
       const baseline = rows.find((r) => r.id === baselineRunId);
       const comparison = rows.find((r) => r.id === comparisonRunId);
 
-      if (!baseline) {
+      // Sign-in P3: each run is checked against the actor's tenant, and one
+      // of another tenant is the same 404 as a missing one.
+      if (!baseline || isOtherTenant(req, baseline.tenant_id, { table: 'value_runs', id: baselineRunId })) {
         res.status(404).json({ message: `value run ${baselineRunId} not found` });
         return;
       }
-      if (!comparison) {
+      if (!comparison || isOtherTenant(req, comparison.tenant_id, { table: 'value_runs', id: comparisonRunId })) {
         res.status(404).json({ message: `value run ${comparisonRunId} not found` });
         return;
       }

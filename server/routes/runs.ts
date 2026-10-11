@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 export function runsRouter(pool: Pool): Router {
   const router = Router();
@@ -35,7 +36,8 @@ export function runsRouter(pool: Pool): Router {
           WHERE vr.id = $1 AND vr.deleted_at IS NULL`,
         [req.params.id],
       );
-      if (!run) {
+      // vr.* carries the run's own tenant_id (sign-in P3).
+      if (!run || isOtherTenant(req, run.tenant_id, { table: 'value_runs', id: req.params.id })) {
         res.status(404).json({ message: `run ${req.params.id} not found` });
         return;
       }

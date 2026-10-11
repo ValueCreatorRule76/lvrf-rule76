@@ -4829,7 +4829,10 @@ check to self-diagnose.
   not-addressable Healthcare entry. See *Case mix index promoted*.
 - ~~**Write routes respond before COMMIT.**~~ Closed 10 October 2026 — see *Commit
   before the response*.
-- **Next after P2b: a supersession writer for institution facts.** Moved up from
+- **Next: sign-in P3, the tenant check on every route** (writes and reads, one
+  helper, a coverage guard). Built 11 October; see *Sign-in P3* at the end of
+  this file. Deploy pending.
+- **Then: a supersession writer for institution facts** (after P3). Moved up from
   the workbench's own list on 11 October, because a real fact now needs
   correcting.
   - The column, its `_supersession_sane` trigger and `_no_delete` exist; the route
@@ -7228,3 +7231,238 @@ and `.env` was unchanged (it has no `LVRF_ALLOW_ACTOR_HEADER` line).
   - No non-staff credential or session.
   - **No audit rows and no refusals since the restart.** The last audit id is
     still 202: the curl wrote nothing governed.
+
+## Sign-in P3 — every route answers for the actor's tenant only — 11 October 2026
+
+**Spine stage:** cross-cutting. It guards the reads and writes behind every value-spine
+stage, from `baseline` (account inputs) to `verify` (the outcome walk) and the record
+documents.
+
+**Why now.** Prod has one tenant and one staff person, so nothing can be reached
+across tenants today. That changes the moment a second tenant exists. Before P3:
+
+- no mutating route compared the target's tenant with the actor's (the lookups
+  resolved `tenant_id` only to attribute refusals);
+- six GET files had no tenant reference at all, so `GET /api/runs/:id` would serve
+  another tenant's run.
+
+### Decisions (approved 11 October)
+
+1. **A mismatch is a 404**: the route's own not-found answer, so an id of another
+   tenant reads exactly like an id that does not exist. An id inside a request body
+   gets that field's own not-found answer.
+2. **A mismatch is not a refusal.** `refusals` rows are attributed to a tenant and feed
+   its gap register, so a probe would land in the victim's record. A mismatch is
+   logged at **warn**, with the actor person, the actor's tenant, the route pattern
+   and the target id. The request body is never logged.
+3. **Reads are in P3**, through the same helper. The coverage guard lists **every**
+   `/api` route under `requireActor`, GET included; `/api/health` and `/api/auth/*`
+   are exempt.
+
+### The helper — `server/lib/tenantScope.ts`
+
+| Function | Used for |
+|---|---|
+| `isOtherTenant(req, targetTenantId, {table, id})` | Every lookup by id. True (and logged) when the row's tenant is not the actor's. A null tenant counts as another tenant: fail closed. |
+| `actorTenantId(req)` | Every list, as a filter. |
+| `personTenantId(db, personId)` | A person id chosen in a body that nothing else ties to the account (the metric owner). |
+
+The three local `resolveActorTenantId` copies (`cohort`, `industryPack`,
+`institutionView`) are gone.
+
+Four lookups had the tenant inside their SQL `WHERE` (`engagementRetire`,
+`industryExclusions`, and `industryResearch`'s parse and review routes). They now
+look up by id and call the helper, so a mismatch is logged rather than silent.
+
+### Table classification: TENANT-OWNED or SHARED REFERENCE
+
+**How it was determined.** It was read from the schema, not assumed, by querying
+`pg_attribute` for a `tenant_id` column and its nullability, and `pg_constraint` for
+the foreign-key chains. Usage in the routes was then checked against that.
+
+**No table the routes take an id of is shared.** Industries, pack measures, research
+results and offerings all carry a **`NOT NULL tenant_id`**: each tenant has its own
+taxonomy, pack, research and catalog. So `industry_slug` on classify is resolved
+*within* the institution's tenant, which is correct, not an over-check. A slug is
+unique only inside a tenant.
+
+| Table | Class | Determined by |
+|---|---|---|
+| `engagements`, `industries`, `industry_measures`, `industry_measure_exclusions`, `institutions`, `offerings`, `research_results`, `value_runs`, `record_documents`, `heartbeat_events`, `refusals`, `stewardship_returns` | TENANT-OWNED | own `tenant_id`, NOT NULL |
+| `persons` | TENANT-OWNED | own `tenant_id` (staff) **or** `institution_id` → `institutions.tenant_id` (customer side); `persons_scoped_to_exactly_one` makes it exactly one |
+| `value_outcomes`, `business_metrics`, `capabilities`, `evidence`, `institution_facts`, `assessments`, `reflections` | TENANT-OWNED | FK chain: `institution_id` → `institutions.tenant_id` |
+| `value_outcome_evidence` | TENANT-OWNED | FK chain: `value_outcome_id` → `value_outcomes` → institution |
+| `capability_industry_measures` | TENANT-OWNED | FK chain: `capability_id` → `capabilities` → institution (and `industry_measure_id`, tenant-owned) |
+| `offering_capabilities` | TENANT-OWNED | FK chain: `offering_id` / `capability_id` |
+| `reflection_evidence` | TENANT-OWNED | FK chain: `reflection_id` / `evidence_id` |
+| `person_roles` | TENANT-OWNED | FK chain: `person_id` |
+| `heartbeats` | **SHARED REFERENCE** | No tenant column, and no FK to a tenant-owned table (only `persons` as steward, and itself). It is the HEARTBEAT-REGISTER: 18 rows, governance-owned. Read only as a join in `produceRun`; no route takes a heartbeat id. |
+| `tenants` | **SHARED REFERENCE** | The root. No route takes a tenant id from a caller. |
+| `hardening_manifest`, `audit_log` | **SHARED (system)** | No tenant column. Not readable through any route. |
+
+Enum labels (`pg_enum`, e.g. `metric_direction`) are read by several routes. They
+are schema, not rows, and are not checked.
+
+### Inventory: all 35 routes under `requireActor`
+
+The path id is what the route looks up; body ids are those chosen in the request.
+"Was" is the state before P3.
+
+| Route | Path id → tenant | Body ids → tenant | Was |
+|---|---|---|---|
+| GET /api/business-metrics/:metricId/research-prompt | metric → institution | — | unchecked |
+| GET /api/cohort | list, `i.tenant_id` | — | scoped (local copy) |
+| GET /api/engagements | list, `e.tenant_id` | — | **all tenants** |
+| GET /api/engagements/:id/runs | `engagements.tenant_id` | — | unchecked |
+| GET /api/industries | list, `ind.tenant_id` | — | scoped (local copy) |
+| GET /api/industries/:slug/pack | slug + tenant in WHERE (slug unique per tenant; nothing to log) | — | scoped |
+| GET /api/institutions | list, `i.tenant_id` | — | **all tenants** |
+| GET /api/institutions/:id/view | `institutions.tenant_id` | — | scoped in WHERE (silent) |
+| GET /api/persons | list, `COALESCE(p.tenant_id, institution tenant)`; `?institution_id` of another tenant → `[]`, logged | — | **all tenants** |
+| GET /api/runs | list, `vr.tenant_id` | — | **all tenants** |
+| GET /api/runs/:id | `value_runs.tenant_id` | — | unchecked |
+| GET /api/value-outcomes/:outcomeId/gaps | outcome → institution | — | unchecked |
+| GET /api/value-outcomes/:outcomeId/record-documents | outcome → institution | — | unchecked |
+| GET /api/value-runs/:a/compare/:b | both runs' `tenant_id` | — | unchecked |
+| POST /api/account-inputs | creates in the **actor's** tenant | persons/assessments created inside the new account | "the only tenant" (422 if ≠ 1) |
+| POST /api/business-metrics/:metricId/pack-basis | metric → institution | `industry_measure_id` → `industry_measures.tenant_id` (**new**: it leaked the other tenant's industry name) | unchecked |
+| POST /api/business-metrics/:metricId/validate | metric → institution | `confirmed_by` → must be of the account (existing); `metric.owner_person_id` → `personTenantId` (**new**) | unchecked |
+| POST /api/capabilities/:capabilityId/industry-measures | capability → institution | `industry_measure_id` → tenant (**new**, same leak) | unchecked |
+| POST /api/engagements/:engagementId/produce-run | `engagements.tenant_id` | — | unchecked |
+| POST /api/engagements/:id/retire | `engagements.tenant_id` | — | scoped in WHERE (silent) |
+| POST /api/industries/:industryId/exclusions | `industries.tenant_id` | — | scoped in WHERE (silent) |
+| POST /api/industries/:industryId/research-results | `industries.tenant_id` | — | scoped in WHERE (silent) |
+| POST /api/institutions/:institutionId/facts | `institutions.tenant_id` | — | unchecked |
+| POST /api/institutions/:institutionId/industry | `institutions.tenant_id` (in `classifyInstitution`) | `industry_slug` resolved in the institution's tenant; another tenant's slug is now the same 404 as an unknown one (**was a 422 that said so**) | unchecked |
+| POST /api/institutions/:institutionId/inputs | `institutions.tenant_id` | `owner_or_learner_person_id` → must be of the account (existing) | unchecked |
+| POST /api/institutions/:institutionId/offerings | `institutions.tenant_id` | `offering_key` resolved in the tenant (existing); `owner_person_id` → of the account (existing) | unchecked |
+| POST /api/institutions/:institutionId/value-outcomes | `institutions.tenant_id` | `engagement_id` → `engagements.tenant_id` (**new**: before, its 422 confirmed the engagement existed); `engagement_owner_person_id` → of the account (existing); `metric.owner_person_id` → `personTenantId` (**new**) | unchecked |
+| POST /api/research-results/:id/accept | `research_results.tenant_id` | — | scoped in WHERE (silent) |
+| POST /api/research-results/:id/reject | `research_results.tenant_id` | — | scoped in WHERE (silent) |
+| POST /api/value-outcomes/:outcomeId/commit | outcome → institution | `committed_by` → of the account (existing) | unchecked |
+| POST /api/value-outcomes/:outcomeId/evidence | outcome → institution | `attested_by` → of the account (existing) | unchecked |
+| POST /api/value-outcomes/:outcomeId/measure | outcome → institution | — | unchecked |
+| POST /api/value-outcomes/:outcomeId/verify | outcome → institution | `verified_by` → of the account (existing) | unchecked |
+| POST /api/value-runs/:runId/lock | `value_runs.tenant_id` | — | unchecked |
+| POST /api/value-runs/:runId/record-document | `value_runs.tenant_id` (outcome from the run's own payload) | — | unchecked |
+
+Rows reached *from* a checked target (an outcome's evidence, a run's engagement,
+an account's metrics) are the target's own tenant by their FK chain, and are not
+checked again.
+
+### Behaviour that changes beyond the check
+
+- **`POST /api/account-inputs`** creates the account in the actor's tenant. Before,
+  it used the only tenant and refused with 422 when there wasn't exactly one.
+- **Classify with another tenant's slug** is now a 404, as for an unknown slug. It
+  used to be a 422 that said the slug belonged elsewhere.
+- **`metric.owner_person_id`** (`value-outcomes`, `validate`) used to be checked
+  only by its foreign key. A retired, superseded or unknown person was accepted or
+  hit a 500. Now it must be a current person of the actor's tenant, or it gets 422
+  "not found".
+
+### Later items, recorded at P3
+
+- **The database-level backstop. Not built; needs its own plan.** `actorContext`
+  would also set `lvrf.actor_tenant_id`, and Postgres would refuse cross-tenant
+  writes itself, either by a trigger on each tenant-owned table or by row-level
+  security. CLAUDE.md prefers constraints to code, so this is the stronger
+  long-term answer. It touches every governed table and the read path, so it is
+  planned separately.
+- **`GET /api/value-runs/:a/compare/:b` returns 500 for old runs.** Their payload
+  has no `confidence.modelVersion`: "Cannot read properties of undefined
+  (reading 'modelVersion')". This predates P3 (HEAD gives the same on local
+  `lvrf`). It should be a 422 naming the run that predates the model version.
+
+### Gate A
+
+- **`verify_tenant_scope.sh`: 10 setup checks and 121 cases, 0 failed.** It runs on a
+  throwaway clone. Tenant A is local Skillsoft; tenant B is created with staff, an
+  account, a customer, an engagement, an industry and a measure. Both sign in with
+  **sessions; the header is off.**
+  - **Coverage guard.** `scripts/list_api_routes.mjs` reads every route statically:
+    `index.ts` mounts plus each factory's `router.<method>('…')`. Express 5 keeps
+    mount paths in closures, so the running app cannot be asked. It **refuses** on
+    any shape it cannot read: an unknown mount, a non-literal path,
+    `router.use/all/route`. Result: 35 routes, all with a case, and no case without
+    a route.
+  - **B against A.** Every id route gives the route's exact not-found answer, and
+    each mismatch is logged with actor, tenant, route and target. The slug route
+    gives a plain not-found with no log, by design. `?institution_id` of A's
+    account → `[]`, logged. Every list shows B none of A's rows and all of its own.
+    **Not one `audit_log` row came from B's requests.**
+  - **Body ids of another tenant** (claim and pack-basis measures; value-outcome
+    engagement and metric owner; validate's metric owner; commit's
+    `committed_by`; classify's slug) get **the same status and message as an
+    unknown id**, logged where they are tenant mismatches.
+  - **Logging.** `refusals` is unchanged across all of it, and a marker placed in
+    every request body never reaches the server log.
+  - **Controls.** A's identical requests never get the not-found answer, so each
+    case proves that only the tenant differed. A's lists show its rows and none of
+    B's.
+  - **`account-inputs`.** B creating an account with A's account name → 201, in
+    tenant B. A, same name → 409.
+- **Six deliberate breaks, each caught, then restored byte-identical:**
+
+  | Break | Result |
+  |---|---|
+  | The helper always passes | 67 FAIL |
+  | One route unchecked (`GET /api/runs/:id`) | 2 FAIL |
+  | `GET /api/runs` unfiltered | 1 FAIL |
+  | `GET /api/persons` unfiltered | 2 FAIL |
+  | The claim route's body measure unchecked | 2 FAIL |
+  | **A new route with no case** | **coverage guard FAIL** |
+
+  With the claim check removed, the other tenant's measure reached the
+  industry-mismatch 422, which is the leak this check closes.
+- **Regression:**
+  - all 14 verify scripts pass, 0 failed: tenant_scope 121+10, signin_p2b 44,
+    deploy_reexec 13, signin_p2a 49, signin_p1 35, set_email 29,
+    commit_before_response 17, account_workbench 28, cohort 27,
+    engagement_retire 17, frozen_outcomes 21, refusal_attribution 13,
+    pack_review 17, exclusions 27;
+  - the client `tsc` and build pass, with bundle `index-Bq_62G2h.js`, unchanged:
+    no client change;
+  - lint shows only the existing warning.
+- No migration; 84 triggers.
+
+### Before Gate B: two checks on the prod copy
+
+- **Reads are byte-identical on prod data.** `lvrf_prodcopy` (the 10 October
+  snapshot, all 28 migrations, one tenant) was served by HEAD `bfb9371` and by the
+  P3 tree side by side, as `b6da352c-…` via the header (it is not production).
+  - Every GET route was fetched for every applicable id: every metric, engagement,
+    institution, outcome and run; every industry slug; `persons` with and without
+    each `institution_id`; 40 locked-run pairs for compare.
+  - **99 requests across all 14 routes, 0 differences** in status or body. That
+    includes the existing 404, 409 and 422 answers.
+  - Nothing was written to the copy (audit max id 199 → 199, sessions 0 → 0), and
+    no mismatch was logged.
+- **One write per kind succeeds on prod data.** Two throwaway clones of the prod
+  copy were made (never `lvrf_prodcopy` itself), one served by HEAD and one by P3,
+  and the same sequence was sent to each.
+  - **Every write succeeded on P3, with status and message identical to HEAD**: 201
+    or 200 for facts, inputs, offerings, value-outcomes, pack-basis, validate,
+    claim, exclusion, evidence, commit, measure, verify, produce-run → lock →
+    record-document, account-inputs (classified), classify and retire.
+  - The research-result accept and reject routes have no pending row in the prod
+    copy. They are covered by `verify_pack_review` and `verify_tenant_scope`.
+  - Both clones were dropped.
+- **Customer-side people are accepted.** Two new cases in `verify_tenant_scope`
+  (123 passed now):
+  - a **customer-side person at A's own account** as `metric.owner_person_id`:
+    the value-outcome request → 201, stored as the owner;
+  - the same person on validate passes the owner check.
+
+  The prod-copy dry run did the same with Curia's non-simulated customer-side
+  person as metric owner, confirmer, attester, committer and verifier.
+
+**Which person ids go through which check:**
+
+| Check | Accepts | Fields |
+|---|---|---|
+| `personTenantId`, new in P3 | any **current** person of the actor's tenant: staff, **or customer side at any of the tenant's accounts**. Simulated is accepted, as the FK alone did before. | `metric.owner_person_id` (value-outcomes, validate) |
+| Of the target account (`institution_id = $account AND NOT simulated`), unchanged | customer-side people **of that account**, not simulated, not retired; staff are not accepted | `committed_by` (commit), `verified_by` (verify), `attested_by` (evidence), `confirmed_by` (validate), `engagement_owner_person_id` (value-outcomes), `owner_person_id` (offerings), `owner_or_learner_person_id` (inputs) |
+
+The second check already implies the tenant, because the account was
+tenant-checked first.

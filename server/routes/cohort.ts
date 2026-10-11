@@ -1,6 +1,7 @@
-import { Router, type Request, type Response } from 'express';
+import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { actorTenantId } from '../lib/tenantScope.js';
 
 /**
  * 2.0 item 3 — cohort roll-up, weakest link. GET /api/cohort.
@@ -54,25 +55,10 @@ import { isUuid } from './params.js';
  * recomputes from live rows on every request, persists nothing, and has no
  * write path. It reads stored run scores; it never recomputes confidence.
  *
- * Tenant-scoped by the actor, same as institutionView.ts —
- * resolveActorTenantId is duplicated here for the reason that file gives
- * (a file-local helper, not yet a convention).
+ * Tenant-scoped by the actor: actorTenantId (lib/tenantScope.ts, sign-in
+ * P3), which replaced this file's local copy of resolveActorTenantId.
  */
 
-async function resolveActorTenantId(
-  _pool: Pool,
-  req: Request,
-  res: Response,
-): Promise<string | null> {
-  // Sign-in P2a: requireActor has already established a current vendor-staff
-  // actor (session, or the header while P2a still accepts it), with its
-  // tenant. The 401 below is unreachable unless the middleware order breaks.
-  if (!req.actor) {
-    res.status(401).json({ message: 'Sign in to continue.' });
-    return null;
-  }
-  return req.actor.tenantId;
-}
 
 type MemberStatus = 'run_of_record' | 'no_locked_run' | 'never_run' | 'no_engagement';
 
@@ -269,8 +255,7 @@ export function cohortRouter(pool: Pool): Router {
 
   router.get('/', async (req, res) => {
     try {
-      const tenantId = await resolveActorTenantId(pool, req, res);
-      if (tenantId === null) return;
+      const tenantId = actorTenantId(req);
 
       // One row per (customer account, current engagement), or one row
       // with engagement_id NULL for an account with none. The run of

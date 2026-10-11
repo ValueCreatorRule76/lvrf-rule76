@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * GET /api/institutions/:id/view — the account view. Everything the screen
@@ -16,13 +16,9 @@ import { isUuid } from './params.js';
  * returns early on GET. So this queries the pool directly, same as
  * industryPack.ts, gapRegister.ts, persons.ts, runsIndex.ts.
  *
- * TENANT-SCOPED BY THE ACTOR, same reasoning and same helper shape as
- * industryPack.ts's resolveActorTenantId — duplicated here rather than
- * imported, because that function is industryPack.ts's own local helper,
- * not an exported one; this codebase has a documented habit of not
- * factoring out a second copy until a third one shows up (see
- * server/lib/refusal.ts's comment on isCheckViolation/isUniqueViolation,
- * which waited for TEN copies). One duplicate is not that yet.
+ * TENANT-SCOPED BY THE ACTOR: isOtherTenant (lib/tenantScope.ts, sign-in
+ * P3), which replaced the local resolveActorTenantId copies here, in
+ * industryPack.ts and in cohort.ts — the third copy arrived.
  */
 interface PackMeasureRow {
   id: string;
@@ -43,20 +39,6 @@ interface MetricRow {
   industry_measure_id: string | null;
 }
 
-async function resolveActorTenantId(
-  _pool: Pool,
-  req: Request,
-  res: Response,
-): Promise<string | null> {
-  // Sign-in P2a: requireActor has already established a current vendor-staff
-  // actor (session, or the header while P2a still accepts it), with its
-  // tenant. The 401 below is unreachable unless the middleware order breaks.
-  if (!req.actor) {
-    res.status(401).json({ message: 'Sign in to continue.' });
-    return null;
-  }
-  return req.actor.tenantId;
-}
 
 export function institutionViewRouter(pool: Pool): Router {
   const router = Router();
@@ -69,14 +51,11 @@ export function institutionViewRouter(pool: Pool): Router {
     }
 
     try {
-      const tenantId = await resolveActorTenantId(pool, req, res);
-      if (tenantId === null) return;
-
-      // tenant_id scoped in the WHERE, not checked afterward — 404 covers
-      // "no such institution", "soft-deleted" and "belongs to another
-      // tenant" identically, same reasoning as industryPack.ts's slug
-      // lookup: a caller on the wrong tenant gets the same answer as a
-      // caller with a typo, not a hint that the id exists elsewhere.
+      // 404 covers "no such institution", "soft-deleted" and "belongs to
+      // another tenant" identically: a caller on the wrong tenant gets the
+      // same answer as a caller with a typo, not a hint that the id exists
+      // elsewhere. Sign-in P3: the tenant is checked after the lookup, by
+      // the shared helper, so a mismatch is logged (it was in the WHERE).
       const { rows: [institution] } = await pool.query<{
         id: string;
         name: string;
@@ -86,15 +65,16 @@ export function institutionViewRouter(pool: Pool): Router {
         is_tenant_self: boolean;
         industry_name: string | null;
         industry_slug: string | null;
+        tenant_id: string;
       }>(
-        `SELECT i.id, i.name, i.industry, i.industry_id, i.website, i.is_tenant_self,
+        `SELECT i.id, i.name, i.industry, i.industry_id, i.website, i.is_tenant_self, i.tenant_id,
                 ind.name AS industry_name, ind.slug AS industry_slug
            FROM institutions i
            LEFT JOIN industries ind ON ind.id = i.industry_id
-          WHERE i.id = $1 AND i.tenant_id = $2 AND i.deleted_at IS NULL`,
-        [institutionId, tenantId],
+          WHERE i.id = $1 AND i.deleted_at IS NULL`,
+        [institutionId],
       );
-      if (!institution) {
+      if (!institution || isOtherTenant(req, institution.tenant_id, { table: 'institutions', id: institutionId })) {
         res.status(404).json({ message: `institution ${institutionId} not found` });
         return;
       }

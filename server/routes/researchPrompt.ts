@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 
 /**
  * GET /api/business-metrics/:metricId/research-prompt — LVRF 2.0 item 5, step 2.
@@ -62,6 +63,7 @@ interface BusinessMetricForPrompt {
   institution_name: string;
   institution_industry: string | null;
   institution_is_tenant_self: boolean;
+  tenant_id: string;
 }
 
 // Turns a metric name into a field_name an agent can echo back verbatim and
@@ -206,7 +208,7 @@ export function researchPromptRouter(pool: Pool): Router {
         `SELECT bm.id, bm.name, bm.unit, bm.direction, bm.source_system,
                 bm.reporting_cadence, bm.definition_notes, bm.institution_id,
                 i.name AS institution_name, i.industry AS institution_industry,
-                i.is_tenant_self AS institution_is_tenant_self
+                i.is_tenant_self AS institution_is_tenant_self, i.tenant_id
            FROM business_metrics bm
            JOIN institutions i ON i.id = bm.institution_id
           WHERE bm.id = $1
@@ -214,7 +216,7 @@ export function researchPromptRouter(pool: Pool): Router {
             AND bm.superseded_by_id IS NULL`,
         [metricId],
       );
-      if (!bm) {
+      if (!bm || isOtherTenant(req, bm.tenant_id, { table: 'business_metrics', id: metricId })) {
         res.status(404).json({ message: `business metric ${metricId} not found, retired, or superseded` });
         return;
       }

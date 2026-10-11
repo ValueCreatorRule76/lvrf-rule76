@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { isOtherTenant } from '../lib/tenantScope.js';
 import {
   computeConfidence,
   buildConfidenceInput,
@@ -331,6 +332,7 @@ export function gapRegisterRouter(pool: Pool): Router {
       const { rows: [vo] } = await pool.query<{
         id: string;
         institution_id: string;
+        tenant_id: string;
         business_metric_id: string;
         claimed_currency_impact: string | null;
         realized_currency_impact: string | null;
@@ -340,16 +342,17 @@ export function gapRegisterRouter(pool: Pool): Router {
         confidence: 'low' | 'medium' | 'high';
         engagement_retired: boolean;
       }>(
-        `SELECT vo.id, vo.institution_id, vo.business_metric_id,
+        `SELECT vo.id, vo.institution_id, inst.tenant_id, vo.business_metric_id,
                 vo.claimed_currency_impact, vo.realized_currency_impact, vo.impact_basis,
                 vo.committed_by_person_id, vo.verified_by_person_id, vo.confidence,
                 (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN engagements eng ON eng.id = vo.engagement_id
+           JOIN institutions inst ON inst.id = vo.institution_id
           WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
-      if (!vo) {
+      if (!vo || isOtherTenant(req, vo.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }

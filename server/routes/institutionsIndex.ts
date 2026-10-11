@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
+import { actorTenantId } from '../lib/tenantScope.js';
 
 // GET /api/institutions — the accounts index, the front door's own data.
-// Same shape as runsIndex.ts: a flat, unscoped list — no actor header, no
-// filter, no pagination. Mounted before the other /api/institutions
+// Same shape as runsIndex.ts: a flat list of the actor's tenant's accounts
+// (sign-in P3: filtered on actorTenantId; until P3 it was unscoped), no
+// pagination. Mounted before the other /api/institutions
 // routers (all of which match a sub-path, never the bare '/'), the same
 // relationship runsIndex.ts has to runsRouter.
 //
@@ -18,7 +20,7 @@ import type { Pool } from 'pg';
 export function institutionsIndexRouter(pool: Pool): Router {
   const router = Router();
 
-  router.get('/', async (_req, res) => {
+  router.get('/', async (req, res) => {
     try {
       // LEFT JOIN industries — an unclassified institution (industry_id
       // IS NULL) must return industry_name: null, not an omitted row and
@@ -35,10 +37,10 @@ export function institutionsIndexRouter(pool: Pool): Router {
         FROM institutions i
         LEFT JOIN industries ind ON ind.id = i.industry_id
         LEFT JOIN engagements e ON e.institution_id = i.id
-        WHERE i.deleted_at IS NULL
+        WHERE i.deleted_at IS NULL AND i.tenant_id = $1
         GROUP BY i.id, i.name, ind.name
         ORDER BY i.name
-      `);
+      `, [actorTenantId(req)]);
       res.json(rows);
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

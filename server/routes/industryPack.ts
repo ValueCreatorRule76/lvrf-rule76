@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
+import { actorTenantId } from '../lib/tenantScope.js';
 
 /**
  * LVRF 2.0 item 5, industry packs — the read side. Two GET routes: every
@@ -11,38 +11,15 @@ import { isUuid } from './params.js';
  * BOTH ARE READS — actorContext (server/middleware/actorContext.ts) only
  * opens a transaction and sets req.dbClient for MUTATING_METHODS; it
  * returns early on GET. So this queries the pool directly (same as
- * persons.ts, gapRegister.ts, runsIndex.ts), and — unlike those three,
- * which are either global or scoped by an id already in the URL — this
- * file has to resolve the actor's tenant itself, by hand, because nothing
- * upstream validates the actor header on a GET the way it does on a write.
+ * persons.ts, gapRegister.ts, runsIndex.ts).
  *
  * TENANT-SCOPED, NOT GLOBAL. This is a vendor's own view of its own packs,
- * not a cross-tenant listing — the same tenant resolution
- * industryResearch.ts's parse route uses: a vendor-side actor's own
- * tenant_id, or a customer-side actor's institution's tenant_id. Missing or
- * invalid X-Actor-Person-Id is a 422 here, same status actorContext uses
- * for the equivalent failure on a write, even though no middleware enforces
- * it on this path.
+ * not a cross-tenant listing: actorTenantId (lib/tenantScope.ts, sign-in
+ * P3). The pack is looked up by slug WITH the tenant in the WHERE — a slug
+ * is unique only within a tenant, so there is no single row "of another
+ * tenant" to check and log; another tenant's slug is simply not found.
  */
 
-// Shared by both routes below. Writes the 422 itself and returns null so
-// the caller's handler can just `if (tenantId === null) return;` — the
-// same header validation actorContext.ts performs for mutating requests,
-// reimplemented here because GET never reaches that middleware's checks.
-async function resolveActorTenantId(
-  _pool: Pool,
-  req: Request,
-  res: Response,
-): Promise<string | null> {
-  // Sign-in P2a: requireActor has already established a current vendor-staff
-  // actor (session, or the header while P2a still accepts it), with its
-  // tenant. The 401 below is unreachable unless the middleware order breaks.
-  if (!req.actor) {
-    res.status(401).json({ message: 'Sign in to continue.' });
-    return null;
-  }
-  return req.actor.tenantId;
-}
 
 export function industryPackRouter(pool: Pool): Router {
   const router = Router();
@@ -57,8 +34,7 @@ export function industryPackRouter(pool: Pool): Router {
   // gapRegister.ts's `count(*)::int AS n`.
   router.get('/', async (req, res) => {
     try {
-      const tenantId = await resolveActorTenantId(pool, req, res);
-      if (tenantId === null) return;
+      const tenantId = actorTenantId(req);
 
       const { rows } = await pool.query(
         `SELECT
@@ -97,8 +73,7 @@ export function industryPackRouter(pool: Pool): Router {
   // an empty pack is a real state, not an error.
   router.get('/:slug/pack', async (req, res) => {
     try {
-      const tenantId = await resolveActorTenantId(pool, req, res);
-      if (tenantId === null) return;
+      const tenantId = actorTenantId(req);
 
       const slug = req.params.slug;
 

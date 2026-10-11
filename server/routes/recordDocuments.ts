@@ -252,12 +252,14 @@ export function recordDocumentsReadRouter(pool: Pool): Router {
       // Governed rows resolved by something other than a primary key must
       // filter the supersession chain — but value_outcomes has one and
       // record_documents does not; only value_outcomes needs the filter here.
-      const { rows: [outcome] } = await pool.query(
-        `SELECT id FROM value_outcomes
-          WHERE id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+      const { rows: [outcome] } = await pool.query<{ id: string; tenant_id: string }>(
+        `SELECT vo.id, i.tenant_id
+           FROM value_outcomes vo
+           JOIN institutions i ON i.id = vo.institution_id
+          WHERE vo.id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL`,
         [outcomeId],
       );
-      if (!outcome) {
+      if (!outcome || isOtherTenant(req, outcome.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
         res.status(404).json({ message: `value outcome ${outcomeId} not found` });
         return;
       }
