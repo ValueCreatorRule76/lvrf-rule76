@@ -7194,3 +7194,37 @@ That is deliberate.
 - **The P2b deploy is the first to exercise the re-exec.** The pull changes
   `lvrf-deploy.sh`, so the old script should log "changed in this pull; re-running
   the new version". The new step 7 checks then run.
+
+### Deployed — 11 October 2026
+
+`020f39b..bfb9371` went to production. There was no migration and no backup step,
+and `.env` was unchanged (it has no `LVRF_ALLOW_ACTOR_HEADER` line).
+
+- **The re-exec worked on its first real deploy.**
+  - The old script pulled once (`020f39b..bfb9371`), saw that the pull changed
+    its own file, and logged "lvrf-deploy.sh changed in this pull; re-running the
+    new version".
+  - The new script then logged "re-running the updated lvrf-deploy.sh; pulled
+    020f39b..bfb9371 by the first run". There was no second pull.
+  - The new step 7 ran: health 200, `origin_check=configured`, **`actor_header=off`**;
+    no-session run 401; **a header naming vendor staff with no session → 401**;
+    vhost 401.
+  - Deploy OK, exit 0. The service has been up since **13:38:07 UTC**, and the
+    bundle is still `index-Bq_62G2h.js`.
+- **Cookie curl (Brad Piver, 13:40 UTC):**
+  - login 200; the cookie file was `-rw-------`;
+  - `me` 200; `/api/cohort` with the cookie 200;
+  - **header-only `/api/cohort` 401** "Sign in to continue.", naming his own id;
+  - logout 200; `me` after logout 401;
+  - the cookie file was deleted.
+- **Gate C, read-only, as `lvrf_app`:**
+  - HEAD is `bfb9371`, level with origin.
+  - Health reports `{"origin_check":"configured","actor_header":"off"}`.
+  - The curl session `78713bcc…` (13:40:06.59) was **revoked at 13:40:06.65**
+    by the logout.
+  - The browser session `4e6011a2…` (12:58:12) is still live, unused since then,
+    with idle expiry at 00:58:12 UTC.
+  - 84 triggers, 1 current credential, 1 live session.
+  - No non-staff credential or session.
+  - **No audit rows and no refusals since the restart.** The last audit id is
+    still 202: the curl wrote nothing governed.
