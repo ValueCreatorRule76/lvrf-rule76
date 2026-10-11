@@ -8066,3 +8066,122 @@ and does not come from missing data:**
   retired* with *the account is unknown*. The account is known. A better list would
   join the institution regardless and mark the engagement retired. This is recorded
   as loose end L26, not fixed.
+
+## Q4 — drift checks D2–D4, L16 and L26 — 11 October 2026
+
+**Spine stage:** cross-cutting. The instrument checks its own record by the standard
+it applies to everyone else's (2.0 item 4), now finished. Three commits and docs,
+one deploy, with a backup first (`hardening.sql` runs). The deploy script changes,
+so the deploy re-execs.
+
+### D2 — the migration journal and the schema, against the repo
+
+`scripts/check_schema_drift.mjs`, read-only. It needs the repo, so it runs at the
+deploy, not in `driftChecks.ts` (which is SQL only, by D1's rule).
+
+- **Never run new code against an unmigrated database.** Every migration in this
+  checkout's `_journal.json` must be recorded in `drizzle.__drizzle_migrations`. A
+  deploy whose migration was not applied **stops at step 5c, before the restart**,
+  with the running service untouched, naming the unapplied migration(s).
+- **The schema is what the newest snapshot says.** Tables, columns with their
+  nullability, CHECK and UNIQUE constraints, FKs and indexes are compared as lists
+  with the live catalog. This is the 0013 failure: the journal said applied, and the
+  column was absent.
+  - Names are compared on their first 63 bytes (L19).
+  - The constraints `hardening.sql` adds itself are read from that file, not from
+    a hand-kept list.
+- **The way out if D2 ever blocks a deploy wrongly** (decided by Brad Piver, 11 Oct
+  2026). Fix the cause in a commit, then deploy that commit:
+  - **regenerate or correct the snapshot** (`drizzle-kit generate`) if it is wrong;
+  - **check in the missing migration** if the code needs one;
+  - **or `git revert`** the commit that brought the mismatch, and redeploy.
+
+  **Never an override flag or an environment variable.** A switch that skips D2 is
+  the "new code on an unmigrated database" failure, waiting to be used once.
+- **On prod (read-only, 11 Oct):** 0 real drift. 705 snapshot objects against 706 live;
+  the only differences are the 3 known truncations and `heartbeat_events_value_run_fk`,
+  which `hardening.sql` adds on purpose.
+
+### D3 and D4 — in `driftChecks.ts`, beside D1
+
+They land on every produced run's findings card (`subject: 'instrument'`), and in
+`scripts/drift_report.ts`. Each reports independently; none touches the health
+score.
+
+- **D3, governance triggers (warning).**
+  - The rules: `updated_at` ⇒ `_touch`; `superseded_by_id` ⇒ `_supersession_sane`;
+    every table ⇒ `_no_delete` and `_audit`.
+  - Exemptions are declared in the file, each with its reason: `audit_log`,
+    `heartbeat_events`, `hardening_manifest`, `person_credentials`, `sessions`,
+    `refusals`.
+  - A new table owes all four, so an ungoverned table added later is named on the
+    first run.
+  - **On prod today:** exactly the four L16 tables. After L16, none.
+- **D4, supersession pointers.**
+  - The self-referencing FK must exist (**critical**: it is what refuses a pointer to a
+    row that does not exist).
+  - No successor may be retired (**warning**).
+  - No successor may be claimed twice (**critical**: `_supersession_sane` was bypassed).
+  - **On prod today:** 0 findings. 16 tables, each with its self-FK; 3 superseded rows;
+    no retired successor; no fork.
+- **Deploy step 5c**, before the restart: D2 failing stops the deploy, and so does a
+  critical D1/D3/D4 finding. Warnings are printed.
+
+### L16 — the four link tables, governed (`hardening.sql` section 17)
+
+- **Covers:** `value_outcome_evidence`, `offering_capabilities`, `person_roles`,
+  `reflection_evidence`, each getting `_audit` and `_no_delete`. **Triggers 87 → 95.**
+- **`lvrf_audit_composite(<key columns>)`:**
+  - `audit_log.record_id` is `text NOT NULL`, so a composite key fits with no
+    coercion and no migration;
+  - `record_id` is set to the primary-key values joined with `|`, in key-column
+    order (e.g. `<value_outcome_id>|<evidence_id>`);
+  - the full row, key included, is in `new_row`/`old_row` as always.
+- **Checked by grep first (11 Oct):** every write to these tables in the code is an
+  INSERT (the routes, `walkSpine`, the seeds). The only UPDATE anywhere is
+  `verify_hygiene.sh`'s CHECK test. Nothing deletes them, so `_no_delete` breaks
+  nothing.
+
+### L26 — the Runs list shows the account of a retired engagement's runs
+
+- **The change:** `GET /api/runs` and `GET /api/runs/:id` join the engagement
+  whatever its state, and return `engagement_retired`.
+- **The client:** the runs table shows the account with a *retired engagement* tag,
+  and the run page's back-link says so too. An institution that is itself retired
+  still renders as "no institution".
+- **On the prod copy:** the 21 Curia reference-example runs gain their account.
+
+### Gate A
+
+- **`verify_drift.sh`: 30 passed, 0 failed.**
+  - D2:
+    - clean on a migrated clone;
+    - **a second clone migrated to one BEFORE the newest is refused, naming
+      `0030_supports_check`, both by the script and by the deploy's own step 5c,
+      extracted and run, with no restart;**
+    - the same step passes on the migrated clone;
+    - an extra column and a dropped CHECK are named.
+  - D3: a dropped `_touch` is named (and D1 fires critical with it); a new
+    ungoverned table is named, owing all three.
+  - D4:
+    - a sound chain gives no finding;
+    - a retired successor gives a warning;
+    - a dropped self-FK gives a critical, and `drift_report` exits 2;
+    - a fork, made by bypassing the trigger as superuser, gives a critical.
+  - A run produced now carries the findings.
+  - L16: an insert is audited with `record_id` `<value_outcome_id>|<evidence_id>`
+    and the actor; a DELETE is refused on each table.
+- **`verify_runs_list.sh`: 10 passed, 0 failed.** The 15 runs of a retired
+  engagement keep their account with `engagement_retired` true; a current run is
+  false; the detail route matches.
+- **Deliberate breaks, each restored byte-identical:** 5 for the drift checks, 2 for
+  L16, 1 for L26. All caught.
+- **L26 prod-copy equivalence, HEAD against L26:** 34 GETs; 10 identical; 24 differ
+  **only** as intended (`engagement_retired` added on 46 run objects; the account
+  filled on 42 of them, the 21 reference runs in the list and in detail); **0
+  unexplained.**
+- **`verify_grant_enforcement`** now extracts step 5b alone (5c follows it now).
+- **Regression, at each commit's state:** all verify scripts pass, 0 failed (21 at
+  the L26 commit, including `verify_drift` and `verify_runs_list`). The client `tsc`,
+  build and lint pass, with bundle **`index-B5F5IDzI.js`** (the runs table and the
+  run page changed).
