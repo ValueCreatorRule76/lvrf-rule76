@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { requireSteward } from '../lib/stewardActs.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -58,7 +59,8 @@ const MIN_REASON_LENGTH = 12;
 export function engagementRetireRouter(pool: Pool): Router {
   const router = Router();
 
-  router.post('/:id/retire', async (req, res) => {
+  // Brad-only (3.0 Q3): requireSteward before anything else runs.
+  router.post('/:id/retire', requireSteward(pool), async (req, res) => {
     const client = req.dbClient!;
     const engagementId = req.params.id;
     if (!isUuid(engagementId)) {

@@ -29,6 +29,15 @@ export interface Actor {
   email: string;
   /** Vendor staff have no institution; kept for the components that render it. */
   institution_name: null;
+  /**
+   * Band A item 2: this person is their tenant's steward — the acts that
+   * are Brad's alone are theirs. steward_name names whoever is. A control
+   * for a steward-only act (none exists in the client today) must be
+   * disabled, with steward_name, when is_steward is false; the server
+   * refuses it anyway (403 steward_only).
+   */
+  is_steward: boolean;
+  steward_name: string | null;
 }
 
 /**
@@ -55,10 +64,15 @@ interface MePerson {
   full_name: string;
   email: string;
   must_change?: boolean;
+  is_steward?: boolean;
+  steward_name?: string | null;
 }
 
 function toActor(p: MePerson): Actor {
-  return { id: p.id, full_name: p.full_name, email: p.email, institution_name: null };
+  return {
+    id: p.id, full_name: p.full_name, email: p.email, institution_name: null,
+    is_steward: p.is_steward === true, steward_name: p.steward_name ?? null,
+  };
 }
 
 export function ActorProvider({ children }: { children: ReactNode }) {

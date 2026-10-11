@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { requireSteward } from '../lib/stewardActs.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -56,7 +57,8 @@ function optionalNullableString(obj: Record<string, unknown>, field: string): st
 export function industryExclusionsRouter(pool: Pool): Router {
   const router = Router();
 
-  router.post('/:industryId/exclusions', async (req, res) => {
+  // Brad-only (3.0 Q3): requireSteward before anything else runs.
+  router.post('/:industryId/exclusions', requireSteward(pool), async (req, res) => {
     const client = req.dbClient!;
     const industryId = req.params.industryId;
     if (!isUuid(industryId)) {

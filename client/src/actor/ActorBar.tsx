@@ -38,6 +38,11 @@ export function ActorBar() {
         <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Signed in as</span>
         <span className="font-display text-[15px] tracking-[.03em] text-ink">{actor.full_name}</span>
         <span className="text-xs text-ink-45">{actor.email}</span>
+        {actor.is_steward && (
+          <span className="border border-gold-ink px-1.5 py-px text-[9px] font-semibold uppercase tracking-[.14em] text-gold-ink">
+            Steward
+          </span>
+        )}
       </div>
       <span className="flex items-center gap-2">
       {status === 'signed_in' && (

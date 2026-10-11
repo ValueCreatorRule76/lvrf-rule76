@@ -7790,3 +7790,46 @@ password**.
   - `verify_access_grants` flips one assertion: a person with no grant now gets 401.
 - **Local development:** `LVRF_Local_Setup.md` Phase 11 now gives `set_password`
   (initial setup) → `set_steward` → `grant_access` for local `lvrf` (needs 0029).
+
+### Deploy C — the acts that are Brad's alone, through one check (item 2)
+
+- **`server/lib/stewardActs.ts`** holds the single classification,
+  **`MUTATING_ROUTE_CLASS`**: all 22 mutating routes, each `steward` or
+  `authorized`, per Q3 + D3 (Brad Piver, 11 Oct 2026).
+
+  | Class | Routes |
+  |---|---|
+  | **Steward-only** (4) | `POST /api/research-results/:id/accept`, `…/:id/reject`, `POST /api/industries/:industryId/exclusions`, `POST /api/engagements/:id/retire` |
+  | **Authorized users** (18) | everything else, including classify, offerings, validate, pack-basis and claims (D3) |
+  | **Brad-only, but not routes** | grant/revoke (the scripts, by the steward's password); ratify/demote (**no route yet**: any future one must be classified `steward` from its first commit); model versions and thresholds (commit and deploy, per D6) |
+
+- **`requireSteward(pool)`** is per-route middleware, passed in each steward route's
+  `router.post(path, requireSteward(pool), handler)` call.
+  - It compares the actor with their tenant's `steward_person_id`.
+  - Anyone else gets **403** `{"code":"steward_only"}`, with a sentence naming the
+    act and the steward: *"Retiring an engagement is the steward's act (Brad
+    Piver)."* A 403 is right here: it is the same tenant (P3 guarantees that), so
+    nothing about another tenant is revealed.
+  - It is not recorded in `refusals` (that table feeds the gap register); it is
+    logged at info.
+  - The middleware is generic over route params, so Express keeps inferring `:id`
+    for the handler.
+- **The coverage guard.** `scripts/list_api_routes.mjs --classify` reads from the
+  source whether each router call passes `requireSteward(pool)`.
+  `verify_steward_acts.sh` then fails:
+  - any mutating route that is not classified;
+  - any classified route that does not exist;
+  - a steward route without the middleware;
+  - an authorized route with it.
+- **The client.** `/api/auth/login` and `/me` return `is_steward` and
+  `steward_name`, and the bar shows a **Steward** tag.
+  - **No client control exists today for any of the four steward acts** (they
+    are made through the API), so nothing needed disabling.
+  - The rule is written on the client's `Actor` type: a future control for a
+    steward-only act is shown disabled, naming the steward, when `is_steward` is
+    false. The server stays the authority.
+- **The fixtures.** The header-driven scripts that call steward routes
+  (`commit_before_response`, `engagement_retire`, `exclusions`, `pack_review`,
+  `frozen_outcomes`) name their actor steward.
+  - In `signin_p2b`, the header-write case now acts as the steward. The point it
+    proves is unchanged: with no session, the header's person is the actor.

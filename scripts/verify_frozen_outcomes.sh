@@ -50,6 +50,10 @@ for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep
 curl -s -o /dev/null "$BASE/api/health" && ok "server up" || { bad "server did not start"; exit 1; }
 
 ACTOR="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL ORDER BY created_at LIMIT 1")"
+# Band A item 2: the steward's acts (accept, reject, exclude, retire) need
+# the actor to be the tenant's steward — name them, as the box's
+# set_steward.ts would.
+q "UPDATE tenants SET steward_person_id = '$ACTOR' WHERE id = (SELECT tenant_id FROM persons WHERE id = '$ACTOR') AND steward_person_id IS NULL" > /dev/null
 OUTCOME="$(q "SELECT vo.id FROM value_outcomes vo
               JOIN engagements e ON e.id = vo.engagement_id AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
               JOIN institutions i ON i.id = vo.institution_id AND NOT i.is_tenant_self

@@ -162,8 +162,11 @@ start_server NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 && ok "server up" ||
 code GET /api/health > /dev/null; [ "$(rj .actor_header)" = "on" ] && ok "health actor_header on" || bad "health actor_header: $(rj .actor_header)"
 grep -q 'LVRF_ALLOW_ACTOR_HEADER=1 — the X-Actor-Person-Id header is accepted' "$LOG" && ok "startup log warns that the header is on" || bad "no startup warning"
 C="$(code GET /api/cohort -H "x-actor-person-id: $STAFF")"; [ "$C" = "200" ] && ok "header, vendor staff -> 200" || bad "header GET -> $C"
-C="$(code POST "$X" "${JSON[@]}" -H "x-actor-person-id: $STAFF2" -d "$(excl)")"
-[ "$C" = "201" ] && [ "$(audit_actor "$(rj .exclusion_id)")" = "$STAFF2" ] && ok "header write -> 201, audited as the header's person" || bad "header write -> $C"
+# The header's person must be the steward here: exclusions are the
+# steward's act (Band A item 2). The point stands — the HEADER's person is
+# the actor when there is no session.
+C="$(code POST "$X" "${JSON[@]}" -H "x-actor-person-id: $STAFF" -d "$(excl)")"
+[ "$C" = "201" ] && [ "$(audit_actor "$(rj .exclusion_id)")" = "$STAFF" ] && ok "header write -> 201, audited as the header's person" || bad "header write -> $C"
 login > /dev/null
 C="$(code POST "$X" "${JSON[@]}" -b "$JAR" -H "x-actor-person-id: $STAFF2" -d "$(excl)")"
 [ "$C" = "201" ] && [ "$(audit_actor "$(rj .exclusion_id)")" = "$STAFF" ] && ok "cookie + header naming someone else: still the session" || bad "header overrode the session"

@@ -163,6 +163,10 @@ export function authRouter(pool: Pool): Router {
         [hashToken(token), candidate.person_id, IDLE_HOURS, ABSOLUTE_DAYS, req.get('user-agent') ?? null],
       );
       setSessionCookie(req, res, token);
+      const { rows: [steward] } = await pool.query<{ id: string; full_name: string }>(
+        'SELECT p.id, p.full_name FROM tenants t JOIN persons p ON p.id = t.steward_person_id WHERE t.id = $1',
+        [candidate.tenant_id],
+      );
       res.status(200).json({
         person: {
           id: candidate.person_id,
@@ -170,6 +174,8 @@ export function authRouter(pool: Pool): Router {
           email: candidate.email,
           tenant_id: candidate.tenant_id,
           must_change: candidate.must_change,
+          is_steward: steward?.id === candidate.person_id,
+          steward_name: steward?.full_name ?? null,
         },
       });
     } catch (err) {
@@ -206,6 +212,14 @@ export function authRouter(pool: Pool): Router {
         res.status(401).json({ message: 'Not signed in.' });
         return;
       }
+      // Band A item 2: whether this person is their tenant's steward, and
+      // who the steward is — so the client can disable the steward's
+      // controls and say whose act it is. The server stays the authority
+      // (requireSteward).
+      const { rows: [steward] } = await pool.query<{ id: string; full_name: string }>(
+        'SELECT p.id, p.full_name FROM tenants t JOIN persons p ON p.id = t.steward_person_id WHERE t.id = $1',
+        [person.tenant_id],
+      );
       res.status(200).json({
         person: {
           id: person.person_id,
@@ -213,6 +227,8 @@ export function authRouter(pool: Pool): Router {
           email: person.email,
           tenant_id: person.tenant_id,
           must_change: person.must_change,
+          is_steward: steward?.id === person.person_id,
+          steward_name: steward?.full_name ?? null,
         },
       });
     } catch (err) {

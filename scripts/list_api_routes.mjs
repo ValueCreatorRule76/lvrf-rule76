@@ -13,10 +13,15 @@
 // router.use / router.all / router.route), so a new route cannot slip past
 // the guard by being written in a shape this parser skips.
 //
-//   node scripts/list_api_routes.mjs [--all]
+//   node scripts/list_api_routes.mjs [--all] [--classify]
 //
 // Without --all, /api/health and /api/auth/* are left out: they run before
 // requireActor and have no tenant.
+//
+// --classify (3.0 Band A item 2): each line gains " steward" when the
+// route's router call passes requireSteward(pool) right after its path,
+// else " -". verify_steward_acts.sh compares that with
+// server/lib/stewardActs.ts's table.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const all = process.argv.includes('--all');
+const classify = process.argv.includes('--classify');
 const fail = (msg) => { console.error(`list_api_routes: REFUSING: ${msg}`); process.exit(1); };
 
 const index = readFileSync(join(root, 'server/index.ts'), 'utf8');
@@ -60,12 +66,12 @@ for (const line of index.split('\n').map((l) => l.trim()).filter((l) => l.starts
   const body = src.slice(start, next === -1 ? undefined : next);
   for (const bad of body.matchAll(/router\.(use|all|route)\(/g)) fail(`router.${bad[1]}() in ${factory}: not readable by this guard`);
   const calls = [...body.matchAll(/router\.(get|post|put|patch|delete)\(/g)];
-  const literal = [...body.matchAll(/router\.(get|post|put|patch|delete)\(\s*'([^']*)'/g)];
+  const literal = [...body.matchAll(/router\.(get|post|put|patch|delete)\(\s*'([^']*)'\s*,\s*(requireSteward\(pool\)\s*,)?/g)];
   if (calls.length !== literal.length) fail(`${factory}: a route path that is not a string literal`);
-  for (const [, method, path] of literal) {
+  for (const [, method, path, steward] of literal) {
     const full = mount + (path === '/' ? '' : path);
     if (!all && EXEMPT.has(mount)) continue;
-    routes.push(`${method.toUpperCase()} ${full}`);
+    routes.push(`${method.toUpperCase()} ${full}` + (classify ? (steward ? ' steward' : ' -') : ''));
   }
 }
 if (routes.length === 0) fail('no routes found');

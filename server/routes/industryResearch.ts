@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { requireSteward } from '../lib/stewardActs.js';
 
 /**
  * 2.0 item 5, industry packs — pack parse-and-review.
@@ -587,7 +588,8 @@ export function researchResultsReviewRouter(pool: Pool): Router {
   // POST /api/research-results/:id/accept — turns one pending
   // industry_measure result into a proposed industry_measures row, in the
   // same transaction. Does not exist for result_kind = 'metric_value' yet.
-  router.post('/:id/accept', async (req, res) => {
+  // Brad-only (3.0 Q3): requireSteward before anything else runs.
+  router.post('/:id/accept', requireSteward(pool), async (req, res) => {
     const client = req.dbClient!;
     const resultId = req.params.id;
     if (!isUuid(resultId)) {
@@ -746,7 +748,8 @@ export function researchResultsReviewRouter(pool: Pool): Router {
   // person-reviewed path from rejected research_results into that table is
   // future work, same deferral as the exclusion list in the parse route
   // above.
-  router.post('/:id/reject', async (req, res) => {
+  // Brad-only (3.0 Q3 + D3): requireSteward before anything else runs.
+  router.post('/:id/reject', requireSteward(pool), async (req, res) => {
     const client = req.dbClient!;
     const resultId = req.params.id;
     if (!isUuid(resultId)) {
