@@ -554,9 +554,13 @@ END $$;
 -- ------------------------------------------------------------------
 -- 6. Append-only privileges
 -- ------------------------------------------------------------------
--- The app can write history and read it. It cannot rewrite it.
--- This is FA-001's "AI may never rewrite history" made unbreakable —
--- and it applies to humans and agents alike.
+-- The app can write history and read it. Its code paths cannot rewrite it.
+-- This is FA-001's "AI may never rewrite history", applied to humans and
+-- agents alike. NOT YET UNBREAKABLE AT THE ROLE LEVEL: lvrf_app owns
+-- audit_log and heartbeat_events (migrations run as it), and an owner can
+-- GRANT these privileges back to itself (shown on the prod copy, 12 Oct
+-- 2026). Pending OWN-1 (LVRF_PLAN): a separate owner role, so lvrf_app
+-- holds only the privileges below.
 
 REVOKE UPDATE, DELETE, TRUNCATE ON audit_log        FROM lvrf_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON heartbeat_events FROM lvrf_app;
@@ -956,8 +960,12 @@ CREATE TRIGGER sessions_no_delete
 --
 -- TRUST ROOT, stated rather than hidden: the postgres superuser can
 -- disable or bypass any trigger, and SSH to the box reaches it. That is
--- accepted (BUILD_STATUS, Band A). This guards the app role and every
--- script that connects as lvrf_app.
+-- accepted (BUILD_STATUS, Band A). These triggers bind the APP'S CODE
+-- PATHS: every route, and every script that writes through them. They do
+-- NOT yet bind the lvrf_app ROLE: migrations run as lvrf_app, so it owns
+-- the tables, and a table's owner can drop or disable its triggers and
+-- re-grant itself revoked privileges (shown as lvrf_app on the prod copy,
+-- 12 Oct 2026). Role-level protection is pending OWN-1 (LVRF_PLAN).
 --
 -- CONSEQUENCE: trigger count goes 84 -> 87. Three new triggers —
 -- access_grants_audit, access_grants_no_delete,
@@ -1238,8 +1246,8 @@ CREATE CONSTRAINT TRIGGER institution_entities_one_current
 --                    UPDATE — APPEND-ONLY but for the withdrawal: nothing
 --                    changes but retired_at/by/reason, written once, by
 --                    the steward.
--- Same trust root as section 16: guards lvrf_app and every script that
--- connects as it.
+-- Same trust root as section 16: these bind the app's code paths, not yet
+-- the lvrf_app role, which owns the tables until OWN-1 (LVRF_PLAN).
 --
 -- CONSEQUENCE: with value_levers in the governed and supersession loops
 -- above (+4), trigger count goes 103 -> 111.

@@ -131,11 +131,6 @@ LEVER_A="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, me
 LINK_A="$(q "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id)
   SELECT '$TENANT_A', '$LEVER_A', o.id, 'Verification fixture link.', t.steward_person_id FROM offerings o JOIN tenants t ON t.id = o.tenant_id
    WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1 RETURNING id" | head -1)"
-# O2: a hypothesis of tenant A's, for the hypothesis routes' cases. Its chain
-# is not one the routes would accept (it only needs to exist): the guard is
-# disabled for this one fixture INSERT, inside its transaction, on the
-# throwaway clone, and re-enabled before COMMIT.
-HYP_A="$(printf "BEGIN;\nALTER TABLE value_hypotheses DISABLE TRIGGER value_hypotheses_guard;\nINSERT INTO value_hypotheses (tenant_id, institution_id, value_outcome_id, value_lever_id, statement, falsifier_reference, falsifier_due, falsifier_conditions, reference_value, reference_recorded_at, author_person_id) SELECT '%s', vo.institution_id, vo.id, '%s', 'Tenant A hypothesis (verification fixture)', 'baseline', DATE '2030-01-01', '', vo.baseline_value, vo.baseline_measured_at, '%s' FROM value_outcomes vo WHERE vo.id = '%s' RETURNING id;\nALTER TABLE value_hypotheses ENABLE TRIGGER value_hypotheses_guard;\nCOMMIT;\n" "$TENANT_A" "$LEVER_A" "$STAFF_A" "$OUTCOME_A" | psql -X -At -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | head -1)"
 # The account OUTCOME_A belongs to (not necessarily INST_A), for the body-id case.
 OUTCOME_A_INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME_A'")"
 MARKER_A="$(q "INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
@@ -147,7 +142,7 @@ SUMMARY_B="$(q "INSERT INTO executive_summaries (tenant_id, institution_id, lens
   VALUES ('$TENANT_B', '$INST_B', 'general', 'Tenant B summary, a verification fixture of sufficient length.', '$STAFF_B', false) RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST ARR_A ARR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST ARR_A ARR_A2; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -159,6 +154,41 @@ env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=0 DATABAS
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "http://127.0.0.1:$PORT/api/health" && break; sleep 0.5; done
 curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"actor_header":"off"' && ok "server up, actor_header off" || { bad "server did not start"; cat "$LOG"; exit 1; }
+
+step "4b. A hypothesis of tenant A's, through the real routes (no guard switched off)"
+# Signed in as A's staff (by session). The chain is built by the routes
+# that build it in use: an account in A's pack industry, a capability, its
+# claim on MEASURE_A (a pack entry with a direction), an outcome with a
+# recorded baseline, the metric's pack basis, then the hypothesis itself,
+# on LEVER_A. value_hypotheses_guard checks it like any other.
+JAR_A="$(mktemp "${TMPDIR:-/tmp}/lvrf_p3_jar.XXXXXX")"
+PA() {  # PATH BODY — as A; status in $CODE, body in $PA_OUT
+  PA_OUT="$(curl -s -b "$JAR_A" -c "$JAR_A" -w '\n%{http_code}' -X POST -H 'content-type: application/json' -d "$2" "http://127.0.0.1:$PORT$1")"
+  CODE="${PA_OUT##*$'\n'}"; PA_OUT="${PA_OUT%$'\n'*}"
+}
+pj() { node -e "console.log(JSON.parse(process.argv[1])$1)" "$PA_OUT"; }
+PA /api/auth/login "{\"email\":\"$EMAIL_A\",\"password\":\"$PW\"}"; [ "$CODE" = "200" ] || { bad "A sign-in: $CODE $PA_OUT"; exit 1; }
+OFFERING_KEY_A="$(q "SELECT offering_key FROM offerings WHERE tenant_id = '$TENANT_A' AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY offering_key LIMIT 1")"
+PA /api/account-inputs "{\"institution\":{\"name\":\"Tenant A hypothesis account (verification $TS)\",\"industry_slug\":\"$SLUG_A\",\"classification_note\":\"Verification: classified for the hypothesis fixture.\"},\"persons\":[{\"full_name\":\"Hypothesis owner (verification)\",\"email\":\"hyp.owner.$TS@account-a.example\",\"title\":\"Owner\"}]}"
+[ "$CODE" = "201" ] || { bad "fixture account: $CODE $PA_OUT"; exit 1; }
+INST_H="$(pj .institution_id)"; OWNER_H="$(pj .person_ids[0])"
+PA "/api/institutions/$INST_H/offerings" "{\"offering_key\":\"$OFFERING_KEY_A\",\"capability_name\":\"Hypothesis capability (verification)\",\"owner_person_id\":\"$OWNER_H\",\"is_primary\":false,\"basis\":\"Verification: attached for the hypothesis fixture.\"}"
+[ "$CODE" = "201" ] || { bad "fixture capability: $CODE $PA_OUT"; exit 1; }
+CAP_H="$(pj .capability_id)"
+PA "/api/capabilities/$CAP_H/industry-measures" "{\"industry_measure_id\":\"$MEASURE_A\",\"claim\":\"Verification: the capability claims the fixture entry.\"}"
+[ "$CODE" = "201" ] || { bad "fixture claim: $CODE $PA_OUT"; exit 1; }
+PA "/api/institutions/$INST_H/value-outcomes" "{\"engagement_name\":\"Hypothesis engagement (verification)\",\"engagement_owner_person_id\":\"$OWNER_H\",\"capability_name\":\"Hypothesis capability (verification)\",\"metric\":{\"name\":\"Hypothesis metric $TS\",\"unit\":\"count\",\"direction\":\"increase\",\"source_system\":\"verification system of record\",\"owner_person_id\":\"$OWNER_H\"},\"baseline_value\":0,\"baseline_measured_at\":\"2026-09-30T00:00:00Z\"}"
+[ "$CODE" = "201" ] || { bad "fixture outcome: $CODE $PA_OUT"; exit 1; }
+OUTCOME_H="$(pj .value_outcome_id)"; METRIC_H="$(pj .business_metric_id)"
+PA "/api/business-metrics/$METRIC_H/pack-basis" "{\"industry_measure_id\":\"$MEASURE_A\",\"basis_note\":\"Verification: the fixture metric is the fixture entry.\"}"
+[ "$CODE" = "201" ] || { bad "fixture pack basis: $CODE $PA_OUT"; exit 1; }
+PA "/api/institutions/$INST_H/hypotheses" "{\"value_outcome_id\":\"$OUTCOME_H\",\"value_lever_id\":\"$LEVER_A\",\"statement\":\"Tenant A hypothesis, stated through the route for the checks.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2030-01-01\",\"falsifier_conditions\":\"on the same population\"}"
+[ "$CODE" = "201" ] || { bad "fixture hypothesis: $CODE $PA_OUT"; exit 1; }
+HYP_A="$(pj .value_hypothesis_id)"
+curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$PORT/api/auth/logout"; rm -f "$JAR_A"
+[ "$(q "SELECT reference_value::text || '|' || (SELECT direction FROM industry_measures WHERE id = '$MEASURE_A') || '|' || author_person_id || '|' || lvrf_hypothesis_verdict(h) FROM value_hypotheses h WHERE id = '$HYP_A'")" = "0.0000|increase|$STAFF_A|open" ] \
+  && ok "HYP_A $HYP_A stated by A through the route: reference 0 (recorded baseline), the entry's direction increase, verdict open" || { bad "HYP_A row"; exit 1; }
+[ "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled <> 'O'")" = "0" ] && ok "no trigger is disabled on the clone" || bad "a disabled trigger"
 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
