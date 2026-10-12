@@ -5,7 +5,7 @@
 //
 //   node scripts/lib/account_research_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB INST_ID EMAIL PW
 //
-// MODE: walk | break-h1
+// MODE: walk | break-h1 | create-link
 // Signs in by SESSION through the real sign-in form — never the header.
 // A fictional account: never a real company's figures in a test.
 
@@ -77,6 +77,22 @@ await send('Page.enable'); await send('Runtime.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
 
 check(await signIn(), 'signs in by session (an authorized user, not the steward)');
+
+if (MODE === 'create-link') {
+  // After Create account succeeds, "Open account →" leads to the new account.
+  const NAME = `Walk Link Account ${Date.now()}`;
+  await waitFor(`document.body.textContent.includes('Create account')`);
+  await setField(card('Create account'), 'Account name', NAME);
+  await sleep(200);
+  await click(card('Create account'), 'Submit');
+  check(await waitFor(`!!document.querySelector('[data-testid=open-account]')`), 'Create account: the Recorded block offers "Open account →"');
+  const id = psql(`SELECT id FROM institutions WHERE name = '${NAME}'`);
+  check(await ev(`document.querySelector('[data-testid=open-account]').getAttribute('href')`) === `/accounts/${id}`, '  ...linking to /accounts/<the new institution_id>');
+  await ev(`document.querySelector('[data-testid=open-account]').click()`);
+  check(await waitFor(`location.pathname === '/accounts/${id}' && !!document.querySelector('[data-testid=account-research]')`), '  ...and it opens the new account, with its Research section');
+  ws.close();
+  process.exit(0);
+}
 check(await openAccount(), 'the account page shows the Research section');
 
 if (MODE === 'walk') {

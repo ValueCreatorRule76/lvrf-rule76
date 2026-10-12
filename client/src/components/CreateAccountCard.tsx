@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { useActor } from '../actor/ActorContext';
@@ -91,6 +92,14 @@ export function CreateAccountCard() {
             <p className="m-0 mt-2 font-mono text-[11px] text-ink-45">
               institution_id: {data.institution_id}
             </p>
+            {/* The way into the new account from here (Brad, 12 Oct). */}
+            <Link
+              to={`/accounts/${data.institution_id}`}
+              className={'mt-2 inline-block text-[12.5px] font-semibold text-gold-ink hover:text-ink ' + FOCUS_RING}
+              data-testid="open-account"
+            >
+              Open account →
+            </Link>
           </>
         )}
         provenance={

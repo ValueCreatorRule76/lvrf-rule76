@@ -287,6 +287,7 @@ walk() {  # MODE
   [ "$rc" = "0" ] || bad "the $1 walk exited $rc — a crash is a failure (see $W/walk.$1.log)"
 }
 walk walk
+walk create-link
 
 step "9. Deliberate breaks"
 restore() { cp "$W/$(basename "$1").orig" "$1"; cmp -s "$W/$(basename "$1").orig" "$1" && ok "  ...$1 restored byte-identical" || bad "  ...$1 restore differs"; }
