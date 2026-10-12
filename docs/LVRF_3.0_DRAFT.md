@@ -245,9 +245,19 @@ access. Today any signed-in vendor staff member can do all of them.
 
 Order inside the band matters: 3 → 4 → 5 come before 6, because researching an
 account before its entity, disclosure regime and trust vocabulary are fixed
-produces facts that cannot be judged.
+produces facts that cannot be judged. *[12 Oct 2026: item 6 comes forward as Q4h,
+carrying the minimum of 3 and 4 with it: the entity is pinned and the regime recorded
+**before** any fact is accepted, enforced by the prompt's two phases and by parse.
+Item 5's vocabulary is decided (D2), and the basis is derived, so nothing in Q4h
+stores a second one.]*
 
 #### 3. The entity is pinned before anything is researched
+
+*[12 Oct 2026, Brad: the minimum (the legal name and one identifier, pinned per
+account, parse refusing a different entity, naming both) is built with item 6 as
+**Q4h**. Parent and affiliate relationships, the run sealing its entity (L4, item 10),
+`website` into the entity record (L9) and the entity mismatch rate (item 11) remain,
+as Q7. Plan: `docs/LVRF_PLAN.md` §4e.]*
 
 **The Zachry lesson.** An institution gains an **entity record**: legal name, the
 identifier that makes it unambiguous (SEC CIK, ticker, or a registry number), and
@@ -261,6 +271,11 @@ parent and affiliate relationships with their own evidence.
   supersession plus the run sealing its entity (item 10).
 
 #### 4. The disclosure regime is an account property, read before the prompt runs
+
+*[12 Oct 2026, Brad: the minimum is built with item 6 as **Q4h**. The regime is
+recorded with evidence, as a fact kind, and the account prompt reads it (for a
+private company, not-found with a reason is expected). The gap register computing
+*structurally unobtainable* per account from it remains, as Q8.]*
 
 Filer status: **public filer, private, subsidiary of a filer, public sector.** It
 sets the ceiling on what research can reach, so it is recorded first, with its
@@ -317,6 +332,16 @@ unless this is decided first.
   vocabularies as *owed rather than decided*. LVRF decides before building.
 
 #### 6. Account research intake
+
+*[12 Oct 2026, Brad: **pulled forward as Q4h**, after Q4c1b and Q4g. D13 no longer
+blocks it. Items 3 and 4 are folded in minimally, with L6 and L8. The first test is
+Scotts Miracle-Gro, a public filer. Plan: `docs/LVRF_PLAN.md` §4e. Accepting a
+researched fact is proposed as an **authorized** act, as recording a fact is (Q3):
+decision H2. **Decided by Brad, 12 Oct:** H1, opening the citation is required at
+accept and recorded as resolved by that person; H2, authorized; H3, a company's own
+non-filing publication is `observation` with a source reference (inferred), with its
+source kind kept; H4, every facts prompt asks for all kinds. Order: Q4c1b → Brad's
+IT retirements → Q4g → Q4h → Q4c2 → Q4d.]*
 
 Extend the research pipeline that packs already use (generate prompt → a person
 runs it → parse → accept or reject per field) to accounts. `research_results`
@@ -580,7 +605,9 @@ named. These are the ones found on 11 October:
    boundary for research intake — and **migrates to Compass OS once Compass exists
    as code.** `CLAUDE.md` names the research-intake module as a Compass seam. *[rev 3]*
 9. **The first real account for item 6, with an independent hand-built baseline
-   (item 12).** *[rev 3: added; plan D13.]* **Open, pending Brad.** Recommended: the
-   first real Skillsoft engagement an authorized user is working — not Curia, a
-   read-only reference built from published material — with the hand-built baseline
-   done before the research runs. **Blocks item 6 only.**
+   (item 12).** *[rev 3: added; plan D13.]* **Narrowed by Brad, 12 October 2026:**
+   D13 governs the first **real** engagement and item 12's independent hand-built
+   baseline. It **no longer blocks building item 6** (Q4h), which is tested first on
+   published accounts (Scotts Miracle-Gro). Recommended for the real engagement: the
+   first real Skillsoft engagement an authorized user is working, with the hand-built
+   baseline done before the research runs. **Open for that engagement.**

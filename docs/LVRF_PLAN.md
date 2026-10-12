@@ -89,9 +89,9 @@ on institution routes (P3).
 | ~~L3~~ **DONE 11 Oct 2026 (hygiene, `177eb49`)** | `value_outcome_evidence.supports` is free text; the gate compares it to `'actual'` | `text('supports')`, no CHECK on the table; only the route validates | Q3 hygiene batch (a CHECK, not a comment) |
 | L4 | The run payload carries no institution name | `produceRun` payload has engagement, capability, metric — no account | with 3.0 item 3/10 (seal the entity in the run) |
 | ~~L5~~ **DONE 11 Oct 2026 (hygiene, `177eb49`)** | `compareRuns` returns 500 on runs scored before `modelVersion` (`payload.confidence` absent) | reproduced on HEAD against local `lvrf` | Q3 hygiene batch (422 naming the run) |
-| L6 | Research values carry no reporting period | no period column on `research_results` | with 3.0 item 6 (every accepted fact carries its period) |
+| L6 | Research values carry no reporting period | no period column on `research_results` | **in Q4h:** every accepted account fact carries `as_of` = the last day of the period it describes, plus the period as stated; the contract asks for both and the reviewer sees both (§4e) |
 | L7 | `render_record.py` reads `out/spine_run_*.json`, not the API | `records/render_record.py` l.372 | with 3.0 item 15 |
-| L8 | Parse refusals (the parser's 422s) leave no record | no writer; `refusals` takes DB refusals only | with 3.0 item 6 (research at volume) — item 13 |
+| L8 | Parse refusals (the parser's 422s) leave no record | no writer; `refusals` takes DB refusals only | **in Q4h:** `refusals` gains `source` (`database` \| `parser`), `sqlstate` required only for `database`; parse 422s are written through the pool, outside the rolled-back request (§4e) |
 | L9 | `website` has no update path | no route writes it after create | with 3.0 item 3 (fold into the entity record) — item 13 |
 | L10 | Fact (and outcome-evidence) verification after capture | `source_verified` set at capture only; no route | 3.0 item 13 |
 | L11 | Narrow-viewport overflow on the runs table; card numbering `01A`; form/table left-edge misalignment; compare's `stage`/`claim`/`notes` rendered nowhere | `AddEvidenceCard.tsx` still `n="01A"`; viewport **unverified** (not re-measured) | UI pass, unscheduled |
@@ -149,7 +149,7 @@ None. D3–D6 were decided on 11 October 2026 (above).
 | D10 | WeasyPrint on the VPS, or rendering stays on the Mac | — | 3.0 item 15 |
 | D11 (rest) | 3.0 draft Q1 (Rule76 doctrine source) and Q7 (`record_documents` provisional). Q5 (AMENDMENT-004 drift) is fixed by the hygiene batch's L21; Q6 decided (no amendment) | see the draft | ratification only |
 | D12 | DB-level tenant backstop: trigger or RLS (L15) | — | L15 |
-| **D13** | **The first real account for 3.0 item 6, with an independent hand-built baseline (item 12)** | Recommended: the first real Skillsoft engagement an authorized user is working — not Curia (a read-only reference built from published material); the hand-built baseline done before the research runs | **3.0 item 6 only** — pending Brad |
+| **D13** | **The first REAL engagement, and 3.0 item 12** (the independent hand-built baseline compared field by field with research) | **Narrowed by Brad, 12 Oct 2026: D13 no longer blocks building item 6** (Q4h). It governs only the first real engagement researched under item 6, and item 12's comparison | **Open** for the real engagement; not blocking Q4h |
 
 ---
 
@@ -157,6 +157,9 @@ None. D3–D6 were decided on 11 October 2026 (above).
 
 In order. Each item lists what it depends on. "Why here" is given where the
 placement is a judgement.
+
+**The order from here (Brad, 12 Oct 2026):** Q4c1b deploy → Brad's retirements and
+exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 
 | # | Item | Depends on | Why here |
 |---|---|---|---|
@@ -174,10 +177,11 @@ placement is a judgement.
 | Q4c2 | **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
 | Q4d | **Reference test A: Scotts Miracle-Gro on an existing pack** (Manufacturing; TRIR accepted). Outside-in, published material only; not D13. Step plan in §4a; R1 and R5 decided | Q4c2 | tests a second account on a pack that already exists |
 | Q4e | **Reference test B: Datacom, a pack-only test** under the existing `information-technology` industry (R2, R3). The first real use of the Q4b prompt route. Step plan in §4a; no run, because no published Datacom baseline exists | Q4c1 | tests the pack loop end to end on a pack that does not exist yet |
-| Q7 | **3.0 item 3 — the entity is pinned**, with L4 (the run seals its entity and account name) and L9 (`website` into the entity record) | Q6 | 3 → 4 → 5 before 6, per the draft |
-| Q8 | **3.0 item 4 — disclosure regime** | Q7 | — |
+| Q4h | **3.0 item 6 pulled forward: account research intake** (Brad, 12 Oct), with items 3 and 4 folded in minimally (the entity: legal name and identifier; the disclosure regime) and L6 and L8. The Q4b pattern: an `institution_fact` contract, a prompt generated from live rows and stored immutably, parse that refuses a different entity naming both, per-field review that writes evidence and fact in one transaction. First test: Scotts Miracle-Gro (a public filer), replacing hand entry of its facts in Q4d where research can supply them. Plan in §4e; H1–H4 decided (§4e) | Q4c1b, Q4g; **not D13** (narrowed) | Brad's decision: build the intake before the first real engagement, test it on published accounts first |
+| Q7 | **3.0 item 3, the rest** (after Q4h's minimal entity): parent and affiliate relationships with their own evidence; L4 (the run seals its entity and account name); L9 (`website` into the entity record); item 11's entity mismatch rate | Q4h | — |
+| Q8 | **3.0 item 4, the rest** (after Q4h's minimal regime): the gap register computes *structurally unobtainable by research* per account from its regime, rather than asserting it | Q4h | — |
 | Q9 | **3.0 item 5 — one trust vocabulary (derived)** | D2 | — |
-| Q10 | **3.0 item 6 — account research intake** (needs D13), with L6 (period on every accepted fact) and L8 (parse refusals on record); item 10 becomes binding here (a run seals the fact ids and values it used) | Q7–Q9, D1 | — |
+| ~~Q10~~ | ~~**3.0 item 6 — account research intake**~~ **Moved forward as Q4h** (Brad, 12 Oct 2026); D13 no longer blocks it. Item 10 (a run seals the fact ids and values it used) still becomes binding when facts feed runs, which Q4h does not do | — | — |
 | Q11 | 3.0 items 7 (total vs addressable) and 8 (sources as entities) | alongside Q10 | — |
 | Q12 | 3.0 items 11 (research reliability) and 12 (a human-derived oracle) | the first account researched under Q10 | — |
 | Q13 | 3.0 Band C: item 13 (incl. L10), 14 (after 6), 15 (incl. L7, D10) | as engagements need them | — |
@@ -650,3 +654,295 @@ intent precedes the acts):
 - **Keep:** Billable utilization; Change failure rate; Change lead time; Deployment
   frequency; Failed deployment recovery time; Net first contact resolution rate; Net
   first level resolution rate.
+
+### 4e. Q4h: account research intake (3.0 item 6), with the entity and the regime (plan, 12 Oct 2026; H1–H4 decided by Brad)
+
+**Brad's decisions (12 Oct):**
+
+- **D13 is narrowed.** It governs the first real engagement and item 12, and no
+  longer blocks building item 6.
+- **Item 6 comes forward as Q4h,** after Q4c1b and Q4g, with items 3 and 4 folded in
+  minimally.
+- **First test: Scotts Miracle-Gro.**
+
+**Spine stage:** `baseline`. AMENDMENT-005 Art. I permits research at baseline;
+measure and verify are prohibited. Art. II: research produces evidence, never a value
+in `value_outcomes`.
+
+**The Q4b pattern, applied to accounts:**
+
+- one contract in `server/research/contracts.ts`;
+- a prompt generated from live rows and stored immutably;
+- a parse that names the prompt and refuses wholesale;
+- per-field review that writes through the one existing writer.
+
+Inside the D1 seam.
+
+#### What may be researched (the contract's scope)
+
+- **Baseline facts:** the four existing kinds (`revenue`, `headcount`,
+  `stated_priority`, `system`).
+- **The entity:** legal name and identifier.
+- **The disclosure regime:** `public_filer · private · subsidiary_of_filer ·
+  public_sector`.
+- **Never:**
+  - a measure- or verify-stage value;
+  - a value outcome, baseline, actual or target. A metric's published baseline (as
+    for Scotts' TRIR) stays a value-outcome act with evidence, in Q4c2.
+- **Not in Q4h:**
+  - attach-stage signals ("which pack measures this account says matter", item 6's
+    second permitted use), which come next;
+  - parent and affiliate relationships (item 3, the rest).
+
+#### The `institution_fact` contract (v1), in `contracts.ts`
+
+**Envelope:** `prompt_id`; `institution` (the name as the prompt gave it);
+`research_query`; `query_as_executed`; `research_tool`.
+
+**`entity`:**
+
+- `legal_name`;
+- `identifier_type` (`sec_cik` | `ticker` | `registry`);
+- `identifier`;
+- `registry_jurisdiction` (required when `registry`);
+- `citation`;
+- `caveats` (Q4g's shape: a list, empty stated explicitly).
+
+**`disclosure_regime`:** `value` (the four labels); `basis` (why, in a sentence);
+`citation`; `as_of`; `caveats`.
+
+**`facts[]`, each with:**
+
+- `kind` (the four kinds);
+- `value` (a number for revenue and headcount, text for the others);
+- `unit` (an ISO currency for revenue; `people` for headcount);
+- **`as_of` = the last day of the period the fact describes** (L6). The contract says
+  **not the publication date.**
+- **`period`, as stated** (e.g. "fiscal year ended 30 September 2024"), shown to the
+  reviewer beside `as_of`;
+- `source_kind`: `public_filing` for the company's own filings; otherwise
+  `observation` with a source reference. **Decision H3 below.**
+- `citation`; a `quote` (the sentence the figure comes from); `caveats`.
+
+**`not_found[]`, each with:** `kind`, `reason`. For example: "private company; no
+statutory filing discloses revenue".
+
+**Two gates read the contract, as in Q4b:** parse ("predates the contract") and accept
+(unknown keys refused). It has its own version, `contract_version`.
+
+#### The prompt, generated from live rows
+
+`POST /api/institutions/:id/research-prompts` (authorized, tenant-checked) is stored
+immutably in `research_prompts`. It reads:
+
+- the institution's name and website;
+- **the pinned entity, if any;**
+- **the regime, if recorded;**
+- **the facts already recorded** (kind, value, `as_of`), "do not return these unless
+  a later period";
+- **prior not-found results** with their reasons.
+
+**Two phases, decided by the live rows:**
+
+- **Phase `entity` (no entity pinned):** it asks **only** for the entity and the
+  regime. Facts in such a response are refused at parse: "pin the entity first".
+- **Phase `facts` (an entity is pinned):** it names the entity (legal name and
+  identifier) and asks for facts within what the regime can publish.
+  - **For `private`, it says plainly that revenue and headcount are often not
+    published, and that a not-found with a reason is the expected answer.** This is
+    item 4's minimum: the prompt reads the regime.
+
+**`research_prompts` changes (0034):**
+
+- `industry_id` becomes nullable; `institution_id` and `phase` are added;
+- **a CHECK:** an `industry_measure` prompt names an industry and no institution; an
+  `institution_fact` prompt names an institution and no industry, plus a phase.
+- The row is still immutable (section 18).
+
+#### Parse: `POST /api/institutions/:id/research-results`
+
+- Requires `prompt_id`: the prompt must be this institution's, of the current contract
+  version (naming both, as Q4b), and phase-consistent.
+- **Entity check (item 3):**
+  - **Phase `facts`:** the response's `entity.identifier_type` and `identifier` must
+    equal the pinned entity's. Otherwise 422: "this response is about \<legal name,
+    identifier\>; the account's entity is \<legal name, identifier\>; nothing was
+    written."
+  - **Phase `entity`:** no comparison is possible yet, so the entity becomes a pending
+    result for a person to judge.
+- **One `research_results` row per field:**
+  - the entity, the regime, each fact, and each not-found;
+  - new `result_kind = institution_fact`, with `field_name` = the kind;
+  - `found` = false for not-founds, with the reason in the existing
+    `not_found_reason`;
+  - the whole object in `raw_response`.
+- **Refuse wholesale**, every issue named.
+- **L8:** each parse 422 is written to `refusals` through the pool, outside the request
+  transaction, which rolls back on a 422, exactly as `handleGovernanceError` does.
+  - `refusals` gains `source` (`database` | `parser`); `sqlstate` becomes required
+    only for `database`; a CHECK enforces both.
+
+#### Review, per field: who, and what accept writes
+
+- **Who: an authorized user, not steward-only.**
+  - Q3 made recording facts an authorized act (`POST /api/institutions/:id/facts` is
+    `authorized`). Accepting a researched fact *is* recording a fact, with research
+    as its source.
+  - Making it steward-only would make research a harder path than typing the same
+    figure by hand. The tenant-wide pack is the steward's because every account
+    inherits it; a fact is one account's.
+  - **The same holds for pinning the entity and recording the regime**, since they are
+    account-scoped. The guard on the entity is the exact-identifier rule at parse and
+    supersession to correct it, not a role.
+- **Accept, no hop left short.** One transaction, through **one writer** extracted
+  from `institutionFacts.ts` into `server/lib/institutionFactWriter.ts` and used by
+  both routes:
+  - an `evidence` row with `kind` = `source_kind`, the citation as provenance plus
+    `source_reference`, `ai_sourced` as the parse recorded it, and `research_query`
+    and `research_tool`;
+  - the `institution_facts` row with `as_of` from the contract;
+  - `research_results` → accepted, linking `evidence_id` and the new
+    `institution_fact_id`.
+  - Or nothing.
+- **Citation resolution at accept (decision H1, recommended).** The reviewer ticks "I
+  opened the citation and it says this".
+  - That sets `citation_resolved` (named person and time, final: AMENDMENT-005
+    Art. IV).
+  - Without it, D2 rule 2 makes an AI-sourced fact **assumed**, whatever its kind.
+  - The Q4c1b caveats tick applies too, and Q4g's `caveats` show as their own block.
+- **Accepting the entity** writes the new `institution_entities` row (below).
+  **Accepting the regime** writes an `institution_facts` row of the new kind
+  `disclosure_regime`.
+- **A not-found is reviewed too:** "accept as not found" records the reason and writes
+  no fact. The account's facts card lists it, e.g. "Revenue: not found by research,
+  private company, as of …". That is the regime made visible.
+- **Reject:** a note is required, and the rejection is kept, as for packs.
+- **Supersession stays the existing correction path:** a later period's figure
+  supersedes the earlier fact through the same writer, with a reason.
+
+#### The minimal entity and regime records (migrations 0033 and 0034)
+
+- **`institution_entities`** (governed):
+  - columns: `institution_id`; `legal_name`; `identifier_type` (enum `sec_cik`,
+    `ticker`, `registry`); `identifier`; `registry_jurisdiction`; `evidence_id` (NOT
+    NULL: provenance); `captured_by_person_id`; plus `governance()` (supersession,
+    retirement);
+  - **a partial unique index:** one current entity per institution;
+  - CHECKs: `registry` needs a jurisdiction; an `sec_cik` is 10 digits, zero-padded;
+  - in the governed loop and the supersession loop (`_audit`, `_touch`, `_no_delete`,
+    `_supersession_sane`): **triggers 98 → 102**;
+  - **correcting an entity supersedes it** (item 3).
+- **The regime:** a new `institution_fact_kind`, `disclosure_regime`. `value_text` is
+  one of the four labels (a CHECK), with evidence, `as_of` and supersession for free.
+  No new table.
+- **`research_results`:**
+  - `result_kind` gains `institution_fact`;
+  - FKs `institution_fact_id` and `institution_entity_id`;
+  - the kind-shape, found-shape and accepted-has-record CHECKs are extended;
+  - **the enum value is added in its own migration (0033)**, because Postgres cannot
+    use a new enum value inside the transaction that adds it. Everything else is 0034.
+- **`refusals`:** `source`, as in L8.
+- **Back up first. What it could orphan:** nothing; it is additive.
+
+**What is left of items 3 and 4 for later (Q7, Q8):**
+
+- parent and affiliate relationships;
+- the run sealing its entity and account name (L4, item 10);
+- `website` into the entity record (L9);
+- the entity mismatch rate (item 11);
+- the gap register computing *structurally unobtainable* per account from its regime.
+
+#### The cards on the account page, mirroring R1–R5 (`AccountResearch`)
+
+| Card | What it does |
+|---|---|
+| **A1** | **Entity and regime.** The pinned entity (legal name, identifier, its evidence) and the regime, or "not pinned: research the entity first". The entity's correction is supersession |
+| **A2** | **Generate a research prompt.** It shows its phase ("entity first" or "facts for \<legal name, CIK\>"), the text with Copy, and its hash |
+| **A3** | **Prompts on record.** Stale ones (an older contract version) are flagged |
+| **A4** | **Parse a response.** Invalid JSON is caught locally. **An entity mismatch is shown with both entities named.** All issues are listed. The refusal is on record (L8) |
+| **A5** | **Pending review, per field.** Shows the value, unit, **`as_of` beside the period as stated**, the source kind, the citation and quote, Q4g's caveats and the text-search caveats. Ticks: "caveats read", and "I opened the citation" (H1). Accept or reject with a note. A not-found shows its reason and is "accepted as not found" |
+
+The facts card (`AccountFactsCard`) shows researched facts with their basis, and lists
+not-found kinds with reasons.
+
+#### Scotts Miracle-Gro, through it (Q4d's A3, replaced)
+
+1. Create the account (A1 in §4a), classified `manufacturing`.
+2. **Phase `entity`:** Brad generates, runs and parses. The response gives the legal
+   name, the SEC CIK and the ticker, citing EDGAR, and the regime `public_filer`
+   citing the 10-K cover. **Accepting the entity pins it;** accepting the regime
+   records it.
+3. **Phase `facts`:** the prompt names the pinned entity and asks for revenue and
+   headcount (from the 10-K, `as_of` = the fiscal year end), stated priorities (the
+   10-K and the CR report), and systems (likely not found: "not disclosed in
+   filings").
+   - A response citing another company (e.g. a former parent or a namesake) is
+     refused at parse, naming both entities.
+4. **Review:** Brad opens each citation, ticks, and accepts or rejects. Each accept is
+   one evidence row and one fact. Not-founds are accepted as not found.
+5. **The TRIR baseline (2.28, FY2021) is not an account fact.** It remains Q4c2's
+   value outcome and evidence, entered by hand from the CR report.
+
+#### Datacom, through it (a private company)
+
+1. **Phase `entity`:** the legal entity and its registry number, with
+   `registry_jurisdiction` NZ (the Companies Office); the regime `private`.
+2. **Phase `facts`:** the prompt says a private company publishes little. The likely
+   result: revenue and headcount **not found**, with reasons like "private; no
+   statutory filing discloses it". Any figure from the company's own press release
+   needs decision H3. Stated priorities may come from its site; systems are likely
+   not found.
+3. **The record then shows what research cannot reach and why.** That is the point of
+   the regime. Datacom stays a pack-only test for value (R3): no outcome, no run.
+
+#### Decisions, by Brad, 12 Oct 2026
+
+**All four as recommended:**
+
+- **H1, yes:** accepting a researched fact requires the reviewer to confirm they
+  opened the citation. It is recorded as `citation_resolved` by that person, with the
+  time.
+- **H2, yes:** accept, pin the entity and record the regime are **authorized** acts.
+- **H3, yes:** a company's own non-filing publication is `observation` with a source
+  reference (derives **inferred**). **The contract's `source_kind` value is kept as
+  stated**, so a "company publication" kind can be added later without re-reading
+  responses.
+- **H4, yes:** every facts-phase prompt asks for all kinds, listing what is already
+  recorded.
+
+*As proposed, for the record:*
+
+- **H1:** accepting a researched fact requires the reviewer to open the citation, and
+  records `citation_resolved` (recommended). The alternative leaves it to a later act,
+  and the fact counts as **assumed** until then.
+- **H2:** accepting is an **authorized** act, like typing the fact by hand (Q3). The
+  same goes for pinning the entity and recording the regime (recommended).
+- **H3:** the evidence kind for a company's **own non-filing publication** (a private
+  company's annual review or press release). D2 maps `public_filing` (published) and
+  `vendor_publication` (the vendor's own). Recommended: `observation` with a source
+  reference, which derives as **inferred**, until a ruling says otherwise.
+- **H4:** the facts phase asks for every kind every time, listing what is already
+  recorded as "do not repeat unless a later period" (recommended). The alternative is
+  to ask only for kinds not yet recorded.
+
+#### Gate A (outline)
+
+- **`verify_account_research.sh`, contract-driven:**
+  - each field missing → 422;
+  - phase rules: facts in an entity-phase response refused;
+  - **an entity mismatch refused, naming both**;
+  - a stale contract version;
+  - L8: the parse refusal is in `refusals`;
+  - accept: evidence and fact in one transaction, no partial on a forced failure;
+  - `as_of` = the period end, not the publication date;
+  - a not-found accepted writes no fact;
+  - reject kept;
+  - entity supersession;
+  - the regime CHECK;
+  - triggers 102.
+- **A browser walk by session, with screenshots:** a fictional public filer and a
+  fictional private company. **Never Scotts' or Datacom's real figures in a test.**
+- **Breaks:** the entity check, the phase check, the one-transaction writer, the
+  `as_of` rule, and L8's writer.
+- **Also:** the regression; prod-copy equivalence (only the additive reads differ);
+  backup → migrate 0033 and 0034 → harden (102) → deploy.
