@@ -9244,3 +9244,28 @@ change.**
   `verify_tenant_scope` has 155 cases (the walk read added). The client `tsc`, build
   and lint pass; the bundle is **`index-Bi754H_A.js`**. The one lint warning predates
   this work.
+
+## Q4i — the small UI batch — 12 October 2026
+
+Shipped with Q4c2 in one deploy. **No migration:** nothing under `db/` has changed
+since the deployed `92ae23b`, and D2 is none against 0034.
+
+- **"Open account →"** (`7e14556`): Create account's Recorded block links to the new
+  account.
+- **The citation-opened state on fact cards:**
+  - **The change:** `/view` now selects `citation_resolved`, with the person and the
+    date (UTC), as its comment always said. Each fact card reads **"Citation opened by
+    \<reviewer\>, \<date\>"** when set, **apart from** the Unverified badge, which is
+    `source_verified`, the disclosure gate.
+  - **Why:** before this, a fact whose citation a person opened (H1) looked identical
+    to one nobody had opened.
+  - **Verified** in `verify_account_research.sh` (160/0):
+    - by API, the researched revenue carries `citation_resolved` true, by X, dated,
+      and still source-unverified, while a typed fact carries none;
+    - in the browser, the revenue card reads "Citation opened by Authorized X
+      (verification), 2026-10-12" beside its Unverified badge (screenshot looked at).
+  - **Prod copy, HEAD `92ae23b` against this batch:** 60 GETs identical (the copy
+    predates any account facts, so `/view`'s new fields never appear there; a
+    comparator allowing exactly those three fields found nothing else).
+- **Regression for the batch** (the link, Q4c2 and Q4i): all 26 verify scripts pass;
+  `verify_tenant_scope` has 155 cases. The bundle is **`index-BuEzZg7S.js`**.
