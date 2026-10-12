@@ -9302,3 +9302,188 @@ account →), `23489f3` (docs), `6d02c40` (Q4c2), `4926fed` (docs), `722a30d` (Q
 - **Scotts, before the walk:** 0 persons, 0 capabilities, 0 engagements. The
   manufacturing pack's TRIR entry is `82572f6f…` (incidents per 200,000 hours,
   decrease, proposed).
+
+## O1 — the grounding: basis, sealed facts, levers and solutions — 12 October 2026
+
+Outputs band, phase 1 (LVRF_PLAN §5). **Migration 0035** (`value_levers`,
+`lever_offerings`, refusal source `route`); `hardening.sql` sections 20–21; **111
+triggers** (103 + 8). Not deployed.
+
+### What was built
+
+- **Q9, the D2 basis, derived** (hardening section 21):
+  - **What it is:** `lvrf_evidence_basis(e evidence)`, a STABLE SQL function and the
+    one place a basis is computed. Every renderer calls it and none infers one.
+    Nothing is stored beside it, so nothing can drift.
+  - **The rules,** in D2's order, first match decides:
+    1. simulated → assumed;
+    2. AI-sourced with an unopened citation → assumed;
+    3. system export → system_of_record;
+    4. public filing → published;
+    5. attestation by a non-simulated customer-side person, dated → client_stated;
+    6. any other attestation → assumed;
+    7. vendor publication → published about the tenant itself, else inferred;
+    8. artifact → client_stated with a customer-side attester, else inferred;
+    9. observation → inferred with a source reference, else assumed;
+    10. assessment result → NULL (outside the vocabulary).
+  - **What does not raise it:** `source_verified` (the disclosure gate) and
+    self-declared confidence.
+  - **Where it is read:** `/view` facts and the outside-in walk's evidence carry
+    `basis`; the fact cards and the walk card show it.
+- **3.0 item 10, a run renders from itself:**
+  - `produce-run` seals the account's current facts and its pinned entity into the
+    payload, under the same `payload_hash`;
+  - each outcome evidence row in the run gains `basis`;
+  - runs produced before O1 carry neither key. That is accurate, not missing.
+- **`value_levers` and `lever_offerings` (0035), steward acts (O-D2),** four routes:
+  - `POST /api/industry-measures/:id/levers`: a lever on a current pack entry
+    (name, mechanism ≥12, leading indicator, citation ≥12);
+  - `POST /api/value-levers/:id/offerings`: a current catalog offering, with a basis
+    (≥12);
+  - `POST /api/value-levers/:id/retire`: **withdraw a lever** (reason ≥12);
+  - `POST /api/lever-offerings/:id/retire`: **withdraw a link** (reason ≥12).
+  - **What every route refuses:**
+    - 403 for a non-steward;
+    - 404 for another tenant's subject;
+    - 409 for a non-current subject, a duplicate, or a second withdrawal (naming who
+      withdrew it, when and why);
+    - 422 with every issue named.
+- **No effect size, refused on record:**
+  - any field a lever route does not take is refused with **400**;
+  - a field that names a size, a target or an expected result (`effect_size`,
+    `target_value`, `expected_uplift`, …) is refused as such: "a value lever carries
+    no effect size or target — it is a mechanism, not a promise (LVRF_PLAN §5)";
+  - each refusal is recorded in **`refusals`** with source **`route`** (new in 0035:
+    a refusal made before any write, with no sqlstate) and the payload as sent;
+  - `refusals_source_shape` now allows `route` beside `parser`.
+- **Withdrawn, never deleted, and still visible:**
+  - **A lever** is withdrawn by retirement: `deleted_at`, status `retired`, who and why,
+    together or not at all (`value_levers_retirement_is_complete`). Its links stay,
+    and it takes no new ones.
+  - **A link** is withdrawn by `retired_at`, who and why
+    (`lever_offerings_retirement_is_complete`). The pair key is unique among current
+    links, so a withdrawn pair can be linked again as a new row.
+  - **On the pack page,** withdrawn levers follow the current ones, struck through,
+    badged "withdrawn", reading "Withdrawn by \<steward\>, \<date\> — \<reason\>", with
+    no further actions. Withdrawn links stay under their lever, marked the same way.
+- **The database enforces the steward and append-only rules** (hardening section 20,
+  following `access_grants_steward_only`):
+  - **`value_levers_steward_only`** (INSERT, UPDATE):
+    - only the tenant's steward may propose or withdraw a lever;
+    - a lever's tenant is its pack entry's;
+    - a lever is inserted current.
+  - **`lever_offerings_steward_only`** (INSERT, UPDATE):
+    - only the steward may link;
+    - a link's tenant is its lever's and its offering's;
+    - **append-only:** after a link is made, nothing may be written but its withdrawal,
+      once, by the steward.
+  - **Also present:**
+    - `value_levers` is governed (`_audit`, `_touch`, `_no_delete`,
+      `_supersession_sane`);
+    - `lever_offerings` has `_audit` and `_no_delete`.
+- **The pack page (outputs 3 and 4):**
+  - per entry, its levers; per lever, its solutions, each **beside what it can
+    evidence**;
+  - "Add a lever…", "Link a solution…", "Withdraw this lever…" and "Withdraw this
+    solution…" are disabled for a non-steward, naming the steward; the server's 403
+    stays the authority;
+  - on success a form closes, and the new row is the confirmation.
+- **`scripts/check_run_hashes.ts`** (read-only, a READ ONLY transaction): recomputes
+  every run's `payload_hash` from its stored payload, as produced, and compares the
+  embedded `payloadHash` with the column.
+
+### Review answers (Brad, 12 Oct)
+
+1. **Hardening covers both tables:**
+   - **the coverage:**
+     - `value_levers`: audit, touch, no_delete, supersession_sane, steward_only;
+     - `lever_offerings`: audit, no_delete, steward_only (append-only and steward-only
+       in the database);
+   - **111 distinct triggers, 168 trigger rows; `hardening_manifest` holds 111,**
+     checked on a clone and on the migrated prod copy;
+   - **where the total is asserted:**
+     - every verify script, and `restore_prod_copy.sh`, compare the live count with
+       hardening.sql's "Total: 111";
+     - D1 (`drift_report.ts`, deploy step 5c) compares the manifest with the catalog
+       and blocks the deploy on a mismatch.
+2. **0035's snapshot is committed:** `db/drizzle/meta/0035_snapshot.json` and the
+   journal entry. D2 reads "schema drift: none (journal 36 migrations, newest
+   0035_value_levers; 822 schema objects match 0035_snapshot.json)" on a clone and on
+   the migrated prod copy.
+   - 0035 was **regenerated** for this review. It had only ever run on throwaway
+     clones; real local `lvrf` is at 27 migrations, and prod at 0034.
+3. **An effect size is refused with a 400 and a `refusals` row,** as described above.
+   `verify_value_levers.sh` checks:
+   - `effect_size`, `target_value` and an unknown field, on a lever;
+   - `expected_uplift`, on a link;
+   - `target`, on a withdrawal;
+   - the refusal row's source, endpoint, actor, tenant, null sqlstate, payload and
+     reason;
+   - that nothing was written.
+4. **Withdrawal:** described above. In short, a lever by retirement and a link by
+   `retired_at`, both by the steward's routes, both visible afterwards, neither ever
+   deleted.
+5. **Pre-O1 runs recompute under their original payload shape:**
+   - the recompute hashes the stored payload minus `payloadHash`, over whatever keys
+     the run was produced with, so a run from before O1 is recomputed without
+     `entity` or `institutionFacts`;
+   - **on the prod copy all 23 runs match,** recomputed and embedded, before and after
+     0035 and hardening;
+   - **locally, the same 6 seed runs as before differ.** They are from 1 Aug 2026, on
+     "Customer Zero" (#999, #1000, #3, #4) and "Switching Order Verification" (#1,
+     #2). Four have no embedded `payloadHash`; two have one that matches the column
+     but do not recompute. **Not fixed,** pending the prod check.
+
+### Gate A (after the review changes)
+
+- **`verify_value_levers.sh`: 169 passed, 0 failed.**
+  - **The basis:** 19 in-memory cases covering all 10 rules.
+  - **/view:** basis matches the function row by row.
+  - **Sealing:** run one seals the entity and three facts with their basis; its hash
+    recomputes; a later correction changes run two only; the 29 pre-O1 runs are
+    byte-identical to the template's.
+  - **Levers, solutions and withdrawal,** by API: each refusal listed above; the rows;
+    the audit with the steward as actor.
+  - **The database, by direct SQL:**
+    - DELETE refused on both tables;
+    - a link's basis cannot be edited, nor a withdrawal amended;
+    - a non-steward cannot propose, link or withdraw;
+    - a lever's tenant must be its entry's;
+    - a "withdrawal" without who and why is refused;
+    - the CHECKs and the pair key hold.
+  - **The pack GET:** the current lever first; its solutions with what each can
+    evidence; the withdrawn link last and marked; the withdrawn lever after it, with
+    who, why, when and its solution.
+  - **The browser walk** (session sign-in, screenshots looked at):
+    - S proposes a lever, links the compliance suite, then proposes and **withdraws** a
+      second lever, which stays on the page struck through, naming who and why, with
+      no actions, and the count reads "1, and 1 withdrawn";
+    - X sees all four controls disabled, naming Brad Piver, and reads both levers.
+  - **Deliberate breaks,** each restored:
+    - **B1:** without basis rule 2, an unopened AI figure reads system_of_record.
+    - **B2:** without the payload keys, a run seals nothing.
+    - **B3:** without the route's tenant check, **the database now refuses** the
+      cross-tenant lever (422, `value_levers_steward_only`), and nothing is written.
+      Before the review it was written (201). The route's 404 remains the answer
+      that does not reveal the other tenant's entry.
+    - **B4:** without the client's gate, X submits and the server answers 403.
+    - **B5:** without `lever_offerings_steward_only`, a link's basis can be rewritten;
+      the trigger is what keeps it append-only.
+- **Prod copy, HEAD `3c16984` (code as deployed) against O1**, each clone migrated and
+  hardened by its own code (35/103 and 36/111, the manifest matching):
+  - **62 GETs:** 50 identical, 12 differing only by the added keys allowed, 0
+    unexplained;
+  - **the keys added:** `measures[].levers`, all 13 empty; `offerings` on the pack;
+    `basis` on the walk's evidence;
+  - every run GET is identical, and all 23 runs recompute after the migration.
+- **Regression:** all **27** verify scripts pass.
+  - `verify_steward_acts` 32/0: 9 steward routes, plus 403 cases for all four lever
+    routes.
+  - `verify_tenant_scope`: **167 cases** (155 + the four routes' cases); its fixtures
+    name the tenant's steward, as the database now requires.
+  - `verify_account_research` 160/0, with its 0034-pinned expectations removed.
+  - Client tsc, build and lint are clean apart from the pre-existing `ActorContext`
+    warning. The bundle is **`index-CnB3nt9a.js`**.
+  - A first run caught `scripts/check_run_hashes.ts` importing `hash.ts` where
+    scripts import `.js`; the scripts' tsc failed in two scripts. Fixed, and the
+    regression re-run.
