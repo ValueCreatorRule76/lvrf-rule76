@@ -9817,3 +9817,103 @@ pulled), `a34af19` (O2), `9f83cf0` (docs), `bf82326` (the review fixes) and `f35
     - every function is owned by `postgres`;
     - roles: `lvrf_app` (login) and `postgres` (super);
     - extensions plpgsql, uuid-ossp and vector, owned by `postgres`.
+
+## W1 fix (Q4j): an existing person as analyst of record; refusals in plain words — 12 October 2026
+
+Brad's Scotts walk, W1, was blocked: entering himself with his own email returned "duplicate
+key value violates unique constraint persons_email_key", because the steward's person row
+already holds that email. **Migration 0037; hardening section 23; 129 triggers** (126 +
+3). Not deployed.
+
+### The design, and the rules it was checked against
+
+- **No account–person link existed.** A person is scoped to exactly one tenant (vendor
+  staff) or one institution (the customer's people), and `person_roles` carries no
+  account. So **a migration was needed**: 0037 adds `account_person_links`, which names
+  an existing person (current, non-simulated staff of the account's tenant) in a role
+  on an account (`analyst_of_record`), with the title stated for that account. It is
+  append-only but for one withdrawal, enforced by `account_person_links_guard`; there
+  is one current link per account, person and role. **No person row is created**, and
+  no placeholder.
+- **What a link does:** it satisfies the capability-owner and engagement-owner checks.
+  The analyst may own what he asserts, and the schema already calls the engagement
+  owner "the value engineer of record. Vendor-side"; the route had required a customer
+  person, which contradicted it.
+- **What a link never does: it never makes a person customer-side.**
+  - **Commit and verify** still require a person of the institution, so an analyst of
+    record can never commit a target or verify an actual (checked in Gate A).
+  - **`lvrf_evidence_basis`** reads `persons.institution_id`, which a link does not
+    touch, so nothing he attests rises to client-stated.
+- **Against D4** (`tenants.steward_person_id` identifies Brad): no conflict. Naming an
+  analyst of record is an authorized act, not a steward act. Brad as steward and as
+  analyst is the same person in two acts. One thing to notice, not a conflict: as
+  steward he ratifies the levers (O-D2) that, as analyst, he states hypotheses through.
+- **Against verifier-not-author (O2-D1):** Brad as analyst of record and as hypothesis
+  author is allowed. He can never verify his own actuals, twice over: the verify
+  route admits only the institution's own people, and
+  `value_outcomes_verifier_not_author` refuses any verifier who wrote a hypothesis on
+  the outcome.
+- **O2 conflicts: none.**
+  - Hypotheses and summaries are authored by staff (the actor), and Brad is staff.
+  - The POV's banners and bases read evidence and `persons.institution_id`, not links.
+  - The gap register's "persons on record" lists the institution's own people, and
+    still does.
+
+### The plain refusal
+
+- `handleGovernanceError` maps Postgres's own unique-violation text to a plain
+  sentence:
+  - `persons_email_key` → "\<email\> is already in LVRF; select them instead of adding
+    them again.";
+  - a duplicate exclusion → "\"\<name\>\" is already excluded from this pack; an
+    exclusion is not repeated.";
+  - any other unique violation → "That is already in LVRF; nothing was written. Select
+    the existing one instead.";
+- Messages the schema writes for people (a RAISE) pass unchanged.
+- The raw text and the constraint name still go into `refusals`, for the record, and
+  never to the person.
+- **L29** records what remains: each route's 500 fallback can still echo other
+  Postgres errors.
+
+### The walk card
+
+- **W1** offers **"Name the analyst of record"**: a staff member (default: you) and the
+  title on this account.
+- Below it, "Or add a person of this account", for the customer's own people only.
+- The W2 and W4 owner pickers list the analyst of record beside the account's people.
+- The walk's read returns `analysts` and `staff`.
+
+### Gate A
+
+- **`verify_outside_in_walk.sh`: 119 passed, 0 failed** (it was 80).
+  - **The plain refusal:** the steward's own email in W1 → 409 "…is already in LVRF;
+    select them instead…", with no Postgres text or constraint name in the response;
+    the refusal recorded with `persons_email_key` and 23505; no duplicate person.
+  - **Naming, refused:** an unknown field → 400 (recorded); a short title → 422; a
+    customer's person, another tenant's staff, or simulated staff → 422, all with the
+    same message.
+  - **Naming, accepted:** the steward → 201; again → 409. The walk read shows him with
+    his title, and no person row on the account.
+  - **What the analyst can and cannot do:** he owns the capability and the engagement;
+    **commit as him → 422; verify as him → 422.**
+  - **The database:** a customer's person linked by SQL, an edited title, and a DELETE
+    are each refused by the guard.
+  - **Withdrawal:** the link is withdrawn, and he owns nothing new there afterwards.
+  - **The browser walk** (screenshot looked at): the plain refusal on the page;
+    "Name an existing person" defaulting to you; W1 done with his title; one person
+    row for him in LVRF and none on the account; W2–W8 walked with him as owner.
+  - **Deliberate break B4:** without the mapping, the raw "duplicate key value violates
+    unique constraint \"persons_email_key\"" reaches the person. Restored, it is plain
+    again.
+- **Regression:** all **28** verify scripts pass.
+  - **The first run failed one check:** `verify_exclusions` expected the raw constraint
+    name in a duplicate exclusion's 409. It now gets, and checks for, the plain
+    exclusion sentence. Re-run: 28/0.
+  - `verify_tenant_scope`: **200 cases**. The two link routes are covered, plus a
+    `person_id` of another tenant answered as unknown.
+  - Client tsc, build and lint are clean apart from the pre-existing warning. The
+    bundle is **`index-DPskA7fH.js`**.
+- **Prod copy against the deployed code (`f352e89`):**
+  - **62 GETs:** 60 identical, and the 2 walk reads differ only by the added
+    `analysts` and `staff`;
+  - 129 triggers and manifest; D2 none (930 objects); run hashes 23/23.
