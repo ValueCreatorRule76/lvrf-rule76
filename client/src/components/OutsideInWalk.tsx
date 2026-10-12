@@ -29,6 +29,10 @@ import { AddEvidenceCard } from './workbench/AddEvidenceCard';
 interface WalkState {
   institution: { id: string; name: string; industry_slug: string | null; industry_name: string | null };
   persons: { id: string; full_name: string; email: string; title: string | null }[];
+  /** W1 fix: existing staff named analyst of record on this account, with the title for it. */
+  analysts: { link_id: string; id: string; full_name: string; email: string; title: string; linked_by: string; linked_at: string }[];
+  /** The tenant's current staff, to choose the analyst of record from. */
+  staff: { id: string; full_name: string; email: string }[];
   offerings: { offering_key: string; name: string; family: string }[];
   pack: { id: string; name: string; unit: string; direction: string; definition: string; confounders: string; addressable: boolean }[];
   capabilities: { id: string; name: string; claims: { industry_measure_id: string; measure_name: string; claim: string; claimed_by: string | null }[] }[];
@@ -90,6 +94,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
 
   // Form state, one object per step.
   const [p1, setP1] = useState({ full_name: '', email: '', title: '' });
+  const [pa, setPa] = useState({ person_id: '', title: 'External analyst of record — not an employee. Asserting from published material.' });
   const [p2, setP2] = useState({ offering_key: '', capability_name: '', owner_person_id: '', basis: '' });
   const [p3, setP3] = useState({ capability_id: '', industry_measure_id: '', claim: '' });
   const [p4, setP4] = useState({ engagement_name: '', owner: '', metric_name: '', unit: '', direction: '', source_system: '', capability_name: '', baseline_value: '', baseline_measured_at: '' });
@@ -110,7 +115,14 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
   const hasBaselineEvidence = Boolean(outcome?.evidence.some((e) => e.supports === 'baseline'));
   const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
 
-  const s1: StepState = w.persons.length > 0 ? 'done' : 'next';
+  const s1: StepState = w.persons.length > 0 || w.analysts.length > 0 ? 'done' : 'next';
+  // Who may own a capability or an engagement here: the analyst of record
+  // (linked staff) and the account's own people.
+  const owners = [
+    ...w.analysts.map((a) => ({ id: a.id, label: `${a.full_name} — analyst of record` })),
+    ...w.persons.map((p) => ({ id: p.id, label: p.full_name })),
+  ];
+  const analystId = pa.person_id || actor?.id || '';
   const s2: StepState = w.capabilities.length > 0 ? 'done' : s1 === 'done' ? 'next' : 'waiting';
   const s3: StepState = claims.length > 0 ? 'done' : s2 === 'done' ? (w.pack.length ? 'next' : 'waiting') : 'waiting';
   const s4: StepState = outcome ? 'done' : s3 === 'done' ? 'next' : 'waiting';
@@ -129,24 +141,43 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
         a source. A hypothesis with no target is complete: never derive a target from a vendor claim.
       </p>
       <div data-testid="outside-in-walk">
-        <Step id="W1" title="Analyst of record (a person on this account)" state={s1} testId="w1">
+        <Step id="W1" title="Analyst of record" state={s1} testId="w1">
+          {w.analysts.length > 0 && <p className="m-0 mb-2 text-[12.5px] text-ink" data-testid="w1-analysts">{w.analysts.map((a) => `${a.full_name} — ${a.title}`).join('; ')}</p>}
           {w.persons.length > 0 && <p className="m-0 mb-2 text-[12.5px] text-ink">{w.persons.map((p) => `${p.full_name}${p.title ? ` — ${p.title}` : ''}`).join('; ')}</p>}
           {s1 === 'next' && (
+            <div data-testid="w1-name-existing">
+            <GovernedForm<{ account_person_link_id: string }>
+              path={`/api/institutions/${institutionId}/analyst-of-record`} provenanceLabel="What this records"
+              provenance={<p className="m-0 text-[12.5px] text-ink">An existing person — the tenant's own analyst, usually you — named analyst of record on this account, with the title for this account. <strong>No new person is created</strong>, and this does not make them the customer's: they can own what they assert, never commit to a target or verify an actual.</p>}
+              fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {field('Person', <select className={INPUT_CLASS} value={analystId} onChange={(e) => setPa({ ...pa, person_id: e.target.value })}>
+                  {w.staff.map((p) => <option key={p.id} value={p.id}>{p.full_name}{p.id === actor?.id ? ' (you)' : ''}</option>)}</select>)}
+                {field('Title on this account', <input className={INPUT_CLASS} value={pa.title} onChange={(e) => setPa({ ...pa, title: e.target.value })} />, undefined, true)}
+              </div>}
+              canSubmit={!!analystId && pa.title.trim().length >= 3}
+              buildBody={() => ({ person_id: analystId, title: pa.title })}
+              submitLabel="Name the analyst of record" onSuccess={reload} renderSuccess={() => <>Named.</>} />
+            </div>
+          )}
+          {s1 === 'next' && (
+            <div className="mt-3 border-t border-rule-soft pt-2" data-testid="w1-add-person">
+            <p className="m-0 mb-1 text-[11.5px] text-ink-45">Or add a person of this account (the customer's own people only; someone already in LVRF is named above, not added again).</p>
             <GovernedForm<{ person_ids: string[] }>
               path={`/api/institutions/${institutionId}/inputs`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">A customer-side person on this account, named as the owner of what is asserted from published material (Curia's precedent: "external analyst of record").</p>}
+              provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account (customer-side).</p>}
               fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {field('Full name', <input className={INPUT_CLASS} value={p1.full_name} onChange={(e) => setP1({ ...p1, full_name: e.target.value })} />)}
                 {field('Email (required by the route)', <input className={INPUT_CLASS} value={p1.email} onChange={(e) => setP1({ ...p1, email: e.target.value })} />)}
-                {field('Title', <input className={INPUT_CLASS} value={p1.title} onChange={(e) => setP1({ ...p1, title: e.target.value })} />, 'e.g. "External analyst of record — not an employee. Asserting from published material."', true)}
+                {field('Title', <input className={INPUT_CLASS} value={p1.title} onChange={(e) => setP1({ ...p1, title: e.target.value })} />, 'their title at the account, e.g. "EHS director"', true)}
               </div>}
               canSubmit={p1.full_name.trim() !== '' && p1.email.trim() !== ''}
               buildBody={() => ({ persons: [{ full_name: p1.full_name, email: p1.email, title: p1.title || null }] })}
               submitLabel="Add the person" onSuccess={reload} renderSuccess={() => <>Added.</>} />
+            </div>
           )}
         </Step>
 
-        <Step id="W2" title="Offering and capability" state={s2} waitsFor="W1, a person to own the capability" testId="w2">
+        <Step id="W2" title="Offering and capability" state={s2} waitsFor="W1, an analyst of record or a person to own the capability" testId="w2">
           {w.capabilities.length > 0 && <p className="m-0 mb-2 text-[12.5px] text-ink">{w.capabilities.map((c) => c.name).join('; ')}</p>}
           {s2 === 'next' && (
             <GovernedForm<{ capability_id: string }>
@@ -156,7 +187,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
                 {field('Offering', <select className={INPUT_CLASS} value={p2.offering_key} onChange={(e) => setP2({ ...p2, offering_key: e.target.value })}>
                   <option value="">— choose —</option>{w.offerings.map((o) => <option key={o.offering_key} value={o.offering_key}>{o.name}</option>)}</select>)}
                 {field('Owner', <select className={INPUT_CLASS} value={p2.owner_person_id} onChange={(e) => setP2({ ...p2, owner_person_id: e.target.value })}>
-                  <option value="">— choose —</option>{w.persons.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select>)}
+                  <option value="">— choose —</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>)}
                 {field('Capability name', <input className={INPUT_CLASS} value={p2.capability_name} onChange={(e) => setP2({ ...p2, capability_name: e.target.value })} />, undefined, true)}
                 {field('Basis', <textarea rows={2} className={INPUT_CLASS} value={p2.basis} onChange={(e) => setP2({ ...p2, basis: e.target.value })} />, undefined, true)}
               </div>}
@@ -209,7 +240,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {field('Engagement name', <input className={INPUT_CLASS} value={p4.engagement_name} onChange={(e) => setP4({ ...p4, engagement_name: e.target.value })} />, 'e.g. "<Account> — reference example, not an engagement"', true)}
                 {field('Owner', <select className={INPUT_CLASS} value={p4.owner} onChange={(e) => setP4({ ...p4, owner: e.target.value })}>
-                  <option value="">— choose —</option>{w.persons.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}</select>)}
+                  <option value="">— choose —</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>)}
                 {field('Capability', <select className={INPUT_CLASS} value={p4.capability_name} onChange={(e) => setP4({ ...p4, capability_name: e.target.value })}>
                   <option value="">— choose —</option>{w.capabilities.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}</select>)}
                 {field('Metric name', <input className={INPUT_CLASS} value={p4.metric_name} onChange={(e) => setP4({ ...p4, metric_name: e.target.value })} />)}

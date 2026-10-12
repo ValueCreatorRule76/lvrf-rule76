@@ -115,7 +115,7 @@ visible industry_measure_exclusions "$EXCL_ID" || bad "exclusion $EXCL_ID never 
 [ "$(q "SELECT excluded_by_person_id = '$ACTOR' AND proposed_by_research_tool = 'Verification tool' AND reason LIKE 'Verification: set by%' FROM industry_measure_exclusions WHERE industry_id = '$IND' AND name = 'Payer mix'")" = "t" ] \
   && ok "row: excluded by the actor; reason and proposal stored separately" || bad "row contents wrong"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'industry_measure_exclusions' AND record_id = '$EXCL_ID' AND actor_person_id = '$ACTOR'")" -ge 1 ] && ok "audit_log records this exclusion ($EXCL_ID) with the actor" || bad "no attributed audit row for $EXCL_ID"
-post "$X" '{"name":"Payer mix","reason":"Verification: a second exclusion of the same name."}' 409 "same name again" "industry_measure_exclusions_industry_name_key"
+post "$X" '{"name":"Payer mix","reason":"Verification: a second exclusion of the same name."}' 409 "same name again: refused in plain words (W1 fix: no constraint name)" '"Payer mix" is already excluded from this pack; an exclusion is not repeated.'
 
 step "6. Cannot be both in the pack and excluded from it"
 TOOL="Verification tool $(date +%s)"

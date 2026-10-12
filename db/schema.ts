@@ -2297,3 +2297,54 @@ export const executiveSummaries = pgTable('executive_summaries', {
     sql`(${t.draftedWithAi} AND ${t.draftingTool} IS NOT NULL AND length(btrim(${t.draftingTool})) >= 2)
         OR (NOT ${t.draftedWithAi} AND ${t.draftingTool} IS NULL)`),
 ]);
+
+/* ================================================================== */
+/* Account ↔ person links (0037, the W1 fix)                           */
+/* ================================================================== */
+
+/** What a linked person is on an account. One role today. */
+export const accountPersonRole = pgEnum('account_person_role', ['analyst_of_record']);
+
+/**
+ * 0037 (W1 fix, 12 Oct 2026). An EXISTING person named in a role on an
+ * account, with a title stated for that account — without a person row on
+ * the account. For an outside-in walk the honest analyst of record is the
+ * vendor's own analyst (Brad), asserting from published material, not a
+ * customer employee; persons are scoped to exactly one tenant or one
+ * institution, so naming him on an account needs this link, not a copy.
+ *
+ * A LINK NEVER MAKES A PERSON CUSTOMER-SIDE. It satisfies the capability-
+ * owner and engagement-owner checks (an analyst may own what he asserts;
+ * the engagement owner is vendor-side by design), and nothing else: commit,
+ * verify and attestation still require a person OF the institution, and
+ * lvrf_evidence_basis's customer-side attester rule reads
+ * persons.institution_id, which a link does not touch.
+ *
+ * Append-only but for one withdrawal (retired_at, who, why), by
+ * account_person_links_guard (hardening section 23): the person is current,
+ * non-simulated staff of the account's tenant. One current link per
+ * account, person and role (a partial unique index: unlink, then relink,
+ * is two statements).
+ */
+export const accountPersonLinks = pgTable('account_person_links', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  role: accountPersonRole('role').notNull(),
+  /** The title on THIS account, e.g. "External analyst of record — not an employee". */
+  title: text('title').notNull(),
+  linkedByPersonId: uuid('linked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp('retired_at', { withTimezone: true }),
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
+}, (t) => [
+  uniqueIndex('account_person_links_current_key').on(t.institutionId, t.personId, t.role).where(sql`${t.retiredAt} IS NULL`),
+  index('account_person_links_institution_idx').on(t.institutionId),
+  check('account_person_links_title_stated', sql`length(btrim(${t.title})) >= 3`),
+  check('account_person_links_retirement_is_complete',
+    sql`(${t.retiredAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL)
+        OR (${t.retiredAt} IS NOT NULL AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
+]);

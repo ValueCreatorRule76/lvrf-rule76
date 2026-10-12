@@ -21,7 +21,31 @@ function isCheckViolation(err: unknown): err is { code: '23514'; message: string
   );
 }
 
-function isUniqueViolation(err: unknown): err is { code: '23505'; message: string; constraint?: string } {
+/**
+ * W1 fix (12 Oct 2026). Postgres's own unique-violation text ("duplicate key
+ * value violates unique constraint persons_email_key") names a constraint
+ * and reads as a crash. The person sees a plain sentence instead; the raw
+ * text and the constraint name still go into `refusals`, for the record.
+ * A message the schema wrote for people (a RAISE in hardening.sql, e.g. a
+ * one-current trigger) is not Postgres's own text and passes unchanged.
+ */
+const PLAIN_UNIQUE: Record<string, (detail: string | undefined) => string> = {
+  industry_measure_exclusions_industry_name_key: (detail) => {
+    const name = detail?.match(/=\([^,]*, (.*)\) already exists/)?.[1];
+    return `${name ? `"${name}" is` : 'That measure is'} already excluded from this pack; an exclusion is not repeated.`;
+  },
+  persons_email_key: (detail) => {
+    const email = detail?.match(/\(email\)=\(([^)]*)\)/)?.[1];
+    return `${email ? `${email} is` : 'That person is'} already in LVRF; select them instead of adding them again.`;
+  },
+};
+export function plainUniqueMessage(err: { message: string; constraint?: string; detail?: string }): string {
+  if (!err.message.startsWith('duplicate key value violates unique constraint')) return err.message;
+  const plain = err.constraint ? PLAIN_UNIQUE[err.constraint] : undefined;
+  return plain ? plain(err.detail) : 'That is already in LVRF; nothing was written. Select the existing one instead.';
+}
+
+function isUniqueViolation(err: unknown): err is { code: '23505'; message: string; constraint?: string; detail?: string } {
   return (
     typeof err === 'object' &&
     err !== null &&
@@ -160,7 +184,7 @@ export async function handleGovernanceError(
 
   await recordRefusal(pool, req, context, err.code, err.constraint ?? null, err.message);
 
-  res.status(status).json({ message: err.message });
+  res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : err.message });
   return true;
 }
 

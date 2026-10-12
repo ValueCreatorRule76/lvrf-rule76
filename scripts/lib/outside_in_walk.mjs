@@ -66,12 +66,25 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   check(await signIn(S_EMAIL), 'signs in by session');
   check(await openAccount(), 'the account page shows the outside-in walk');
   check((await stateOf('w1')) === 'next' && (await stateOf('w2')) === 'waiting', 'W1 is next; W2 waits');
-  await setField(step('w1'), 'Full name', 'Walk Analyst (external analyst of record)');
-  await setField(step('w1'), 'Email', `walk.analyst.${Date.now()}@outside-in.example`);
-  await setField(step('w1'), 'Title', 'External analyst of record — not an employee. Asserting from published material.');
-  await sleep(200); await click(step('w1'), 'Add the person');
-  check(await done('w1'), 'W1 done: the analyst of record');
-  const person = psql(`SELECT id FROM persons WHERE institution_id = '${INST}' ORDER BY created_at DESC LIMIT 1`);
+  // W1 fix: adding someone already in LVRF (here the steward, by his own
+  // email) is refused in plain words — no Postgres text, no constraint name.
+  const addPerson = `(${step('w1')}).querySelector('[data-testid=w1-add-person]')`;
+  await setField(addPerson, 'Full name', 'The steward, added again');
+  await setField(addPerson, 'Email', S_EMAIL);
+  await sleep(200); await click(addPerson, 'Add the person');
+  check(await waitFor(`(${addPerson}).textContent.includes('already in LVRF; select them instead')`),
+    'W1: an existing person\'s email is refused in plain words ("already in LVRF; select them instead")');
+  check(await ev(`!/duplicate key|persons_email_key|constraint/i.test((${step('w1')}).textContent)`), '  ...no Postgres text and no constraint name on the page');
+  await shot('w1_plain_refusal', '[data-testid=w1]');
+  // The honest analyst of record: the signed-in steward himself, named (not copied).
+  const nameExisting = `(${step('w1')}).querySelector('[data-testid=w1-name-existing]')`;
+  check(await ev(`[...(${nameExisting}).querySelectorAll('option')].find(o=>o.selected)?.textContent.includes('(you)')`), 'W1: "Name an existing person" defaults to you');
+  await click(nameExisting, 'Name the analyst of record');
+  check(await done('w1'), 'W1 done: the steward named analyst of record, with the title for this account');
+  check(await ev(`(${step('w1')}).querySelector('[data-testid=w1-analysts]')?.textContent.includes('External analyst of record')`), '  ...shown with his title on this account');
+  const person = psql(`SELECT id FROM persons WHERE email = '${S_EMAIL}'`);
+  check(psql(`SELECT count(*) FROM persons WHERE email = '${S_EMAIL}'`) === '1' && psql(`SELECT count(*) FROM persons WHERE institution_id = '${INST}'`) === '0',
+    '  ...no person row created: one row for him in LVRF, none on the account');
   await setField(step('w2'), 'Offering', 'skillsoft_compliance_suite');
   await setField(step('w2'), 'Owner', person);
   await setField(step('w2'), 'Capability name', 'Walk safety capability');

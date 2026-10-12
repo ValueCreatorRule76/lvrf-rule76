@@ -107,9 +107,24 @@ export function outsideInWalkRouter(pool: Pool): Router {
           ORDER BY e.created_at, e.id`,
         [institutionId],
       );
+      // W1 fix: the account's analysts of record (existing staff, linked with
+      // a per-account title), and the tenant's current staff to choose from.
+      const { rows: analysts } = await pool.query(
+        `SELECT l.id AS link_id, p.id, p.full_name, p.email, l.title, lb.full_name AS linked_by, l.linked_at
+           FROM account_person_links l JOIN persons p ON p.id = l.person_id JOIN persons lb ON lb.id = l.linked_by_person_id
+          WHERE l.institution_id = $1 AND l.role = 'analyst_of_record' AND l.retired_at IS NULL
+          ORDER BY l.linked_at, l.id`,
+        [institutionId],
+      );
+      const { rows: staff } = await pool.query(
+        `SELECT id, full_name, email FROM persons
+          WHERE tenant_id = $1 AND NOT simulated AND deleted_at IS NULL AND superseded_by_id IS NULL
+          ORDER BY full_name, id`,
+        [inst.tenant_id],
+      );
       res.json({
         institution: { id: inst.id, name: inst.name, industry_slug: inst.industry_slug, industry_name: inst.industry_name },
-        persons, offerings, pack, capabilities, engagements,
+        persons, analysts, staff, offerings, pack, capabilities, engagements,
       });
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { isAnalystOfRecord } from './accountPersonLinks.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -111,14 +112,16 @@ export function offeringAttachmentRouter(pool: Pool): Router {
         return;
       }
 
+      // W1 fix: the account's own people, or its current analyst of record
+      // (account_person_links) — who may own what he asserts.
       const { rows: [ownerPerson] } = await client.query<{ id: string }>(
         `SELECT id FROM persons
           WHERE id = $1 AND institution_id = $2 AND simulated = false AND deleted_at IS NULL`,
         [ownerPersonId, institutionId],
       );
-      if (!ownerPerson) {
+      if (!ownerPerson && !(await isAnalystOfRecord(client, institutionId, ownerPersonId))) {
         res.status(422).json({
-          message: `owner_person_id does not belong to institution ${institutionId}, or is simulated: ${ownerPersonId}`,
+          message: `owner_person_id is neither a person of institution ${institutionId} nor its analyst of record, or is simulated: ${ownerPersonId}`,
         });
         return;
       }

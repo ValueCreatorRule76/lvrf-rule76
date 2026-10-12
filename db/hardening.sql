@@ -1707,6 +1707,85 @@ CREATE TRIGGER executive_summaries_guard
   FOR EACH ROW EXECUTE FUNCTION lvrf_executive_summary_guard();
 
 -- ------------------------------------------------------------------
+-- 23. W1 fix (0037, 12 Oct 2026) — account_person_links
+--     (placed before section 14 so the manifest includes these)
+-- ------------------------------------------------------------------
+-- An existing person named in a role on an account (analyst of record),
+-- with the title stated for that account. A link never makes a person
+-- customer-side: commit, verify and attestation read persons.institution_id,
+-- which a link does not touch.
+--   account_person_links_guard  BEFORE INSERT OR UPDATE —
+--     INSERT: the account is of the link's tenant; the person is current,
+--             non-simulated STAFF of that tenant (persons.tenant_id); the
+--             linker is current staff of it too; inserted current.
+--     UPDATE: append-only but for the withdrawal, once.
+--   account_person_links_audit, _no_delete.
+-- These bind the app's code paths, not yet the lvrf_app role (OWN-1).
+--
+-- CONSEQUENCE: 126 -> 129.
+
+CREATE OR REPLACE FUNCTION lvrf_account_person_link_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  inst_tenant uuid;
+  ok boolean;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+    IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: account_person_links: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+    END IF;
+    SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
+      INTO ok FROM persons p WHERE p.id = NEW.person_id;
+    IF NOT coalesce(ok, false) THEN
+      RAISE EXCEPTION 'LVRF: account_person_links: % is not current, non-simulated staff of the tenant; only the tenant''s own people are linked to an account (a customer''s people belong to it directly).', NEW.person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+    END IF;
+    SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL)
+      INTO ok FROM persons p WHERE p.id = NEW.linked_by_person_id;
+    IF NOT coalesce(ok, false) THEN
+      RAISE EXCEPTION 'LVRF: account_person_links: the linker % is not current staff of the tenant.', NEW.linked_by_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+    END IF;
+    IF NEW.retired_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: account_person_links: a link is inserted current; withdrawal is a later act.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.retired_at IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: account_person_links: link % is already withdrawn; a withdrawal is not amended.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+     OR NEW.institution_id IS DISTINCT FROM OLD.institution_id OR NEW.person_id IS DISTINCT FROM OLD.person_id
+     OR NEW.role IS DISTINCT FROM OLD.role OR NEW.title IS DISTINCT FROM OLD.title
+     OR NEW.linked_by_person_id IS DISTINCT FROM OLD.linked_by_person_id OR NEW.linked_at IS DISTINCT FROM OLD.linked_at THEN
+    RAISE EXCEPTION 'LVRF: account_person_links: only the withdrawal may be written after a link is made; withdraw it and link again to change the title.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS account_person_links_audit ON account_person_links;
+CREATE TRIGGER account_person_links_audit
+  AFTER INSERT OR UPDATE ON account_person_links
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS account_person_links_no_delete ON account_person_links;
+CREATE TRIGGER account_person_links_no_delete
+  BEFORE DELETE ON account_person_links
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A person named on an account stays on record; withdraw the link instead (POST /api/account-person-links/:id/retire).'
+  );
+
+DROP TRIGGER IF EXISTS account_person_links_guard ON account_person_links;
+CREATE TRIGGER account_person_links_guard
+  BEFORE INSERT OR UPDATE ON account_person_links
+  FOR EACH ROW EXECUTE FUNCTION lvrf_account_person_link_guard();
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1787,6 +1866,8 @@ COMMIT;
 --   reference_example_markers_one_current (deferred),
 --   executive_summaries_audit, executive_summaries_no_delete,
 --   executive_summaries_guard — 7
+--   23: account_person_links_audit, account_person_links_no_delete,
+--   account_person_links_guard — 3
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
@@ -1803,7 +1884,7 @@ COMMIT;
 --   offering_capabilities, person_roles, reflection_evidence — 8
 --   18: research_prompts_audit, research_prompts_no_delete,
 --   research_prompts_immutable — 3
---   Total: 126 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 129 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -1811,15 +1892,16 @@ COMMIT;
 --   Section 19 took it 102 -> 103: institution_entities_one_current.
 --   0035 (O1) took it 103 -> 111: value_levers' four, section 20's four.
 --   0036 (O2) took it 111 -> 126: value_hypotheses' and
---   reference_example_markers' four each, section 22's seven.)
+--   reference_example_markers' four each, section 22's seven.
+--   0037 (W1 fix) took it 126 -> 129: section 23's three.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 126.
+-- TRUNCATE in section 14 fail. Total stays 129.
 --
--- Expect 192 rows here: information_schema.triggers emits one row per event
+-- Expect 197 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -1841,7 +1923,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

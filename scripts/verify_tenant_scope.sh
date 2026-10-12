@@ -135,6 +135,10 @@ LINK_A="$(q "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id
 OUTCOME_A_INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME_A'")"
 MARKER_A="$(q "INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
   SELECT '$TENANT_A', '$INST_A', 'demonstration', 'Verification fixture citation.', 'Verification fixture marker.', steward_person_id FROM tenants WHERE id = '$TENANT_A' RETURNING id" | head -1)"
+# W1 fix: tenant A's staff named analyst of record on A's account (the
+# guard admits it: A's own staff, linked by A's staff).
+APL_A="$(q "INSERT INTO account_person_links (tenant_id, institution_id, person_id, role, title, linked_by_person_id)
+  VALUES ('$TENANT_A', '$INST_A', '$STAFF_A', 'analyst_of_record', 'Verification analyst of record', '$STAFF_A') RETURNING id" | head -1)"
 # Tenant B's own lever and summary, for the body-id cases.
 LEVER_B="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
   SELECT tenant_id, id, 'Tenant B lever (verification)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$STAFF_B' FROM industry_measures WHERE id = '$MEASURE_OTHER' RETURNING id" | head -1)"
@@ -142,7 +146,7 @@ SUMMARY_B="$(q "INSERT INTO executive_summaries (tenant_id, institution_id, lens
   VALUES ('$TENANT_B', '$INST_B', 'general', 'Tenant B summary, a verification fixture of sufficient length.', '$STAFF_B', false) RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST ARR_A ARR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST APL_A ARR_A ARR_A2; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -193,7 +197,7 @@ curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST ARR_A ARR_A2
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A ARR_A ARR_A2
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

@@ -30,7 +30,8 @@ SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 ROUTE=server/routes/outsideInWalk.ts
 CARD=client/src/components/OutsideInWalk.tsx
 EVCARD=client/src/components/workbench/AddEvidenceCard.tsx
-for f in "$ROUTE" "$CARD" "$EVCARD"; do cp "$f" "$W/$(basename "$f").orig"; done
+REFUSAL=server/lib/refusal.ts
+for f in "$ROUTE" "$CARD" "$EVCARD" "$REFUSAL"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
@@ -40,7 +41,7 @@ cleanup() {
   stop_server
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for f in "$ROUTE" "$CARD" "$EVCARD"; do
+  for f in "$ROUTE" "$CARD" "$EVCARD" "$REFUSAL"; do
     cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }
   done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
@@ -132,6 +133,47 @@ expect GET "/api/institutions/$A_API/walk" "" 200 "the walk read after every ste
 [ "$(rj "[b.persons.length, b.capabilities[0].claims.length, b.engagements[0].retired, b.engagements[0].outcomes[0].metric.industry_measure_id==='$E_M', b.engagements[0].outcomes[0].evidence.map(e=>e.supports).sort().join('+'), b.engagements[0].runs[0].locked_at!==null].join()")" = "1,1,true,true,baseline+impact_basis,true" ] \
   && ok "  ...every step reflected: person, claim, basis, evidence, locked run, retired" || bad "  ...$(head -c 400 "$W/r.json")"
 
+step "4b. W1 fix: an existing person as analyst of record; refusals in plain words"
+A_W1="$(acct 'Walk W1 account')"
+REF_W1="$(q "SELECT count(*) FROM refusals")"
+expect POST "/api/institutions/$A_W1/inputs" "{\"persons\":[{\"full_name\":\"The steward, added again\",\"email\":\"$S_EMAIL\",\"title\":\"x\"}]}" 409 "adding someone already in LVRF (the steward's own email)" "$S_EMAIL is already in LVRF; select them instead of adding them again."
+grep -qiE 'duplicate key|persons_email_key|constraint' "$W/r.json" && bad "  ...the response carries Postgres text or a constraint name: $(cat "$W/r.json")" || ok "  ...no Postgres text and no constraint name in the response"
+[ "$(q "SELECT count(*) FROM refusals")" = "$((REF_W1 + 1))" ] && [ "$(q "SELECT constraint_name || '|' || sqlstate FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")" = "persons_email_key|23505" ] \
+  && ok "  ...recorded in refusals with the constraint, for the record (never shown)" || bad "  ...refusal row"
+[ "$(q "SELECT count(*) FROM persons WHERE email = '$S_EMAIL'")" = "1" ] && ok "  ...no duplicate person" || bad "  ...duplicate"
+CUST_W1="$(q "SELECT id FROM persons WHERE institution_id = '$A_API' ORDER BY created_at LIMIT 1")"
+SIM_STAFF="$(q "INSERT INTO persons (tenant_id, full_name, email, simulated) VALUES ('$TEN', 'Simulated staff (walk verification)', 'sim.staff.$TS@walk.example', true) RETURNING id" | head -1)"
+X_STAFF="$(q "SELECT id FROM persons WHERE tenant_id = '$TEN_X' ORDER BY created_at LIMIT 1")"
+AOR="/api/institutions/$A_W1/analyst-of-record"
+TITLE='External analyst of record — not an employee. Asserting from published material.'
+expect POST "$AOR" "{\"person_id\":\"$S\",\"title\":\"$TITLE\",\"role\":\"verifier\"}" 400 "a field the route does not take (a role)" "body.role is not a field of this request"
+expect POST "$AOR" "{\"person_id\":\"$S\",\"title\":\"x\"}" 422 "a title under 3 characters" "body.title must state the title on this account"
+expect POST "$AOR" "{\"person_id\":\"$CUST_W1\",\"title\":\"$TITLE\"}" 422 "a customer's person (another account's)" "is not a current member of this tenant's staff"
+[ -n "$X_STAFF" ] && expect POST "$AOR" "{\"person_id\":\"$X_STAFF\",\"title\":\"$TITLE\"}" 422 "another tenant's staff: read as unknown" "is not a current member of this tenant's staff"
+expect POST "$AOR" "{\"person_id\":\"$SIM_STAFF\",\"title\":\"$TITLE\"}" 422 "simulated staff" "is not a current member of this tenant's staff"
+expect POST "$AOR" "{\"person_id\":\"$S\",\"title\":\"$TITLE\"}" 201 "the steward named analyst of record on the account (an existing person, linked)"
+LINK_W1="$(rj b.account_person_link_id)"
+expect POST "$AOR" "{\"person_id\":\"$S\",\"title\":\"$TITLE\"}" 409 "named again" "is already the analyst of record"
+expect GET "/api/institutions/$A_W1/walk" "" 200 "the walk read"
+[ "$(rj "[b.analysts.length, b.analysts[0].id, b.analysts[0].title, b.persons.length, b.staff.some(p=>p.id==='$S')].join('|')")" = "1|$S|$TITLE|0|true" ] \
+  && ok "  ...one analyst of record (the steward, with the title for this account); no person row on the account; the staff list to choose from" || bad "  ...$(head -c 300 "$W/r.json")"
+expect POST "/api/institutions/$A_W1/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"W1 safety capability\",\"owner_person_id\":\"$S\",\"is_primary\":false,\"basis\":\"Verification: owned by the analyst of record.\"}" 201 "the analyst of record owns the capability"
+expect POST "/api/capabilities/$(rj b.capability_id)/industry-measures" "{\"industry_measure_id\":\"$E_M\",\"claim\":\"Verification: training reduces incidents.\"}" 201 "  ...its claim"
+expect POST "/api/institutions/$A_W1/value-outcomes" "{\"engagement_name\":\"W1 engagement\",\"engagement_owner_person_id\":\"$S\",\"capability_name\":\"W1 safety capability\",\"metric\":{\"name\":\"W1 TRIR\",\"unit\":\"incidents per 200,000 hours\",\"direction\":\"decrease\",\"source_system\":\"published disclosures\",\"owner_person_id\":\"$S\"},\"baseline_value\":1.4,\"baseline_measured_at\":\"2025-09-30T00:00:00Z\"}" 201 "the analyst of record owns the engagement (vendor-side, as the schema says)"
+OUT_W1="$(rj b.value_outcome_id)"
+expect POST "/api/value-outcomes/$OUT_W1/commit" "{\"committed_by_person_id\":\"$S\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"target_value\":1.2,\"commitment_note\":\"Verification: the analyst committing.\"}" 422 "but the analyst of record cannot COMMIT a target (not the customer's)" "committed_by_person_id does not belong to institution"
+expect POST "/api/value-outcomes/$OUT_W1/evidence" "$(EVB system_export 'TRIR extract (fixture)' actual)" 201 "  ...(actual evidence)"
+expect POST "/api/value-outcomes/$OUT_W1/measure" '{"actual_value":1.1,"actual_measured_at":"2026-10-12T12:00:00Z"}' 200 "  ...(measured)"
+expect POST "/api/value-outcomes/$OUT_W1/verify" "{\"verified_by_person_id\":\"$S\",\"verified_at\":\"2026-10-12T13:00:00Z\",\"attestation_note\":\"Verification: the analyst verifying.\"}" 422 "and the analyst of record cannot VERIFY the actual (his own assertion)" "does not belong to institution"
+OUT="$(printf 'BEGIN;\nINSERT INTO account_person_links (tenant_id, institution_id, person_id, role, title, linked_by_person_id) VALUES (%s, %s, %s, %s, %s, %s);\nROLLBACK;\n' "'$TEN'" "'$A_W1'" "'$CUST_W1'" "'analyst_of_record'" "'A title'" "'$S'" | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+printf '%s' "$OUT" | grep -qF "only the tenant's own people are linked to an account" && ok "the database refuses to link a customer's person (the guard)" || bad "guard: $OUT"
+OUT="$(printf 'BEGIN;\nUPDATE account_person_links SET title = %s WHERE id = %s;\nROLLBACK;\n' "'A quietly changed title'" "'$LINK_W1'" | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+printf '%s' "$OUT" | grep -qF "only the withdrawal may be written" && ok "  ...and refuses an edited title (withdraw and link again)" || bad "edit: $OUT"
+OUT="$(printf 'BEGIN;\nDELETE FROM account_person_links WHERE id = %s;\nROLLBACK;\n' "'$LINK_W1'" | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+printf '%s' "$OUT" | grep -qF "withdraw the link instead" && ok "  ...and refuses a DELETE" || bad "delete: $OUT"
+expect POST "/api/account-person-links/$LINK_W1/retire" '{"retirement_reason":"Verification: the analyst steps back."}' 200 "the link withdrawn"
+expect POST "/api/institutions/$A_W1/offerings" "{\"offering_key\":\"skillsoft_percipio_platform\",\"capability_name\":\"W1 second capability\",\"owner_person_id\":\"$S\",\"is_primary\":false,\"basis\":\"Verification: after the link is withdrawn.\"}" 422 "  ...after which he no longer owns new things here" "nor its analyst of record"
+
 step "5. The card, in a browser (sign-in by session)"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) &
 VITE_PID=$!
@@ -168,7 +210,13 @@ expect GET "/api/institutions/$INST_X/walk" "" 404 "B2 restored: 404 again"
 # B3 — the evidence card's outcomeId path removed: evidence cannot be added before a run.
 edit "$EVCARD" "  const outcomeId = outcomeIdProp ?? run?.payload.valueOutcomeId;" "  const outcomeId = run?.payload.valueOutcomeId ?? (outcomeIdProp && undefined);"
 sleep 5; walk break-evidence "$A_UI2"; restore "$EVCARD"
-for f in "$ROUTE" "$CARD" "$EVCARD"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
+# B4 — the plain-message mapping removed: Postgres's own text reaches the person.
+edit "$REFUSAL" "res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : err.message });" "res.status(status).json({ message: err.message });"
+stop_server; start_server
+expect POST "/api/institutions/$A_W1/inputs" "{\"persons\":[{\"full_name\":\"The steward, again\",\"email\":\"$S_EMAIL\"}]}" 409 "B4: without the mapping, the raw Postgres text is shown — the mapping is what keeps it plain" "duplicate key value violates unique constraint \"persons_email_key\""
+restore "$REFUSAL"; stop_server; start_server
+expect POST "/api/institutions/$A_W1/inputs" "{\"persons\":[{\"full_name\":\"The steward, again\",\"email\":\"$S_EMAIL\"}]}" 409 "B4 restored: plain again" "is already in LVRF; select them instead"
+for f in "$ROUTE" "$CARD" "$EVCARD" "$REFUSAL"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 
 echo

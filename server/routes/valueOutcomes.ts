@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant, personTenantId } from '../lib/tenantScope.js';
+import { isAnalystOfRecord } from './accountPersonLinks.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -240,14 +241,16 @@ export function valueOutcomesRouter(pool: Pool): Router {
         engagementIdResolved = engagement.id;
         engagementCreated = false;
       } else {
+        // W1 fix: the account's own people, or its current analyst of
+        // record — the engagement owner is vendor-side by design (schema.ts).
         const { rows: [owner] } = await client.query<{ id: string }>(
           `SELECT id FROM persons
             WHERE id = $1 AND institution_id = $2 AND simulated = false AND deleted_at IS NULL`,
           [engagementOwnerPersonId, institutionId],
         );
-        if (!owner) {
+        if (!owner && !(engagementOwnerPersonId && await isAnalystOfRecord(client, institutionId, engagementOwnerPersonId))) {
           res.status(422).json({
-            message: `engagement_owner_person_id does not belong to institution ${institutionId}, or is simulated: ${engagementOwnerPersonId}`,
+            message: `engagement_owner_person_id is neither a person of institution ${institutionId} nor its analyst of record, or is simulated: ${engagementOwnerPersonId}`,
           });
           return;
         }

@@ -21,6 +21,7 @@ import { accountResearchRouter, accountResearchReviewRouter } from './routes/acc
 import { outsideInWalkRouter } from './routes/outsideInWalk.js';
 import { valueLeverRouter, leverOfferingRouter, leverOfferingRetireRouter } from './routes/valueLevers.js';
 import { hypothesisInstitutionRouter, valueHypothesisRouter, referenceExampleRouter } from './routes/valueHypotheses.js';
+import { analystOfRecordRouter, accountPersonLinkRouter } from './routes/accountPersonLinks.js';
 import { industryExclusionsRouter } from './routes/industryExclusions.js';
 import { institutionsIndexRouter } from './routes/institutionsIndex.js';
 import { offeringAttachmentRouter } from './routes/offeringAttachment.js';
@@ -107,6 +108,8 @@ app.use('/api/lever-offerings', leverOfferingRetireRouter(pool));
 app.use('/api/institutions', hypothesisInstitutionRouter(pool));
 app.use('/api/value-hypotheses', valueHypothesisRouter(pool));
 app.use('/api/reference-examples', referenceExampleRouter(pool));
+app.use('/api/institutions', analystOfRecordRouter(pool));
+app.use('/api/account-person-links', accountPersonLinkRouter(pool));
 app.use('/api/business-metrics', validateMetricRouter(pool));
 app.use('/api/business-metrics', metricPackBasisRouter(pool));
 app.use('/api/business-metrics', researchPromptRouter(pool));

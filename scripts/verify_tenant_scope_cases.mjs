@@ -106,6 +106,13 @@ const CASES = [
   { route: 'POST /api/reference-examples/:id/supersede', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/supersede`,
     body: { kind: 'demonstration', source_citation: note('Verification citation.'), note: note('Verification marker.'), supersession_reason: note('Verification: P3 tenant scope checks.') },
     notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
+  // W1 fix: naming an analyst of record, and withdrawing the link.
+  { route: 'POST /api/institutions/:institutionId/analyst-of-record', kind: 'id', path: `/api/institutions/${E.INST_A}/analyst-of-record`,
+    body: { person_id: E.STAFF_A, title: 'Verification analyst' },
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/account-person-links/:id/retire', kind: 'id', path: `/api/account-person-links/${E.APL_A}/retire`,
+    body: { retirement_reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `account person link ${E.APL_A} not found`], target: ['account_person_links', E.APL_A] },
   { route: 'POST /api/reference-examples/:id/retire', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/retire`,
     body: { retirement_reason: note('Verification: P3 tenant scope checks.') },
     notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
@@ -261,6 +268,8 @@ const BODY_CASES = [
   { name: 'executive summary: supersedes_id of another tenant', path: `/api/institutions/${E.INST_A}/executive-summaries`,
     body: (id) => ({ lens: 'chro', body: 'A summary naming a summary by id, for the tenant scope checks.', drafted_with_ai: false, supersedes_id: id }),
     other: E.SUMMARY_B, logged: null },
+  { name: 'analyst of record: person_id of another tenant', path: `/api/institutions/${E.INST_A}/analyst-of-record`,
+    body: (id) => ({ person_id: id, title: 'Verification analyst' }), other: E.STAFF_B, logged: null },
   { name: 'classify: an industry slug only another tenant has', path: `/api/institutions/${E.INST_A_UNCLASSIFIED}/industry`,
     body: (slug) => ({ industry_slug: slug, classification_note: note('P3') }), other: E.SLUG_B, unknown: 'no-such-slug-p3', logged: null },
 ];
