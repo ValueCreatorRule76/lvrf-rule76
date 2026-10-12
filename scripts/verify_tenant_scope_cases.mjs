@@ -70,6 +70,8 @@ const CASES = [
   // nothing to log — another tenant's slug is simply not found.
   { route: 'GET /api/industries/:slug/pack', kind: 'id', path: `/api/industries/${E.SLUG_A}/pack`,
     notFound: [404, `industry '${E.SLUG_A}' not found`], target: null },
+  { route: 'GET /api/industries/:slug/research', kind: 'id', path: `/api/industries/${E.SLUG_A}/research`,
+    notFound: [404, `industry '${E.SLUG_A}' not found`], target: null },
   { route: 'GET /api/institutions', kind: 'list', path: '/api/institutions', aIds: [E.INST_A], bIds: [E.INST_B] },
   { route: 'GET /api/institutions/:id/view', kind: 'id', path: `/api/institutions/${E.INST_A}/view`,
     notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },

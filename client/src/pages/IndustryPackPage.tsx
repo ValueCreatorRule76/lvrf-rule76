@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import { fetchIndustryPack, type IndustryExclusion, type IndustryMeasure, type IndustryPack } from '../api/packs';
 import { Card, Badge } from '../components/workbench/Card';
+import { PackResearch } from '../components/PackResearch';
 
 // Lifecycle statuses this table has ever supported (db/schema.ts's
 // lifecycleStatus enum) mapped to a tone, even though industry_measures'
@@ -214,6 +215,16 @@ export function IndustryPackPage() {
     };
   }, [slug, actor]);
 
+  // Q4c1: after a research write, the pack is refetched IN PLACE — never
+  // back to "loading", which would unmount the Research section and lose
+  // what is only on screen (the agent's exclusion list).
+  const refreshPack = () => {
+    if (!slug) return;
+    fetchIndustryPack(slug).then((r) => {
+      if (r.status === 'ok') setResult(r);
+    });
+  };
+
   if (!actor) {
     return (
       <p className="p-8 text-ink-45">
@@ -252,6 +263,8 @@ export function IndustryPackPage() {
       </p>
 
       <PackBody pack={pack} />
+
+      <PackResearch industry={pack.industry} onPackChanged={refreshPack} />
     </div>
   );
 }

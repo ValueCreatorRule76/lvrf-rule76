@@ -17,7 +17,8 @@ import { apiFetch } from './http';
 
 export type PostResult<T> =
   | { status: 'ok'; data: T }
-  | { status: 'refused'; message: string }
+  /** issues: every problem a 422 named (Q4c1), when the route sends a list — e.g. a parse refused wholesale. */
+  | { status: 'refused'; message: string; issues?: string[] }
   | { status: 'conflict'; message: string }
   | { status: 'error'; message: string };
 
@@ -54,7 +55,8 @@ export async function postGoverned<T>(path: string, body: unknown): Promise<Post
     // err.message exactly as the server sent it — never prefixed, wrapped,
     // appended, or mapped to a friendlier string. That sentence is the
     // product.
-    return { status: 'refused', message: parsed?.message ?? `HTTP ${res.status}` };
+    const issues = Array.isArray(parsed?.issues) ? (parsed.issues as unknown[]).filter((i): i is string => typeof i === 'string') : undefined;
+    return { status: 'refused', message: parsed?.message ?? `HTTP ${res.status}`, ...(issues && issues.length > 0 ? { issues } : {}) };
   }
   if (res.status === 409) {
     return { status: 'conflict', message: parsed?.message ?? `HTTP ${res.status}` };

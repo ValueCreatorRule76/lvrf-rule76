@@ -13,6 +13,8 @@ export interface GovernedActionProps<T> {
   renderSuccess: (data: T) => ReactNode;
   /** Defaults to {} — a governed action with no input to collect usually posts an empty body. */
   body?: unknown;
+  /** Called once with the response data after a write is recorded — for a caller that must refetch. */
+  onSuccess?: (data: T) => void;
 }
 
 /**
@@ -28,6 +30,7 @@ export function GovernedAction<T>({
   disabledReason,
   renderSuccess,
   body = {},
+  onSuccess,
 }: GovernedActionProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
@@ -42,6 +45,7 @@ export function GovernedAction<T>({
     const r = await postGoverned<T>(path, body);
     setSubmitting(false);
     setResult(r);
+    if (r.status === 'ok') onSuccess?.(r.data);
   }
 
   return (

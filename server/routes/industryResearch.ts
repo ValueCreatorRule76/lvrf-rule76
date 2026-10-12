@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
-import { isOtherTenant } from '../lib/tenantScope.js';
+import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
 import {
   INDUSTRY_MEASURE_CONTRACT, PROMPT_TEMPLATE_VERSION, buildIndustryMeasurePrompt, contractColumns, validateMeasure,
@@ -159,9 +159,59 @@ function validateExclusionList(body: Record<string, unknown>, issues: string[]):
 // POST /api/industries/:industryId/research-results — parses a research
 // agent's response for one industry into pending research_results rows.
 // Does not create industry_measures rows; see the file comment. Also
-// POST /api/industries/:industryId/research-prompts (Q4b), below it.
+// POST /api/industries/:industryId/research-prompts (Q4b), and
+// GET /api/industries/:slug/research (Q4c1), below it.
 export function industryResearchRouter(pool: Pool): Router {
   const router = Router();
+
+  // GET /api/industries/:slug/research (Q4c1) — the pack's research state,
+  // for the pack page's Research section: the prompts on record (with
+  // their text) and the results still pending review. A READ, inside the
+  // D1 seam because it is research state; it writes nothing.
+  //
+  // A separate route, not more fields on GET /:slug/pack: that is the
+  // account manager's read, and it stays byte-identical. Tenant in the
+  // WHERE, exactly as the pack GET: another tenant's slug is simply not
+  // found (no single row of another tenant to log).
+  //
+  // Pending only — an accepted result is already on the pack (with its
+  // review), and a rejected one is a decision, not work.
+  router.get('/:slug/research', async (req, res) => {
+    try {
+      const tenantId = actorTenantId(req);
+      const slug = req.params.slug;
+      const { rows: [industry] } = await pool.query<{ id: string; name: string; slug: string }>(
+        'SELECT id, name, slug FROM industries WHERE slug = $1 AND tenant_id = $2',
+        [slug, tenantId],
+      );
+      if (!industry) {
+        res.status(404).json({ message: `industry '${slug}' not found` });
+        return;
+      }
+      const { rows: prompts } = await pool.query(
+        `SELECT p.id, p.generated_at, g.full_name AS generated_by, p.contract_version, p.template_version,
+                p.prompt_sha256, cardinality(p.listed_measure_ids) AS listed_measures,
+                cardinality(p.listed_exclusion_ids) AS listed_exclusions,
+                (SELECT count(*)::int FROM research_results r WHERE r.prompt_id = p.id) AS results_count,
+                p.prompt_text
+           FROM research_prompts p JOIN persons g ON g.id = p.generated_by_person_id
+          WHERE p.industry_id = $1 AND p.result_kind = 'industry_measure'
+          ORDER BY p.generated_at DESC, p.id`,
+        [industry.id],
+      );
+      const { rows: pending } = await pool.query(
+        `SELECT r.id, r.field_name, r.parsed_at, pb.full_name AS parsed_by, r.research_tool,
+                r.research_query, r.prompt_id, r.contract_version, r.raw_response
+           FROM research_results r JOIN persons pb ON pb.id = r.parsed_by_person_id
+          WHERE r.industry_id = $1 AND r.result_kind = 'industry_measure' AND r.review_state = 'pending'
+          ORDER BY r.parsed_at, r.field_name, r.id`,
+        [industry.id],
+      );
+      res.json({ industry, contract_version_now: INDUSTRY_MEASURE_CONTRACT.version, prompts, pending });
+    } catch (err) {
+      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+    }
+  });
 
   router.post('/:industryId/research-results', async (req, res) => {
     const client = req.dbClient!;

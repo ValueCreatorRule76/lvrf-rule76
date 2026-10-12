@@ -40,6 +40,10 @@ export interface GovernedFormProps<T> {
   canSubmit: boolean;
   renderSuccess: (data: T) => ReactNode;
   submitLabel?: string;
+  /** As GovernedAction's: a precondition the caller already knows has failed (e.g. a steward-only act, Q4c1). Set, every field and the button are disabled and this is shown; no request is attempted. The server stays the authority. */
+  disabledReason?: string;
+  /** Called once with the response data after a write is recorded — for a caller that must refetch. */
+  onSuccess?: (data: T) => void;
 }
 
 export function GovernedForm<T>({
@@ -51,20 +55,24 @@ export function GovernedForm<T>({
   canSubmit,
   renderSuccess,
   submitLabel = 'Submit',
+  disabledReason,
+  onSuccess,
 }: GovernedFormProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const disabled = !actor || !canSubmit || submitting || result?.status === 'ok';
+  const blockedLocally = Boolean(disabledReason);
+  const disabled = blockedLocally || !actor || !canSubmit || submitting || result?.status === 'ok';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!actor || !canSubmit || submitting) return;
+    if (blockedLocally || !actor || !canSubmit || submitting) return;
     setSubmitting(true);
     const r = await postGoverned<T>(path, buildBody());
     setSubmitting(false);
     setResult(r);
+    if (r.status === 'ok') onSuccess?.(r.data);
   }
 
   return (
@@ -86,7 +94,16 @@ export function GovernedForm<T>({
         </div>
       )}
 
-      <fieldset disabled={!actor} className="m-0 min-w-0 border-0 p-0">
+      {actor && disabledReason && (
+        <div className="mb-4 border-l-[3px] border-gold bg-offwhite px-3.5 py-3">
+          <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
+            Not yours to record
+          </span>
+          <p className="m-0 mt-1 text-[12.5px] text-ink">{disabledReason}</p>
+        </div>
+      )}
+
+      <fieldset disabled={!actor || blockedLocally} className="m-0 min-w-0 border-0 p-0">
         <div className="mb-4 border border-rule bg-rule-soft px-3 py-3">
           <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[.16em] text-gold-ink">
             {provenanceLabel}
@@ -113,6 +130,7 @@ export function GovernedForm<T>({
       <button
         type="submit"
         disabled={disabled}
+        title={blockedLocally ? disabledReason : undefined}
         className={
           'border border-silver px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-[.1em] ' +
           (disabled
@@ -162,6 +180,14 @@ export function ResultBlock<T>({
           {result.status === 'refused' ? 'Write refused' : 'Write conflict'}
         </span>
         <p className="m-0 text-[12.5px] text-offwhite/[.82]">{result.message}</p>
+        {/* Every issue the server named, verbatim (Q4c1) — a parse is
+            refused wholesale, and the list is what tells the person what
+            to re-run. */}
+        {result.status === 'refused' && result.issues && (
+          <ul className="m-0 mt-2 list-disc pl-5 text-[12px] text-offwhite/[.82]">
+            {result.issues.map((i, k) => <li key={k} className="py-0.5">{i}</li>)}
+          </ul>
+        )}
       </div>
     );
   }
