@@ -9119,3 +9119,128 @@ account succeeds, the "Recorded" block carries **"Open account →"**, linking t
 `/accounts/<institution_id>`. Until now there was no way into a new account from the
 card. Verified in `verify_account_research.sh` (156/0): created through the card, the
 link points at the new id and opens the account with its Research section.
+
+### Scotts account research on prod — read-only check, 12 October 2026
+
+Read as `lvrf_app`. All of it is through Q4h's routes, by Brad.
+
+- **The entity:** The Scotts Miracle-Gro Company, `sec_cik` **0000825542**, current.
+  Its evidence is `public_filing`, **`citation_resolved` by Brad Piver**, AI-sourced,
+  not source-verified.
+- **The regime:** `public_filer`, as of **2025-09-30**, citing the FY2025 10-K cover.
+- **Six facts, each with evidence `citation_resolved = true` by Brad Piver (H1),
+  `ai_sourced = true`, `source_verified = false`, confidence `low`:**
+  - **revenue** 3,413,100,000 USD and **headcount** 5,200 people, as of 2025-09-30
+    (FY2025 10-K, Item 7 and Item 1);
+  - **stated priority** "The health and safety of associates", as of 2025-09-30
+    (10-K, Item 1);
+  - **systems** SAP ECC, SAP Business Technology Platform (BTP) and SAP S/4HANA, as
+    of 2026-01-08. These are evidence `observation` (H3): a job posting on Built In,
+    not a filing.
+- **Two prompts** (entity, facts), contract v1. **1 parse refusal, on record (L8).**
+- **Named, standing as written:**
+  - the stored priority reads "…of associates", not "…of our associates";
+  - **the three system facts' review notes say "Form 10-K for the fiscal year ended
+    September 30, 2025", while their citation is the job posting.** The evidence
+    kind is right (`observation`); the note names the wrong source.
+- **What "UNVERIFIED" measures, and what it does not:**
+  - The facts card's badge reads `evidence.source_verified`: Rule 6's disclosure gate,
+    whether the figure has been verified against its source of record. Nothing in the
+    research path sets it, and it never should automatically.
+  - **Opening the citation is a different fact:** `citation_resolved`, recorded by
+    H1. It is the human gate between AI-sourced text and evidence (AMENDMENT-005
+    Art. IV), and it is what lifts D2's derived basis from **assumed**. A resolved
+    public filing derives as **published**; the job posting as **inferred**.
+  - **The facts card does not show `citation_resolved`.** `/view` does not select it,
+    though its comment says it does. So a fact Brad opened looks identical to one
+    nobody opened. **Queued as a display fix (Q4i)**, with the "Open account →" link.
+- **TRIR, for Q4d (researched 12 Oct, for the baseline Brad asked for):**
+  - **The latest Scotts publishes** is the *2026 Corporate Responsibility Disclosure
+    Report* (published May 2026, covering FY25, 1 Oct 2024 – 30 Sep 2025), page 21,
+    "Occupational health and safety metrics":
+    - **Total Recordable Incident Rate (TRIR): FY23 1.5 · FY24 1.7 · FY25 1.4**;
+    - recordable injuries 95 · 112 · 93.
+  - **The table does not state the rate's denominator.** It cites SASB RT-CH-320a.1,
+    whose TRIR is per 200,000 hours. **Confirm before entering.**
+  - **The label changed** from the 2022 report's "Total Incident Rate" (FY2021 2.28)
+    to "Total Recordable Incident Rate". So the two may not be one series.
+  - **The 2025 report (FY24) sits behind a password-protected viewer.** It was not
+    read; the 2026 report restates FY24.
+  - **The baseline for Q4d is therefore TRIR 1.4, FY25, as of 2025-09-30,** from that
+    report, unless the denominator check says otherwise.
+
+## Q4c2 — the outside-in walk card on the account page — 12 October 2026
+
+Plan §4c, approved by Brad, with the change that Scotts' baseline is the latest
+published (above). There is **no migration, no new write route and no hardening
+change.**
+
+### What was built
+
+- **`GET /api/institutions/:institutionId/walk`** (`routes/outsideInWalk.ts`), a read,
+  tenant-checked (logged), with a tenant-scope case. It returns everything the card
+  needs:
+  - the account's people;
+  - the tenant's offering catalog;
+  - the account's pack, with definition and confounders;
+  - capabilities and their claims;
+  - engagements with outcomes (metric, baseline, target, evidence by `supports`),
+    runs, and retired.
+  - Dates are rendered as **UTC calendar dates**.
+  - `/view` is untouched.
+- **The card "Outside-in walk"** on the account page, below the facts (not on the
+  tenant's own record). Nine steps, each **done / next / waiting**, each an existing
+  route under the session:
+  - **W1, analyst of record:** `/inputs`.
+  - **W2, offering and capability:** `/offerings`.
+  - **W3, the claim on a pack entry:** the entry's **definition, unit and confounders
+    shown above the claim box**.
+  - **W4, the value outcome:** **no target field**; "zero is a value".
+  - **W5, pack basis:** offered only for an entry the capability claims.
+  - **W6, evidence** before any run, through `AddEvidenceCard`, now bindable to an
+    outcome. It is hidden once a run is locked.
+  - **W7, produce:** banner, note, and a run source label, all required by the route.
+  - **W8, lock.**
+  - **W9, retire the reference engagement:** **steward-only, disabled for anyone
+    else, naming the steward.**
+  - **Nothing is prefilled from a source.**
+- **`AddEvidenceCard`** takes `outcomeId` as well as `run`. The run page's use is
+  unchanged.
+
+### Gate A
+
+- **`verify_outside_in_walk.sh`: 80 passed, 0 failed,** on fictional accounts.
+  - **The read:** shape and pack confounders; another tenant → 404.
+  - **The routes, with §4c's cases:**
+    - a claim and a basis on another industry's entry → 422;
+    - a second claim, and a second basis → 409 (final);
+    - **baseline 0 accepted, target null**;
+    - **a vendor publication as the actual → refused by the database** ("vendor-published
+      evidence may not support a measured actual");
+    - the baseline and the vendor claim (`impact_basis`) recorded before any run;
+    - produce; lock; a second lock → 409;
+    - **retire by a non-steward → 403**, by the steward → 200;
+    - the read reflects every step.
+  - **The browser walk, by session, screenshots looked at:**
+    - W1–W8 as the steward, with the confounders above the claim, no target field,
+      the evidence before any run, and one locked run;
+    - X sees W9 disabled, naming the steward;
+    - the steward retires.
+  - **Breaks:**
+    - **the client's W9 gate removed:** X submits; the server 403s; the engagement
+      stays current;
+    - **the read's tenant check removed:** another tenant's walk is served;
+    - **the evidence card's `outcomeId` path removed:** evidence cannot be added
+      before a run.
+  - **Two defects found in the screenshots and fixed:**
+    - **W4 showed the baseline date a day early** (the timestamp rendered in the
+      server's time zone, then cut); the read now renders UTC dates, and the walk
+      checks the date as entered;
+    - **W6 still offered evidence after the lock;** it now says evidence would not be
+      in the locked run.
+- **Prod copy, against the deployed `92ae23b`:** 48 GETs identical; the new read 200
+  on both accounts; D2 none.
+- **Regression, at the feat commit's state:** all 26 verify scripts pass, 0 failed.
+  `verify_tenant_scope` has 155 cases (the walk read added). The client `tsc`, build
+  and lint pass; the bundle is **`index-Bi754H_A.js`**. The one lint warning predates
+  this work.
