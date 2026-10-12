@@ -1590,3 +1590,154 @@ reproduce the same ownership.
 - the count of disabled triggers (`pg_trigger.tgenabled <> 'O'`).
 
 Today all are expected to show `lvrf_app` as owner. After OWN-1, none.
+
+### OWN-1, the build and Gate B plan (planned 12 Oct 2026; **not yet approved**)
+
+**New fact from O2's Gate C (prod, read-only).** Besides every table, sequence, type and
+the drizzle schema, **`lvrf_app` owns the database `lvrf`**, and schema `public` is owned
+by `pg_database_owner`, which is to say `lvrf_app`. A schema's owner can drop any object
+in it, and the database owner can create schemas. **So OWN-1 moves the database's
+ownership too**, not only the relations. Every function is already owned by `postgres`;
+the only roles are `lvrf_app` and `postgres`.
+
+#### The pieces
+
+1. **`db/ownership.sql`** (new; idempotent; run as a superuser, per database):
+   - **the roles:** creates `lvrf_owner` (NOLOGIN) and `lvrf_migrate` (LOGIN, no
+     password in the file: set from a psql variable), grants `lvrf_owner` to
+     `lvrf_migrate`, and `ALTER ROLE lvrf_migrate SET role = 'lvrf_owner'`, so every
+     migration session creates objects owned by `lvrf_owner`;
+   - **the ownership:** `ALTER DATABASE … OWNER TO lvrf_owner` (this moves `public`
+     too), then an explicit loop that hands every table, sequence, type and the
+     drizzle schema owned by `lvrf_app` to `lvrf_owner`;
+     - **Not `REASSIGN OWNED`:** it reaches shared objects across the cluster, and the
+       verify clones live in the same cluster;
+     - the loop is the one `restore_prod_copy.sh` already uses, with the owner changed;
+   - **the grants**, `lvrf_app`'s exact data privileges, derived from the code:
+     - CONNECT and TEMP on the database; USAGE on `public` and `drizzle`;
+     - SELECT and INSERT on every table;
+     - UPDATE only on the tables the server and scripts UPDATE today: `sessions`,
+       `value_outcomes`, `person_credentials`, `research_results`, `value_hypotheses`,
+       `reference_example_markers`, `business_metrics`, `value_runs`, `value_levers`,
+       `tenants`, `persons`, `lever_offerings`, `institutions`, `institution_facts`,
+       `institution_entities`, `industry_measures`, `engagements`, `access_grants`.
+       This list is from a grep of `UPDATE <table>`; Gate A's full regression is what
+       proves it complete (a missing grant fails a script with "permission denied");
+     - **no DELETE or TRUNCATE anywhere** (no code deletes, and the no-delete triggers
+       assume it);
+     - USAGE and SELECT on the sequences; EXECUTE on the `lvrf_*` functions;
+     - **no CREATE** on the database or `public`;
+   - **`ALTER DEFAULT PRIVILEGES FOR ROLE lvrf_owner IN SCHEMA public`:** a new table
+     grants `lvrf_app` SELECT and INSERT, and its sequences USAGE and SELECT, and
+     nothing else. UPDATE on a new table is a reviewed line in `ownership.sql`, not
+     inherited.
+2. **The assertion.** `hardening.sql` section 23 (a DO block, run after the grants)
+   **fails the hardening run** if:
+   - any relation, type or schema in `lvrf` is owned by `lvrf_app`, or the database is;
+   - `lvrf_app` holds UPDATE, DELETE or TRUNCATE on `audit_log`, `heartbeat_events`
+     or `refusals`;
+   - `lvrf_app` holds DELETE or TRUNCATE anywhere, or CREATE on the database or
+     `public`;
+   - any trigger is disabled.
+
+   No trigger count change.
+3. **Deploy step 5d** (`scripts/lvrf-deploy.sh`) runs the same checks read-only, as
+   `lvrf_app`, and **refuses to restart** on any failure. The deploy script changes, so
+   its self-update re-exec runs once.
+4. **Migrations run as `lvrf_migrate`.**
+   - **On the box:** its URL is in **`~/.lvrf_migrate.env`**, `chmod 600`, owner brad,
+     never in `/srv/lvrf/.env`. The migrate paste line is `DATABASE_URL="$(grep
+     '^DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate`.
+   - **`scripts/check_migrate_role.ts`** (new, read-only) prints `current_user` and
+     `current_role`, and exits 1 unless they are `lvrf_migrate` and `lvrf_owner`. The
+     paste runs it on the line before migrating.
+   - `drizzle.config.ts` keeps its database-name and localhost guards.
+5. **The local harness**, so the verify clones have prod's shape:
+   - **one-time, locally:** the same `ownership.sql` (roles and grants) on the local
+     cluster, and `lvrf_migrate`'s local URL in a git-ignored `.env.migrate`;
+     - the local template `lvrf` stays as it is (**nothing is created in real local
+       `lvrf`**); each clone is converted after `createdb -T lvrf`;
+   - **`scripts/lib/clone.sh`** (new): `make_clone NAME` = `createdb -T lvrf`, then
+     `ownership.sql` on the clone, then migrate as `lvrf_migrate`, then
+     `hardening.sql`. It replaces the four lines repeated in 26 verify scripts, a
+     mechanical change;
+   - **`restore_prod_copy.sh`** hands ownership to `lvrf_owner`, not `lvrf_app`, and
+     runs `ownership.sql`.
+
+#### Gate A (planned)
+
+- **`verify_ownership.sh`**, on a clone converted as above, **as `lvrf_app`**. Each
+  attempt must be refused, and only the database's refusal counts:
+  - `DROP TRIGGER value_runs_locked_immutable`;
+  - `ALTER TABLE … DISABLE TRIGGER value_hypotheses_guard`;
+  - `GRANT UPDATE ON audit_log TO lvrf_app`;
+  - `ALTER TABLE institutions ADD COLUMN x int`;
+  - `CREATE TABLE public.x (…)`;
+  - `DROP TABLE` on a governed table;
+  - `TRUNCATE refusals`;
+  - `SET session_replication_role = replica`;
+  - `ALTER DATABASE … OWNER TO lvrf_app`.
+- **And as `lvrf_migrate`:** a test migration creates a table owned by `lvrf_owner`,
+  with the default privileges applied (SELECT and INSERT for `lvrf_app`, no UPDATE).
+- **Deliberate breaks** (as the superuser, named):
+  - **B1:** one table handed back to `lvrf_app` → the hardening assertion fails, and
+    step 5d refuses;
+  - **B2:** UPDATE granted on `audit_log` → the same;
+  - **B3:** a migration run as `lvrf_app` → its new table is `lvrf_app`'s, and the
+    assertion fails;
+  - **B4:** a trigger disabled → the assertion fails.
+- **The proof you asked for:** the three attempts, as `lvrf_app`, on a prod copy
+  converted by `ownership.sql` (DROP TRIGGER, GRANT on `audit_log`, DISABLE TRIGGER),
+  each refused.
+- **The full regression on converted clones** is what proves `lvrf_app`'s grants are
+  enough: every route and script runs as `lvrf_app`. The tenant-scope coverage is
+  unchanged.
+- **Prod-copy equivalence:** every GET identical before and after conversion. No API
+  changes.
+
+#### Gate B (planned pastes, a STOP after each)
+
+1. **Read-only pre-check:**
+   - HEAD;
+   - the run-hash check (with `DATABASE_URL` inline);
+   - the ownership baseline (as in O2's Gate C);
+   - `pg_hba.conf`'s rules for 127.0.0.1, read with `sudo cat` (**if sudo asks for a
+     password, stop and run it yourself**), to confirm a new local login can
+     authenticate with scram.
+2. **Backup:** `sudo -u postgres pg_dump -Fc lvrf`, `chmod 600`.
+3. **Roles and ownership, as `postgres`:**
+   - the password is generated on the box (`openssl rand -hex 24`), written straight to
+     `~/.lvrf_migrate.env` (`chmod 600`), and passed to `ownership.sql` as a psql
+     variable read from that file. **It is never echoed or typed**;
+   - then `ownership.sql`;
+   - then `check_migrate_role.ts`, with the migrate URL inline;
+   - then the baseline again: `lvrf_owner` owns everything, and `lvrf_app` only its
+     grants.
+4. **Pull, migrate as `lvrf_migrate`, harden:**
+   - **expected:** no new migration; hardening exit 0 with section 23's assertion
+     passing; **126 triggers, manifest 126** (unchanged);
+   - **the proof on prod,** read-only: `has_table_privilege` and ownership, showing
+     `lvrf_app` with no UPDATE, DELETE or TRUNCATE on the append-only tables and owning
+     nothing;
+   - **the three DDL attempts as `lvrf_app` on prod are optional,** your call. Each
+     runs in `BEGIN … ROLLBACK`, so even if one succeeded it would be undone, but
+     `DROP TRIGGER` briefly takes an exclusive lock.
+5. **Deploy**, with `DATABASE_URL` inline:
+   - **expected:** the re-exec line (the deploy script changed); 5c drift none; **5d
+     ownership and privileges as asserted**; smoke checks; the HEAD; the bundle
+     unchanged unless the client changed.
+6. **Gate C (mine, read-only):** the baseline now reads `lvrf_owner` everywhere,
+   `lvrf_app` with exactly its grants, and 0 disabled triggers; plus the run hashes and
+   the cross-tenant refusal check.
+
+#### Decisions for Brad before the build
+
+- **OWN-1-D1, the local cluster.** Run `ownership.sql`'s roles and grants once on this
+  Mac's cluster. This creates roles `lvrf_owner` and `lvrf_migrate` cluster-wide,
+  though nothing in real local `lvrf`: clones are converted, the template is not.
+  Recommendation: yes; otherwise the verify clones can't have prod's shape.
+- **OWN-1-D2, the live DDL attempts on prod** (Gate B step 4). Recommendation: no.
+  The read-only privilege facts on prod, plus the three attempts refused on the
+  converted prod copy, are the proof without touching prod's locks.
+- **OWN-1-D3, the CLAUDE.md Stack edit** (in §6 above), applied in OWN-1's docs commit
+  after Gate C, with rule 3's "Pending OWN-1" note removed.
