@@ -36,8 +36,24 @@ interface AddEvidenceResponse {
 // keeps that choice unmade until someone makes it.
 type YesNo = '' | 'true' | 'false';
 
-export function AddEvidenceCard({ run }: { run: Run }) {
-  const outcomeId = run.payload.valueOutcomeId;
+/**
+ * Q4c2: bound to an outcome directly (`outcomeId`) as well as through a run
+ * (`run`), so the outside-in walk can attach evidence BEFORE the first run —
+ * then one run is produced and locked with its evidence. The run page's use
+ * is unchanged.
+ */
+export function AddEvidenceCard({
+  run,
+  outcomeId: outcomeIdProp,
+  n = '01A',
+  onRecorded,
+}: {
+  run?: Run;
+  outcomeId?: string;
+  n?: string;
+  onRecorded?: () => void;
+}) {
+  const outcomeId = outcomeIdProp ?? run?.payload.valueOutcomeId;
 
   const [provenance, setProvenance] = useState('');
   const [kind, setKind] = useState('');
@@ -58,7 +74,7 @@ export function AddEvidenceCard({ run }: { run: Run }) {
     // production runs predate valueOutcomeId — see client/src/types/run.ts.
     return (
       <Card
-        n="01A"
+        n={n}
         title="Add evidence"
         badge={<Badge tone="neutral">Unavailable on this run</Badge>}
       >
@@ -90,8 +106,9 @@ export function AddEvidenceCard({ run }: { run: Run }) {
     aiFieldsValid;
 
   return (
-    <Card n="01A" title="Add evidence">
+    <Card n={n} title="Add evidence">
       <GovernedForm<AddEvidenceResponse>
+        onSuccess={() => onRecorded?.()}
         path={`/api/value-outcomes/${outcomeId}/evidence`}
         canSubmit={canSubmit}
         buildBody={() => ({

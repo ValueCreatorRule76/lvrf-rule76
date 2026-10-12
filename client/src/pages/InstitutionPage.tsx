@@ -12,6 +12,7 @@ import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
 import { AccountResearch } from '../components/AccountResearch';
+import { OutsideInWalk } from '../components/OutsideInWalk';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -434,6 +435,10 @@ export function InstitutionPage() {
         facts={view.facts}
         onRecorded={refresh}
       />
+      {/* Q4c2: the outside-in walk, below the facts (LVRF_PLAN §4c). */}
+      {!view.institution.is_tenant_self && (
+        <OutsideInWalk institutionId={view.institution.id} onChanged={refresh} />
+      )}
       <PackSection
         pack={view.pack}
         measuredIds={measuredIds}

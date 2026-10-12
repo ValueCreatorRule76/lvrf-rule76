@@ -74,6 +74,8 @@ const CASES = [
     notFound: [404, `industry '${E.SLUG_A}' not found`], target: null },
   { route: 'GET /api/institutions/:institutionId/research', kind: 'id', path: `/api/institutions/${E.INST_A}/research`,
     notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'GET /api/institutions/:institutionId/walk', kind: 'id', path: `/api/institutions/${E.INST_A}/walk`,
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
   { route: 'GET /api/institutions', kind: 'list', path: '/api/institutions', aIds: [E.INST_A], bIds: [E.INST_B] },
   { route: 'GET /api/institutions/:id/view', kind: 'id', path: `/api/institutions/${E.INST_A}/view`,
     notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
