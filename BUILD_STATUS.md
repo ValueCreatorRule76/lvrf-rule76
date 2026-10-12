@@ -8404,3 +8404,96 @@ production, with migration 0031.
 - **For future read-only Gate Cs:** `ssh -o BatchMode=yes brad@72.60.69.221` works from
   the dev Mac (checked 12 Oct: `srv1862778`, `0ee288d`). Prod is read through
   `lvrf_app`'s `DATABASE_URL`. Backup, migrate and deploy stay as pastes Brad runs.
+
+## Q4c1 — pack-research cards on the pack page — 12 October 2026
+
+The pack research loop gets a UI. Five existing routes (generate prompt, parse,
+accept, reject, exclude) are now usable by a signed-in person, and one read is added.
+There is **no migration, no new write route and no hardening change.** Plan: §4b of
+`docs/LVRF_PLAN.md`, approved by Brad with his three recommendations and one
+requirement.
+
+### What was built
+
+- **`GET /api/industries/:slug/research`**, a new read inside the D1 seam. It returns
+  the industry, `contract_version_now`, the prompts on record (with their text) and the
+  results still pending review.
+  - Tenant in the WHERE, as the pack GET: another tenant's slug → 404, and a
+    tenant-scope case is added.
+  - The pack GET itself is untouched.
+- **The Research section** (`client/src/components/PackResearch.tsx`), below the pack,
+  for every authorized user:
+  - R1 generates a prompt (the text with Copy, its id, its hash and its versions);
+  - R2 lists the prompts on record, flagging a stale contract version in `--warning`;
+  - R3 parses a response (invalid JSON is caught locally; it shows whether the
+    `prompt_id` is on record);
+  - R4 is the pending review (accept or reject with a note);
+  - R5 excludes a measure.
+  - **Steward-only controls are disabled, not hidden,** naming the steward. The
+    server's 403 stays the authority.
+- **The agent's exclusion list is shown, not stored.** After a parse it is read from
+  the pasted text, with "Record as exclusion…" on each line.
+  - **Brad's requirement:** the agent's line goes only into `proposed_by_research_tool`
+    / `proposal_text`, and **the reason box starts empty**; only the steward types it.
+  - The name is offered from the line, and the steward can edit it.
+- **Primitives:**
+  - `PostResult.refused` carries `issues`, and `ResultBlock` lists them. A parse
+    refusal used to show only "N issue(s) found".
+  - `GovernedForm` gains `disabledReason`, as `GovernedAction` has.
+  - Both gain `onSuccess`.
+  - The pack page refetches in place after a research write, so the section is never
+    unmounted (that would lose the on-screen agent list).
+- **`client/vite.config.ts`:** `LVRF_API_PROXY` can point a verify script's browser walk
+  at its own throwaway API. Unset, it is 3001 as before.
+
+### Gate A
+
+- **`verify_pack_research.sh`: 62 passed, 0 failed.**
+  - **API:**
+    - the read's shape;
+    - the stale v2 prompt listed;
+    - another tenant's slug → 404;
+    - the loop: X (authorized) generates and parses, X's accept → 403, S (the
+      steward) accepts and rejects;
+    - pending-only;
+    - a refused parse returns 7 issues;
+    - the pack GET's shape is unchanged.
+  - **A headless-Chrome walk through Vite, signed in by session** (never the header).
+    The throwaway server's origin is configured as production's is.
+    - As X:
+      - the stale flag shows;
+      - generate works;
+      - invalid JSON is caught with nothing sent;
+      - a refused parse lists all 7 issues;
+      - a good parse leaves 2 pending, and the agent list is shown "not stored";
+      - accept, reject and exclude are disabled, naming Brad Piver.
+    - As S:
+      - the agent list is gone after a reload, because it was never stored;
+      - from "Record as exclusion…": **the reason box is empty**, the proposal is the
+        agent's line verbatim, the tool is the research tool, and the name is offered;
+      - **stored: `reason` = exactly what the steward typed; `proposal_text` = the
+        agent's line; they differ; excluded by the steward;**
+      - accept puts the entry on the pack, refreshed in place; reject works; the
+        database shows accepted, rejected and one pending.
+  - **Screenshots, looked at:**
+    - the refused parse with its issues list;
+    - the non-steward's pending card;
+    - **the exclusion form with the empty reason box**;
+    - the steward's page after;
+    - break B2.
+    - One defect was found and fixed: a long raw-response key ran into the value
+      column, and it now wraps.
+- **Deliberate breaks, each restored byte-identical:**
+  - **B1, the client's steward gate removed:** X sees the form enabled; the server
+    still refuses (403), and the result stays pending.
+  - **B2, the issues list removed:** the refusal shows only "7 issue(s) found".
+  - **B3, the read's tenant predicate removed:** another tenant's pack research is
+    served (200). Restored, it is 404 again.
+- **Prod copy:**
+  - D2 none (731 objects);
+  - **48 existing GETs, HEAD (`20c1fa9`) against Q4c1: 48 identical**;
+  - the new read answers 200 on all 10 industries.
+- **Regression, at the feat commit's state:** all 23 verify scripts pass, 0 failed.
+  `verify_tenant_scope` has 131 cases. The client `tsc`, build and lint pass. The
+  bundle is **`index-Bm3_iJwj.js`**, new because the client changed. The one lint
+  warning predates this work.
