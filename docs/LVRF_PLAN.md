@@ -112,7 +112,7 @@ on institution routes (P3).
 | ~~L26~~ **DONE 11 Oct 2026 (Q4, deployed `384e0bc`)** | **The Runs list shows no account for runs under a retired engagement** (Curia reference example, runs 1–21) | `runsIndex.ts` joins the institution only through a current engagement (`e.deleted_at IS NULL` in the ON clause), by design; the data is complete (every engagement has Curia) | UI pass or with L4: join the institution regardless, and mark the engagement retired, so "retired" and "unknown account" stop looking alike |
 | L27 | **npm vulnerabilities**: at the O1 deploy (12 Oct 2026) the client build reported 7 (5 high) and the server 4 (moderate) | reported by Brad, 12 Oct 2026 | Triage alongside L25, not now: `npm audit` per package, which are reachable in production (a build-time-only dependency is not the API), and a fix per package with its own Gate A. **Never `npm audit fix --force`** (CLAUDE.md rule 7) |
 | L28 | **`engagements.value_stage` is stale**: no route advances it (the outcome routes advance `value_outcomes.value_stage`), so the stored column says `baseline` on engagements whose outcomes are verified. O2's POV already derives the stage reached (the furthest of the engagement and its current outcomes) and does not read the column alone | found in O2's Gate A, 12 Oct 2026 | **Proposal, to decide later (not in O2):** compute it, not store it. A function `lvrf_engagement_stage(engagements)` (the POV's derivation, in one place), every reader calling it, and the column dropped, or kept only as a frozen historical value, once nothing reads it. Before deciding: list every reader of the column (the runs list, the cohort, `walkSpine`'s `terminal_value_stage`) |
-| L29 | **Raw Postgres text in 500 answers**: the W1 fix maps unique violations to plain words in the shared refusal handler, but each route's 500 fallback (`err instanceof Error ? err.message`) can still echo Postgres's own text, constraint names included, for other errors (a foreign-key or not-null violation) | found in the W1 fix, 12 Oct 2026 | One central mapping in the same place (`server/lib/refusal.ts`): Postgres errors other than check and unique violations become "That could not be written; nothing was saved." with the raw text in the server log only. Its own Gate A: grep for every 500 fallback, and a deliberate foreign-key violation per route class |
+| L29 | **Raw Postgres text reaches people** (widened 12 Oct 2026, Brad's W6: "new row for relation 'evidence' violates check constraint 'evidence_ai_verify_requires_resolution'" when Source verified = Yes on AI-sourced evidence). **Planned as Q4k below.** Originally: raw Postgres text in 500 answers: the W1 fix maps unique violations to plain words in the shared refusal handler, but each route's 500 fallback (`err instanceof Error ? err.message`) can still echo Postgres's own text, constraint names included, for other errors (a foreign-key or not-null violation) | found in the W1 fix, 12 Oct 2026 | One central mapping in the same place (`server/lib/refusal.ts`): Postgres errors other than check and unique violations become "That could not be written; nothing was saved." with the raw text in the server log only. Its own Gate A: grep for every 500 fallback, and a deliberate foreign-key violation per route class |
 | L30 | **The plain duplicate-person message can confirm that an email exists in another tenant.** "\<email\> is already in LVRF; select them instead" is right when the person is in the caller's tenant, but `persons_email_key` is unique across ALL persons, so it also answers for another tenant's person (or customer contact) | Brad, 12 Oct 2026 | **Must be fixed before anyone outside Brad's tenant gets access.** Say "select them" only when the existing person is in the caller's tenant (their staff, or a person of one of their accounts); otherwise a neutral refusal ("That email cannot be used here; nothing was written."). **Note:** any refusal, however worded, still tells the caller *something* holds that email while email is globally unique. Closing that fully needs email unique per tenant, not globally (a migration that changes `persons_email_key`), which is a decision for then |
 
 ---
@@ -196,6 +196,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~O1~~ | **DONE 12 Oct 2026, deployed `1db189b`** (Gate C clean, 111 triggers, 23/23 run hashes); built and reviewed (migration 0035, 111 triggers; withdrawal of levers and links, steward-only and append-only in the database, effect sizes refused on record; BUILD_STATUS "O1"). **Outputs band, phase 1: the grounding** (plan §5). Q9 (the D2 basis, derived) and item 10 (a run seals the fact ids and values it used) are **prerequisites, built here**; then `value_levers` and `lever_offerings` (steward acts); the pack page shows levers per measure and Skillsoft solutions per lever (outputs 3, 4) | Q4c2 deployed | every later output states each number's basis; nothing can until the basis is computed |
 | ~~O2~~ | **DONE 12 Oct 2026, deployed `f352e89`** (Gate C clean: 126 triggers, run hashes 23/23, 0 cross-tenant refusals); built (migration 0036, 126 triggers; computed verdict, verifier ≠ author, post hoc, typed reference markers; BUILD_STATUS "O2"). **Outputs, phase 2: hypotheses and the account POV** (plan §5): `value_hypotheses` (with falsifiers), `executive_summaries` (human-authored, attributed), the POV page (value-chain visual, stage progress bar, "what it takes to raise confidence") (output 1) | O1 | the hypothesis is what a POV argues; it must be falsifiable before it is shown |
 | ~~Q4j~~ | **W1 fix, DONE 12 Oct 2026, deployed `901fc91`** (Gate C clean) (migration 0037, 129 triggers; BUILD_STATUS "W1 fix"): an existing person (the tenant's own staff) named analyst of record on an account through `account_person_links`, with a per-account title; raw unique violations become plain words ("already in LVRF; select them instead") | Brad's Scotts walk, 12 Oct 2026 | W1 was blocked: a duplicate person, or a placeholder, was the only path |
+| Q4k | **Plain refusals everywhere, and the AI-verified evidence form** (L29 widened; **planned 12 Oct 2026, not yet approved**; plan in §4k) | the Scotts walk | W6 surfaced a raw CHECK message; the form offers a combination the database must refuse |
 | OWN-1 | **NEXT, before any further O-band work** (Brad, 12 Oct 2026). **The database owner role** (plan §6): `lvrf_app` stops owning the schema, so the trigger guards and rule 3 bind the role itself, not only the app's code paths | O2 deployed | shown on the prod copy, 12 Oct 2026: `lvrf_app` can DROP TRIGGER and GRANT itself UPDATE on `audit_log` |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
 | O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15; **O-D5: a print stylesheet**): the browser prints the rendered page; no new dependency; both banners and the run's `payload_hash` on every printed page; QA by printing and looking | O3 | the PDF renders what O3 already shows; no new claim enters at print |
@@ -1744,3 +1745,86 @@ the only roles are `lvrf_app` and `postgres`.
   converted prod copy, are the proof without touching prod's locks.
 - **OWN-1-D3, the CLAUDE.md Stack edit** (in §6 above), applied in OWN-1's docs commit
   after Gate C, with rule 3's "Pending OWN-1" note removed.
+
+
+## 4k. Q4k: plain refusals everywhere, and the AI-sourced evidence form (planned 12 Oct 2026; **not yet approved**)
+
+**What happened.** In W6, Source verified = Yes on AI-sourced evidence returned Postgres's
+own text: "new row for relation 'evidence' violates check constraint
+'evidence_ai_verify_requires_resolution'". The CHECK is right (AMENDMENT-005 Article III:
+AI-sourced evidence cannot certify itself). Its wording and the form are wrong.
+
+**Spine stage:** `baseline` and `measure` (evidence intake). It is also a fix to how every
+stage's refusals read.
+
+### 1. CHECK violations in plain sentences (and L29's other raw errors)
+
+- **One mapping, in `server/lib/refusal.ts`,** beside the unique-violation one.
+  - **Postgres's own CHECK text** ("new row for relation … violates check constraint
+    …") becomes a sentence per constraint, for example:
+    - `evidence_ai_verify_requires_resolution` → "AI-sourced evidence is verified after
+      its citation is opened, not when it's recorded." (Brad's wording; see 3 below);
+    - an unmapped CHECK → a neutral "That can't be recorded as entered; nothing was
+      written.", never the name.
+  - **Messages the schema writes for people** (`RAISE` in hardening.sql, prefixed
+    "LVRF:") pass unchanged, as today.
+  - The raw text and the constraint name still go into `refusals`, never to the
+    person.
+- **Coverage guard.** There are 61 CHECKs in `db/schema.ts`. A check script lists every
+  CHECK name in the schema and fails unless each has either a plain sentence, or is
+  marked "the route pre-validates it" (the route answers first, in its own words).
+  This works like `MUTATING_ROUTE_CLASS`: a new CHECK cannot ship without a sentence.
+- **L29's rest:** the 500 fallbacks (foreign-key, not-null and type errors: 23503,
+  23502, 22P02) go through the same handler. The answer is "That could not be
+  written; nothing was saved.", with the raw text in the server log only.
+- **Gate A:**
+  - each mapped CHECK provoked through its route, with the plain sentence asserted and
+    no constraint name, relation name or "violates" anywhere in the response;
+  - the coverage guard, with a deliberate unmapped CHECK on a clone failing it;
+  - a deliberate foreign-key violation per route class answering plainly;
+  - a break: the mapping removed, so the raw text returns.
+
+### 2. The evidence form (`AddEvidenceCard`, used by W6 and the run workbench)
+
+- **When AI-sourced is Yes,** "Source verified" is set to No and disabled, with the
+  reason beside it: "AI-sourced evidence is verified after its citation is opened, not
+  when it's recorded (AMENDMENT-005, Article III)."
+- Switching AI-sourced back to No re-enables it. A refusal is a courtesy here; the
+  CHECK stays the authority.
+- **The route answers first** (`POST /api/value-outcomes/:id/evidence`): a 422 in the
+  same sentence, before any write. So the database's CHECK is the backstop, not the
+  first thing a person meets.
+- **Gate A:**
+  - the browser walk: AI-sourced Yes disables Source verified and shows the reason;
+  - the API: the combination → 422, plain, nothing written;
+  - a break: the client gate removed, so the route still refuses in plain words.
+
+### 3. The gap this exposes, named
+
+**No route opens the citation on outcome evidence.** `citation_resolved` is set only
+through account research (`accountResearch.ts`'s accept, for facts). So AI-sourced
+**outcome** evidence can be recorded but never verified, and "verified after its
+citation is opened" points at a step that does not exist for it yet. This is the W6
+gap queued after the Scotts research. **Decision for Brad:**
+
+- **Q4k-D1:** build "Open the citation…" for outcome evidence in Q4k (a person, not
+  the author of the evidence, opens it and records that it matches; the same rule as
+  account research H1); or keep Q4k to wording, and say in the sentence "(opening
+  outcome-evidence citations is not built yet)".
+- **Recommendation:** build it in Q4k. Otherwise the plain sentence describes a path a
+  person cannot take.
+
+### 4. R1, refined (Brad, 12 Oct 2026)
+
+**Under R1, a company's formal annual disclosure report counts as `public_filing`**:
+statutory filings (10-K, annual report) and formal annual disclosures (a CR,
+sustainability or ESG report). **Looser company material is `observation`**: press
+releases, web pages, blog posts, job postings and marketing material.
+
+- **The basis follows from D2, unchanged:** `public_filing` → published; `observation`
+  → inferred with a source reference, else assumed.
+- **Scotts:** its 2026 CR Disclosure Report stays `public_filing` (published).
+- **The form:** the evidence kind's help text says this, in the form's own words, so
+  the choice is made at entry and not argued later.
+- **Recorded in §3** as R1's refinement. **No code depends on it** beyond that help
+  text.
