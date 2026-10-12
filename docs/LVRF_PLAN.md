@@ -111,6 +111,7 @@ on institution routes (P3).
 | L25 | **OS maintenance on the box**: 29 updates pending and "System restart required". A reboot restarts Postgres and the API | reported by Brad, 11 Oct 2026 | Its own plan before it is done: a `pg_dump -Fc` backup first; which updates (`apt list --upgradable`), and whether the kernel is among them; a quiet window; after the reboot, check that Postgres comes back with checksums on and `lvrf-api` is active, then health, the pre-check, 87 triggers, and Brad's cookie curl. Not mixed into a feature deploy |
 | ~~L26~~ **DONE 11 Oct 2026 (Q4, deployed `384e0bc`)** | **The Runs list shows no account for runs under a retired engagement** (Curia reference example, runs 1–21) | `runsIndex.ts` joins the institution only through a current engagement (`e.deleted_at IS NULL` in the ON clause), by design; the data is complete (every engagement has Curia) | UI pass or with L4: join the institution regardless, and mark the engagement retired, so "retired" and "unknown account" stop looking alike |
 | L27 | **npm vulnerabilities**: at the O1 deploy (12 Oct 2026) the client build reported 7 (5 high) and the server 4 (moderate) | reported by Brad, 12 Oct 2026 | Triage alongside L25, not now: `npm audit` per package, which are reachable in production (a build-time-only dependency is not the API), and a fix per package with its own Gate A. **Never `npm audit fix --force`** (CLAUDE.md rule 7) |
+| L28 | **`engagements.value_stage` is stale**: no route advances it (the outcome routes advance `value_outcomes.value_stage`), so the stored column says `baseline` on engagements whose outcomes are verified. O2's POV already derives the stage reached (the furthest of the engagement and its current outcomes) and does not read the column alone | found in O2's Gate A, 12 Oct 2026 | **Proposal, to decide later (not in O2):** compute it, not store it. A function `lvrf_engagement_stage(engagements)` (the POV's derivation, in one place), every reader calling it, and the column dropped, or kept only as a frozen historical value, once nothing reads it. Before deciding: list every reader of the column (the runs list, the cohort, `walkSpine`'s `terminal_value_stage`) |
 
 ---
 
@@ -192,6 +193,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q4h~~ | **DONE 12 Oct 2026**: deployed `92ae23b` (0033, 0034; 103 triggers, with entity correction; step 5c clean; Gate C clean). **3.0 item 6 pulled forward: account research intake** (Brad, 12 Oct), with items 3 and 4 folded in minimally (the entity: legal name and identifier; the disclosure regime) and L6 and L8. The Q4b pattern: an `institution_fact` contract, a prompt generated from live rows and stored immutably, parse that refuses a different entity naming both, per-field review that writes evidence and fact in one transaction. First test: Scotts Miracle-Gro (a public filer), replacing hand entry of its facts in Q4d where research can supply them. Plan in §4e; H1–H4 decided (§4e) | Q4c1b, Q4g; **not D13** (narrowed) | Brad's decision: build the intake before the first real engagement, test it on published accounts first |
 | ~~O1~~ | **DONE 12 Oct 2026, deployed `1db189b`** (Gate C clean, 111 triggers, 23/23 run hashes); built and reviewed (migration 0035, 111 triggers; withdrawal of levers and links, steward-only and append-only in the database, effect sizes refused on record; BUILD_STATUS "O1"). **Outputs band, phase 1: the grounding** (plan §5). Q9 (the D2 basis, derived) and item 10 (a run seals the fact ids and values it used) are **prerequisites, built here**; then `value_levers` and `lever_offerings` (steward acts); the pack page shows levers per measure and Skillsoft solutions per lever (outputs 3, 4) | Q4c2 deployed | every later output states each number's basis; nothing can until the basis is computed |
 | O2 | **BUILT 12 Oct 2026, Gate A passed, not deployed** (migration 0036, 126 triggers; computed verdict, verifier ≠ author, post hoc, typed reference markers; BUILD_STATUS "O2"). **Outputs, phase 2: hypotheses and the account POV** (plan §5): `value_hypotheses` (with falsifiers), `executive_summaries` (human-authored, attributed), the POV page (value-chain visual, stage progress bar, "what it takes to raise confidence") (output 1) | O1 | the hypothesis is what a POV argues; it must be falsifiable before it is shown |
+| OWN-1 | **NEXT, before any further O-band work** (Brad, 12 Oct 2026). **The database owner role** (plan §6): `lvrf_app` stops owning the schema, so the trigger guards and rule 3 bind the role itself, not only the app's code paths | O2 deployed | shown on the prod copy, 12 Oct 2026: `lvrf_app` can DROP TRIGGER and GRANT itself UPDATE on `audit_log` |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
 | O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15; **O-D5: a print stylesheet**): the browser prints the rendered page; no new dependency; both banners and the run's `payload_hash` on every printed page; QA by printing and looking | O3 | the PDF renders what O3 already shows; no new claim enters at print |
 | Q7 | **3.0 item 3, the rest** (after Q4h's minimal entity): parent and affiliate relationships with their own evidence; L4 (the run seals its entity and account name); L9 (`website` into the entity record); item 11's entity mismatch rate | Q4h | — |
@@ -1501,3 +1503,90 @@ computes every derived flag in one place:
 - **The rest:** the full regression; prod-copy equivalence (only the new routes and
   the account page change); Gate B and Gate C as for O1, with the run-hash check in
   both.
+
+
+## 6. OWN-1: the database owner role (planned 12 Oct 2026; **next**, before any further O-band work)
+
+**Why.** Migrations run as `lvrf_app`, so `lvrf_app` owns every table, sequence and type,
+and the drizzle schema. A table's owner can drop or disable its triggers and grant itself
+any privilege on it. The functions belong to the superuser, so the audit function cannot
+be rewritten; the triggers that call it can be removed. **Shown on the prod copy, 12 Oct
+2026, as `lvrf_app`, in rolled-back transactions:**
+- `DROP TRIGGER value_runs_locked_immutable ON value_runs` succeeded;
+- `GRANT UPDATE, DELETE ON audit_log TO lvrf_app` succeeded;
+- `SET session_replication_role = replica` was refused.
+
+So every trigger guard, and rule 3's revocation, binds the app's code paths and not the
+role. `CLAUDE.md` rule 3 and hardening sections 6, 16 and 20 now say so.
+
+**Spine stage:** none directly. It is the precondition for every stage's record being
+defensible, which is what the product sells. Placed ahead of O3 by Brad.
+
+### What it does
+
+- **`lvrf_owner`** (NOLOGIN) owns every table, sequence and type, and the drizzle schema.
+  The functions stay with the superuser, as today.
+- **Migrations run through a separate login, `lvrf_migrate`**, a member of `lvrf_owner`
+  (`SET ROLE lvrf_owner`, so new objects are owned by the owner role).
+  - Its credential is **in its own file on the box, readable only by brad** (`chmod
+    600`), and never in the app's `.env`.
+  - The deploy's migrate step reads that file.
+  - `drizzle.config.ts`'s database-name guard is unchanged.
+- **`lvrf_app` keeps exactly the data privileges it uses today,** with no ownership, no
+  DDL and no GRANT ability:
+  - SELECT, INSERT and UPDATE where the routes use them;
+  - no DELETE anywhere, which the no-delete triggers already assume;
+  - SELECT and INSERT only on `audit_log`, `heartbeat_events` and `refusals`;
+  - USAGE on the sequences and EXECUTE on the functions.
+
+  The exact list is derived from today's routes and checked against them, not assumed.
+- **`ALTER DEFAULT PRIVILEGES FOR ROLE lvrf_owner`**, so a table a future migration
+  creates grants `lvrf_app` only what is intended. A new table's grants are then reviewed
+  in hardening, not inherited by accident.
+- **Assertions:**
+  - **hardening.sql** asserts the owner of every relation and `lvrf_app`'s privileges,
+    and fails the run if either is wrong;
+  - **a deploy step (5d)** refuses to restart if any relation is owned by `lvrf_app`, or
+    if `lvrf_app` holds UPDATE, DELETE or TRUNCATE on the append-only tables;
+  - **Gate C** reads both.
+- **The proof** is the same three attempts as `lvrf_app` on the prod copy, after OWN-1:
+  DROP TRIGGER, GRANT on `audit_log`, and DISABLE TRIGGER. **Each must be refused.** The
+  deliberate breaks then run as the superuser, named as such.
+
+### The change on the box (sudo, by Brad)
+
+- create `lvrf_owner` and `lvrf_migrate`;
+- `ALTER … OWNER TO lvrf_owner` for every object;
+- the grants;
+- the credential file;
+- **a `pg_dump -Fc` backup first** (rule 8).
+
+It runs once, as `postgres`, from a paste, with a STOP after each step. The verify
+harness's clones (`createdb -T lvrf -O lvrf_app`) and `restore_prod_copy.sh` change to
+reproduce the same ownership.
+
+### Governance
+
+- **No amendment is needed.** AMENDMENT-005 amends `CLAUDE.md` only to extend the
+  governing AI principle (its `amends:` list and Article VI). AMENDMENT-004 governs the
+  tokens. Neither the governance index nor any amendment in force sets a rule for
+  `CLAUDE.md`'s Stack or for how rule 3 is enforced. OWN-1 enforces rule 3 at the role
+  level; it does not change the rule.
+- **The `CLAUDE.md` Stack edit** (applied when OWN-1 deploys, not before):
+
+  > Postgres 16.14 (db `lvrf`; roles: **`lvrf_owner`** (NOLOGIN) owns the schema;
+  > **`lvrf_migrate`** (login, member of `lvrf_owner`) runs migrations, its credential
+  > in its own file on the box readable only by brad and never in the app `.env`;
+  > **`lvrf_app`** (login) holds data privileges only, no ownership, DDL or GRANT;
+  > localhost only, …)
+
+  Rule 3's "Pending OWN-1" note is removed in the same edit.
+
+### Gate C baseline (read-only, from O2's Gate C on)
+
+- every relation's owner (`pg_tables.tableowner`, plus sequences and types);
+- `lvrf_app`'s privileges on `audit_log` and `heartbeat_events`
+  (`information_schema.table_privileges`, plus `has_table_privilege`);
+- the count of disabled triggers (`pg_trigger.tgenabled <> 'O'`).
+
+Today all are expected to show `lvrf_app` as owner. After OWN-1, none.

@@ -9720,3 +9720,54 @@ Outputs band, phase 2 (LVRF_PLAN §5; decisions O2-D1–O2-D4 in §3). **Migrati
     - Re-run: tenant scope 193/0 ("no mismatch recorded in refusals"), O2 137/0.
   - Client tsc, build and lint are clean apart from the pre-existing `ActorContext`
     warning. The bundle is **`index-BfJpyu1D.js`**.
+
+### O2 review (Brad, 12 Oct): the fixture, ownership, and two Gate C checks
+
+- **(1) The tenant-scope fixture now goes through the real route.**
+  - **The old fixture:** `HYP_A` was inserted with `value_hypotheses_guard` switched off
+    (`ALTER TABLE … DISABLE TRIGGER`, inside its own transaction, through `psql` as the
+    local superuser, on the throwaway clone).
+  - **Replaced** by step 4b: signed in as A's staff (by session), the routes build the
+    chain:
+    - an account in A's pack industry, a capability, its claim on MEASURE_A (a pack
+      entry with a direction, increase);
+    - an outcome with a recorded baseline of 0, and the metric's pack basis;
+    - then `POST …/hypotheses` on LEVER_A.
+  - The script asserts the row (reference 0, direction increase, author A's staff,
+    verdict open) and that **no trigger is disabled** on the clone.
+  - **No fixture in any script switches off a guard.** What remains are named deliberate
+    breaks, and verify_drift's removals, which are what D1 and D3 detect.
+- **The proof asked for could not be given: `lvrf_app` can switch off guards.** On a
+  throwaway clone of the prod copy, as `lvrf_app`, in rolled-back transactions:
+  - `DROP TRIGGER value_runs_locked_immutable ON value_runs`: **succeeded**;
+  - `GRANT UPDATE, DELETE ON audit_log TO lvrf_app`: **succeeded**;
+  - `SET session_replication_role = replica`: refused.
+
+  `lvrf_app` owns every table (migrations run as it), and an owner can do both.
+  **Decision (Brad):** deploy O2; OWN-1 (plan §6) is next, before any further O-band
+  work.
+  - Hardening sections 6, 16 and 20 and `CLAUDE.md` rule 3 now say that the trigger
+    guards and the revocation bind the app's code paths, and that role-level protection
+    is pending OWN-1.
+  - **No amendment is needed**, for the rule-3 note or OWN-1's Stack edit.
+    AMENDMENT-005's `amends:` list touches `CLAUDE.md` only for the governing AI
+    principle (Article VI). No amendment in force, nor the governance index, sets a rule
+    for `CLAUDE.md`'s Stack or rule 3's enforcement.
+- **(2) L28:** `engagements.value_stage` is stale (no route advances it). The proposal
+  is to compute it, not store it; it is decided later, not in O2.
+- **(3) Gate C gains two read-only checks,** both tested as `lvrf_app` on the prod copy
+  and on local `lvrf`:
+  - **refusals referencing another tenant's ids:** every uuid in `subject_id` or the
+    attempted payload, resolved to its owning tenant across twelve tables. Both read 0.
+    On a clone with one planted cross-tenant refusal, it lists exactly that one.
+  - **OWN-1's baseline:** every relation's owner, `lvrf_app`'s privileges on
+    `audit_log` and `heartbeat_events`, and disabled triggers.
+    - **Today:** `lvrf_app` owns all tables, sequences, enum types and the drizzle
+      schema;
+    - on the append-only tables: SELECT and INSERT true; UPDATE, DELETE and TRUNCATE
+      false (as granted);
+    - 0 disabled triggers.
+- **Gate A, re-run:** all **28** verify scripts pass (tenant scope 193 cases; O2 137/0); client tsc, build
+  and lint clean apart from the pre-existing warning; bundle `index-BfJpyu1D.js`. Prod copy
+  against the deployed code: 62 GETs identical, 126 triggers and manifest, D2 none, run
+  hashes 23/23.

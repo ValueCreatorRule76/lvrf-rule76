@@ -43,6 +43,10 @@ These encode failures already paid for in CVAF 1.2. Violating them recreates kno
    trigger that raises — do not work around it.
 3. **The audit log and heartbeat are append-only.** `UPDATE`, `DELETE` and `TRUNCATE`
    are revoked from `lvrf_app` at the database level. Do not add routes that attempt them.
+   **Pending OWN-1:** migrations run as `lvrf_app`, so it owns the tables and can re-grant
+   itself these privileges, or drop or disable any trigger. Until OWN-1 lands, this
+   revocation and every trigger guard bind the app's code paths, not the `lvrf_app` role
+   itself.
 4. **A human authorizes.** AI may draft a reflection or recommend a lever. AI may never
    be the assessor of record, the reviewer of a reflection, or the verifier of a value
    outcome. Enforced in CHECK constraints; keep it enforced in the API.
