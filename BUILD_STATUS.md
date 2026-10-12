@@ -9057,3 +9057,39 @@ verify-stage value:** the contract has no field for one, and the prompt says so.
     - **B7, the deferred trigger dropped** (rolled back): two current entities stand.
 - **One defect found and fixed:** after a correction, A2 still showed a prompt naming
   the old entity. The card is now keyed to the current entity.
+
+### Deployed — 12 October 2026 (UTC)
+
+`4db8808..92ae23b` went to production: `c8ad20b` (docs, never pulled), `8fe2212`
+(feat) and `92ae23b` (docs), with migrations 0033 and 0034.
+
+- **Backup:** `~/lvrf_pre_q4h_20261012_112003.dump` (635,755 bytes, `-rw-------`, 458
+  TOC entries), taken with the box at `4db8808`.
+- **Migration:**
+  - **one `drizzle-kit migrate` applied both:** 0033 (row 34, `1791781175650`) and
+    0034 (row 35, `1791786161792`);
+  - `hardening.sql`: exit 0, with 6 expected notices; **103 triggers**;
+  - `institution_entities` has `_audit`, `_no_delete`, `_one_current` (DEFERRABLE
+    INITIALLY DEFERRED), `_supersession_sane` and `_touch`;
+  - **all 8 new or changed CHECKs are validated**; 0 entities;
+  - the legacy check: 26 accepted, all valid v3;
+  - `\d institution_entities` and `\d research_prompts` as expected.
+- **Deploy:**
+  - no re-exec; pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 35 migrations, newest
+    0034_account_research; 774 schema objects match 0034_snapshot.json)", and no drift
+    findings;
+  - all smoke checks passed; deploy OK, exit 0, HEAD `92ae23b`;
+  - bundle **`index-DM2atepp.js`** / `index-CbFK8jK8.css`. Up since **11:23:01 UTC**.
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `92ae23b`;
+  - D2 none (774 objects); D1/D3/D4 no findings;
+  - the legacy check: 26, all valid v3;
+  - **103 triggers**, and `hardening_manifest` holds 103 rows;
+  - 0 entities, 0 account prompts, 0 parser refusals. The 1 database refusal is the
+    historical one.
+  - **0 audit rows and 0 refusals since 11:23:01**; the last audit id is still 256;
+  - the served assets are `index-DM2atepp.js` and `index-CbFK8jK8.css`.
+
+**Next: Q4d's research half, Scotts Miracle-Gro, by Brad in the browser,** through
+the entity phase and the facts-phase prompt.
