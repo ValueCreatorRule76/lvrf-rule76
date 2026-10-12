@@ -192,11 +192,16 @@ Constitution** is IN PROGRESS; `record_documents` is **provisional** until it ra
 
 **Research intake is a Compass OS seam (decision D1, 11 Oct 2026).** Research runs in
 LVRF's own pipeline — prompt → a person runs it → parse → a person accepts or rejects per
-field — behind one module boundary: today `server/routes/industryResearch.ts`,
-`server/routes/researchPrompt.ts` and the `research_results` staging table; consolidated
-as `server/research/` when 3.0 item 6 begins. **No code calls a research tool** — a person
-runs the prompt. **Only `industryResearch.ts` writes `research_results`** (verify scripts
-excepted, on throwaway clones); other code may read accepted results (e.g. the pack view).
+field — behind one module boundary: today `server/research/contracts.ts` (one contract per
+result kind, read by the generated prompt, the parser and the accept mapping),
+`server/routes/industryResearch.ts`, `server/routes/researchPrompt.ts`, the immutable
+`research_prompts` table (each prompt exactly as generated, with its SHA-256 and contract
+version) and the `research_results` staging table; consolidated as `server/research/` when
+3.0 item 6 begins. **No code calls a research tool** — a person runs the prompt. **A prompt
+is generated from live rows, never hand-written**; changing a contract field bumps its
+version. **Only `industryResearch.ts` writes `research_prompts` and `research_results`**
+(verify scripts excepted, on throwaway clones), and **a new result must name the prompt it
+answered**; other code may read accepted results (e.g. the pack view).
 When Compass OS exists as code, research moves there and this boundary becomes its client.
 Do not build a second research path.
 

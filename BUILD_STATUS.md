@@ -8224,3 +8224,134 @@ went to production. There was no migration; `hardening.sql` added section 17.
   - `check_schema_drift.mjs`: none. `drift_report.ts`: no findings.
   - 95 triggers; `hardening_manifest` holds 95 rows.
   - No audit rows or refusals since the restart; the last audit id is still 207.
+
+## Q4b — the research contract module, and a generated prompt — 11 October 2026
+
+The first step of 3.0 Band B. The item 9 recon found the pack prompt hand-written
+outside the repo and the parser's contract hand-written twice. Now one definition
+drives all three, and a parsed result names the prompt it answered.
+
+### Two commits, then this one
+
+- **`65f8486` refactor(research), behaviour-neutral.**
+  - `server/research/contracts.ts` holds `INDUSTRY_MEASURE_CONTRACT` (v3). The
+    parser (`'parse'` mode) and the accept mapping (`'accept'` mode) read it, and so
+    do the accept INSERT's columns.
+  - **Proven byte-for-byte:** HEAD against the refactor on twin clones, with 31 parse
+    cases, 9 accept cases plus the written row, and a reject. **41 of 41 identical.**
+- **feat(research), migration 0031:**
+  - **`POST /api/industries/:industryId/research-prompts`** generates the prompt from
+    live rows: the industry, its current pack entries, and its exclusions with their
+    reasons, plus every field's sentence from the contract.
+    - It is an authorized user's act (`MUTATING_ROUTE_CLASS`), tenant-checked.
+    - It is deterministic: the same rows give the same text.
+    - The prompt names its own id and asks the agent to echo it, with the
+      industry's slug.
+  - **`research_prompts`** stores each prompt with its SHA-256, the contract and
+    template versions, and the ids of the entries and exclusions it listed.
+    - A CHECK holds the hash to the text.
+    - `hardening.sql` section 18 adds `_audit`, `_no_delete` and `_immutable`.
+      **Triggers 95 → 98.**
+  - **Parse now requires `prompt_id`.** It refuses, writing nothing, if:
+    - the prompt is unknown, another industry's, or another tenant's;
+    - the prompt was generated against another contract version: *"the prompt was
+      generated against v2; the contract is now v3; generate a new prompt."*;
+    - the response's `industry` is neither the prompt's slug nor its name (case and
+      surrounding space ignored). The refusal names both.
+  - Each result records `prompt_id` and `contract_version`.
+  - **The results that predate prompts are left as they are.** 0031 sets
+    `prompt_tracked = false` on every existing row, then defaults it to true.
+    `research_results_prompt_named` requires a tracked row to name its prompt and
+    version, so a promptless result cannot be written, even by direct SQL.
+  - **Tied to the cut-off** (added at Brad's Gate A review):
+    - `research_results_untracked_predates_prompts` lets a row be untracked only if
+      it was parsed before **2026-10-12 00:00:00+00**. That is a literal fixed in
+      0031, after the 13 legacy rows on prod (the newest parsed 10 Oct).
+    - `research_results_touch` (section 10) now stamps `parsed_at` with `now()` on
+      INSERT and freezes it on UPDATE, so a caller cannot backdate it. Its function
+      is renamed `lvrf_research_results_stamps()`; the old one is dropped.
+    - So no new row can claim to predate prompt tracking, even by direct SQL.
+    - It is the same trigger with one more event: 98 distinct triggers, 147 trigger
+      rows.
+    - If any existing row were parsed at or after the cut-off, the CHECK would fail
+      and the migration would stop.
+  - **One hand edit to drizzle-kit's output,** named in 0031's header. The column is
+    added `DEFAULT false` and then defaulted to true, so existing rows are false. The
+    end state matches the snapshot.
+- **Unchanged:**
+  - accept and reject: still steward-only (Band A), and `researchResultsReviewRouter`
+    is byte-identical to `65f8486`;
+  - the metric prompt (`researchPrompt.ts`);
+  - every GET.
+- **Consequence for 3.0 item 6:** the `metric_value` path has no writer today. When
+  it gets one, it must generate a prompt too, or the CHECK refuses it.
+
+### Gate A
+
+- **`verify_research_contract.sh`: 85 passed, 0 failed.**
+  - **Contract-driven:**
+    - each required field, read from the contract, missing → 422 *"predates the
+      current contract"*;
+    - every field and its sentence appears in the prompt;
+    - every field maps to an `industry_measures` column.
+  - **The prompt:**
+    - it lists the current entry, not the retired one, and the exclusion with its
+      reason;
+    - it is deterministic;
+    - a new exclusion appears in the next prompt, not the last, with a different
+      hash;
+    - the stored hash equals the SHA-256 of the stored text and of the returned
+      text;
+    - UPDATE, DELETE and a wrong hash are each refused;
+    - it is audited with the actor; another tenant's industry → 404.
+  - **Parse:**
+    - no `prompt_id`, an unknown one, another industry's, another tenant's → 422;
+    - **v2 prompt → 422 with the exact wording;**
+    - **wrong industry → 422 naming both;**
+    - both at once → both named;
+    - every refusal wrote nothing;
+    - the slug in capitals or the industry's name → 201;
+    - a valid result carries `prompt_id`, v3 and `prompt_tracked`;
+    - direct SQL without a prompt is refused by `research_results_prompt_named`.
+  - **The cut-off:**
+    - a new untracked row by direct SQL is refused by
+      `research_results_untracked_predates_prompts`, even with `parsed_at`
+      backdated to 2026-01-01;
+    - an UPDATE that untracks and backdates a new row is refused;
+    - a backdating UPDATE leaves `parsed_at` as it was.
+  - **Accept and reject:**
+    - steward-only by `MUTATING_ROUTE_CLASS`;
+    - the review router byte-identical to `65f8486`;
+    - a non-steward gets 403 on both;
+    - the steward's accept gives a proposed measure, and the steward's reject works.
+  - **The legacy rows:**
+    - all existing rows have `prompt_tracked = false` with no prompt;
+    - every accepted one validates against v3 (`scripts/check_legacy_research.ts`,
+      read-only).
+    - Local lvrf also has a September test row, pending, with an `extra_field` key.
+      The checker names it, and accept would refuse it too.
+- **Deliberate breaks, each restored byte-identical (`cmp`):**
+  - **B1, the version check removed:** the v2 prompt's response is written (201).
+  - **B2, the industry check removed:** a response for another industry is written
+    (201).
+  - **B3, the `prompt_id` requirement removed:** `research_results_prompt_named`
+    still refuses it. That is the second wall.
+  - **B4, the `_immutable` trigger dropped:** a prompt's text can be rewritten.
+    Re-hardening restores the refusal.
+  - **B5, the cut-off CHECK dropped** (rolled back): a new untracked row is written.
+  - **B6, the `parsed_at` stamp dropped** (rolled back): a row backdated to
+    2026-01-01 passes the CHECK. The stamp is what makes the cut-off hold.
+  - **The legacy checker:** an accepted row with its citation removed is named.
+- **The prod copy (13 results, all accepted):**
+  - 0031 and section 18 apply, giving 98 triggers;
+  - D2 none (731 schema objects match `0031_snapshot.json`), and D1/D3/D4 have no
+    findings;
+  - **all 13 have `prompt_tracked` false and validate against v3**;
+  - **48 GETs, HEAD (`65f8486`) against Q4b: 48 identical.**
+- **Regression, at the feat commit's state:** all 22 verify scripts pass, 0 failed.
+  - `verify_tenant_scope` has 129 cases (the new route: another tenant → 404, its own
+    → 201).
+  - `verify_pack_review` and `verify_exclusions` now generate a prompt before they
+    parse.
+  - The client `tsc`, build and lint pass. The bundle is unchanged
+    (**`index-B5F5IDzI.js`**); the one lint warning predates this work.
