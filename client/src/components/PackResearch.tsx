@@ -391,18 +391,47 @@ function findCaveats(raw: unknown): { field: string; sentence: string }[] {
         if (CAVEAT_PHRASE.test(sentence)) out.push({ field: path, sentence: sentence.trim() });
       }
     } else if (isRecord(v)) {
-      for (const [k, sub] of Object.entries(v)) walk(sub, path ? `${path}.${k}` : k);
+      // v4's own `caveats` field has its own block (StatedCaveats); searching
+      // it too would show each caveat twice.
+      for (const [k, sub] of Object.entries(v)) if (!(path === '' && k === 'caveats')) walk(sub, path ? `${path}.${k}` : k);
     }
   };
   walk(raw, '');
   return out;
 }
 
+// Q4g — the research's STATED caveats: contract v4 makes `caveats` a
+// required list on every measure ([] = the research states none). Shown
+// first, as the research's own word; the text search below is the backstop.
+function StatedCaveats({ raw, version }: { raw: unknown; version: number | null }) {
+  const stated = isRecord(raw) && Array.isArray(raw['caveats']) ? (raw['caveats'] as unknown[]) : null;
+  return (
+    <div className="mt-3 border-l-[3px] border-warning bg-offwhite px-3.5 py-3" data-testid="stated-caveats">
+      <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-warning">
+        The research's stated caveats
+      </span>
+      {stated === null ? (
+        <p className="m-0 mt-1 text-[12px] text-ink-45">
+          This result predates stated caveats (contract v{version ?? 3}). Read the citation and the search below.
+        </p>
+      ) : stated.length === 0 ? (
+        <p className="m-0 mt-1 text-[12px] text-ink-45">The research stated none.</p>
+      ) : (
+        <ul className="m-0 mt-1.5 list-disc pl-5">
+          {stated.map((c, i) => (
+            <li key={i} className="py-0.5 text-[12.5px] text-ink">{typeof c === 'string' ? c : JSON.stringify(c)}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CaveatBlock({ caveats }: { caveats: { field: string; sentence: string }[] }) {
   return (
     <div className="mt-3 border-l-[3px] border-warning bg-offwhite px-3.5 py-3" data-testid="caveats">
       <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-warning">
-        The research's own caveats
+        Caveat phrases elsewhere in the response
       </span>
       {caveats.length === 0 ? (
         <p className="m-0 mt-1 text-[12px] text-ink-45">
@@ -437,6 +466,7 @@ function ReviewForm({
   const caveats = useMemo(() => findCaveats(result.raw_response), [result.raw_response]);
   return (
     <div className="mt-3">
+      <StatedCaveats raw={result.raw_response} version={result.contract_version} />
       <CaveatBlock caveats={caveats} />
       <GovernedForm<{ review_state: string }>
         path={`/api/research-results/${result.id}/${decision}`}
@@ -460,7 +490,9 @@ function ReviewForm({
             </div>
             <label className="mb-3 flex items-center gap-2 text-[12.5px] text-ink">
               <input type="checkbox" checked={caveatsRead} onChange={(e) => setCaveatsRead(e.target.checked)} />
-              {caveats.length > 0 ? "I have read the research's caveats" : 'I have read the citation'}
+              {caveats.length > 0 || (isRecord(result.raw_response) && Array.isArray(result.raw_response['caveats']) && result.raw_response['caveats'].length > 0)
+                ? "I have read the research's caveats"
+                : 'I have read the citation'}
               <span className="text-[11px] text-ink-45">(required to accept)</span>
             </label>
             <label className="block">

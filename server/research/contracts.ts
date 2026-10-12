@@ -21,13 +21,17 @@
  * it, not the contract.
  */
 
-export type MeasureFieldKind = 'string' | 'boolean';
+export type MeasureFieldKind = 'string' | 'boolean' | 'string_list';
 
 export interface ContractLeaf {
   key: string;
   kind: MeasureFieldKind;
-  /** The industry_measures column this lands in at accept. */
-  column: string;
+  /**
+   * The industry_measures column this lands in at accept — or null for a
+   * review-only field (v4's `caveats`), validated at both gates and kept in
+   * raw_response, mapped to no column.
+   */
+  column: string | null;
   /** The sentence the generated prompt uses to ask for it. */
   prompt: string;
   /** Validated against this enum's live labels (pg_enum), not a list here. */
@@ -49,10 +53,7 @@ export interface ResearchContract {
   fields: ContractField[];
 }
 
-export const INDUSTRY_MEASURE_CONTRACT: ResearchContract = {
-  resultKind: 'industry_measure',
-  version: 3,
-  fields: [
+const V3_FIELDS: ContractField[] = [
     { key: 'name', kind: 'string', column: 'name',
       prompt: 'The measure as the industry names it — a short, recognisable name.' },
     { key: 'unit', kind: 'string', column: 'unit',
@@ -75,8 +76,35 @@ export const INDUSTRY_MEASURE_CONTRACT: ResearchContract = {
         { key: 'why', kind: 'string', column: 'addressable_reasoning',
           prompt: 'The reasoning, in a sentence or two.' },
       ] },
-  ],
+];
+
+/**
+ * EVERY VERSION IS KEPT, by number (Q4g): a result is judged against the
+ * version it was parsed under (check_legacy_research.ts), while parse and
+ * accept use the current one. v3 is the shape of every result parsed before
+ * Q4g, including the 13 pre-Q4b rows (verified against v3 at Q4b's Gate C).
+ */
+export const INDUSTRY_MEASURE_CONTRACTS: Readonly<Record<number, ResearchContract>> = {
+  3: { resultKind: 'industry_measure', version: 3, fields: V3_FIELDS },
+  /**
+   * v4 (Q4g, Brad 12 Oct): `caveats` is REQUIRED on every measure — a list,
+   * where [] is the research stating there are none. Q4e showed why: the
+   * agent's caveats ("reviewer should confirm…") were buried in `citation`
+   * and accepted unread. Review-only: it maps to no column.
+   */
+  4: {
+    resultKind: 'industry_measure',
+    version: 4,
+    fields: [
+      ...V3_FIELDS,
+      { key: 'caveats', kind: 'string_list', column: null,
+        prompt: 'Anything a reviewer must check before relying on this measure: a figure taken from a secondary summary, a source you could not open, a gated or paywalled report, an estimate. One caveat per string. If there are none, return an empty list [] — the key is required either way.' },
+    ],
+  },
 };
+
+/** The contract parse and accept validate against now. */
+export const INDUSTRY_MEASURE_CONTRACT: ResearchContract = INDUSTRY_MEASURE_CONTRACTS[4];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -140,7 +168,19 @@ export function validateMeasure(
     if (f.kind === 'boolean') {
       if (v === undefined && missingIsDrift) issues.push(missingMessage(mode, `${p}.${f.key}`));
       else if (typeof v !== 'boolean') issues.push(`${p}.${f.key} must be a boolean`);
-      else columns[f.column] = v;
+      else if (f.column) columns[f.column] = v;
+      return;
+    }
+    if (f.kind === 'string_list') {
+      if (v === undefined && missingIsDrift) {
+        issues.push(missingMessage(mode, `${p}.${f.key}`));
+      } else if (!Array.isArray(v)) {
+        issues.push(`${p}.${f.key} must be a list of strings ([] if there are none)`);
+      } else {
+        v.forEach((item, i) => {
+          if (typeof item !== 'string' || item.trim() === '') issues.push(`${p}.${f.key}[${i}] must be a non-empty string`);
+        });
+      }
       return;
     }
     if (v === undefined && missingIsDrift) {
@@ -154,7 +194,7 @@ export function validateMeasure(
     if (f.enumType === 'metric_direction' && !validDirections.includes(v)) {
       issues.push(`${p}.${f.key} must be one of: ${validDirections.join(', ')}`);
     }
-    columns[f.column] = v;
+    if (f.column) columns[f.column] = v;
   };
   for (const f of contract.fields) {
     if (f.kind !== 'object') {
@@ -183,7 +223,9 @@ export function validateMeasure(
 
 /** Every industry_measures column the contract fills, in contract order. */
 export function contractColumns(contract: ResearchContract): string[] {
-  return contract.fields.flatMap((f) => (f.kind === 'object' ? f.fields.map((s) => s.column) : [f.column]));
+  return contract.fields
+    .flatMap((f) => (f.kind === 'object' ? f.fields.map((s) => s.column) : [f.column]))
+    .filter((c): c is string => c !== null);
 }
 
 /* ------------------------------------------------------------------ */
@@ -191,7 +233,7 @@ export function contractColumns(contract: ResearchContract): string[] {
 /* ------------------------------------------------------------------ */
 
 /** The wording of buildIndustryMeasurePrompt. Bump on any change to its text. */
-export const PROMPT_TEMPLATE_VERSION = 1;
+export const PROMPT_TEMPLATE_VERSION = 2; // 2: v4's caveats (Q4g)
 
 export interface IndustryPromptInputs {
   promptId: string;
@@ -220,12 +262,14 @@ export function buildIndustryMeasurePrompt(contract: ResearchContract, inputs: I
   const fieldLines = contract.fields.flatMap((f) =>
     f.kind === 'object'
       ? [`- ${f.key}: ${f.prompt}`, ...f.fields.map((s) => `    - ${s.key} (${s.kind}): ${s.prompt}`)]
-      : [`- ${f.key} (${f.kind}): ${f.prompt}`]);
+      : [`- ${f.key} (${f.kind === 'string_list' ? 'list of strings' : f.kind}): ${f.prompt}`]);
   const skeleton = Object.fromEntries(contract.fields.map((f) => [
     f.key,
     f.kind === 'object'
       ? Object.fromEntries(f.fields.map((s) => [s.key, s.kind === 'boolean' ? '<true|false>' : `<${s.key}>`]))
-      : `<${f.key}>`,
+      : f.kind === 'string_list'
+        ? [`<a ${f.key.replace(/s$/, '')}; or [] if there are none>`]
+        : `<${f.key}>`,
   ]));
   const envelope = {
     prompt_id: promptId,
@@ -259,6 +303,9 @@ export function buildIndustryMeasurePrompt(contract: ResearchContract, inputs: I
     '  addressable_by_workforce_capability.value = false and the reasoning, or list it under',
     '  measures_tested_and_excluded_as_unaddressable.',
     `- Return "prompt_id" and "industry" exactly as shown below: "${promptId}" and "${industry.slug}".`,
+    ...(contract.fields.some((f) => f.key === 'caveats')
+      ? ['- "caveats" is required on every measure. Say what a reviewer must check; [] states there is nothing to check.']
+      : []),
     '',
     'Return ONE JSON object of exactly this shape, and nothing else:',
     JSON.stringify(envelope, null, 2),

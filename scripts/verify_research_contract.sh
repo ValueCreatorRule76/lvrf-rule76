@@ -33,6 +33,8 @@ BASE="http://127.0.0.1:${PORT}"
 ROUTE=server/routes/industryResearch.ts
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_contract.XXXXXX")"
 cp "$ROUTE" "$W/route.orig"
+CONTRACTS=server/research/contracts.ts; CHECKER=scripts/check_legacy_research.ts
+cp "$CONTRACTS" "$W/contracts.orig"; cp "$CHECKER" "$W/checker.orig"
 PASS=0; FAIL=0; SERVER_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
@@ -41,6 +43,8 @@ stop_server() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; 
 cleanup() {
   stop_server
   cmp -s "$W/route.orig" "$ROUTE" || { cp "$W/route.orig" "$ROUTE"; echo "  (EXIT trap restored $ROUTE)"; }
+  cmp -s "$W/contracts.orig" "$CONTRACTS" || { cp "$W/contracts.orig" "$CONTRACTS"; echo "  (EXIT trap restored $CONTRACTS)"; }
+  cmp -s "$W/checker.orig" "$CHECKER" || { cp "$W/checker.orig" "$CHECKER"; echo "  (EXIT trap restored $CHECKER)"; }
   dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W"
 }
 trap cleanup EXIT
@@ -94,18 +98,18 @@ step "3. The results that predate prompts (0031 left them as they were)"
 # printed, not failed — accept itself would refuse that row.
 legacy() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_legacy_research.ts 2>&1 || true; }
 OUT="$(legacy)"
-ACC_FINDINGS="$(printf '%s\n' "$OUT" | grep '^LEGACY: .* (accepted):' || true)"
-[ -z "$ACC_FINDINGS" ] && printf '%s' "$OUT" | grep -q '^legacy research results: ' \
-  && ok "check_legacy_research: every accepted legacy result validates against the contract" || bad "check_legacy_research: $OUT"
+ACC_FINDINGS="$(printf '%s\n' "$OUT" | grep '^LEGACY: .* (accepted, ' || true)"
+[ -z "$ACC_FINDINGS" ] && printf '%s' "$OUT" | grep -q '^research results: ' \
+  && ok "check_legacy_research: every accepted result validates against the version it was parsed under" || bad "check_legacy_research: $OUT"
 printf '%s\n' "$OUT" | grep '^LEGACY: ' | sed 's/^/  NOTE  /' | cut -c1-220 || true
 printf '%s\n' "$OUT" | tail -1 | sed 's/^/  NOTE  /'
 ACC="$(q "SELECT id FROM research_results WHERE result_kind = 'industry_measure' AND review_state = 'accepted' ORDER BY id LIMIT 1")"
 if [ -n "$ACC" ]; then
   q "SELECT raw_response::text FROM research_results WHERE id = '$ACC'" > "$W/acc.json"
   q "UPDATE research_results SET raw_response = raw_response - 'citation' WHERE id = '$ACC'" > /dev/null
-  legacy | grep -qF "LEGACY: $ACC (accepted): raw_response.citation is missing" && ok "break: an accepted row without its citation is named by the checker" || bad "break: the checker missed $ACC"
+  legacy | grep -qF "LEGACY: $ACC (accepted, v3): raw_response.citation is missing" && ok "break: an accepted row without its citation is named by the checker" || bad "break: the checker missed $ACC"
   echo "UPDATE research_results SET raw_response = :'raw'::jsonb WHERE id = '$ACC'" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -v raw="$(cat "$W/acc.json")" > /dev/null
-  [ -z "$(legacy | grep '^LEGACY: .* (accepted):' || true)" ] && ok "  ...restored: no accepted row fails" || bad "  ...restore"
+  [ -z "$(legacy | grep '^LEGACY: .* (accepted, ' || true)" ] && ok "  ...restored: no accepted row fails" || bad "  ...restore"
 fi
 
 step "4. Fixtures and server"
@@ -137,7 +141,8 @@ MISSING_COLS=""; for c in $COLS; do [ "$(q "SELECT count(*) FROM information_sch
 
 expect "/api/industries/$IND/research-prompts" '{}' 201 "generate a prompt"
 P1="$(rj b.prompt_id)"; rj b.prompt > "$W/p1.txt"
-[ "$(rj "b.contract_version+'/'+b.template_version")" = "$CV/1" ] && ok "response: contract v$CV, template v1" || bad "versions: $(rj "b.contract_version+'/'+b.template_version")"
+TV="$(npx tsx -e "import('./server/research/contracts.ts').then(m=>console.log(m.PROMPT_TEMPLATE_VERSION))")"
+[ "$(rj "b.contract_version+'/'+b.template_version")" = "$CV/$TV" ] && ok "response: contract v$CV, template v$TV" || bad "versions: $(rj "b.contract_version+'/'+b.template_version")"
 [ "$(rj b.prompt_sha256)" = "$(q "SELECT prompt_sha256 FROM research_prompts WHERE id = '$P1'")" ] \
   && [ "$(q "SELECT prompt_sha256 = encode(sha256(convert_to(prompt_text, 'UTF8')), 'hex') FROM research_prompts WHERE id = '$P1'")" = "t" ] \
   && [ "$(node -e "console.log(require('crypto').createHash('sha256').update(require('$W/r.json').prompt,'utf8').digest('hex'))")" = "$(rj b.prompt_sha256)" ] \
@@ -178,7 +183,7 @@ printf '%s' "$BADHASH" | grep -qF "research_prompts_sha256_is_the_text" && ok "a
 expect "/api/industries/$IND_X/research-prompts" '{}' 404 "another tenant's industry" "industry $IND_X not found"
 
 step "6. Parse requires the prompt, its version and its industry"
-GOOD_M='{"name":"Contract measure","unit":"%","direction":"increase","definition":"d","why_it_pays":"w","confounders":"c","citation":"cite","addressable_by_workforce_capability":{"value":true,"why":"y"}}'
+GOOD_M='{"name":"Contract measure","unit":"%","direction":"increase","definition":"d","why_it_pays":"w","confounders":"c","citation":"cite","addressable_by_workforce_capability":{"value":true,"why":"y"},"caveats":[]}'
 body() {  # PROMPT_ID INDUSTRY [MEASURE] — PROMPT_ID "-" omits the key
   local pid=""; [ "$1" = "-" ] || pid="\"prompt_id\":\"$1\","
   printf '{%s"industry":"%s","research_query":"q","query_as_executed":"qe","research_tool":"Contract verification","measures":[%s]}' "$pid" "$2" "${3:-$GOOD_M}"
@@ -237,6 +242,25 @@ printf '%s' "$OUT" | grep -qF "research_results_untracked_predates_prompts" && [
 q "UPDATE research_results SET parsed_at = '2026-01-01' WHERE id = '$RR_2'" > /dev/null
 [ "$(q "SELECT parsed_at FROM research_results WHERE id = '$RR_2'")" = "$PA" ] && ok "parsed_at is frozen on UPDATE (a backdating UPDATE leaves it as it was)" || bad "parsed_at moved"
 [ "$(q "SELECT count(*) FROM research_results WHERE NOT prompt_tracked AND parsed_at >= '$CUTOFF'")" = "0" ] && ok "no untracked row at or after the cut-off" || bad "an untracked row after the cut-off"
+
+step "6b. Contract v4: caveats (Q4g)"
+[ "$CV" = "4" ] && ok "the current contract is v4" || bad "contract version $CV"
+expect "$PARSE" "$(body "$P1" "$SLUG" "${GOOD_M/\"caveats\":[]/\"caveats\":\"none\"}")" 422 "caveats not a list" "measures[0].caveats must be a list of strings ([] if there are none)"
+expect "$PARSE" "$(body "$P1" "$SLUG" "${GOOD_M/\"caveats\":[]/\"caveats\":[\"ok\",\"  \"]}")" 422 "a blank caveat" "measures[0].caveats[1] must be a non-empty string"
+expect "$PARSE" "$(body "$P1" "$SLUG" "$(printf '%s' "${GOOD_M/\"caveats\":[]/\"caveats\":[\"Secondary summary; reviewer should confirm.\"]}" | sed 's/Contract measure/Contract measure with a caveat/')")" 201 "a stated caveat"
+RR_CAV="$(rj b.results[0].id)"
+[ "$(q "SELECT raw_response->'caveats'->>0 FROM research_results WHERE id = '$RR_CAV'")" = "Secondary summary; reviewer should confirm." ] && ok "  ...kept verbatim in raw_response (review-only: no column)" || bad "  ...caveat not kept"
+grep -qF '"caveats" is required on every measure' "$W/p1.txt" && grep -qF -- '- caveats (list of strings):' "$W/p1.txt" && ok "the v4 prompt asks for caveats, with its rule" || bad "prompt lacks caveats"
+# A pending result parsed under v3 (from before Q4g) — inserted as one, since
+# parse can no longer write v3: accept judges it against v4 and refuses it;
+# the checker judges it against v3 and passes it.
+V3_RAW="$(printf '%s' "$GOOD_M" | sed 's/,"caveats":\[\]//; s/Contract measure/A v3-era pending result/')"
+RR_V3="$(q "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
+  VALUES ('$TEN', 'industry_measure', '$IND', 'A v3-era pending result', true, '$V3_RAW'::jsonb, 'q', 'qe', 't', '$ACTOR', '$P_OLD', 3) RETURNING id" | head -1)"
+expect "/api/research-results/$RR_V3/accept" '{"review_note":"Verification: a v3-era result."}' 422 "accepting a v3-era pending result (no caveats)" "raw_response.caveats is missing. This raw_response predates the accept mapping"
+OUT="$(legacy)"
+printf '%s' "$OUT" | grep -qF "$RR_V3" && bad "the checker flags the v3-era result: $(printf '%s' "$OUT" | grep -F "$RR_V3")" || ok "the checker passes the v3-era result against v3, the version it was parsed under"
+printf '%s' "$OUT" | grep -qE 'v3: [0-9]+, v4: [0-9]+' && ok "  ...and reports both versions: $(printf '%s' "$OUT" | grep -oE '\(v3: [0-9]+, v4: [0-9]+\)')" || bad "  ...versions: $(printf '%s' "$OUT" | tail -1)"
 
 step "7. Accept and reject: steward-only (Band A) and unchanged"
 npx tsx -e "import('./server/lib/stewardActs.ts').then(m=>{const t=m.MUTATING_ROUTE_CLASS;console.log([t['POST /api/research-results/:id/accept'],t['POST /api/research-results/:id/reject'],t['POST /api/industries/:industryId/research-prompts'],t['POST /api/industries/:industryId/research-results']].join(' '))})" > "$W/cls.txt"
@@ -297,6 +321,25 @@ OUT="$(printf 'BEGIN;\n%s\n%s\nROLLBACK;\n' "DROP TRIGGER research_results_touch
   | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
 printf '%s' "$OUT" | grep -qF "INSERT 0 1" && ok "B6: without the parsed_at stamp, a row backdated to 2026-01-01 claims to predate prompts — the stamp is what makes the cut-off hold (rolled back)" || bad "B6: $OUT"
 [ "$(q "SELECT count(*) FROM pg_constraint WHERE conname = 'research_results_untracked_predates_prompts'")$(q "SELECT count(*) FROM research_results WHERE field_name IN ('B5', 'B6')")" = "10" ] && ok "  ...after B5 and B6: the CHECK is in place, neither row exists" || bad "B5/B6 left state behind"
+# B7 — Q4g: caveats removed from contract v4: a response without them is written.
+python3 - "$CONTRACTS" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+i = s.index("      { key: 'caveats'"); j = s.index("either way.' },\n", i) + len("either way.' },\n")
+open(p, 'w').write(s[:i] + s[j:])
+PY
+cmp -s "$W/contracts.orig" "$CONTRACTS" && bad "B7 did not change $CONTRACTS" || { stop_server; start_server; }
+expect "$PARSE" "$(body "$P1" "$SLUG" "$(printf '%s' "$GOOD_M" | sed 's/,"caveats":\[\]//; s/Contract measure/Break seven/')")" 201 "B7: without caveats in the contract, a response without caveats is written — the field is what refuses it"
+cp "$W/contracts.orig" "$CONTRACTS"; cmp -s "$W/contracts.orig" "$CONTRACTS" && ok "  ...$CONTRACTS restored byte-identical" || bad "  ...restore"
+stop_server; start_server
+expect "$PARSE" "$(body "$P1" "$SLUG" "$(printf '%s' "$GOOD_M" | sed 's/,"caveats":\[\]//; s/Contract measure/Break seven again/')")" 422 "B7 restored: refused again" "measures[0].caveats is missing"
+# B8 — Q4g: the checker judging every row by the CURRENT contract: the v3 rows are named as failing.
+python3 - "$CHECKER" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+a = "const contract = INDUSTRY_MEASURE_CONTRACTS[version];"
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "const contract = INDUSTRY_MEASURE_CONTRACTS[4];"))
+PY
+legacy | grep -qF "LEGACY: $RR_V3 (pending, v3): raw_response.caveats is missing" && ok "B8: judged by the current contract, the v3-era result is named as failing — judging by its own version is what keeps it valid" || bad "B8 not caught"
+cp "$W/checker.orig" "$CHECKER"; cmp -s "$W/checker.orig" "$CHECKER" && ok "  ...$CHECKER restored byte-identical" || bad "  ...restore"
 cmp -s "$W/route.orig" "$ROUTE" && ok "$ROUTE is byte-identical to before the run" || bad "$ROUTE differs"
 
 echo

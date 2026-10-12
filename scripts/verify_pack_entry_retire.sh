@@ -112,7 +112,7 @@ M_X="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, dir
   VALUES ('$TEN_X', '$IND_X', 'Other tenant entry (verification)', '%', 'increase', 'd', 'w', true, 'r', 'c', 'Verification fixture, not a source.') RETURNING id" | head -1)"
 start_server && ok "API up on $PORT"
 
-mk() { printf '{"name":"%s","unit":"%%","direction":"increase","definition":"d","why_it_pays":"w","confounders":"c","citation":"Verification citation, not a source.","addressable_by_workforce_capability":{"value":true,"why":"y"}}' "$1"; }
+mk() { printf '{"name":"%s","unit":"%%","direction":"increase","definition":"d","why_it_pays":"w","confounders":"c","citation":"Verification citation, not a source.","addressable_by_workforce_capability":{"value":true,"why":"y"},"caveats":[]}' "$1"; }
 accept_all() {  # NAMES... — generate a prompt, parse the names, accept each as S
   req POST "/api/industries/$IND/research-prompts" '{}'; local P; P="$(rj b.prompt_id)"
   local ms=""; for n in "$@"; do ms="$ms${ms:+,}$(mk "$n")"; done
@@ -187,6 +187,14 @@ expect POST "/api/research-results/$R4/accept" '{"review_note":"Verification: ba
 [ "$(q "SELECT count(*) || '/' || count(*) FILTER (WHERE deleted_at IS NULL) FROM industry_measures WHERE industry_id = '$IND' AND name = 'Retire E4 claimed by a retired capability'")" = "2/1" ] && ok "  ...as a NEW row; the retired one stays retired" || bad "  ...rows"
 expect POST "/api/research-results/$R1/accept" '{"review_note":"Verification: should be refused."}' 409 "an excluded name cannot return" "was excluded from this pack"
 
+# Q4g: a pending result parsed under v3 (before caveats), for the walk's
+# "predates stated caveats" check. Parse can no longer write v3, so it is
+# inserted as one, with a v3 prompt of its own.
+P_V3="$(q "INSERT INTO research_prompts (tenant_id, industry_id, result_kind, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
+  VALUES ('$TEN', '$IND', 'industry_measure', 3, 1, 'a v3 prompt (verification fixture)', encode(sha256(convert_to('a v3 prompt (verification fixture)', 'UTF8')), 'hex'), '$S') RETURNING id" | head -1)"
+q "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
+  VALUES ('$TEN', 'industry_measure', '$IND', 'A v3-era pending result (walk)', true, '$(mk 'A v3-era pending result (walk)' | sed 's/,"caveats":\[\]//')'::jsonb, 'q', 'qe', 't', '$S', '$P_V3', 3)" > /dev/null
+
 step "7. The page, in a browser"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) &
 VITE_PID=$!
@@ -194,8 +202,11 @@ VITE_PID=$!
 CHROME_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 walk() {  # MODE ENTRY_NAME
-  node scripts/lib/pack_research_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$SLUG" "$S_EMAIL" "$X_EMAIL" "$PW" "${2:-}" "$S_NAME" 2>&1 | tee "$W/walk.$1.log" || true
+  set +e  # pipefail would end the script on a failed walk before its code is read
+  node scripts/lib/pack_research_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$SLUG" "$S_EMAIL" "$X_EMAIL" "$PW" "${2:-}" "$S_NAME" 2>&1 | tee "$W/walk.$1.log"; local rc=${PIPESTATUS[0]}; set -e
   PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.$1.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.$1.log" || true)))
+  # A walk that crashes prints no FAIL lines; its exit code is what says so.
+  [ "$rc" = "0" ] || bad "the $1 walk exited $rc — a crash is a failure (see $W/walk.$1.log)"
 }
 walk caveats
 walk nonsteward-retire "Retire E5 browser"
@@ -220,7 +231,7 @@ python3 - "$CARDS" <<'PY'
 import sys; p = sys.argv[1]; s = open(p).read(); a = "(decision === 'reject' || caveatsRead)"
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "true"))
 PY
-sleep 2; walk break-tick; restore "$CARDS"
+sleep 5; walk break-tick; restore "$CARDS"
 # B4 — the client's steward gate on "Retire this entry…" removed: the server still refuses.
 python3 - "$PAGE" <<'PY'
 import sys; p = sys.argv[1]; s = open(p).read(); a = "const stewardReason = actor?.is_steward\n    ? undefined"

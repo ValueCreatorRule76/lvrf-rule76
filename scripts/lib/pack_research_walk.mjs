@@ -96,6 +96,7 @@ const measure = (name, dir = 'increase') => ({
   why_it_pays: 'Verification reason it carries money.', confounders: 'Verification confounders.',
   citation: 'Verification citation, not a source.',
   addressable_by_workforce_capability: { value: true, why: 'Verification why.' },
+  caveats: [],
 });
 const response = (promptId, measures, extra = {}) => JSON.stringify({
   prompt_id: promptId, industry: SLUG, research_query: 'Verification query', query_as_executed: 'As asked',
@@ -108,7 +109,7 @@ async function parse(text) {
   return r;
 }
 async function latestPromptId() {
-  return psql(`SELECT p.id FROM research_prompts p JOIN industries i ON i.id = p.industry_id WHERE i.slug = '${SLUG}' AND p.contract_version = 3 ORDER BY p.generated_at DESC LIMIT 1`).split('\n')[0];
+  return psql(`SELECT p.id FROM research_prompts p JOIN industries i ON i.id = p.industry_id WHERE i.slug = '${SLUG}' ORDER BY p.contract_version DESC, p.generated_at DESC LIMIT 1`).split('\n')[0];
 }
 
 await send('Page.enable');
@@ -119,7 +120,7 @@ if (MODE === 'full') {
   // ---- as authorized X (not the steward)
   check(await signIn(X_EMAIL), 'X signs in by session');
   check(await openPack(), 'the pack page shows the Research section to X');
-  check(await ev(`(${card('Prompts on record')}).textContent.includes('Generated against contract v2; the contract is now v3')`), 'the v2 prompt is flagged STALE, with "generate a new prompt"');
+  check(await ev(`(${card('Prompts on record')}).textContent.match(/Generated against contract v2; the contract is now v[3-9]/) !== null`), 'the v2 prompt is flagged STALE, with "generate a new prompt"');
   await click(card('Generate a research prompt'), 'Generate research prompt');
   check(await waitFor(bodyHas('Copy prompt')), 'X generates a prompt; the text appears with Copy');
   const P = await latestPromptId();
@@ -229,7 +230,8 @@ if (MODE === 'full') {
   const P = await latestPromptId();
   const NAME = MODE === 'caveats' ? 'Caveat walk measure' : 'Caveat walk measure (break)';
   const CAVEAT = 'Secondary summaries report the figure at 27%; reviewer should confirm the figure in the report itself.';
-  await parse(response(P, [{ ...measure(NAME), citation: `Verification Report 2025, https://example.org/report. ${CAVEAT}` },
+  const STATED = 'Stated by the research: the 2025 figure is from a gated report I could not open.';
+  await parse(response(P, [{ ...measure(NAME), citation: `Verification Report 2025, https://example.org/report. ${CAVEAT}`, caveats: [STATED] },
     measure(NAME + ' — no caveat')]));
   await waitFor(`!!${pendingEntry(NAME)}`);
   const block = await ev(`(${pendingEntry(NAME)}).querySelector('[data-testid=caveats]')?.textContent || ''`);
@@ -241,6 +243,14 @@ if (MODE === 'full') {
     check(block.includes('Secondary summaries report the figure at 27%;') && block.includes('reviewer should confirm the figure in the report itself.') && block.includes('citation'),
       "the caveat block shows the agent's sentences verbatim, each with its field (citation)", block.slice(0, 200));
     check(plain.includes('No caveat phrases found'), 'a result with no caveat phrase says so — "a text search, not a finding"');
+    const stated = await ev(`(${pendingEntry(NAME)}).querySelector('[data-testid=stated-caveats]')?.textContent || ''`);
+    check(stated.includes(STATED) && !block.includes(STATED), "Q4g: the stated caveat is in its own block, and not repeated by the text search", stated.slice(0, 200));
+    check((await ev(`(${pendingEntry(NAME + ' — no caveat')}).querySelector('[data-testid=stated-caveats]')?.textContent || ''`)).includes('The research stated none.'), 'Q4g: caveats [] reads "The research stated none."');
+    const V3 = 'A v3-era pending result (walk)';
+    if (await ev(`!!${pendingEntry(V3)}`)) {
+      check((await ev(`(${pendingEntry(V3)}).querySelector('[data-testid=stated-caveats]')?.textContent || ''`)).includes('predates stated caveats (contract v3)'),
+        'Q4g: a v3-era result reads "predates stated caveats (contract v3)"');
+    } else bad('Q4g: the v3-era fixture is not pending on the page');
     check(await ev(`(${pendingEntry(NAME + ' — no caveat')}).textContent.includes('I have read the citation')`), 'with no match, the tick still exists ("I have read the citation")');
     check(disabledBefore === true, 'Accept is disabled with the note written but the tick unticked');
     await shot('q4c1b_1_caveats_unticked', `#pending-card`);
@@ -252,7 +262,7 @@ if (MODE === 'full') {
     await sleep(300);
     check((await buttonDisabled(pendingEntry(NAME + ' — no caveat'), 'Reject')) === false, 'Reject does not need the tick');
   } else {
-    check(disabledBefore === false, 'B-tick: with the client gate removed, Accept is enabled without the tick — the gate is what holds it');
+    check(disabledBefore === false, 'B-tick: with the client gate removed, Accept is enabled without the tick — the gate is what holds it', `Accept disabled = ${disabledBefore}; entry found = ${await ev(`!!${pendingEntry(NAME)}`)}`);
   }
 } else if (MODE === 'break-retire-gate') {
   // The client's steward gate on "Retire this entry…" removed: X can open

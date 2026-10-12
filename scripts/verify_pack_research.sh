@@ -102,8 +102,9 @@ start_server && ok "API up on $PORT"
 
 step "3. GET /api/industries/:slug/research"
 req GET "/api/industries/$SLUG/research"
-[ "$CODE" = "200" ] && [ "$(rj "[b.industry.id===\"$IND\", b.contract_version_now===3, Array.isArray(b.prompts), Array.isArray(b.pending)].join()")" = "true,true,true,true" ] \
-  && ok "200: industry, contract_version_now 3, prompts, pending" || bad "shape: $CODE $(head -c 300 "$W/r.json")"
+CV="$(npx tsx -e "import('./server/research/contracts.ts').then(m=>console.log(m.INDUSTRY_MEASURE_CONTRACT.version))")"
+[ "$CODE" = "200" ] && [ "$(rj "[b.industry.id===\"$IND\", b.contract_version_now===$CV, Array.isArray(b.prompts), Array.isArray(b.pending)].join()")" = "true,true,true,true" ] \
+  && ok "200: industry, contract_version_now $CV (the contract's own), prompts, pending" || bad "shape: $CODE $(head -c 300 "$W/r.json")"
 [ "$(rj "b.prompts.find(p=>p.id===\"$P_STALE\")?.contract_version")" = "2" ] && ok "the stale prompt is listed with contract_version 2 (the card flags v2 ≠ v3)" || bad "stale prompt missing"
 req GET "/api/industries/$SLUG_X/research"
 [ "$CODE" = "404" ] && [ "$(rj b.message)" = "industry '$SLUG_X' not found" ] && ok "another tenant's slug -> 404 \"industry '$SLUG_X' not found\"" || bad "other tenant: $CODE $(cat "$W/r.json")"
@@ -113,7 +114,7 @@ step "4. The loop the cards drive (API)"
 req POST "/api/industries/$IND/research-prompts" '{}' "$X"
 [ "$CODE" = "201" ] && ok "generate as authorized X -> 201" || bad "generate: $CODE"
 P1="$(rj b.prompt_id)"
-M() { printf '{"name":"%s","unit":"%%","direction":"%s","definition":"d","why_it_pays":"w","confounders":"c","citation":"Verification citation","addressable_by_workforce_capability":{"value":true,"why":"y"}}' "$1" "$2"; }
+M() { printf '{"name":"%s","unit":"%%","direction":"%s","definition":"d","why_it_pays":"w","confounders":"c","citation":"Verification citation","addressable_by_workforce_capability":{"value":true,"why":"y"},"caveats":[]}' "$1" "$2"; }
 BODY="{\"prompt_id\":\"$P1\",\"industry\":\"$SLUG\",\"research_query\":\"q\",\"query_as_executed\":\"qe\",\"research_tool\":\"API verification tool\",\"measures\":[$(M 'API measure one' increase),$(M 'API measure two' decrease)]}"
 req POST "/api/industries/$IND/research-results" "$BODY" "$X"
 [ "$CODE" = "201" ] && ok "parse as authorized X -> 201" || bad "parse: $CODE $(head -c 300 "$W/r.json")"
@@ -142,8 +143,11 @@ VITE_PID=$!
 CHROME_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 walk() {  # MODE — prints PASS/FAIL lines; counted here
-  node scripts/lib/pack_research_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$SLUG" "$S_EMAIL" "$X_EMAIL" "$PW" "$P_STALE" "$S_NAME" 2>&1 | tee "$W/walk.$1.log" || true
+  set +e  # pipefail would end the script on a failed walk before its code is read
+  node scripts/lib/pack_research_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$SLUG" "$S_EMAIL" "$X_EMAIL" "$PW" "$P_STALE" "$S_NAME" 2>&1 | tee "$W/walk.$1.log"; local rc=${PIPESTATUS[0]}; set -e
   PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.$1.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.$1.log" || true)))
+  # A walk that crashes prints no FAIL lines; its exit code is what says so.
+  [ "$rc" = "0" ] || bad "the $1 walk exited $rc — a crash is a failure (see $W/walk.$1.log)"
 }
 walk full
 

@@ -74,7 +74,7 @@ NOTE="Verification note: confirm the threshold before relying on it."
 PAYLOAD=$(cat <<JSON
 {"prompt_id":"$PROMPT_ID","industry":"$SLUG","research_query":"Verification query","query_as_executed":"As asked","research_tool":"$TOOL",
  "measures":[{"name":"Verification measure","unit":"%","direction":"increase","definition":"A verification definition.",
-   "why_it_pays":"A verification reason.","addressable_by_workforce_capability":{"value":true,"why":"A verification why."},
+   "why_it_pays":"A verification reason.","addressable_by_workforce_capability":{"value":true,"why":"A verification why."},"caveats":[],
    "confounders":"Verification confounders.","citation":"Verification citation."}]}
 JSON
 )
