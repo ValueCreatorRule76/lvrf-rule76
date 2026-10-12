@@ -90,18 +90,15 @@ way to name the actor. Every mutating request must be JSON and same-origin
 bypass it. **P3 remains:** a tenant check on every mutating route. Caddy basic_auth
 stays in front of everything until P4 decides otherwise.
 
-**Not yet:** React/Vite + Tailwind · WeasyPrint 69.0 on the VPS (`pip install weasyprint
---break-system-packages`, fonts into `~/.fonts`, then **`fc-cache -f`** — skip it and
-rendering silently falls back to default fonts).
+**Not yet:** React/Vite + Tailwind.
+
+**PDF:** a value case's PDF is the browser's print of its rendered page, by a print
+stylesheet (decision O-D5, 12 Oct 2026): no WeasyPrint, no new dependency. Every
+printed page carries the disclosure banner and the run's `payload_hash`. QA every
+template by printing to PDF and looking at every page.
 
 Separate repo, database and VPS from CVAF. CVAF carries live revenue; nothing here
 may reach it.
-
-### WeasyPrint constraints
-
-CSS **Grid is unreliable** — use flexbox and HTML tables. QA every template with
-`pdftoppm -png` and actually look at it. The Grid restriction is **PDF-pipeline
-only**; Grid is fine in the React SPA.
 
 ---
 

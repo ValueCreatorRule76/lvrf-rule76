@@ -1185,9 +1185,13 @@ CHRO or board. It rests on CAPABILITY_MAP items:
 - **The browser renders it,** so CSS Grid is usable. `CLAUDE.md`'s "Grid is
   unreliable" applies to WeasyPrint, which this replaces.
 - **What changes in tracing:** the PDF is produced in the reader's browser, so the
-  server never holds its bytes. The `record_documents` row records the run, its
-  `payload_hash`, the lens and who printed it, not a hash of the PDF bytes. **The
-  printed `payload_hash` is the trace.**
+  server never holds its bytes.
+  - **The `record_documents` row records "print requested",** never that the page was
+    printed. The Print control's route writes it server-side **before**
+    `window.print()` is called: the run, its `payload_hash`, the lens, the person and
+    the time.
+  - The browser may cancel the dialog. The record claims only the request.
+  - **The printed `payload_hash` is the trace;** there is no hash of the PDF bytes.
 
 ### What Scotts would show (from the record as it stands, plus Q4d)
 
@@ -1259,3 +1263,14 @@ WeasyPrint. Proposed amendment wording, **not applied until Brad approves it:**
 
 It replaces the WeasyPrint entry in **Not yet** and the "WeasyPrint constraints"
 section.
+
+**Applied 12 Oct 2026,** on Brad's instruction. **No amendment was needed.** The
+governance in force was checked:
+
+- **AMENDMENT-005** amends `CLAUDE.md` only to extend the governing AI principle, and
+  sets no rule for its other content.
+- **AMENDMENT-004** names WeasyPrint only in its *grounds*, as the pipeline of the
+  time. Its Article IV ("Screen and Print Are One System") speaks of "the PDF
+  pipeline" generically, and a browser print of the rendered page meets it more
+  directly. Its Article V (tokens defined once, in `CLAUDE.md`) is untouched.
+- **The O-D5 row in §3 is the history.**
