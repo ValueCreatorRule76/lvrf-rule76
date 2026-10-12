@@ -131,9 +131,23 @@ LEVER_A="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, me
 LINK_A="$(q "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id)
   SELECT '$TENANT_A', '$LEVER_A', o.id, 'Verification fixture link.', t.steward_person_id FROM offerings o JOIN tenants t ON t.id = o.tenant_id
    WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1 RETURNING id" | head -1)"
+# O2: a hypothesis of tenant A's, for the hypothesis routes' cases. Its chain
+# is not one the routes would accept (it only needs to exist): the guard is
+# disabled for this one fixture INSERT, inside its transaction, on the
+# throwaway clone, and re-enabled before COMMIT.
+HYP_A="$(printf "BEGIN;\nALTER TABLE value_hypotheses DISABLE TRIGGER value_hypotheses_guard;\nINSERT INTO value_hypotheses (tenant_id, institution_id, value_outcome_id, value_lever_id, statement, falsifier_reference, falsifier_due, falsifier_conditions, reference_value, reference_recorded_at, author_person_id) SELECT '%s', vo.institution_id, vo.id, '%s', 'Tenant A hypothesis (verification fixture)', 'baseline', DATE '2030-01-01', '', vo.baseline_value, vo.baseline_measured_at, '%s' FROM value_outcomes vo WHERE vo.id = '%s' RETURNING id;\nALTER TABLE value_hypotheses ENABLE TRIGGER value_hypotheses_guard;\nCOMMIT;\n" "$TENANT_A" "$LEVER_A" "$STAFF_A" "$OUTCOME_A" | psql -X -At -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | head -1)"
+# The account OUTCOME_A belongs to (not necessarily INST_A), for the body-id case.
+OUTCOME_A_INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME_A'")"
+MARKER_A="$(q "INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
+  SELECT '$TENANT_A', '$INST_A', 'demonstration', 'Verification fixture citation.', 'Verification fixture marker.', steward_person_id FROM tenants WHERE id = '$TENANT_A' RETURNING id" | head -1)"
+# Tenant B's own lever and summary, for the body-id cases.
+LEVER_B="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
+  SELECT tenant_id, id, 'Tenant B lever (verification)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$STAFF_B' FROM industry_measures WHERE id = '$MEASURE_OTHER' RETURNING id" | head -1)"
+SUMMARY_B="$(q "INSERT INTO executive_summaries (tenant_id, institution_id, lens, body, author_person_id, drafted_with_ai)
+  VALUES ('$TENANT_B', '$INST_B', 'general', 'Tenant B summary, a verification fixture of sufficient length.', '$STAFF_B', false) RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A ARR_A ARR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST ARR_A ARR_A2; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -149,7 +163,7 @@ curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"actor_header":"off"' && 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A ARR_A ARR_A2
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST ARR_A ARR_A2
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

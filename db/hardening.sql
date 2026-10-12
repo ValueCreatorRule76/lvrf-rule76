@@ -157,7 +157,10 @@ DECLARE t text;
     -- full governance() columns; corrected by supersession.
     'institution_entities',
     -- 0035 (O1): value_levers — pack content, full governance() columns.
-    'value_levers'
+    'value_levers',
+    -- 0036 (O2): hypotheses and reference-example markers are governed rows,
+    -- corrected by supersession.
+    'value_hypotheses', 'reference_example_markers'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -512,7 +515,10 @@ DECLARE t text;
     -- 0034 (Q4h): an entity is corrected by superseding it (3.0 item 3).
     'institution_entities',
     -- 0035 (O1): a lever is corrected by superseding it.
-    'value_levers'
+    'value_levers',
+    -- 0036 (O2): hypotheses and reference-example markers are governed rows,
+    -- corrected by supersession.
+    'value_hypotheses', 'reference_example_markers'
   ];
 BEGIN
   FOREACH t IN ARRAY supersession_governed LOOP
@@ -1390,6 +1396,309 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- ------------------------------------------------------------------
+-- 22. O2 (0036, 12 Oct 2026) — hypotheses, their computed verdict, the
+--     verifier rule, executive summaries, reference-example markers
+--     (placed before section 14 so the manifest includes these)
+-- ------------------------------------------------------------------
+-- value_hypotheses and reference_example_markers are in the governed and
+-- supersession loops above (+8). This section adds:
+--   value_hypotheses_guard            BEFORE INSERT OR UPDATE — the chain is
+--                                     one chain; the author is current,
+--                                     non-simulated staff; the reference
+--                                     value is COPIED from the outcome row;
+--                                     post_hoc COMPUTED; conditions hold no
+--                                     digit; after INSERT nothing changes but
+--                                     a withdrawal or a supersession, once,
+--                                     while the verdict is open.
+--   value_outcomes_verifier_not_author BEFORE UPDATE — O2-D1: the person who
+--                                     verifies an actual may not have written
+--                                     a hypothesis on that outcome.
+--   reference_example_markers_steward_only, _one_current (deferred).
+--   executive_summaries_audit, _no_delete, _guard (author is the actor's
+--                                     kind: current non-simulated staff of
+--                                     the tenant; no UPDATE, ever).
+-- And the function lvrf_hypothesis_verdict(value_hypotheses): the verdict,
+-- derived and never stored (O2-D1).
+--
+-- CONSEQUENCE: 111 -> 126 (8 from the loops, 7 here).
+
+CREATE OR REPLACE FUNCTION lvrf_value_hypothesis_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  o record;
+  lev record;
+  inst_tenant uuid;
+  author_ok boolean;
+  v text;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.falsifier_conditions ~ '[0-9]' THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: numbers belong in recorded values, not falsifier conditions (the conditions hold a digit).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_conditions_no_digits';
+    END IF;
+    SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+    IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    SELECT vo.id, vo.institution_id, vo.capability_id, vo.deleted_at, vo.superseded_by_id,
+           vo.baseline_value, vo.baseline_measured_at, vo.target_value, vo.committed_by_person_id,
+           vo.committed_at, vo.actual_value, vo.verified_by_person_id, bm.industry_measure_id AS entry_id
+      INTO o
+      FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id
+     WHERE vo.id = NEW.value_outcome_id;
+    IF o.id IS NULL OR o.institution_id IS DISTINCT FROM NEW.institution_id THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: outcome % is not this account''s.', NEW.value_outcome_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    IF o.deleted_at IS NOT NULL OR o.superseded_by_id IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: outcome % is not current (retired or superseded).', NEW.value_outcome_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    SELECT id, tenant_id, industry_measure_id, deleted_at, superseded_by_id INTO lev FROM value_levers WHERE id = NEW.value_lever_id;
+    IF lev.id IS NULL OR lev.tenant_id IS DISTINCT FROM NEW.tenant_id OR lev.deleted_at IS NOT NULL OR lev.superseded_by_id IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: lever % is not a current lever of this tenant.', NEW.value_lever_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    IF o.entry_id IS DISTINCT FROM lev.industry_measure_id THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the outcome''s metric is not based on the lever''s pack entry; a hypothesis is one chain (capability, lever, pack entry, metric, outcome).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM capability_industry_measures c
+                    WHERE c.capability_id = o.capability_id AND c.industry_measure_id = lev.industry_measure_id) THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the outcome''s capability does not claim the lever''s pack entry.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
+      INTO author_ok FROM persons p WHERE p.id = NEW.author_person_id;
+    IF NOT coalesce(author_ok, false) THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the author % is not current, non-simulated staff of the tenant.', NEW.author_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    IF o.verified_by_person_id IS NOT DISTINCT FROM NEW.author_person_id THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: % verified this outcome''s actual and cannot author a hypothesis on it; the verifier may not be the author (O2-D1).', NEW.author_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_verifier_not_author';
+    END IF;
+    -- The reference value is QUOTED from the outcome row, here, once.
+    IF NEW.falsifier_reference = 'baseline' THEN
+      NEW.reference_value := o.baseline_value;
+      NEW.reference_recorded_at := o.baseline_measured_at;
+    ELSE
+      IF o.target_value IS NULL OR o.committed_by_person_id IS NULL THEN
+        RAISE EXCEPTION 'LVRF: value_hypotheses: outcome % has no committed target; a falsifier may reference only a target a named person committed to.', NEW.value_outcome_id
+          USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+      END IF;
+      NEW.reference_value := o.target_value;
+      NEW.reference_recorded_at := o.committed_at;
+    END IF;
+    -- O2-D3: computed, never taken from a request.
+    NEW.post_hoc := (now() AT TIME ZONE 'UTC')::date > NEW.falsifier_due OR o.actual_value IS NOT NULL;
+    IF NEW.deleted_at IS NOT NULL OR NEW.superseded_by_id IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: a hypothesis is inserted current.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- UPDATE: FROZEN. Only a withdrawal or a supersession, once each, while open.
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+     OR NEW.institution_id IS DISTINCT FROM OLD.institution_id OR NEW.value_outcome_id IS DISTINCT FROM OLD.value_outcome_id
+     OR NEW.value_lever_id IS DISTINCT FROM OLD.value_lever_id OR NEW.statement IS DISTINCT FROM OLD.statement
+     OR NEW.falsifier_reference IS DISTINCT FROM OLD.falsifier_reference OR NEW.falsifier_due IS DISTINCT FROM OLD.falsifier_due
+     OR NEW.falsifier_conditions IS DISTINCT FROM OLD.falsifier_conditions
+     OR NEW.reference_value IS DISTINCT FROM OLD.reference_value
+     OR NEW.reference_recorded_at IS DISTINCT FROM OLD.reference_recorded_at
+     OR NEW.post_hoc IS DISTINCT FROM OLD.post_hoc OR NEW.author_person_id IS DISTINCT FROM OLD.author_person_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at OR NEW.version IS DISTINCT FROM OLD.version THEN
+    RAISE EXCEPTION 'LVRF: value_hypotheses: hypothesis % is frozen; its statement, chain and falsifier are never edited. Supersede it (POST /api/value-hypotheses/:id/supersede): the old version stays on the record.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_frozen';
+  END IF;
+  IF (OLD.deleted_at IS NOT NULL AND NEW.deleted_at IS DISTINCT FROM OLD.deleted_at)
+     OR (OLD.superseded_by_id IS NOT NULL AND NEW.superseded_by_id IS DISTINCT FROM OLD.superseded_by_id) THEN
+    RAISE EXCEPTION 'LVRF: value_hypotheses: hypothesis % is already withdrawn or superseded; that is not undone or amended.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_frozen';
+  END IF;
+  IF (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+     OR (OLD.superseded_by_id IS NULL AND NEW.superseded_by_id IS NOT NULL) THEN
+    v := lvrf_hypothesis_verdict(OLD);
+    IF v <> 'open' THEN
+      RAISE EXCEPTION 'LVRF: value_hypotheses: hypothesis %''s verdict is in (%); a tested hypothesis is not withdrawn or superseded.', OLD.id, v
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_frozen';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+-- The verdict (O2-D1). Derived, never stored; every renderer calls this.
+--   superseded / withdrawn     the row says so
+--   open                       until the outcome THIS hypothesis names has a
+--                              VERIFIED actual (source_verified and a named
+--                              verifier) measured on or after the due date
+--   refuted                    the actual is no better than the reference,
+--                              in the PACK ENTRY's direction (decrease:
+--                              actual >= reference; increase: actual <=)
+--   survived                   otherwise
+--   ..._post_hoc               O2-D3: a post hoc hypothesis never reads
+--                              plain 'survived'
+-- Created before 0036's guard on value_hypotheses (the guard calls it).
+CREATE OR REPLACE FUNCTION lvrf_hypothesis_verdict(h value_hypotheses) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN h.superseded_by_id IS NOT NULL THEN 'superseded'
+    WHEN h.deleted_at IS NOT NULL THEN 'withdrawn'
+    WHEN NOT (o.source_verified AND o.verified_by_person_id IS NOT NULL AND o.actual_value IS NOT NULL
+              AND o.actual_measured_at IS NOT NULL
+              AND (o.actual_measured_at AT TIME ZONE 'UTC')::date >= h.falsifier_due) THEN 'open'
+    ELSE CASE WHEN (m.direction = 'decrease' AND o.actual_value >= h.reference_value)
+                OR (m.direction = 'increase' AND o.actual_value <= h.reference_value)
+              THEN 'refuted' ELSE 'survived' END
+         || CASE WHEN h.post_hoc THEN '_post_hoc' ELSE '' END
+  END
+  FROM value_outcomes o, value_levers l JOIN industry_measures m ON m.id = l.industry_measure_id
+  WHERE o.id = h.value_outcome_id AND l.id = h.value_lever_id
+$$;
+
+DROP TRIGGER IF EXISTS value_hypotheses_guard ON value_hypotheses;
+CREATE TRIGGER value_hypotheses_guard
+  BEFORE INSERT OR UPDATE ON value_hypotheses
+  FOR EACH ROW EXECUTE FUNCTION lvrf_value_hypothesis_guard();
+
+CREATE OR REPLACE FUNCTION lvrf_outcome_verifier_not_author() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.verified_by_person_id IS NOT NULL
+     AND NEW.verified_by_person_id IS DISTINCT FROM OLD.verified_by_person_id
+     AND EXISTS (SELECT 1 FROM value_hypotheses h
+                  WHERE h.value_outcome_id = NEW.id AND h.author_person_id = NEW.verified_by_person_id) THEN
+    RAISE EXCEPTION 'LVRF: value_outcomes: % wrote a hypothesis on outcome % and cannot verify its actual; the verifier may not be the hypothesis'' author (O2-D1).', NEW.verified_by_person_id, NEW.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_verifier_not_author';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcomes_verifier_not_author ON value_outcomes;
+CREATE TRIGGER value_outcomes_verifier_not_author
+  BEFORE UPDATE ON value_outcomes
+  FOR EACH ROW EXECUTE FUNCTION lvrf_outcome_verifier_not_author();
+
+CREATE OR REPLACE FUNCTION lvrf_reference_marker_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  inst_tenant uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF TG_OP = 'INSERT' THEN
+    SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+    IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: reference_example_markers: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+    END IF;
+    IF steward IS NULL OR NEW.marked_by_person_id IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: reference_example_markers: only the tenant''s steward may mark a reference example (marked_by % is not the steward).', NEW.marked_by_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+    END IF;
+    IF NEW.deleted_at IS NOT NULL OR NEW.superseded_by_id IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: reference_example_markers: a marker is inserted current.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.kind IS DISTINCT FROM OLD.kind OR NEW.source_citation IS DISTINCT FROM OLD.source_citation
+     OR NEW.note IS DISTINCT FROM OLD.note OR NEW.institution_id IS DISTINCT FROM OLD.institution_id
+     OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.marked_by_person_id IS DISTINCT FROM OLD.marked_by_person_id THEN
+    RAISE EXCEPTION 'LVRF: reference_example_markers: a marker is not edited; supersede it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+  END IF;
+  IF OLD.retired_by_person_id IS NULL AND NEW.retired_by_person_id IS NOT NULL
+     AND (steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: reference_example_markers: only the tenant''s steward may unmark a reference example.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS reference_example_markers_steward_only ON reference_example_markers;
+CREATE TRIGGER reference_example_markers_steward_only
+  BEFORE INSERT OR UPDATE ON reference_example_markers
+  FOR EACH ROW EXECUTE FUNCTION lvrf_reference_marker_steward_only();
+
+CREATE OR REPLACE FUNCTION lvrf_one_current_reference_marker() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  n int;
+BEGIN
+  SELECT count(*) INTO n FROM reference_example_markers
+   WHERE institution_id = NEW.institution_id AND deleted_at IS NULL AND superseded_by_id IS NULL;
+  IF n > 1 THEN
+    RAISE EXCEPTION 'LVRF: account % would have % current reference-example markers; it has one. Supersede it instead.', NEW.institution_id, n
+      USING ERRCODE = 'unique_violation';
+  END IF;
+  RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS reference_example_markers_one_current ON reference_example_markers;
+CREATE CONSTRAINT TRIGGER reference_example_markers_one_current
+  AFTER INSERT OR UPDATE ON reference_example_markers
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION lvrf_one_current_reference_marker();
+
+CREATE OR REPLACE FUNCTION lvrf_executive_summary_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  inst_tenant uuid;
+  author_ok boolean;
+  prev record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: executive_summaries: summary % is a version on the record and is never edited; write a new version that supersedes it.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
+  END IF;
+  SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+  IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: executive_summaries: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
+  END IF;
+  SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
+    INTO author_ok FROM persons p WHERE p.id = NEW.author_person_id;
+  IF NOT coalesce(author_ok, false) THEN
+    RAISE EXCEPTION 'LVRF: executive_summaries: the author % is not current, non-simulated staff of the tenant; a summary is written by a named person.', NEW.author_person_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
+  END IF;
+  IF NEW.value_run_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM value_runs r JOIN engagements e ON e.id = r.engagement_id
+        WHERE r.id = NEW.value_run_id AND e.institution_id = NEW.institution_id) THEN
+    RAISE EXCEPTION 'LVRF: executive_summaries: run % is not this account''s.', NEW.value_run_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
+  END IF;
+  IF NEW.supersedes_id IS NOT NULL THEN
+    SELECT institution_id, lens INTO prev FROM executive_summaries WHERE id = NEW.supersedes_id;
+    IF prev.institution_id IS DISTINCT FROM NEW.institution_id OR prev.lens IS DISTINCT FROM NEW.lens THEN
+      RAISE EXCEPTION 'LVRF: executive_summaries: a new version supersedes a summary of the same account and lens.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS executive_summaries_audit ON executive_summaries;
+CREATE TRIGGER executive_summaries_audit
+  AFTER INSERT OR UPDATE ON executive_summaries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS executive_summaries_no_delete ON executive_summaries;
+CREATE TRIGGER executive_summaries_no_delete
+  BEFORE DELETE ON executive_summaries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'An executive summary is a version on the record and is never deleted; write a new version that supersedes it.'
+  );
+
+DROP TRIGGER IF EXISTS executive_summaries_guard ON executive_summaries;
+CREATE TRIGGER executive_summaries_guard
+  BEFORE INSERT OR UPDATE ON executive_summaries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_executive_summary_guard();
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1446,23 +1755,30 @@ COMMIT;
 -- right things are present. Do not re-derive a total here and trust it —
 -- diff the SELECT below against the full list this file declares:
 --
---   17 governed tables (0005 added 'offerings'; 0019 added
+--   19 governed tables (0005 added 'offerings'; 0019 added
 --   'industry_measures'; 0024 added 'institution_facts'; 0034 added
---   'institution_entities'; 0035 added 'value_levers') × 3 (_audit, _touch,
---   _no_delete) — 51
+--   'institution_entities'; 0035 added 'value_levers'; 0036 added
+--   'value_hypotheses', 'reference_example_markers') × 3 (_audit, _touch,
+--   _no_delete) — 57
 --   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
 --   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   5e: <table>_supersession_sane × 18 (assessments, business_metrics,
+--   5e: <table>_supersession_sane × 20 (assessments, business_metrics,
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
 --   value_outcomes, value_runs, industry_measures, institution_facts,
---   institution_entities, value_levers) — 18
+--   institution_entities, value_levers, value_hypotheses,
+--   reference_example_markers) — 20
 --   19: institution_entities_one_current (a deferred constraint trigger) — 1
 --   20: lever_offerings_audit, lever_offerings_no_delete,
 --   lever_offerings_steward_only, value_levers_steward_only — 4
+--   22: value_hypotheses_guard, value_outcomes_verifier_not_author,
+--   reference_example_markers_steward_only,
+--   reference_example_markers_one_current (deferred),
+--   executive_summaries_audit, executive_summaries_no_delete,
+--   executive_summaries_guard — 7
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
@@ -1479,22 +1795,24 @@ COMMIT;
 --   offering_capabilities, person_roles, reflection_evidence — 8
 --   18: research_prompts_audit, research_prompts_no_delete,
 --   research_prompts_immutable — 3
---   Total: 111 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 126 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
 --   institution_entities _audit, _touch, _no_delete, _supersession_sane.
 --   Section 19 took it 102 -> 103: institution_entities_one_current.
---   0035 (O1) took it 103 -> 111: value_levers' four, section 20's four.)
+--   0035 (O1) took it 103 -> 111: value_levers' four, section 20's four.
+--   0036 (O2) took it 111 -> 126: value_hypotheses' and
+--   reference_example_markers' four each, section 22's seven.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 111.
+-- TRUNCATE in section 14 fail. Total stays 126.
 --
--- Expect 168 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×17 = 68;
+-- Expect 192 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
@@ -1515,7 +1833,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

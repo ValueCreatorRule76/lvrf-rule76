@@ -40,6 +40,14 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/value-levers/:id/offerings': 'steward',
   'POST /api/value-levers/:id/retire': 'steward',
   'POST /api/lever-offerings/:id/retire': 'steward',
+  'POST /api/institutions/:institutionId/reference-example': 'steward',
+  'POST /api/reference-examples/:id/supersede': 'steward',
+  'POST /api/reference-examples/:id/retire': 'steward',
+  // O2: hypotheses and executive summaries are the account team's acts.
+  'POST /api/institutions/:institutionId/hypotheses': 'authorized',
+  'POST /api/value-hypotheses/:id/supersede': 'authorized',
+  'POST /api/value-hypotheses/:id/withdraw': 'authorized',
+  'POST /api/institutions/:institutionId/executive-summaries': 'authorized',
   'POST /api/engagements/:id/retire': 'steward',
   // Authorized users (Q3 + D3: classify, offerings, validate, pack-basis and
   // claims are authorized-user acts)
@@ -80,6 +88,9 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/value-levers/:id/offerings': 'Linking a solution to a lever',
   'POST /api/value-levers/:id/retire': 'Withdrawing a value lever',
   'POST /api/lever-offerings/:id/retire': 'Withdrawing a solution from a lever',
+  'POST /api/institutions/:institutionId/reference-example': 'Marking a reference example',
+  'POST /api/reference-examples/:id/supersede': 'Correcting a reference-example marker',
+  'POST /api/reference-examples/:id/retire': 'Unmarking a reference example',
 };
 
 /** The actor's tenant's steward: { id, full_name }, or null if none is named. */

@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
-import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
+import { handleGovernanceError } from '../lib/refusal.js';
+import { refuseUnknownFields } from '../lib/strictBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
 
@@ -39,28 +40,12 @@ function text(body: Record<string, unknown>, k: string, min: number, issues: str
   return v.trim();
 }
 const MIN_REASON_LENGTH = 12;
-// A key that names a size, a target or an expected result.
 const EFFECT_LIKE = /effect|target|impact|uplift|expected|improvement|delta|roi|size|estimate|forecast|projected/i;
 
-/**
- * Fields outside `allowed` are refused, 400, and recorded (source 'route').
- * Returns true when it has answered. Runs once the subject's tenant is known
- * (refusals.tenant_id is NOT NULL).
- */
-async function refuseUnknownFields(
-  pool: Pool, req: Request, res: Response, allowed: readonly string[],
-  ctx: { endpoint: string; subjectTable: string; subjectId: string | null; tenantId: string },
-): Promise<boolean> {
-  const extra = Object.keys(req.body as Record<string, unknown>).filter((k) => !allowed.includes(k));
-  if (extra.length === 0) return false;
-  const issues = extra.map((k) => EFFECT_LIKE.test(k)
-    ? `body.${k}: a value lever carries no effect size or target — it is a mechanism, not a promise (LVRF_PLAN §5)`
-    : `body.${k} is not a field of this request (it takes ${allowed.join(', ')})`);
-  const message = `${issues.length} field(s) refused; nothing was written.`;
-  await recordRouteRefusal(pool, req, { ...ctx, institutionId: null, attemptedPayload: req.body }, `${message} ${issues.join(' | ')}`);
-  res.status(400).json({ message, issues });
-  return true;
-}
+// A key that names a size, a target or an expected result.
+const leverFieldExplained = (k: string): string | null => EFFECT_LIKE.test(k)
+  ? `body.${k}: a value lever carries no effect size or target — it is a mechanism, not a promise (LVRF_PLAN §5)`
+  : null;
 
 function reasonOf(body: unknown, what: string): string {
   if (!isRecord(body)) throw new ValidationError(['body is required']);
@@ -111,7 +96,7 @@ export function valueLeverRouter(pool: Pool): Router {
       }
       refusalTenantId = m.tenant_id;
       if (await refuseUnknownFields(pool, req, res, ['name', 'mechanism', 'leading_indicator', 'citation'],
-        { endpoint, subjectTable: 'value_levers', subjectId: null, tenantId: m.tenant_id })) return;
+        { endpoint, subjectTable: 'value_levers', subjectId: null, tenantId: m.tenant_id }, leverFieldExplained)) return;
       if (m.deleted_at !== null || m.superseded_by_id !== null) {
         res.status(409).json({ message: `"${m.name}" is not a current pack entry (retired or superseded); a lever attaches to a current entry.` });
         return;
@@ -173,7 +158,7 @@ export function leverOfferingRouter(pool: Pool): Router {
       }
       refusalTenantId = lever.tenant_id;
       if (await refuseUnknownFields(pool, req, res, ['offering_key', 'basis'],
-        { endpoint, subjectTable: 'lever_offerings', subjectId: null, tenantId: lever.tenant_id })) return;
+        { endpoint, subjectTable: 'lever_offerings', subjectId: null, tenantId: lever.tenant_id }, leverFieldExplained)) return;
       if (lever.deleted_at !== null || lever.superseded_by_id !== null) {
         res.status(409).json({ message: `lever "${lever.name}" is not current (withdrawn or superseded).` });
         return;
@@ -232,7 +217,7 @@ export function leverOfferingRouter(pool: Pool): Router {
       }
       refusalTenantId = lever.tenant_id;
       if (await refuseUnknownFields(pool, req, res, ['retirement_reason'],
-        { endpoint, subjectTable: 'value_levers', subjectId: leverId, tenantId: lever.tenant_id })) return;
+        { endpoint, subjectTable: 'value_levers', subjectId: leverId, tenantId: lever.tenant_id }, leverFieldExplained)) return;
       const reason = reasonOf(req.body, 'lever');
       if (lever.deleted_at !== null) {
         res.status(409).json({ message: `lever "${lever.name}" was already withdrawn by ${lever.retired_by ?? 'an unrecorded person'} on ${day(lever.deleted_at)}: "${lever.retirement_reason ?? ''}". A withdrawal is not repeated or amended.` });
@@ -285,7 +270,7 @@ export function leverOfferingRetireRouter(pool: Pool): Router {
       }
       refusalTenantId = link.tenant_id;
       if (await refuseUnknownFields(pool, req, res, ['retirement_reason'],
-        { endpoint, subjectTable: 'lever_offerings', subjectId: linkId, tenantId: link.tenant_id })) return;
+        { endpoint, subjectTable: 'lever_offerings', subjectId: linkId, tenantId: link.tenant_id }, leverFieldExplained)) return;
       const reason = reasonOf(req.body, 'link');
       if (link.retired_at !== null) {
         res.status(409).json({ message: `the link of "${link.offering}" to lever "${link.lever}" was already withdrawn by ${link.retired_by ?? 'an unrecorded person'} on ${day(link.retired_at)}: "${link.retirement_reason ?? ''}". A withdrawal is not repeated or amended.` });

@@ -5,6 +5,7 @@ import { AccountsIndexPage } from './pages/AccountsIndexPage';
 import { PacksIndexPage } from './pages/PacksIndexPage';
 import { IndustryPackPage } from './pages/IndustryPackPage';
 import { InstitutionPage } from './pages/InstitutionPage';
+import { PovPage } from './pages/PovPage';
 import { ActorProvider, useActor } from './actor/ActorContext';
 import { ActorBar } from './actor/ActorBar';
 import { SignInOverlay, SignInPage } from './actor/SignIn';
@@ -30,6 +31,7 @@ function SignedInRoutes() {
         <Route path="/packs" element={<PacksIndexPage />} />
         <Route path="/packs/:slug" element={<IndustryPackPage />} />
         <Route path="/accounts/:id" element={<InstitutionPage />} />
+        <Route path="/accounts/:id/pov" element={<PovPage />} />
       </Routes>
       {status === 'expired' && <SignInOverlay />}
     </>
@@ -43,10 +45,12 @@ export default function App() {
         {/* One row, two components that don't know about each other.
             NavBar is fixed-width content; ActorBar fills the rest, exactly
             as wide as it always was — neither file is touched to compose
-            them. */}
-        <div className="flex items-stretch">
+            them. The row wraps (O2, phone width): below about 560px the
+            ActorBar drops under the NavBar instead of pushing the page
+            wider than the screen. */}
+        <div className="flex flex-wrap items-stretch">
           <NavBar />
-          <div className="flex-1">
+          <div className="min-w-[260px] flex-1">
             <ActorBar />
           </div>
         </div>

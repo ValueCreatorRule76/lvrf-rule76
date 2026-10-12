@@ -41,7 +41,11 @@ async function call(cookie, method, path, body) {
   const text = await r.text();
   let json = null;
   try { json = JSON.parse(text); } catch { /* not JSON */ }
-  return { status: r.status, json, text, message: json && typeof json === 'object' && !Array.isArray(json) ? json.message : undefined };
+  // The message AND any issues list: a 422 that names its issue must name
+  // the same one for another tenant's id as for an unknown id.
+  const obj = json && typeof json === 'object' && !Array.isArray(json) ? json : null;
+  const message = obj ? (Array.isArray(obj.issues) ? [obj.message, ...obj.issues].join(' | ') : obj.message) : undefined;
+  return { status: r.status, json, text, message };
 }
 
 const T0 = '2026-01-01T00:00:00Z';
@@ -79,6 +83,32 @@ const CASES = [
   { route: 'GET /api/institutions', kind: 'list', path: '/api/institutions', aIds: [E.INST_A], bIds: [E.INST_B] },
   { route: 'GET /api/institutions/:id/view', kind: 'id', path: `/api/institutions/${E.INST_A}/view`,
     notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  // O2: the POV read, and the hypothesis, summary and reference-example acts.
+  { route: 'GET /api/institutions/:institutionId/pov', kind: 'id', path: `/api/institutions/${E.INST_A}/pov`,
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/institutions/:institutionId/hypotheses', kind: 'id', path: `/api/institutions/${E.INST_A}/hypotheses`,
+    body: { value_outcome_id: E.OUTCOME_A, value_lever_id: E.LEVER_A, statement: note('Verification: a hypothesis for the tenant scope checks.'),
+            falsifier_reference: 'baseline', falsifier_due: '2030-01-01', falsifier_conditions: 'on the same denominator' },
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/institutions/:institutionId/executive-summaries', kind: 'id', path: `/api/institutions/${E.INST_A}/executive-summaries`,
+    body: { lens: 'board', body: note('Verification: an executive summary for the tenant scope checks.'), drafted_with_ai: false },
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/institutions/:institutionId/reference-example', kind: 'id', path: `/api/institutions/${E.INST_A}/reference-example`,
+    body: { kind: 'demonstration', source_citation: note('Verification citation.'), note: note('Verification marker.') },
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/value-hypotheses/:id/supersede', kind: 'id', path: `/api/value-hypotheses/${E.HYP_A}/supersede`,
+    body: { statement: note('Verification: a restated hypothesis for the checks.'), falsifier_reference: 'baseline', falsifier_due: '2030-01-01',
+            falsifier_conditions: 'on the same denominator', supersession_reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `value hypothesis ${E.HYP_A} not found`], target: ['value_hypotheses', E.HYP_A] },
+  { route: 'POST /api/value-hypotheses/:id/withdraw', kind: 'id', path: `/api/value-hypotheses/${E.HYP_A}/withdraw`,
+    body: { retirement_reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `value hypothesis ${E.HYP_A} not found`], target: ['value_hypotheses', E.HYP_A] },
+  { route: 'POST /api/reference-examples/:id/supersede', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/supersede`,
+    body: { kind: 'demonstration', source_citation: note('Verification citation.'), note: note('Verification marker.'), supersession_reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
+  { route: 'POST /api/reference-examples/:id/retire', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/retire`,
+    body: { retirement_reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
   { route: 'GET /api/persons', kind: 'list', path: '/api/persons', aIds: [E.STAFF_A, E.CUST_A], bIds: [E.STAFF_B, E.CUST_B] },
   { route: 'GET /api/runs', kind: 'list', path: '/api/runs', aIds: [E.RUN_A], bIds: [] },
   { route: 'GET /api/runs/:id', kind: 'id', path: `/api/runs/${E.RUN_A}`,
@@ -220,6 +250,17 @@ const BODY_CASES = [
     other: E.CUST_B, logged: ['persons'] },
   { name: 'commit: committed_by of another tenant (checked against the account)', path: `/api/value-outcomes/${E.OUTCOME_A_OPEN}/commit`,
     body: (id) => ({ committed_by_person_id: id, committed_at: T0, target_value: 1, commitment_note: note('P3') }), other: E.CUST_B, logged: null },
+  // O2: a hypothesis naming another tenant's lever; a summary superseding
+  // another tenant's summary. Answered as an unknown id: the same status
+  // and message, from the route, before any write (so nothing is recorded
+  // in refusals).
+  { name: 'hypothesis: value_lever_id of another tenant', path: `/api/institutions/${E.OUTCOME_A_INST}/hypotheses`,
+    body: (id) => ({ value_outcome_id: E.OUTCOME_A, value_lever_id: id, statement: 'A hypothesis naming a lever by id, for the checks.',
+                     falsifier_reference: 'baseline', falsifier_due: '2030-01-01', falsifier_conditions: 'on the same denominator' }),
+    other: E.LEVER_B, logged: null },
+  { name: 'executive summary: supersedes_id of another tenant', path: `/api/institutions/${E.INST_A}/executive-summaries`,
+    body: (id) => ({ lens: 'chro', body: 'A summary naming a summary by id, for the tenant scope checks.', drafted_with_ai: false, supersedes_id: id }),
+    other: E.SUMMARY_B, logged: null },
   { name: 'classify: an industry slug only another tenant has', path: `/api/institutions/${E.INST_A_UNCLASSIFIED}/industry`,
     body: (slug) => ({ industry_slug: slug, classification_note: note('P3') }), other: E.SLUG_B, unknown: 'no-such-slug-p3', logged: null },
 ];

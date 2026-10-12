@@ -13,6 +13,7 @@ import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
 import { AccountResearch } from '../components/AccountResearch';
 import { OutsideInWalk } from '../components/OutsideInWalk';
+import { PovAuthoring } from '../components/PovAuthoring';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -460,6 +461,10 @@ export function InstitutionPage() {
           </ul>
         )}
       </Card>
+
+      {/* O2: hypotheses, the executive summary and the reference-example
+          marker; the POV page is the document they feed. */}
+      {!view.institution.is_tenant_self && <PovAuthoring institutionId={view.institution.id} />}
 
       {/* Q4h: account research intake (3.0 item 6). Hidden for the tenant's own
           record, which is not an account to research. */}

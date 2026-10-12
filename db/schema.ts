@@ -2158,3 +2158,142 @@ export const leverOfferings = pgTable('lever_offerings', {
   index('lever_offerings_lever_idx').on(t.valueLeverId),
   check('lever_offerings_basis_stated', sql`length(btrim(${t.basis})) >= 12`),
 ]);
+
+/* ================================================================== */
+/* Outputs band, O2 — hypotheses, executive summaries, reference marks */
+/* ================================================================== */
+
+/** O2-D2: what kind of reference example an account is. */
+export const referenceExampleKind = pgEnum('reference_example_kind', ['published_case_study', 'demonstration']);
+/** O2-D4: the recorded value a falsifier is measured against. */
+export const falsifierReference = pgEnum('falsifier_reference', ['baseline', 'committed_target']);
+/** The reader an executive summary was written for (lens_policies are O3). */
+export const summaryLens = pgEnum('summary_lens', ['cfo', 'chro', 'board', 'general']);
+
+/**
+ * 0036 (O2-D2). An account is a REFERENCE EXAMPLE only when a current
+ * marker says so — never inferred from retired engagements, which mean
+ * something else. Typed (kind), cited, steward-set (the route and
+ * reference_example_markers_steward_only, hardening section 22), audited,
+ * supersedable (a correction), retirable (unmarking: deleted_at, status
+ * 'retired', who and why together). One current marker per account, by a
+ * DEFERRED constraint trigger (the 0034 lesson: a two-step supersession).
+ * O-D3 reads it: a reference example renders only as one.
+ */
+export const referenceExampleMarkers = pgTable('reference_example_markers', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  kind: referenceExampleKind('kind').notNull(),
+  /** Where the example comes from, e.g. the published case study. */
+  sourceCitation: text('source_citation').notNull(),
+  note: text('note').notNull(),
+  markedByPersonId: uuid('marked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
+  supersessionReason: text('supersession_reason'),
+  ...governance(),
+  status: lifecycleStatus('status').notNull().default('active'),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id], name: 'reference_example_markers_superseded_by_fk' }).onDelete('restrict'),
+  index('reference_example_markers_institution_idx').on(t.institutionId),
+  check('reference_example_markers_stated',
+    sql`length(btrim(${t.sourceCitation})) >= 12 AND length(btrim(${t.note})) >= 12`),
+  check('reference_example_markers_retirement_is_complete',
+    sql`(${t.deletedAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL AND ${t.status} <> 'retired')
+        OR (${t.deletedAt} IS NOT NULL AND ${t.status} = 'retired' AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
+  check('reference_example_markers_supersession_reason',
+    sql`(${t.supersededById} IS NULL) = (${t.supersessionReason} IS NULL)
+        AND (${t.supersessionReason} IS NULL OR length(btrim(${t.supersessionReason})) >= 12)`),
+]);
+
+/**
+ * 0036 (O2; CAPABILITY_MAP item 7). A VALUE HYPOTHESIS: this account's
+ * outcome (which names the capability and the metric) moves, through this
+ * lever, and here is what would show it wrong.
+ *
+ * THE FALSIFIER CARRIES NO NEW NUMBER (O-D4, O2-D4). It is "no better than
+ * the reference by the due date", where the reference is the outcome's
+ * recorded baseline or its committed target. reference_value and
+ * reference_recorded_at are COPIED BY THE DATABASE at INSERT
+ * (value_hypotheses_guard), never taken from a request. The conditions are
+ * words only: a digit is refused ("numbers belong in recorded values, not
+ * falsifier conditions"). The direction (lower or higher is better) is the
+ * PACK ENTRY's: this table has no direction column.
+ *
+ * NO STORED VERDICT (O2-D1). lvrf_hypothesis_verdict() computes open ·
+ * survived · refuted (· _post_hoc) · withdrawn · superseded from the
+ * falsifier and the outcome's VERIFIED actual. Nobody decides it; the human
+ * act is verifying the actual, and the verifier may not be the author.
+ *
+ * FROZEN. Nothing about a hypothesis changes after INSERT; a new version
+ * supersedes it (with a reason), the old one stays visible, and only while
+ * the verdict is open. post_hoc (O2-D3) is computed at INSERT.
+ */
+export const valueHypotheses = pgTable('value_hypotheses', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  valueLeverId: uuid('value_lever_id').notNull().references(() => valueLevers.id, { onDelete: 'restrict' }),
+  statement: text('statement').notNull(),
+  falsifierReference: falsifierReference('falsifier_reference').notNull(),
+  falsifierDue: date('falsifier_due').notNull(),
+  falsifierConditions: text('falsifier_conditions').notNull().default(''),
+  /** Set by value_hypotheses_guard from the outcome row; never from a request. */
+  referenceValue: numeric('reference_value', { precision: 18, scale: 4 }).notNull(),
+  referenceRecordedAt: timestamp('reference_recorded_at', { withTimezone: true }).notNull(),
+  /** O2-D3, computed at INSERT: written after its due date or after a measured actual. */
+  postHoc: boolean('post_hoc').notNull().default(false),
+  authorPersonId: uuid('author_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
+  supersessionReason: text('supersession_reason'),
+  ...governance(),
+  status: lifecycleStatus('status').notNull().default('proposed'),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id], name: 'value_hypotheses_superseded_by_fk' }).onDelete('restrict'),
+  index('value_hypotheses_institution_idx').on(t.institutionId),
+  index('value_hypotheses_outcome_idx').on(t.valueOutcomeId),
+  check('value_hypotheses_statement_stated', sql`length(btrim(${t.statement})) >= 24`),
+  check('value_hypotheses_conditions_no_digits', sql`${t.falsifierConditions} !~ '[0-9]'`),
+  check('value_hypotheses_retirement_is_complete',
+    sql`(${t.deletedAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL AND ${t.status} <> 'retired')
+        OR (${t.deletedAt} IS NOT NULL AND ${t.status} = 'retired' AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
+  check('value_hypotheses_supersession_reason',
+    sql`(${t.supersededById} IS NULL) = (${t.supersessionReason} IS NULL)
+        AND (${t.supersessionReason} IS NULL OR length(btrim(${t.supersessionReason})) >= 12)`),
+]);
+
+/**
+ * 0036 (O2; O-D6). An EXECUTIVE SUMMARY, human-authored and attributed:
+ * author_person_id is the session's actor (set by the route), non-simulated
+ * vendor staff (executive_summaries_guard). LVRF generates no prose; an
+ * AI-drafted one says so (drafted_with_ai and the tool, together). Append-
+ * only versions: a new version names the one it supersedes
+ * (supersedes_id, each version superseded at most once); no row is ever
+ * updated (the guard refuses every UPDATE) or deleted.
+ */
+export const executiveSummaries = pgTable('executive_summaries', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  valueRunId: uuid('value_run_id').references(() => valueRuns.id, { onDelete: 'restrict' }),
+  lens: summaryLens('lens').notNull(),
+  body: text('body').notNull(),
+  authorPersonId: uuid('author_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  draftedWithAi: boolean('drafted_with_ai').notNull(),
+  draftingTool: text('drafting_tool'),
+  supersedesId: uuid('supersedes_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: 'executive_summaries_supersedes_fk' }).onDelete('restrict'),
+  unique('executive_summaries_supersedes_key').on(t.supersedesId),
+  index('executive_summaries_institution_idx').on(t.institutionId),
+  check('executive_summaries_body_stated', sql`length(btrim(${t.body})) >= 40`),
+  check('executive_summaries_ai_disclosed',
+    sql`(${t.draftedWithAi} AND ${t.draftingTool} IS NOT NULL AND length(btrim(${t.draftingTool})) >= 2)
+        OR (NOT ${t.draftedWithAi} AND ${t.draftingTool} IS NULL)`),
+]);

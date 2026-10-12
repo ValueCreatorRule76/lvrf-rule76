@@ -50,7 +50,7 @@ EXTRA="$(while read -r m p cls; do grep -q "^$m $p " "$W/src.txt" || echo "$m $p
 [ -z "$EXTRA" ] && ok "every classified route exists in the source" || bad "classified but not a route: $(echo "$EXTRA" | tr '\n' '|')"
 WRONG="$(while read -r m p cls; do t="$(grep "^$m $p " "$W/table.txt" | awk '{print $3}')"; { [ "$t" = "steward" ] && [ "$cls" != "steward" ]; } || { [ "$t" = "authorized" ] && [ "$cls" = "steward" ]; } && echo "$m $p (table: $t, source: $cls)"; done < "$W/src.txt"; true)"
 [ -z "$WRONG" ] && ok "steward routes carry requireSteward(pool); authorized routes do not" || bad "mismatch: $(echo "$WRONG" | tr '\n' '|')"
-[ "$(grep -c ' steward$' "$W/table.txt")" = "9" ] && ok "9 steward-only routes: accept, reject, exclusions, engagement retire, pack-entry retire (Q4c1b), lever, lever-offering, withdraw a lever, withdraw a link (O1) (ratify has no route; grant/revoke are scripts; model and thresholds are commit + deploy)" || bad "steward count: $(grep -c ' steward$' "$W/table.txt")"
+[ "$(grep -c ' steward$' "$W/table.txt")" = "12" ] && ok "12 steward-only routes: accept, reject, exclusions, engagement retire, pack-entry retire (Q4c1b), lever, lever-offering, withdraw a lever, withdraw a link (O1), mark, correct and unmark a reference example (O2) (ratify has no route; grant/revoke are scripts; model and thresholds are commit + deploy)" || bad "steward count: $(grep -c ' steward$' "$W/table.txt")"
 
 step "3. Clone, migrate, harden"
 dropdb --if-exists "$VERIFY_DB"
@@ -111,6 +111,9 @@ check403 "propose a lever" "/api/industry-measures/00000000-0000-4000-8000-00000
 check403 "link a solution" "/api/value-levers/00000000-0000-4000-8000-000000000001/offerings" '{"offering_key":"x"}' "Linking a solution to a lever"
 check403 "withdraw a lever" "/api/value-levers/00000000-0000-4000-8000-000000000001/retire" "$RET" "Withdrawing a value lever"
 check403 "withdraw a link" "/api/lever-offerings/00000000-0000-4000-8000-000000000001/retire" "$RET" "Withdrawing a solution from a lever"
+check403 "mark a reference example" "/api/institutions/00000000-0000-4000-8000-000000000001/reference-example" '{"kind":"demonstration"}' "Marking a reference example"
+check403 "correct a marker" "/api/reference-examples/00000000-0000-4000-8000-000000000001/supersede" '{"kind":"demonstration"}' "Correcting a reference-example marker"
+check403 "unmark" "/api/reference-examples/00000000-0000-4000-8000-000000000001/retire" "$RET" "Unmarking a reference example"
 [ "$(q "SELECT coalesce(max(id), 0) FROM audit_log")" = "$AUD0" ] && ok "  ...no audit row from any of them (nothing written)" || bad "  ...a refused act wrote"
 [ "$(q "SELECT count(*) FROM refusals")" = "$REF0" ] && ok "  ...and none recorded as a refusal" || bad "  ...recorded in refusals"
 grep -q "LVRF steward-only act refused: actor $X POST /api/engagements/:id/retire" "$W/server.log" && ok "  ...logged at info: actor and route" || bad "  ...not logged"
