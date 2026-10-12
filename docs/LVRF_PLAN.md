@@ -174,11 +174,15 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q4c1~~ | **DONE 12 Oct 2026**: deployed `6f44b7a` (no migration; step 5c clean; Gate C clean; Brad confirmed the five cards in the browser). ~~**Pack-research cards on the pack page**~~: generate the prompt (Q4b route), paste the agent's response to parse, accept or reject each pending result, and record exclusions. Accept, reject and exclude stay steward-only (Band A); generate and parse are authorized acts. Same routes, same session, no new actor path. Detailed plan in §4b | Q4b | unblocks Q4e (Datacom) |
 | ~~Q4c1b~~ | **DONE 12 Oct 2026**: deployed `9605859` (0032, the CHECK validated on prod; step 5c clean; Gate C clean; Brad confirmed the retire control). ~~**Retire a pack entry** (steward-only, reason required, migration 0032), retired entries shown on the pack page, and the R4 caveats aid. Plan in §4d, **approved by Brad 12 Oct** | Q4c1 | Q4e accepted six IT entries Brad now judges should not stand, and no route can correct an accepted entry |
 | ~~Q4g~~ | **DONE 12 Oct 2026**: deployed `4db8808` (no migration; step 5c clean; Gate C clean; legacy check 26 valid v3). Plan §4f. **Contract v4: a required `caveats` field per measure** (Brad, 12 Oct). It is a list of strings, and an empty list is allowed but must be stated explicitly; a missing key is refused as drift. The prompt asks for it, and R4 shows it as its own block, above the text-search block. Prompts generated under v3 go stale, as designed (parse refuses them, naming both versions). `PROMPT_TEMPLATE_VERSION` bumps too. The legacy and v3-era accepted results are untouched; `check_legacy_research` checks them against the version they were parsed under | Q4c1b | turns the R4 caveat search into a structural field |
-| Q4i | **Built, Gate A 12 Oct 2026; deploying with Q4c2** (no migration). **Small UI batch** (Brad, 12 Oct): (1) **"Open account →"** in Create account's Recorded block — built and verified (`7e14556`), not deployed; (2) **the facts card shows whether a fact's citation was opened** (`citation_resolved`, by whom, when). Today it shows only `source_verified` ("UNVERIFIED") and `ai_sourced`, so an opened citation looks unopened; `/view` must select it (its comment already claims it does) | — | ships with the next deploy |
-| Q4c2 | **Built, Gate A 12 Oct 2026; deploy pending** (no migration; `verify_outside_in_walk.sh` 80/0). **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
+| ~~Q4i~~ | **DONE 12 Oct 2026**: deployed `3388444` with Q4c2 (no migration). **Small UI batch** (Brad, 12 Oct): (1) **"Open account →"** in Create account's Recorded block — built and verified (`7e14556`), not deployed; (2) **the facts card shows whether a fact's citation was opened** (`citation_resolved`, by whom, when). Today it shows only `source_verified` ("UNVERIFIED") and `ai_sourced`, so an opened citation looks unopened; `/view` must select it (its comment already claims it does) | — | ships with the next deploy |
+| ~~Q4c2~~ | **DONE 12 Oct 2026**: deployed `3388444` (no migration; step 5c clean; Gate C clean). **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
 | Q4d | **Reference test A: Scotts Miracle-Gro on an existing pack** (Manufacturing; TRIR accepted). Outside-in, published material only; not D13. Step plan in §4a; R1 and R5 decided | Q4c2 | tests a second account on a pack that already exists |
 | Q4e | **Reference test B: Datacom, a pack-only test** under the existing `information-technology` industry (R2, R3). The first real use of the Q4b prompt route. Step plan in §4a; no run, because no published Datacom baseline exists | Q4c1 | tests the pack loop end to end on a pack that does not exist yet |
 | ~~Q4h~~ | **DONE 12 Oct 2026**: deployed `92ae23b` (0033, 0034; 103 triggers, with entity correction; step 5c clean; Gate C clean). **3.0 item 6 pulled forward: account research intake** (Brad, 12 Oct), with items 3 and 4 folded in minimally (the entity: legal name and identifier; the disclosure regime) and L6 and L8. The Q4b pattern: an `institution_fact` contract, a prompt generated from live rows and stored immutably, parse that refuses a different entity naming both, per-field review that writes evidence and fact in one transaction. First test: Scotts Miracle-Gro (a public filer), replacing hand entry of its facts in Q4d where research can supply them. Plan in §4e; H1–H4 decided (§4e) | Q4c1b, Q4g; **not D13** (narrowed) | Brad's decision: build the intake before the first real engagement, test it on published accounts first |
+| O1 | **Outputs band, phase 1: the grounding** (plan §5). Q9 (the D2 basis, derived) and item 10 (a run seals the fact ids and values it used) are **prerequisites, built here**; then `value_levers` and `lever_offerings` (steward acts); the pack page shows levers per measure and Skillsoft solutions per lever (outputs 3, 4) | Q4c2 deployed | every later output states each number's basis; nothing can until the basis is computed |
+| O2 | **Outputs, phase 2: hypotheses and the account POV** (plan §5): `value_hypotheses` (with falsifiers), `executive_summaries` (human-authored, attributed), the POV page (value-chain visual, stage progress bar, "what it takes to raise confidence") (output 1) | O1 | the hypothesis is what a POV argues; it must be falsifiable before it is shown |
+| O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
+| O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15): `render_record.py` from the API, WeasyPrint placement decided, flexbox and tables only, `pdftoppm` QA, the banner on every page of an unverified record, the bytes traced to the run's `payload_hash` | O3 | the PDF renders what O3 already shows; no new claim enters at print |
 | Q7 | **3.0 item 3, the rest** (after Q4h's minimal entity): parent and affiliate relationships with their own evidence; L4 (the run seals its entity and account name); L9 (`website` into the entity record); item 11's entity mismatch rate | Q4h | — |
 | Q8 | **3.0 item 4, the rest** (after Q4h's minimal regime): the gap register computes *structurally unobtainable by research* per account from its regime, rather than asserting it | Q4h | — |
 | Q9 | **3.0 item 5 — one trust vocabulary (derived)** | D2 | — |
@@ -1018,3 +1022,208 @@ not-found kinds with reasons.
 - **Also:** the regression, with every script's payload carrying `caveats`; the
   prod-copy equivalence (every GET identical); the client `tsc`, build and lint.
 - **Deploy:** no migration and no hardening change. A backup is still taken first.
+
+## 5. The Outputs band: the monetizable surface (plan, 12 Oct 2026; not yet approved)
+
+**What it is.** The documents a value engineer puts in front of a customer's CFO,
+CHRO or board. It rests on CAPABILITY_MAP items:
+
+- **4, Executive Lenses as policy;**
+- **7, Value Hypothesis, falsifiable;**
+- **8, Value Levers;**
+- **10, Solution Catalogs;**
+- **12, Executive Outputs.**
+
+**Spine stages:** `attach` and `model` (levers, solutions, hypotheses) and `return`
+(the outputs).
+
+### The five outputs
+
+1. **The account POV,** with its value hypothesis and executive summary.
+2. **The value case per locked run,** as a web page, then a PDF.
+3. **Proposed value levers per pack measure.**
+4. **Skillsoft solutions per lever.**
+5. **Value outcomes by lever,** with confidence and basis.
+
+### The rules every output obeys (enforced in the data or the renderer, not by convention)
+
+- **Every number comes from the record, with its basis.**
+  - A figure is rendered only from a row (a fact, an outcome's baseline or actual, a
+    run's sealed payload), always beside its **D2 basis**: system of record ·
+    published · client-stated · inferred · assumed.
+  - **The basis is derived, not stored** (decided, Q9). It is computed by one function,
+    and renderers call it. They never infer it.
+- **No invented targets.** The renderer never computes a target. It shows only a
+  `target_value` a named person committed to. **A vendor's claim is shown as a vendor
+  claim** (`impact_basis`), never applied to a baseline. An outside-in hypothesis with
+  no target renders "no target: a hypothesis".
+- **The executive summary is human-authored and attributed.**
+  - It is an `executive_summaries` row with an `author_person_id`: NOT NULL, a
+    non-simulated person, per rule 4.
+  - It is versioned (immutable, superseded), dated, and shown with its author.
+  - **AI may draft outside LVRF:** the author declares `drafted_with_ai` and the tool,
+    and the document says so. LVRF itself generates no prose.
+- **Lens policies.** A lens is a governed `lens_policies` row: a persona, a minimum
+  computed confidence, the D2 bases it admits, what it shows and suppresses, and its
+  refusal text. It is ratified by the steward.
+  - **CFO:** refuses to render an outcome below its threshold. It says why, and what
+    it takes, rather than showing a footnote. It admits only system-of-record and
+    published actuals. It suppresses consumption metrics.
+  - **CHRO:** shows capability movement (assessment coverage, `evidence_class`, the
+    learning spine), labelled as capability, never as value realized.
+  - **Board:** the confirmation gap across the portfolio. Later (Band D trigger).
+- **Outside-in says so.** A POV or value case whose numbers include no customer-side
+  evidence (no system-of-record or client-stated basis) carries **"OUTSIDE-IN
+  HYPOTHESIS"** on every page, beside the disclosure gate (rule 6). Neither banner can
+  be suppressed.
+
+### The objects
+
+- **`value_levers`** (governed; pack content, so **steward acts**): a lever on one
+  pack entry.
+  - Columns: `industry_measure_id`, `name`, `mechanism` (how capability change moves
+    the measure, in a sentence a CFO can test), `leading_indicator` (what moves
+    first), `citation` (NOT NULL), `status` (proposed → ratified), supersession.
+  - **No expected-effect size column:** a lever is a mechanism, not a promise.
+  - Research may propose levers later, through a pack contract version, under the
+    seam.
+- **`lever_offerings`** (link, steward): lever ↔ catalog offering, with `basis` (why
+  this offering pulls this lever). It is rendered with the offering's own
+  `evidence_class` and `verification_source`. So "solutions per lever" also says what
+  each can evidence: consumption · assessed · demonstrated · applied.
+- **`value_hypotheses`** (governed, per account; authorized acts).
+  - **What it says:** this capability, through this lever, moves this account's metric
+    (`capability_id`, `value_lever_id`, `business_metric_id`, optional
+    `value_outcome_id`); `statement`.
+  - **`falsifier` is required:** what observation would show it wrong, in terms of
+    **recorded values only**. For example, "TRIR at or above its FY25 baseline of 1.4
+    at the first period end after deployment".
+    - The falsifier may reference the baseline and the period; **it may not introduce
+      a new number.** A CHECK enforces the reference to a recorded value; the
+      renderer quotes it.
+  - `falsifier_due` (a date or a period end); `status`: open · **confirmed** ·
+    **refuted** · withdrawn.
+  - **A decision** (confirmed or refuted) needs a named person and evidence;
+    **refuted is a first-class result.** The confirmation-gap report counts refuted
+    hypotheses, not only confirmed ones.
+- **`executive_summaries`** (append-only versions): `institution_id` and optionally
+  `value_run_id`, `body`, `author_person_id`, `drafted_with_ai`, `drafting_tool`, and
+  a `lens` (which reader it was written for).
+- **`lens_policies`** (governed, steward-ratified): `persona`, `min_confidence_score`,
+  `admitted_bases[]`, `shows[]`, `suppresses[]`, `refusal_text`.
+  - **The thresholds are policy values Brad ratifies, not computed numbers** (decision
+    O-D1).
+- **No new object for outputs 2 and 5.** They render runs (sealed payloads), outcomes,
+  and the levers above. The PDF is a `record_documents` rendering (provisional until
+  the Repository Constitution ratifies; named, not resolved).
+
+### The pages
+
+- **The account POV** (`/accounts/:id/pov`):
+  - **who the account is:** the entity, the regime, and the facts, each with its basis
+    and "citation opened by…";
+  - **the value-chain visual,** one row per hypothesis:
+    **offering → capability → lever → pack measure → account metric → outcome**. Each
+    node shows its status and basis, and a missing node renders as a gap, not a blank;
+  - **the hypotheses,** each with its falsifier and status;
+  - **the executive summary,** attributed and dated;
+  - **the stage progress bar:** the value spine, baseline → attach → model → commit →
+    measure → verify → return, from the engagement's `value_stage`, each stage marked
+    done, current or not reached;
+  - **"What it takes to raise confidence":** the gap register's asks per outcome (state
+    open or refused, path viable or blocked), with **draft-and-refuse** drafting each
+    request (the extract, the confirmer, the attester). It never touches the score.
+- **The value case** (`/runs/:id/case`): renders only from the run's sealed payload
+  (and, after item 10, the fact values it sealed), through a lens. A **CFO-lens
+  refusal page** is a real page with the reason and the asks, not an error.
+- **The pack page:** each entry lists its levers (mechanism, citation, status). Each
+  lever lists its solutions (offering, basis, what it can evidence).
+- **Outcomes by lever:** per account first, then across the cohort. Lever ·
+  hypothesis · outcome · realization · computed confidence (score and band) · the
+  basis of baseline and actual.
+
+### The phases
+
+**O1, the grounding.** It is the prerequisite for everything.
+
+- **Q9:** the D2 basis as one SQL function, tested against D2's ten rules.
+- **3.0 item 10:** a run seals the fact ids and values it used, into its hashed
+  payload.
+- **`value_levers` and `lever_offerings`,** with migration, hardening and steward
+  routes.
+- **The pack page shows levers and solutions** (outputs 3, 4).
+
+**O2, hypotheses and the POV.**
+
+- `value_hypotheses` (with the falsifier CHECK) and `executive_summaries`.
+- The POV page: the value chain, the stage bar, what it takes (gap register plus
+  drafted asks), the outside-in banner (output 1).
+
+**O3, lenses and the value case.**
+
+- `lens_policies`, with CFO and CHRO ratified by Brad.
+- The value case web page per locked run through a lens, including the refusal page
+  (output 2).
+- Outcomes by lever (output 5).
+
+**O4, the PDF** (3.0 item 15).
+
+- `render_record.py` reads the API; the decision is WeasyPrint on the box or
+  rendering on the Mac.
+- Flexbox and tables only, `pdftoppm` QA looked at, the banners on every page.
+- The rendered bytes' hash and the run's `payload_hash` are recorded in
+  `record_documents`.
+
+### What Scotts would show (from the record as it stands, plus Q4d)
+
+- **POV, banner OUTSIDE-IN HYPOTHESIS:**
+  - The Scotts Miracle-Gro Company, CIK 0000825542, public filer.
+  - **Published** (10-K, citation opened): revenue and headcount as of 2025-09-30, and
+    the stated priority on associate health and safety.
+  - **Inferred** (job posting): SAP ECC, BTP and S/4HANA.
+- **The value chain:** Skillsoft Compliance Suite (EHS solution) → the workplace
+  safety capability → a lever on TRIR (to be authored and cited in O1) → TRIR
+  (manufacturing pack, proposed) → Scotts' TRIR → the outcome.
+  - **Baseline 1.4, FY25, published** (2026 CR Disclosure Report p. 21), once its
+    denominator is confirmed.
+  - **Target: none.**
+- **The hypothesis' falsifier** would read, for example, "TRIR at or above 1.4 at the
+  first fiscal year end after deployment". **The period is Brad's to state.**
+- **Skillsoft's "75% reduction"** appears as a vendor claim (`vendor_publication`,
+  `impact_basis`), never as the actual, never applied to 1.4.
+- **CFO lens: refuses.** The locked run's computed confidence is low. The page says
+  why, and what it takes: a customer system-of-record TRIR extract, a named committer,
+  a named verifier. These come from the gap register, drafted.
+- **CHRO lens:** shows capability coverage, which today is none recorded. It says so
+  rather than implying movement.
+
+### What Curia would show
+
+- **POV, labelled "reference example, not an engagement"** (its engagements are
+  retired): the outside-in hypothesis, and its validated successor.
+- **Value cases for its locked runs.** The reference example's latest, run 21, is
+  medium at 55.0 (`curia_validated`). There is also the lot-acceptance run on the
+  pharmaceutical pack's LAR.
+- **Under a CFO lens,** run 21 renders only if the CFO threshold is at most 55, which
+  is the medium band's floor. **Whether a reference example renders under the CFO lens
+  at all is decision O-D3.**
+- **Its history shows the instrument's point:** confidence rising from the
+  outside-in hypothesis to validated, each step a locked run that is never rewritten.
+
+### Decisions for Brad
+
+- **O-D1, the lens thresholds.** For example, CFO at least 55 (the medium floor) or at
+  least 80 (high). A policy value, ratified, versioned. Recommendation: 55, with the
+  refusal page carrying the asks.
+- **O-D2, who ratifies levers and lever↔offering links.** Recommendation: the steward,
+  as pack entries (Band A).
+- **O-D3, reference examples under a lens.** Recommendation: they render only as
+  "reference example", never as an account's value case, and never under the CFO lens.
+- **O-D4, the falsifier rule.** The CHECK limits numbers to recorded values;
+  confirm.
+- **O-D5, the PDF's home** (3.0 item 15): WeasyPrint on the VPS (fonts, then
+  `fc-cache -f`), or rendering on the Mac by decision.
+- **O-D6, AI drafting disclosure:** `drafted_with_ai` and the tool shown on the
+  document. Recommendation: shown, small, beside the author.
+- **Named, not resolved:** `record_documents` stays **provisional** until the
+  Repository Constitution ratifies (CLAUDE.md). O4 builds on it as provisional.

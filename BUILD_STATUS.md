@@ -9269,3 +9269,36 @@ since the deployed `92ae23b`, and D2 is none against 0034.
     comparator allowing exactly those three fields found nothing else).
 - **Regression for the batch** (the link, Q4c2 and Q4i): all 26 verify scripts pass;
   `verify_tenant_scope` has 155 cases. The bundle is **`index-BuEzZg7S.js`**.
+
+### Deployed — 12 October 2026 (UTC): Q4c2 and Q4i
+
+`92ae23b..3388444` went to production: `fdd016b` (docs, never pulled), `7e14556` (Open
+account →), `23489f3` (docs), `6d02c40` (Q4c2), `4926fed` (docs), `722a30d` (Q4i) and
+`3388444` (docs). **No migration.**
+
+- **Backup:** `~/lvrf_pre_q4c2_20261012_131637.dump` (683,278 bytes, `-rw-------`, 481
+  TOC entries), taken with the box at `92ae23b`.
+- **Deploy:**
+  - no re-exec; pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 35 migrations, newest
+    0034_account_research; 774 schema objects match 0034_snapshot.json)", and no drift
+    findings;
+  - all smoke checks passed; deploy OK, exit 0, HEAD `3388444`;
+  - bundle **`index-BuEzZg7S.js`** / `index-Dby4X9tb.css`. Up since **13:17:53 UTC**.
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `3388444`;
+  - D2 none (774 objects); D1/D3/D4 no findings;
+  - the legacy check: 26, all valid v3;
+  - **103 triggers**, and `hardening_manifest` holds 103 rows;
+  - the served assets match.
+  - **0 audit rows since 13:17:53; the last audit id is 293** (it was 256 at Q4h's Gate
+    C; the difference is Brad's Scotts account and research).
+  - **1 refusal since the restart, explained:**
+    - at 13:20:31, `POST …/inputs` on Scotts (W1, the analyst of record), Brad's
+      attempt to add himself with his own login address;
+    - refused by the database, `persons_email_key` (23505): email is unique across all
+      persons;
+    - nothing was written. The refusal stands on record, as designed.
+- **Scotts, before the walk:** 0 persons, 0 capabilities, 0 engagements. The
+  manufacturing pack's TRIR entry is `82572f6f…` (incidents per 200,000 hours,
+  decrease, proposed).
