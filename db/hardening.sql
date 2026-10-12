@@ -680,12 +680,27 @@ CREATE TRIGGER evidence_resolution_is_final
 -- so that column stays caller-supplied and is what
 -- research_results_review_is_complete (0018) actually checks alongside it.
 --
+-- Q4b (0031) widened _touch to INSERT as well, and renamed its function
+-- lvrf_research_results_stamps() (lvrf_touch_reviewed_at() is dropped
+-- below, once nothing uses it). parsed_at is now server-set too: stamped
+-- now() on INSERT, whatever the caller sent, and frozen on UPDATE. That is
+-- what gives research_results_untracked_predates_prompts (0031) its force
+-- — the CHECK says an untracked row was parsed before the cut-off, and
+-- this makes parsed_at a fact the caller cannot choose, so no new row,
+-- even by direct SQL, can claim to predate prompt tracking. Same trigger,
+-- one more event: the distinct count is unchanged.
+--
 -- CONSEQUENCE: trigger count goes 65 -> 68.
 
-CREATE OR REPLACE FUNCTION lvrf_touch_reviewed_at() RETURNS trigger
+CREATE OR REPLACE FUNCTION lvrf_research_results_stamps() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  NEW.reviewed_at := now();
+  IF TG_OP = 'INSERT' THEN
+    NEW.parsed_at := now();
+  ELSE
+    NEW.parsed_at := OLD.parsed_at;
+    NEW.reviewed_at := now();
+  END IF;
   RETURN NEW;
 END $$;
 
@@ -696,8 +711,9 @@ CREATE TRIGGER research_results_audit
 
 DROP TRIGGER IF EXISTS research_results_touch ON research_results;
 CREATE TRIGGER research_results_touch
-  BEFORE UPDATE ON research_results
-  FOR EACH ROW EXECUTE FUNCTION lvrf_touch_reviewed_at();
+  BEFORE INSERT OR UPDATE ON research_results
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_results_stamps();
+DROP FUNCTION IF EXISTS lvrf_touch_reviewed_at();
 
 DROP TRIGGER IF EXISTS research_results_no_delete ON research_results;
 CREATE TRIGGER research_results_no_delete
@@ -1097,6 +1113,54 @@ CREATE TRIGGER reflection_evidence_no_delete
   );
 
 -- ------------------------------------------------------------------
+-- 18. Q4b (0031, 11 Oct 2026) — research_prompts: a generated prompt is
+--     final (placed before section 14 so the manifest includes these three)
+-- ------------------------------------------------------------------
+-- research_prompts (db/schema.ts) records the exact text a research agent
+-- was given, generated from live rows by POST /api/industries/:id/
+-- research-prompts. A research result names the prompt it answered
+-- (research_results.prompt_id), so the prompt is the other half of that
+-- result's provenance: if its text could change, the result would point at
+-- a question nobody asked. research_prompts_sha256_is_the_text (CHECK)
+-- holds the hash to the text; this section holds the row still.
+--
+--   _audit      the generic lvrf_audit(): the table has an id.
+--   _no_delete  with its own remedy text: there is no deleted_at to set.
+--   _immutable  BEFORE UPDATE, raises on every UPDATE. A prompt that is
+--               wrong is replaced by generating a new one; nothing is
+--               edited. (So _audit only ever sees INSERTs; it is attached
+--               for INSERT OR UPDATE like every other _audit, to keep one
+--               shape.)
+--
+-- CONSEQUENCE: trigger count goes 95 -> 98.
+
+CREATE OR REPLACE FUNCTION lvrf_research_prompt_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION
+    'LVRF: research prompt % is final. It is the exact text a research agent was given, '
+    'and the results that answered it name it. Generate a new prompt instead.', OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+DROP TRIGGER IF EXISTS research_prompts_audit ON research_prompts;
+CREATE TRIGGER research_prompts_audit
+  AFTER INSERT OR UPDATE ON research_prompts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS research_prompts_no_delete ON research_prompts;
+CREATE TRIGGER research_prompts_no_delete
+  BEFORE DELETE ON research_prompts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A research prompt is the exact text an agent was given; the results that answered it name it. It cannot be deleted.'
+  );
+
+DROP TRIGGER IF EXISTS research_prompts_immutable ON research_prompts;
+CREATE TRIGGER research_prompts_immutable
+  BEFORE UPDATE ON research_prompts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_prompt_is_final();
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1179,17 +1243,20 @@ COMMIT;
 --   access_grants_steward_only — 3
 --   17: <t>_audit, <t>_no_delete for value_outcome_evidence,
 --   offering_capabilities, person_roles, reflection_evidence — 8
---   Total: 95 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   18: research_prompts_audit, research_prompts_no_delete,
+--   research_prompts_immutable — 3
+--   Total: 98 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
---   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.)
+--   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
+--   Section 18, Q4b (0031), took it 95 -> 98.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 95.
+-- TRUNCATE in section 14 fail. Total stays 98.
 --
--- Expect 142 rows here: information_schema.triggers emits one row per event
+-- Expect 147 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -1197,7 +1264,7 @@ COMMIT;
 -- each 5e trigger fires on INSERT and UPDATE, ×16 (+32); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
--- research_results_touch on UPDATE only (+1), research_results_no_delete on
+-- research_results_touch on INSERT and UPDATE (+2, since Q4b), research_results_no_delete on
 -- DELETE only (+1); industries_audit fires on INSERT and UPDATE (+2),
 -- industries_no_delete on DELETE only (+1);
 -- industry_measure_exclusions_audit fires on INSERT and UPDATE (+2),
@@ -1208,8 +1275,10 @@ COMMIT;
 -- access_grants_steward_only and access_grants_audit on INSERT and UPDATE
 -- (+4), access_grants_no_delete on DELETE only (+1); section 17's four
 -- _audit triggers on INSERT and UPDATE (+8) and four _no_delete on DELETE
--- only (+4).
--- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 = 142.
+-- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
+-- research_prompts_no_delete on DELETE only (+1),
+-- research_prompts_immutable on UPDATE only (+1).
+-- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 = 147 (the last +1: research_results_touch on INSERT, Q4b).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

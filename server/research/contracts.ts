@@ -12,7 +12,13 @@
  * VERSIONING: `version` is the contract's shape. v1 predated
  * addressable_by_workforce_capability (the CDMO run, 31 Aug); v2 lacked
  * confounders (Manufacturing); v3 is the current shape. Changing a field
- * here is a contract change: bump the version.
+ * here is a contract change: bump the version. A prompt records the
+ * version it was generated against (research_prompts.contract_version),
+ * and parse refuses a response to a prompt of any other version.
+ *
+ * PROMPT_TEMPLATE_VERSION is the wording of buildIndustryMeasurePrompt
+ * below, separately: rewording the prompt without changing a field bumps
+ * it, not the contract.
  */
 
 export type MeasureFieldKind = 'string' | 'boolean';
@@ -178,4 +184,84 @@ export function validateMeasure(
 /** Every industry_measures column the contract fills, in contract order. */
 export function contractColumns(contract: ResearchContract): string[] {
   return contract.fields.flatMap((f) => (f.kind === 'object' ? f.fields.map((s) => s.column) : [f.column]));
+}
+
+/* ------------------------------------------------------------------ */
+/* The generated prompt (Q4b)                                          */
+/* ------------------------------------------------------------------ */
+
+/** The wording of buildIndustryMeasurePrompt. Bump on any change to its text. */
+export const PROMPT_TEMPLATE_VERSION = 1;
+
+export interface IndustryPromptInputs {
+  promptId: string;
+  industry: { name: string; slug: string };
+  /** The pack's current entries (not retired, not superseded). */
+  entries: { name: string; addressable: boolean }[];
+  /** The pack's exclusions, each with the reason a person recorded. */
+  exclusions: { name: string; reason: string }[];
+}
+
+// Code-point order, not locale order: the same rows give the same text on
+// any machine.
+const byName = <T extends { name: string }>(a: T, b: T) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+
+/**
+ * The research prompt for one industry, generated from live rows and from
+ * INDUSTRY_MEASURE_CONTRACT — never hand-written. Deterministic: the same
+ * inputs give the same text, byte for byte. The prompt names its own id
+ * and asks the agent to echo it, with the industry's slug, so a response
+ * says which prompt it answered (parse checks both).
+ */
+export function buildIndustryMeasurePrompt(contract: ResearchContract, inputs: IndustryPromptInputs): string {
+  const { promptId, industry } = inputs;
+  const entries = [...inputs.entries].sort(byName);
+  const exclusions = [...inputs.exclusions].sort(byName);
+  const fieldLines = contract.fields.flatMap((f) =>
+    f.kind === 'object'
+      ? [`- ${f.key}: ${f.prompt}`, ...f.fields.map((s) => `    - ${s.key} (${s.kind}): ${s.prompt}`)]
+      : [`- ${f.key} (${f.kind}): ${f.prompt}`]);
+  const skeleton = Object.fromEntries(contract.fields.map((f) => [
+    f.key,
+    f.kind === 'object'
+      ? Object.fromEntries(f.fields.map((s) => [s.key, s.kind === 'boolean' ? '<true|false>' : `<${s.key}>`]))
+      : `<${f.key}>`,
+  ]));
+  const envelope = {
+    prompt_id: promptId,
+    industry: industry.slug,
+    research_query: '<this prompt\'s task, in one sentence>',
+    query_as_executed: '<the searches you actually ran>',
+    research_tool: '<your name and version>',
+    measures: [skeleton],
+    measures_tested_and_excluded_as_unaddressable: ['<a measure you tested and rejected, with why>'],
+  };
+  return [
+    `LVRF industry pack research — ${industry.name}`,
+    `Prompt ${promptId} · ${contract.resultKind} contract v${contract.version} · template v${PROMPT_TEMPLATE_VERSION}`,
+    '',
+    `TASK. Find the operational measures that carry money in the ${industry.name} industry and that`,
+    'workforce capability can plausibly move. Each one you return will be reviewed by a person before',
+    'it enters the pack; none is accepted on your word.',
+    '',
+    `ALREADY IN THE PACK (${entries.length}). Do not return these again.`,
+    ...(entries.length ? entries.map((e) => `- ${e.name}${e.addressable ? '' : ' (kept as not addressable)'}`) : ['- (none)']),
+    '',
+    `EXCLUDED (${exclusions.length}). A person has judged these do not belong; do not return them.`,
+    ...(exclusions.length ? exclusions.map((x) => `- ${x.name} — ${x.reason}`) : ['- (none)']),
+    '',
+    'FOR EACH MEASURE, every field is required:',
+    ...fieldLines,
+    '',
+    'RULES.',
+    '- A measure you cannot cite, leave out. Do not invent a citation, a figure or a source.',
+    '- A measure you tested and found workforce capability cannot move: either return it with',
+    '  addressable_by_workforce_capability.value = false and the reasoning, or list it under',
+    '  measures_tested_and_excluded_as_unaddressable.',
+    `- Return "prompt_id" and "industry" exactly as shown below: "${promptId}" and "${industry.slug}".`,
+    '',
+    'Return ONE JSON object of exactly this shape, and nothing else:',
+    JSON.stringify(envelope, null, 2),
+    '',
+  ].join('\n');
 }

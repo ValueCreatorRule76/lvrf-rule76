@@ -66,9 +66,13 @@ read -r IND SLUG <<< "$(q "SELECT i.id || ' ' || i.slug FROM industries i
 echo "  industry $SLUG ($IND)"
 
 TOOL="Verification tool $(date +%s)"
+# Q4b: a response names the prompt it answered, and that prompt's industry.
+PROMPT_ID="$(curl -s -X POST -H 'content-type: application/json' -H "x-actor-person-id: $ACTOR" -d '{}' \
+  "$BASE/api/industries/$IND/research-prompts" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).prompt_id||""))')"
+[ -n "$PROMPT_ID" ] || { bad "no research prompt generated"; exit 1; }
 NOTE="Verification note: confirm the threshold before relying on it."
 PAYLOAD=$(cat <<JSON
-{"industry":"Verification","research_query":"Verification query","query_as_executed":"As asked","research_tool":"$TOOL",
+{"prompt_id":"$PROMPT_ID","industry":"$SLUG","research_query":"Verification query","query_as_executed":"As asked","research_tool":"$TOOL",
  "measures":[{"name":"Verification measure","unit":"%","direction":"increase","definition":"A verification definition.",
    "why_it_pays":"A verification reason.","addressable_by_workforce_capability":{"value":true,"why":"A verification why."},
    "confounders":"Verification confounders.","citation":"Verification citation."}]}

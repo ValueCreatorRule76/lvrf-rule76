@@ -1,10 +1,13 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
-import { INDUSTRY_MEASURE_CONTRACT, contractColumns, validateMeasure } from '../research/contracts.js';
+import {
+  INDUSTRY_MEASURE_CONTRACT, PROMPT_TEMPLATE_VERSION, buildIndustryMeasurePrompt, contractColumns, validateMeasure,
+} from '../research/contracts.js';
 
 /**
  * 2.0 item 5, industry packs — pack parse-and-review.
@@ -87,6 +90,16 @@ import { INDUSTRY_MEASURE_CONTRACT, contractColumns, validateMeasure } from '../
  * migration that adds or renames a direction does not require this file
  * to be edited to notice.
  *
+ * A RESPONSE NAMES ITS PROMPT (Q4b). The prompt is generated here, from
+ * live rows and the contract (POST /api/industries/:id/research-prompts,
+ * below), and stored immutable in research_prompts. Parse requires the
+ * response to carry that prompt's id, and refuses — nothing written — if
+ * the prompt is unknown or another industry's, if it was generated against
+ * a contract version other than the one parse now validates against, or if
+ * the response's own `industry` is not the prompt's industry. Each result
+ * then records prompt_id and contract_version. The 13 results parsed
+ * before Q4b carry neither (prompt_tracked = false, 0031).
+ *
  * 404 COVERS TWO CASES ON PURPOSE: a missing industry and one that exists
  * but belongs to a different tenant read the same to the caller. The
  * query below resolves the requesting actor's own tenant (via persons,
@@ -145,7 +158,8 @@ function validateExclusionList(body: Record<string, unknown>, issues: string[]):
 
 // POST /api/industries/:industryId/research-results — parses a research
 // agent's response for one industry into pending research_results rows.
-// Does not create industry_measures rows; see the file comment.
+// Does not create industry_measures rows; see the file comment. Also
+// POST /api/industries/:industryId/research-prompts (Q4b), below it.
 export function industryResearchRouter(pool: Pool): Router {
   const router = Router();
 
@@ -207,16 +221,51 @@ export function industryResearchRouter(pool: Pool): Router {
       // unlike the per-measure contract, these did not evolve across the
       // three research runs; every run stated what it asked and what it
       // ran.
-      requireEnvelopeString(body, 'industry', issues);
-      // Not cross-checked against the resolved industry's own name — the
-      // industryId path param, not this field, is what governs which
-      // industry this writes to. This field records what the agent
-      // believed it researched.
+      const bodyIndustry = requireEnvelopeString(body, 'industry', issues);
       const researchQuery = requireEnvelopeString(body, 'research_query', issues);
       const queryAsExecuted = requireEnvelopeString(body, 'query_as_executed', issues);
       const researchTool = requireEnvelopeString(body, 'research_tool', issues);
 
       validateExclusionList(body, issues);
+
+      // The prompt this response answered (Q4b). Checked before the
+      // measures so a stale prompt is named first, but every issue is still
+      // collected — refuse wholesale, as above.
+      const promptId = body['prompt_id'];
+      if (typeof promptId !== 'string' || !isUuid(promptId)) {
+        issues.push(
+          'body.prompt_id is required: the id of the prompt this response answered. Generate one with ' +
+          `POST /api/industries/${industryId}/research-prompts and give the agent that prompt.`,
+        );
+      } else {
+        const { rows: [prompt] } = await client.query<{ industry_id: string; contract_version: number; slug: string; name: string }>(
+          `SELECT p.industry_id, p.contract_version, i.slug, i.name
+             FROM research_prompts p JOIN industries i ON i.id = p.industry_id
+            WHERE p.id = $1 AND p.result_kind = 'industry_measure'`,
+          [promptId],
+        );
+        // Another tenant's prompt reads as unknown, as everywhere else.
+        if (!prompt || prompt.industry_id !== industryId) {
+          issues.push(`body.prompt_id ${promptId} is not a research prompt for industry ${industryId}.`);
+        } else {
+          if (prompt.contract_version !== INDUSTRY_MEASURE_CONTRACT.version) {
+            issues.push(
+              `the prompt was generated against v${prompt.contract_version}; the contract is now ` +
+              `v${INDUSTRY_MEASURE_CONTRACT.version}; generate a new prompt.`,
+            );
+          }
+          // The prompt asks for the slug; the name is accepted too (case
+          // and surrounding space ignored). Anything else is a response to
+          // a different industry's question.
+          const said = bodyIndustry?.trim().toLowerCase();
+          if (bodyIndustry !== undefined && said !== prompt.slug.toLowerCase() && said !== prompt.name.trim().toLowerCase()) {
+            issues.push(
+              `body.industry is "${bodyIndustry}", but prompt ${promptId} is for "${prompt.slug}" ` +
+              `(${prompt.name}). This response answers a different industry's question.`,
+            );
+          }
+        }
+      }
 
       const measuresRaw = body['measures'];
       let parsedMeasures: ParsedMeasure[] = [];
@@ -252,12 +301,13 @@ export function industryResearchRouter(pool: Pool): Router {
           `INSERT INTO research_results (
              tenant_id, result_kind, industry_id, field_name, found,
              raw_response, research_query, query_as_executed, research_tool,
-             parsed_by_person_id
-           ) VALUES ($1, 'industry_measure', $2, $3, true, $4, $5, $6, $7, $8)
+             parsed_by_person_id, prompt_id, contract_version
+           ) VALUES ($1, 'industry_measure', $2, $3, true, $4, $5, $6, $7, $8, $9, $10)
            RETURNING id, field_name`,
           [
             industry.tenant_id, industryId, measure.name, measure.raw,
             researchQuery!, queryAsExecuted!, researchTool!, actorPersonId,
+            promptId as string, INDUSTRY_MEASURE_CONTRACT.version,
           ],
         );
         results.push(inserted);
@@ -279,6 +329,87 @@ export function industryResearchRouter(pool: Pool): Router {
       if (await handleGovernanceError(pool, err, req, res, {
         endpoint: 'POST /api/industries/:industryId/research-results',
         subjectTable: 'research_results',
+        subjectId: null,
+        tenantId: refusalTenantId,
+        institutionId: null,
+        attemptedPayload: req.body,
+      })) {
+        return;
+      }
+      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+    }
+  });
+
+  // POST /api/industries/:industryId/research-prompts — generates the
+  // research prompt for one industry from live rows (the industry, its
+  // current pack entries, its exclusions with their reasons) and the
+  // contract, and stores it, immutable, in research_prompts. An authorized
+  // user's act (stewardActs.ts), tenant-checked like parse. The response
+  // carries the text to give the agent and the id parse will require.
+  router.post('/:industryId/research-prompts', async (req, res) => {
+    const client = req.dbClient!;
+    const industryId = req.params.industryId;
+    if (!isUuid(industryId)) {
+      res.status(400).json({ message: `invalid industry id: ${industryId}` });
+      return;
+    }
+    let refusalTenantId: string | null = null;
+    try {
+      const actorPersonId = req.actor?.personId;
+      if (!actorPersonId) throw new Error('req.actor missing on a request past requireActor');
+
+      const { rows: [industry] } = await client.query<{ id: string; tenant_id: string; name: string; slug: string }>(
+        'SELECT id, tenant_id, name, slug FROM industries WHERE id = $1',
+        [industryId],
+      );
+      if (!industry || isOtherTenant(req, industry.tenant_id, { table: 'industries', id: industryId })) {
+        res.status(404).json({ message: `industry ${industryId} not found` });
+        return;
+      }
+      refusalTenantId = industry.tenant_id;
+
+      // Current entries: the pack as GET /api/industries/:slug/pack shows it.
+      const { rows: entries } = await client.query<{ id: string; name: string; addressable: boolean }>(
+        `SELECT id, name, addressable FROM industry_measures
+          WHERE industry_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
+          ORDER BY name COLLATE "C", id`,
+        [industryId],
+      );
+      const { rows: exclusions } = await client.query<{ id: string; name: string; reason: string }>(
+        `SELECT id, name, reason FROM industry_measure_exclusions
+          WHERE industry_id = $1 ORDER BY name COLLATE "C", id`,
+        [industryId],
+      );
+
+      const promptId = randomUUID();
+      const text = buildIndustryMeasurePrompt(INDUSTRY_MEASURE_CONTRACT, {
+        promptId, industry: { name: industry.name, slug: industry.slug }, entries, exclusions,
+      });
+      const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
+      // research_prompts_sha256_is_the_text (CHECK) recomputes the hash in
+      // Postgres; a disagreement is refused there, not trusted here.
+      await client.query(
+        `INSERT INTO research_prompts (
+           id, tenant_id, industry_id, result_kind, contract_version, template_version,
+           prompt_text, prompt_sha256, listed_measure_ids, listed_exclusion_ids, generated_by_person_id
+         ) VALUES ($1, $2, $3, 'industry_measure', $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          promptId, industry.tenant_id, industryId, INDUSTRY_MEASURE_CONTRACT.version, PROMPT_TEMPLATE_VERSION,
+          text, sha256, entries.map((e) => e.id), exclusions.map((x) => x.id), actorPersonId,
+        ],
+      );
+
+      res.status(201).json({
+        prompt_id: promptId,
+        prompt_sha256: sha256,
+        contract_version: INDUSTRY_MEASURE_CONTRACT.version,
+        template_version: PROMPT_TEMPLATE_VERSION,
+        prompt: text,
+      });
+    } catch (err) {
+      if (await handleGovernanceError(pool, err, req, res, {
+        endpoint: 'POST /api/industries/:industryId/research-prompts',
+        subjectTable: 'research_prompts',
         subjectId: null,
         tenantId: refusalTenantId,
         institutionId: null,

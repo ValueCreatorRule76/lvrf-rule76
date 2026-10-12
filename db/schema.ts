@@ -1338,6 +1338,41 @@ export const hardeningManifest = pgTable('hardening_manifest', {
  * invariant in its place: institutionId is required for metric_value and
  * forbidden for industry_measure, never both, never neither.
  */
+/**
+ * 0031 (Q4b) — a research prompt, as generated and handed to a person to
+ * run. Generated from live rows by POST /api/industries/:industryId/
+ * research-prompts (server/research/contracts.ts): the industry, the pack's
+ * current entries, its exclusions with their reasons, and the contract's
+ * field definitions. Each research_results row names the prompt it
+ * answered, so a result says exactly what was asked.
+ *
+ * Immutable: a prompt is a fact about what was asked. _audit, _no_delete
+ * and _immutable (hardening.sql section 18). prompt_sha256 is held to the
+ * text by a CHECK, so the hash cannot disagree with what it names.
+ */
+export const researchPrompts = pgTable('research_prompts', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  industryId: uuid('industry_id').notNull().references(() => industries.id, { onDelete: 'restrict' }),
+  resultKind: researchResultKind('result_kind').notNull(),
+  /** The contract's version when this prompt was generated (contracts.ts). */
+  contractVersion: integer('contract_version').notNull(),
+  /** The prompt template's version (contracts.ts PROMPT_TEMPLATE_VERSION). */
+  templateVersion: integer('template_version').notNull(),
+  promptText: text('prompt_text').notNull(),
+  promptSha256: text('prompt_sha256').notNull(),
+  /** The pack entries and exclusions the prompt listed — what it told the agent not to return. */
+  listedMeasureIds: uuid('listed_measure_ids').array().notNull().default(sql`'{}'::uuid[]`),
+  listedExclusionIds: uuid('listed_exclusion_ids').array().notNull().default(sql`'{}'::uuid[]`),
+  generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  generatedByPersonId: uuid('generated_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+}, (t) => [
+  index('research_prompts_industry_idx').on(t.industryId),
+  check('research_prompts_versions_positive', sql`${t.contractVersion} > 0 AND ${t.templateVersion} > 0`),
+  check('research_prompts_sha256_is_the_text',
+    sql`${t.promptSha256} = encode(sha256(convert_to(${t.promptText}, 'UTF8')), 'hex')`),
+]);
+
 export const researchResults = pgTable('research_results', {
   id: id(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
@@ -1383,7 +1418,37 @@ export const researchResults = pgTable('research_results', {
 
   parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
   parsedByPersonId: uuid('parsed_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  /**
+   * 0031 (Q4b). The exact prompt this result answered (research_prompts),
+   * and the contract version the parser validated it against. Both or
+   * neither (research_results_prompt_named).
+   */
+  promptId: uuid('prompt_id').references(() => researchPrompts.id, { onDelete: 'restrict' }),
+  contractVersion: integer('contract_version'),
+  /**
+   * 0031. false on every row that existed when 0031 ran — they predate
+   * prompt tracking and are left exactly as they were (nothing is
+   * back-filled: a guessed prompt would be manufactured history). Defaults
+   * true, so every row parsed since must name its prompt. Tied to the
+   * cut-off by research_results_untracked_predates_prompts: an untracked
+   * row must have been parsed before 2026-10-12 00:00 UTC, and parsed_at
+   * is stamped by research_results_touch on INSERT and frozen on UPDATE
+   * (hardening.sql section 10), so no new row — not even by direct SQL —
+   * can claim to predate prompt tracking.
+   */
+  promptTracked: boolean('prompt_tracked').notNull().default(true),
 }, (t) => [
+  /** 0031: a tracked result names its prompt and contract version; prompt and version come together. */
+  check('research_results_prompt_named',
+    sql`((${t.promptId} IS NULL) = (${t.contractVersion} IS NULL))
+        AND (NOT ${t.promptTracked} OR ${t.promptId} IS NOT NULL)`),
+  /**
+   * 0031: only a row parsed before prompt tracking began may be untracked.
+   * The literal is the cut-off, fixed when 0031 was written (after the 13
+   * legacy rows on prod, the newest parsed 10 Oct 2026); it never moves.
+   */
+  check('research_results_untracked_predates_prompts',
+    sql`${t.promptTracked} OR ${t.parsedAt} < '2026-10-12 00:00:00+00'::timestamptz`),
   /** A decision has a decider and a time, both or neither. */
   check('research_results_review_is_complete',
     sql`${t.reviewState} = 'pending'

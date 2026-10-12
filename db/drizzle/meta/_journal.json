@@ -218,6 +218,13 @@
       "when": 1791748891681,
       "tag": "0030_supports_check",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791763319829,
+      "tag": "0031_research_prompts",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/business-metrics/:metricId/validate': 'authorized',
   'POST /api/capabilities/:capabilityId/industry-measures': 'authorized',
   'POST /api/engagements/:engagementId/produce-run': 'authorized',
+  'POST /api/industries/:industryId/research-prompts': 'authorized',
   'POST /api/industries/:industryId/research-results': 'authorized',
   'POST /api/institutions/:institutionId/facts': 'authorized',
   'POST /api/institutions/:institutionId/facts/:factId/supersede': 'authorized',

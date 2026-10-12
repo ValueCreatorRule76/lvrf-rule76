@@ -119,7 +119,9 @@ post "$X" '{"name":"Payer mix","reason":"Verification: a second exclusion of the
 
 step "6. Cannot be both in the pack and excluded from it"
 TOOL="Verification tool $(date +%s)"
-PAYLOAD="{\"industry\":\"Verification\",\"research_query\":\"q\",\"query_as_executed\":\"As asked\",\"research_tool\":\"$TOOL\",\"measures\":[
+post "/api/industries/$IND/research-prompts" '{}' 201 "generated a research prompt (Q4b)"
+PROMPT_ID="$(rj .prompt_id)"
+PAYLOAD="{\"prompt_id\":\"$PROMPT_ID\",\"industry\":\"$(q "SELECT slug FROM industries WHERE id = '$IND'")\",\"research_query\":\"q\",\"query_as_executed\":\"As asked\",\"research_tool\":\"$TOOL\",\"measures\":[
  {\"name\":\"In the pack\",\"unit\":\"%\",\"direction\":\"increase\",\"definition\":\"d\",\"why_it_pays\":\"w\",\"addressable_by_workforce_capability\":{\"value\":false,\"why\":\"y\"},\"confounders\":\"c\",\"citation\":\"x\"},
  {\"name\":\"Payer mix\",\"unit\":\"%\",\"direction\":\"increase\",\"definition\":\"d\",\"why_it_pays\":\"w\",\"addressable_by_workforce_capability\":{\"value\":false,\"why\":\"y\"},\"confounders\":\"c\",\"citation\":\"x\"}]}"
 post "/api/industries/$IND/research-results" "$PAYLOAD" 201 "parsed two measures"
