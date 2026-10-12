@@ -8859,3 +8859,201 @@ There is **no migration, no hardening change, and no new route.**
 - **For the record (Brad, 12 Oct):** the two missing exclusions (breach lifecycle;
   Revenue per billable consultant) are **still intended**. Brad will record them
   himself, with specific reasons.
+
+## Q4h — account research intake (3.0 item 6), with the entity and the regime — 12 October 2026
+
+3.0 item 6, brought forward with the minimum of items 3 and 4, and L6 and L8. Plan:
+§4e of `docs/LVRF_PLAN.md`, with H1–H4 decided by Brad. Scope per AMENDMENT-005
+Art. I: baseline facts, the entity, the disclosure regime. **Never a measure- or
+verify-stage value:** the contract has no field for one, and the prompt says so.
+
+### What was built
+
+- **Migrations 0033 and 0034:**
+  - **0033** adds only the enum values: `research_result_kind` gains
+    `institution_fact`; `institution_fact_kind` gains `disclosure_regime`.
+  - **0034** is drizzle-kit's own output:
+    - `institution_entities`, governed: legal name and one identifier (SEC CIK as 10
+      digits, ticker, or registry number with its jurisdiction), its evidence NOT
+      NULL; corrected by supersession with a reason. **Triggers 98 → 103** (with
+      section 19's deferred one-current trigger; see the addition below).
+    - `institution_facts_regime_shape`: one of four labels;
+    - `research_prompts`: `industry_id` nullable, plus `institution_id`, `phase` and
+      `entity_id` (the entity a facts prompt names), with
+      `research_prompts_subject_shape`;
+    - `research_results`: `institution_fact_id` and `institution_entity_id`, and an
+      `institution_fact` branch in each shape CHECK;
+    - `refusals`: `source` (`database` | `parser`), with `sqlstate` required only for
+      `database`.
+  - **The enum split, tested:** 0034's CHECKs compare the new values as text, so
+    applying 0033 and 0034 in one run is safe. Tested on local and prod-copy clones.
+- **The one writer:** `insertFactWithEvidence` moved from `routes/institutionFacts.ts`
+  to `lib/institutionFactWriter.ts`, unchanged for that route (its regression passes).
+  It now optionally records the citation resolved by the person (H1), and takes the
+  regime kind.
+- **The contract**, `INSTITUTION_FACT_CONTRACT_VERSION` 1, in `contracts.ts`:
+  - **entity; disclosure regime;** facts (kind, value, unit, `as_of` = the last day of
+    the period, the period as stated, `source_kind`, citation, quote, caveats);
+    not-found entries with reasons;
+  - **two gates** (parse, accept);
+  - **the two-phase prompt, from live rows:**
+    - `entity` asks only for the entity and regime;
+    - `facts` names the pinned entity, reads the regime (for a private company,
+      not-found is the expected answer), lists what is recorded and what was not
+      found, and asks for every kind (H4).
+- **The routes, `routes/accountResearch.ts`, inside the D1 seam:**
+  - `GET /api/institutions/:institutionId/research`;
+  - `POST …/research-prompts` and `POST …/research-results`;
+  - `POST /api/account-research-results/:id/accept|reject`.
+  - **All authorized (H2).** Tenant-checked; tenant-scope cases added.
+  - **Parse:**
+    - phase rules: facts refused until the entity is pinned;
+    - **a response about another entity refused, naming both**;
+    - a prompt whose entity has since been corrected is refused;
+    - every issue named;
+    - **L8: each parse refusal written to `refusals` through the pool.**
+  - **Accept, one transaction:**
+    - **H1:** `citation_opened` is required for a found field, and recorded as
+      resolved by the reviewer;
+    - the entity → `institution_entities` plus its evidence;
+    - the regime → a `disclosure_regime` fact;
+    - a fact → evidence plus fact through the one writer. **H3:** the stated
+      `source_kind` is kept; a company's other publication is recorded as
+      `observation` with a source reference;
+    - a not-found → accepted as not found, nothing written;
+    - **reject is kept.**
+- **The account page** (not the tenant's own record) gets a Research section:
+  - **A1, entity and regime:** pinned or "not pinned: research the entity first",
+    plus the not-found list with reasons;
+  - **A2, generate:** by phase;
+  - **A3, prompts on record:** stale flagged;
+  - **A4, parse:** issues listed;
+  - **A5, per-field review:** `as_of` beside the period as stated; source kind,
+    citation, quote and stated caveats; Accept needs "caveats read" and "I opened the
+    citation"; "Accept as not found".
+- **The steward's pack review router is unchanged** (Q4b's byte-identical proof
+  stands). Its accept already refuses an `institution_fact` result by kind.
+
+### Gate A
+
+- **`verify_account_research.sh`: 152 passed, 0 failed** with the addition below, on
+  fictional accounts only.
+  - **0033 and 0034 in one migrate run;** 103 triggers; D2 none; no drift findings.
+  - **Entity phase:**
+    - the prompt (phase, scope, "never a measured outcome", the hash, the stored row);
+    - **8 refusals, each named and each on record (L8)**, nothing written;
+    - accepting the regime before the entity → 409;
+    - **H1, no `citation_opened` → 422**;
+    - the entity accepted by an authorized user: one transaction, evidence
+      `public_filing`, resolved by the reviewer, AI-sourced with its query, audited;
+    - a second accept → 409;
+    - the regime fact; the regime CHECK.
+  - **Facts phase:**
+    - the prompt names the pinned entity and states `as_of`'s rule;
+    - **another entity → 422 naming both**; a regime in a facts response, a lowercase
+      currency, a fractional headcount, a missing `as_of`, an entity not-found → each
+      422, all 6 on record;
+    - **revenue 0 accepted (zero is data)** with `as_of` = the period end and the
+      quote and period in the provenance;
+    - **H3:** a company publication becomes `observation` with a source reference,
+      `source_kind` kept;
+    - a not-found accepted with nothing written; a reject kept;
+    - the next prompt lists what is recorded and what was not found.
+  - **No hop left short:** a fact refused by the database after its evidence was
+    inserted leaves no evidence and the result pending.
+  - **The entity guard:** after the entity is corrected, a pending fact cannot be
+    accepted and the old prompt cannot be parsed against.
+  - **The steward's pack accept on an account result** → 422 by kind.
+  - **A private company:** a registry number needs its jurisdiction; NZ pinned; the
+    prompt says not-found is expected; the record shows what research cannot reach
+    and why.
+  - **The browser walk, by session as an authorized user, screenshots looked at:**
+    - facts in an entity-phase response refused;
+    - both ticks needed before Accept;
+    - the entity pinned and the regime recorded, in place;
+    - **the mismatch refusal naming both**;
+    - `as_of` beside the period;
+    - the stated caveat;
+    - the not-found listed.
+    - One defect was found and fixed: the citation cell's font size.
+- **Deliberate breaks, each restored byte-identical:**
+  - **B1, the entity check:** another entity's response is written.
+  - **B2, the phase checks:** facts written from an entity-phase prompt.
+  - **B3, the server's H1 rule:** a fact accepted with no citation opened.
+  - **B4, L8's writer:** no refusal recorded.
+  - **B-H1, the client ticks removed:** the server still refuses without
+    `citation_opened`.
+- **Prod copy:**
+  - 0033 and 0034 apply with 103 triggers (155 rows);
+  - D2 none (774 objects); no drift findings;
+  - **48 existing GETs identical to HEAD**, `/view` included;
+  - the new read answers 200 on both accounts;
+  - the legacy check: 13 valid v3.
+- **Regression, at the feat commit's state, with the addition:** all 25 verify scripts
+  pass, 0 failed (`verify_account_research` 152, `verify_tenant_scope` 152 cases). The
+  bundle is **`index-DM2atepp.js`**. The prod-copy check against the deployed
+  `c8ad20b`: 48 GETs identical, 103 triggers, `hardening_manifest` 103, D2 none (774
+  objects), no drift findings.
+- **The first regression, before the addition:**
+  - The first run caught two gaps in test scaffolding, not in Q4h's code:
+    - **the tenant-scope coverage guard named the 5 new routes as having no tenant
+      case.** Cases and a tenant-A account-research fixture were added;
+      `verify_tenant_scope` now passes 149 cases.
+    - `verify_pack_entry_retire` hard-coded "newest 0032" in its D2 check. It is now
+      version-agnostic, and passes 73.
+  - `verify_account_workbench` (28) and `verify_fact_supersession` (38) pass: the
+    writer move is neutral for the typed-fact routes.
+  - The one lint warning predates this work.
+- **`CLAUDE.md`'s research seam, approved by Brad and applied:** `accountResearch.ts`
+  and `institutionFactWriter.ts` are in the boundary. Only `industryResearch.ts` and
+  `accountResearch.ts` write `research_prompts` and `research_results`, and only
+  `institutionFactWriter.ts` writes `institution_facts`.
+  - **The condition, a grep of every INSERT and UPDATE of `institution_facts` across
+    server, scripts and client:**
+    - one server write sat outside the writer: the fact-supersede route's `UPDATE`,
+      which points the old fact at its successor;
+    - it moved into the writer as `pointFactAtSuccessor`, unchanged in effect
+      (`verify_fact_supersession` passes);
+    - the server's only writes are now `lib/institutionFactWriter.ts`'s INSERT and
+      UPDATE;
+    - the other hits are verify scripts on throwaway clones; the client has none.
+
+### The addition: correcting the entity (Brad, 12 Oct, before Gate B)
+
+- **`POST /api/institutions/:institutionId/entity/supersede`:**
+  - an authorized act, as pinning is;
+  - tenant-checked, with a tenant-scope case;
+  - a reason of at least 12 characters, and a citation for the corrected entity;
+  - refused if no entity is pinned (409) or if it is the same entity (422).
+  - It writes the new entity with its evidence, then points the old one at it with
+    the reason, in one transaction.
+  - **Its response lists the facts accepted under the superseded entity,** and the
+    account page shows them in A1 as **"Accepted under the previous entity:
+    review"**, by the old name and identifier. Nothing is changed or hidden.
+  - Every later prompt names the corrected entity. A pending fact from the old entity
+    and a response about it are refused, naming both.
+- **0034 was changed before any deploy (no new migration):**
+  - **Its partial unique index "one current entity per account" is gone.** A
+    correction must insert the successor before pointing the old row at it
+    (`lvrf_supersession_is_sane` requires the successor to exist), and an immediate
+    index refused that moment: the latent gap 0015 recorded for `business_metrics`.
+  - The rule is now `hardening.sql` section 19, **`institution_entities_one_current`,
+    a DEFERRABLE INITIALLY DEFERRED constraint trigger checked at COMMIT.**
+    **Triggers 102 → 103.**
+  - **0034 also gains `institution_entities.supersession_reason`,** with a CHECK
+    matching `institution_facts`': set exactly when superseded, at least 12
+    characters.
+- **The verify adds:**
+  - the refusals (short reason, same entity, another tenant, nothing pinned);
+  - the correction, its listing of 3 facts, the facts unchanged, one current entity;
+  - research now targets the new entity; a pending old-entity fact → 409; the old
+    prompt → 422; an old-entity response → 422 naming both;
+  - **two current entities by direct SQL refused at COMMIT;**
+  - the browser walk: correct, see the review block, A2 cleared of the old entity's
+    prompt.
+  - **Breaks:**
+    - **B6, the listing removed:** the response names none of the facts accepted
+      under the superseded entity.
+    - **B7, the deferred trigger dropped** (rolled back): two current entities stand.
+- **One defect found and fixed:** after a correction, A2 still showed a prompt naming
+  the old entity. The card is now keyed to the current entity.
