@@ -8563,3 +8563,108 @@ Recorded plainly, read-only from prod as `lvrf_app`.
   correction path for the accepted entries is Q4c1b (retire, steward-only), planned in
   `docs/LVRF_PLAN.md` §4d, together with an R4 aid that surfaces the agent's own
   caveats and requires a tick before Accept.
+
+## Q4c1b — retire a pack entry; retired entries shown; the R4 caveats aid — 12 October 2026
+
+The correction path Q4e showed was missing: accepting a result is final, and nothing
+could take an accepted entry back out of a pack. Plan: §4d of `docs/LVRF_PLAN.md`,
+approved by Brad, with the caveats tick required on every pending result.
+
+### What was built
+
+- **Migration 0032:** `industry_measures.retired_by_person_id` (FK, RESTRICT) and
+  `retirement_reason`. CHECK `industry_measures_retirement_is_complete`: retired means
+  `deleted_at`, `status = 'retired'`, the person and a reason of at least 12
+  characters, all together, or none.
+  - **One hand edit, named in its header:** the CHECK is added `NOT VALID` and then
+    validated in the same migration, if no row violates it.
+  - Prod (26 entries, all proposed) validates in full: confirmed on the prod copy.
+  - Local lvrf holds three retired *test* entries from 5 Sep with no person or reason.
+    They are not rewritten, so a clone of local keeps the CHECK `NOT VALID`; it is
+    still enforced on every new or updated row.
+  - Triggers are unchanged at 98.
+- **`POST /api/industry-measures/:id/retire`:**
+  - steward-only (`MUTATING_ROUTE_CLASS`, "Retiring a pack entry"; 5 steward routes
+    now);
+  - a reason of at least 12 characters;
+  - tenant-checked (404);
+  - `FOR UPDATE`;
+  - 409 if already retired (naming who and why) or superseded;
+  - **409 naming each dependent** while a current capability claims the entry or a
+    current metric uses it as its pack basis (a retired capability's claim does not
+    block);
+  - audited;
+  - **the accepted research result stays accepted.**
+- **The pack GET** returns each current entry's `id` and a new `retired` list: who,
+  when, the reason, the original review, and whether the name has since been excluded.
+- **The pack page:**
+  - "Retire this entry…" on each current entry. It opens an inline form with an empty
+    reason box and is disabled for non-stewards, naming the steward.
+  - A **"Retired" card (03), collapsed, not hidden**, showing who retired each entry,
+    when and why, its first review, and whether it can return.
+- **After retirement:** the name can be excluded through the existing route. A retired,
+  unexcluded name can return through a new accepted result as a new row; an excluded
+  one cannot.
+- **R4, the caveats aid (client only):**
+  - A text search of every string field of the response for caveat phrases ("reviewer
+    should", "secondary summaries", "unverified", "gated" and the rest).
+  - Each matching sentence is shown verbatim with its field, in "The research's own
+    caveats".
+  - **The tick is required on every pending result before Accept** (Brad), reading
+    "I have read the citation" where nothing matched. Reject does not need it.
+  - Q4g will make caveats a contract field.
+
+### Gate A
+
+- **`verify_pack_entry_retire.sh`: 70 passed, 0 failed.** Fixtures go through the
+  routes: entries parsed and accepted; an IT-classified account; offerings; claims; a
+  value outcome with a baseline of 0; a pack basis.
+  - **Route:**
+    - non-steward → 403;
+    - a reason under 12 characters, or none → 422;
+    - another tenant's entry → 404; a malformed id → 400;
+    - a claimed entry → 409 naming the capability and account;
+    - an entry used as a pack basis → 409 naming the metric;
+    - claimed only by a retired capability → 200;
+    - the steward's retirement → 200: the row is complete, the result stays
+      accepted, it is audited with the actor;
+    - a second retirement → 409 naming who.
+  - **The CHECK, by direct SQL:** each of the four incomplete shapes is refused.
+  - **The pack GET:** the entry moves to `retired` with who, why and its review.
+  - **Exclusion and return:**
+    - the retired name is excluded (201); a current one still gets 409;
+    - `excluded` flips;
+    - a retired, unexcluded name returns as a new row; an excluded one → 409.
+  - **The browser walk, by session:**
+    - the caveat block shows the agent's sentences verbatim with their field;
+    - "no caveat phrases found" where none match;
+    - Accept is disabled until the tick; Reject needs none;
+    - a non-steward's retire control is disabled, naming the steward;
+    - the steward's retire form opens with an empty reason box, refuses a short
+      reason, and retires; the entry leaves the claimable card in place;
+    - the Retired card shows who, why and the first review.
+    - Screenshots looked at.
+- **Deliberate breaks, each restored byte-identical:**
+  - **B1, the dependency check removed:** a claimed entry is retired.
+  - **B2, the CHECK dropped** (rolled back): an entry is retired with no person or
+    reason.
+  - **B3, the tick gate removed:** Accept is enabled without the tick.
+  - **B4, the client steward gate on retire removed:** X submits, the server still
+    answers 403, and the entry stays current.
+- **Prod copy:**
+  - 0032 applies with the CHECK **validated**;
+  - D2 none (735 objects, newest 0032); D1/D3/D4 no findings;
+  - **58 GETs: 48 identical, and 10 (the pack GET for each industry) differ only by
+    the added `retired: []` and entry ids. 0 unexplained.**
+  - The plan named only `retired`; the ids were added because the retire control
+    needs them.
+- **Also:** `verify_steward_acts` counts 5 steward routes, with a 403 case for the new
+  one. `verify_research_contract`'s retired fixture now carries a person and a
+  reason. Q4c1's walk ticks before Accept.
+- **Regression, at the feat commit's state:** all 24 verify scripts pass, 0 failed.
+  - The first run caught one real gap: **the tenant-scope coverage guard failed, because
+    the retire route had no tenant case.** A case and a tenant-A pack-entry fixture were
+    added; `verify_tenant_scope` now passes 134 cases.
+  - `verify_steward_acts` passes 28.
+  - The client `tsc`, build and lint pass. The bundle is **`index-C7TkKSVp.js`**, new
+    because the client changed. The one lint warning predates this work.
