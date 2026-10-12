@@ -17,6 +17,8 @@ export interface IndustryListItem {
 }
 
 export interface IndustryMeasure {
+  /** Q4c1b: the entry's id, for the steward's "Retire this entry…". */
+  id: string;
   name: string;
   unit: string;
   direction: 'increase' | 'decrease';
@@ -53,10 +55,31 @@ export interface IndustryExclusion {
   proposal_text: string | null;
 }
 
+/**
+ * Q4c1b: an entry a steward retired from the pack — shown, not hidden.
+ * The retirement leads; the review it was first accepted on follows.
+ */
+export interface IndustryRetiredMeasure {
+  name: string;
+  unit: string;
+  direction: 'increase' | 'decrease';
+  citation: string;
+  retired_at: string;
+  /** Null only for an entry retired before 0032 (none on prod). */
+  retired_by: string | null;
+  retirement_reason: string | null;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  /** Excluded since: it cannot return. Otherwise a new accepted result can bring it back. */
+  excluded: boolean;
+}
+
 export interface IndustryPack {
   industry: { id: string; name: string; slug: string };
   measures: IndustryMeasure[];
   exclusions: IndustryExclusion[];
+  retired: IndustryRetiredMeasure[];
 }
 
 export type FetchIndustriesResult =

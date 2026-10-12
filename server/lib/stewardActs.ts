@@ -35,6 +35,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/research-results/:id/accept': 'steward',
   'POST /api/research-results/:id/reject': 'steward',
   'POST /api/industries/:industryId/exclusions': 'steward',
+  'POST /api/industry-measures/:id/retire': 'steward',
   'POST /api/engagements/:id/retire': 'steward',
   // Authorized users (Q3 + D3: classify, offerings, validate, pack-basis and
   // claims are authorized-user acts)
@@ -65,6 +66,7 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/research-results/:id/reject': 'Rejecting a research result',
   'POST /api/industries/:industryId/exclusions': 'Excluding a measure from a pack',
   'POST /api/engagements/:id/retire': 'Retiring an engagement',
+  'POST /api/industry-measures/:id/retire': 'Retiring a pack entry',
 };
 
 /** The actor's tenant's steward: { id, full_name }, or null if none is named. */

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
-import { fetchIndustryPack, type IndustryExclusion, type IndustryMeasure, type IndustryPack } from '../api/packs';
+import {
+  fetchIndustryPack,
+  type IndustryExclusion,
+  type IndustryMeasure,
+  type IndustryPack,
+  type IndustryRetiredMeasure,
+} from '../api/packs';
 import { Card, Badge } from '../components/workbench/Card';
 import { PackResearch } from '../components/PackResearch';
+import { FOCUS_RING, GovernedForm } from '../components/GovernedForm';
 
 // Lifecycle statuses this table has ever supported (db/schema.ts's
 // lifecycleStatus enum) mapped to a tone, even though industry_measures'
@@ -23,13 +30,79 @@ const STATUS_TONE: Record<string, 'healthy' | 'watch' | 'critical' | 'neutral'> 
   rejected: 'critical',
 };
 
+// Q4c1b — the steward's "Retire this entry…". Closed until asked for; the
+// reason box starts empty. Disabled for anyone else, naming the steward:
+// the server's 403 (requireSteward) stays the authority.
+function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetired: () => void }) {
+  const { actor } = useActor();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const stewardReason = actor?.is_steward
+    ? undefined
+    : `This is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <button
+          type="button"
+          disabled={Boolean(stewardReason)}
+          title={stewardReason}
+          onClick={() => setOpen(true)}
+          className={
+            'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] ' +
+            (stewardReason ? 'cursor-not-allowed text-ink-25' : 'text-ink-45 hover:border-ink hover:text-ink') +
+            ' ' + FOCUS_RING
+          }
+        >
+          Retire this entry…
+        </button>
+        {stewardReason && <span className="ml-2 text-[11px] text-ink-45">{stewardReason}</span>}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-3 border-t border-rule-soft pt-3" data-testid="retire-form">
+      <GovernedForm<{ retired_at: string }>
+        path={`/api/industry-measures/${measure.id}/retire`}
+        provenanceLabel="What this records"
+        provenance={
+          <p className="m-0 text-[12.5px] text-ink">
+            Retires "{measure.name}" from this pack, with your reason. Final: a retired entry is not
+            restored — it can return only by a new accepted research result. Its accepted review stays on
+            record, and it stays visible under "Retired".
+          </p>
+        }
+        disabledReason={stewardReason}
+        fields={
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
+              Why it is being retired (required, at least 12 characters)
+            </span>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className={'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING}
+            />
+          </label>
+        }
+        canSubmit={reason.trim().length >= 12}
+        buildBody={() => ({ retirement_reason: reason })}
+        submitLabel="Retire"
+        onSuccess={onRetired}
+        renderSuccess={() => <>Retired.</>}
+      />
+    </div>
+  );
+}
+
 // THIS IS WHAT AN ACCOUNT MANAGER SEES WHEN THEY OPEN AN ACCOUNT'S
 // INDUSTRY — not an admin table. why_it_pays (or, for an unaddressable
 // measure, addressable_reasoning) gets the prominent slot because it is
 // the sentence read aloud; confounders gets its own labeled, bordered
 // block because it is the sentence that stops an overclaim, and burying
 // it beside the definition is how an overclaim happens.
-function MeasureEntry({ measure }: { measure: IndustryMeasure }) {
+function MeasureEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetired: () => void }) {
   const m = measure;
   return (
     <div className="border-b border-rule-soft py-4 last:border-b-0">
@@ -95,6 +168,8 @@ function MeasureEntry({ measure }: { measure: IndustryMeasure }) {
       ) : (
         <p className="m-0 mt-3 text-[11px] text-ink-45">No review on record for this entry.</p>
       )}
+
+      <RetireEntry measure={m} onRetired={onRetired} />
     </div>
   );
 }
@@ -104,18 +179,20 @@ function MeasureGroup({
   title,
   measures,
   emptyText,
+  onRetired,
 }: {
   n: string;
   title: string;
   measures: IndustryMeasure[];
   emptyText: string;
+  onRetired: () => void;
 }) {
   return (
     <Card n={n} title={title} badge={<Badge tone="neutral">{measures.length}</Badge>}>
       {measures.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">{emptyText}</p>
       ) : (
-        measures.map((m) => <MeasureEntry key={m.name} measure={m} />)
+        measures.map((m) => <MeasureEntry key={m.id} measure={m} onRetired={onRetired} />)
       )}
     </Card>
   );
@@ -159,7 +236,55 @@ function ExclusionGroup({ n, exclusions }: { n: string; exclusions: IndustryExcl
   );
 }
 
-function PackBody({ pack }: { pack: IndustryPack }) {
+// Q4c1b — RETIRED ENTRIES ARE SHOWN, NOT HIDDEN. Collapsed by default:
+// the pack's current claims come first; what was taken back out, by whom
+// and why, is one click away and never gone. The retirement leads; the
+// review the entry was first accepted on follows, muted.
+function RetiredGroup({ n, retired }: { n: string; retired: IndustryRetiredMeasure[] }) {
+  return (
+    <Card n={n} title="Retired" badge={<Badge tone="neutral">{retired.length}</Badge>}>
+      {retired.length === 0 ? (
+        <p className="m-0 text-[12.5px] text-ink-45">Nothing has been retired from this pack.</p>
+      ) : (
+        <details data-testid="retired-details">
+          <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[.1em] text-ink-45">
+            Show {retired.length} retired {retired.length === 1 ? 'entry' : 'entries'}
+          </summary>
+          {retired.map((r) => (
+            <div key={r.name + r.retired_at} className="border-b border-rule-soft py-3 last:border-b-0">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h4 className="m-0 text-[13.5px] font-semibold text-ink">{r.name}</h4>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono text-[11px] text-ink-45">
+                    {r.unit} · {r.direction}
+                  </span>
+                  <Badge tone="critical">Retired</Badge>
+                  {r.excluded && <Badge tone="neutral">Since excluded</Badge>}
+                </span>
+              </div>
+              <p className="m-0 mt-1 text-[12.5px] text-ink">{r.retirement_reason ?? 'No reason on record.'}</p>
+              <p className="m-0 mt-1 text-[11px] text-ink-45">
+                Retired by {r.retired_by ?? 'no one on record'} on {r.retired_at.slice(0, 10)}
+                {r.excluded
+                  ? ' · since excluded from this pack, so it cannot return'
+                  : ' · not excluded: a new accepted research result can bring it back'}
+              </p>
+              {r.reviewed_at && (
+                <p className="m-0 mt-1.5 text-[11px] text-ink-45">
+                  First accepted by {r.reviewed_by ?? 'an unnamed reviewer'} on {r.reviewed_at.slice(0, 10)}
+                  {r.review_note ? `, with the note: "${r.review_note}"` : ''}
+                </p>
+              )}
+              <p className="m-0 mt-1 font-mono text-[10.5px] text-ink-45">{r.citation}</p>
+            </div>
+          ))}
+        </details>
+      )}
+    </Card>
+  );
+}
+
+function PackBody({ pack, onRetired }: { pack: IndustryPack; onRetired: () => void }) {
   const claimable = pack.measures.filter((m) => m.addressable);
   const notClaimable = pack.measures.filter((m) => !m.addressable);
 
@@ -173,6 +298,9 @@ function PackBody({ pack }: { pack: IndustryPack }) {
         </p>
         {/* 00, not 02: with no measures there are no cards 00 and 01 above it. */}
         {pack.exclusions.length > 0 && <ExclusionGroup n="00" exclusions={pack.exclusions} />}
+        {pack.retired.length > 0 && (
+          <RetiredGroup n={pack.exclusions.length > 0 ? '01' : '00'} retired={pack.retired} />
+        )}
       </>
     );
   }
@@ -184,14 +312,17 @@ function PackBody({ pack }: { pack: IndustryPack }) {
         title="What you can claim against"
         measures={claimable}
         emptyText="Nothing in this pack has tested addressable yet."
+        onRetired={onRetired}
       />
       <MeasureGroup
         n="01"
         title="What you cannot — and why"
         measures={notClaimable}
         emptyText="Nothing in this pack has tested unaddressable yet."
+        onRetired={onRetired}
       />
       <ExclusionGroup n="02" exclusions={pack.exclusions} />
+      <RetiredGroup n="03" retired={pack.retired} />
     </>
   );
 }
@@ -262,7 +393,7 @@ export function IndustryPackPage() {
         record at two or more accounts. Nothing in this pack is ratified today.
       </p>
 
-      <PackBody pack={pack} />
+      <PackBody pack={pack} onRetired={refreshPack} />
 
       <PackResearch industry={pack.industry} onPackChanged={refreshPack} />
     </div>

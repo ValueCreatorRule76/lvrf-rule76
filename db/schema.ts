@@ -465,9 +465,26 @@ export const industryMeasures = pgTable('industry_measures', {
   citation: text('citation').notNull(),
   ...governance(),
   status: lifecycleStatus('status').notNull().default('proposed'),
+  /**
+   * 0032 (Q4c1b). Who retired this entry, and why — set by
+   * POST /api/industry-measures/:id/retire (steward-only) together with
+   * deleted_at and status 'retired', never apart
+   * (industry_measures_retirement_is_complete). A retired entry is shown
+   * on the pack page, not hidden; its accepted research result stays
+   * accepted. A retired name can return only through a new accepted
+   * result (the unique name index is partial over current entries).
+   */
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'industry_measures_superseded_by_fk' }).onDelete('restrict'),
+  /** 0032: retired means all four marks together — deleted_at, status, who, why (≥ 12 chars) — or none of them. */
+  check('industry_measures_retirement_is_complete',
+    sql`(${t.deletedAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL
+         AND ${t.status} <> 'retired')
+        OR (${t.deletedAt} IS NOT NULL AND ${t.status} = 'retired' AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
   index('industry_measures_tenant_idx').on(t.tenantId),
   index('industry_measures_industry_idx').on(t.industryId),
   // Partial unique index, same technique as 0014's business_metrics index —

@@ -98,13 +98,13 @@ export function industryPackRouter(pool: Pool): Router {
       // at the measure: every entry reachable today has one, but a null says
       // "no review on record" rather than inventing one.
       const { rows } = await pool.query<{
-        name: string; unit: string; direction: string; definition: string;
+        id: string; name: string; unit: string; direction: string; definition: string;
         why_it_pays: string; addressable: boolean; addressable_reasoning: string;
         confounders: string; citation: string; status: string;
         review_note: string | null; reviewed_at: string | null; reviewed_by: string | null;
         research_tool: string | null; parsed_at: string | null;
       }>(
-        `SELECT im.name, im.unit, im.direction, im.definition, im.why_it_pays, im.addressable,
+        `SELECT im.id, im.name, im.unit, im.direction, im.definition, im.why_it_pays, im.addressable,
                 im.addressable_reasoning, im.confounders, im.citation, im.status,
                 rr.review_note, rr.reviewed_at, reviewer.full_name AS reviewed_by,
                 rr.research_tool, rr.parsed_at
@@ -141,7 +141,29 @@ export function industryPackRouter(pool: Pool): Router {
         [industry.id],
       );
 
-      res.json({ industry, measures, exclusions });
+      // Q4c1b: RETIRED ENTRIES ARE SHOWN, NOT HIDDEN. An entry a steward
+      // took back out of the pack keeps its place on the page — who retired
+      // it, when, why, and the review it was first accepted on — beside
+      // "Tested and excluded". `excluded` says whether the name has since
+      // been excluded (then it cannot return); otherwise a later accepted
+      // result can bring it back as a new entry.
+      const { rows: retired } = await pool.query(
+        `SELECT im.name, im.unit, im.direction, im.citation, im.deleted_at AS retired_at,
+                rb.full_name AS retired_by, im.retirement_reason,
+                rr.review_note, reviewer.full_name AS reviewed_by, rr.reviewed_at,
+                EXISTS (SELECT 1 FROM industry_measure_exclusions x
+                         WHERE x.industry_id = im.industry_id AND x.name = im.name) AS excluded
+           FROM industry_measures im
+           LEFT JOIN persons rb ON rb.id = im.retired_by_person_id
+           LEFT JOIN research_results rr
+                  ON rr.industry_measures_id = im.id AND rr.review_state = 'accepted'
+           LEFT JOIN persons reviewer ON reviewer.id = rr.reviewed_by_person_id
+          WHERE im.industry_id = $1 AND im.status = 'retired'
+          ORDER BY im.deleted_at DESC, im.name`,
+        [industry.id],
+      );
+
+      res.json({ industry, measures, exclusions, retired });
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
     }

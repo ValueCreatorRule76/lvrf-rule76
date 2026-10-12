@@ -111,9 +111,13 @@ METRIC_A="$(A1 "SELECT bm.id FROM business_metrics bm JOIN institutions i ON i.i
 METRIC_A_SELF="$(A1 "SELECT bm.id FROM business_metrics bm JOIN institutions i ON i.id = bm.institution_id WHERE i.tenant_id = '$TENANT_A' AND i.is_tenant_self AND bm.deleted_at IS NULL AND bm.superseded_by_id IS NULL ORDER BY bm.created_at")"
 IND_A="$(A1 "SELECT id FROM industries WHERE tenant_id = '$TENANT_A' ORDER BY slug")"
 SLUG_A="$(q "SELECT slug FROM industries WHERE id = '$IND_A'")"
+# Q4c1b: a live pack entry of tenant A's, for the retire route's case — a
+# fixture, labelled as one in every text column, on the throwaway clone only.
+MEASURE_A="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
+  VALUES ('$TENANT_A', '$IND_A', 'Tenant A measure (verification $TS)', 'count', 'increase', 'Verification fixture.', 'Verification fixture.', true, 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.') RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -129,7 +133,7 @@ curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"actor_header":"off"' && 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

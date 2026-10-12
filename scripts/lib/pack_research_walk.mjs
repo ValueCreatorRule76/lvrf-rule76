@@ -4,7 +4,8 @@
 //
 //   node scripts/lib/pack_research_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB SLUG S_EMAIL X_EMAIL PW P_STALE S_NAME
 //
-// MODE: full | break-steward-gate | break-issues
+// MODE: full | break-steward-gate | break-issues (Q4c1);
+//       caveats | break-tick | retire | nonsteward-retire (Q4c1b)
 // Signs in by SESSION through the real sign-in form — never the header.
 
 import { writeFileSync } from 'node:fs';
@@ -69,6 +70,8 @@ const fieldValue = (scopeExpr, labelText) => ev(`(()=>{const root=${scopeExpr};c
 const click = (scopeExpr, text, tag = 'button') => ev(`(()=>{const root=${scopeExpr}||document;const el=[...root.querySelectorAll(${JSON.stringify(tag)})].find(e=>e.textContent.trim()===${JSON.stringify(text)}||e.textContent.includes(${JSON.stringify(text)}));if(!el)return false;el.click();return true})()`);
 const buttonDisabled = (scopeExpr, text) => ev(`(()=>{const root=${scopeExpr};const el=[...root.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(text)});return el?el.disabled:null})()`);
 const card = (title) => `([...document.querySelectorAll('section')].find(s=>s.querySelector('h3')?.textContent.includes(${JSON.stringify(title)})))`;
+// Q4c1b: the "caveats read" tick a pending result needs before Accept.
+const tickCaveats = (scopeExpr) => ev(`(()=>{const root=${scopeExpr};const cb=root&&root.querySelector('input[type=checkbox]');if(!cb)return false;if(!cb.checked)cb.click();return cb.checked})()`);
 const pendingEntry = (name) => `([...(${card('Pending review')}||document).querySelectorAll('h4')].find(h=>h.textContent===${JSON.stringify(name)})?.parentElement)`;
 
 async function signIn(email) {
@@ -180,6 +183,7 @@ if (MODE === 'full') {
   check(await waitFor(`(${card('Tested and excluded')})?.textContent.includes('Server uptime')`), 'the pack\'s "Tested and excluded" card shows it, the proposal labeled as the research\'s');
 
   await setField(pendingEntry('Walk first-contact resolution'), 'Review note', 'Verification: accepted by the steward in the walk.');
+  await tickCaveats(pendingEntry('Walk first-contact resolution'));
   await sleep(200);
   await click(pendingEntry('Walk first-contact resolution'), 'Accept');
   check(await waitFor(bodyHas('Walk first-contact resolution: accepted into the pack')), 'S accepts a result');
@@ -199,6 +203,7 @@ if (MODE === 'full') {
   const enabledForX = !(await ev(`(${pendingEntry('Walk SLA attainment')}).textContent.includes('Not yours to record')`));
   check(enabledForX, 'B1: with the client gate removed, X sees the steward form enabled');
   await setField(pendingEntry('Walk SLA attainment'), 'Review note', 'Verification: X tries to accept.');
+  await tickCaveats(pendingEntry('Walk SLA attainment'));
   await sleep(200);
   await click(pendingEntry('Walk SLA attainment'), 'Accept');
   await sleep(1500);
@@ -214,6 +219,98 @@ if (MODE === 'full') {
   const nIssues = await ev(`(${card('Parse a research response')}).querySelectorAll('ul li').length`);
   check(nIssues === 0, 'B2: with C0 removed, the refusal shows no issues — only "N issue(s) found"; C0 is what lists them');
   await shot('q4c1_5_break_no_issues', '#parse-card');
+} else if (MODE === 'caveats' || MODE === 'break-tick') {
+  // A pending result whose citation carries the agent's own caveat, parsed
+  // here by the steward; Accept must stay disabled until the tick.
+  await signIn(S_EMAIL);
+  await openPack();
+  await click(card('Generate a research prompt'), 'Generate research prompt');
+  await waitFor(bodyHas('Copy prompt'));
+  const P = await latestPromptId();
+  const NAME = MODE === 'caveats' ? 'Caveat walk measure' : 'Caveat walk measure (break)';
+  const CAVEAT = 'Secondary summaries report the figure at 27%; reviewer should confirm the figure in the report itself.';
+  await parse(response(P, [{ ...measure(NAME), citation: `Verification Report 2025, https://example.org/report. ${CAVEAT}` },
+    measure(NAME + ' — no caveat')]));
+  await waitFor(`!!${pendingEntry(NAME)}`);
+  const block = await ev(`(${pendingEntry(NAME)}).querySelector('[data-testid=caveats]')?.textContent || ''`);
+  const plain = await ev(`(${pendingEntry(NAME + ' — no caveat')}).querySelector('[data-testid=caveats]')?.textContent || ''`);
+  await setField(pendingEntry(NAME), 'Review note', 'Verification: reviewed with the caveat in view.');
+  await sleep(200);
+  const disabledBefore = await buttonDisabled(pendingEntry(NAME), 'Accept');
+  if (MODE === 'caveats') {
+    check(block.includes('Secondary summaries report the figure at 27%;') && block.includes('reviewer should confirm the figure in the report itself.') && block.includes('citation'),
+      "the caveat block shows the agent's sentences verbatim, each with its field (citation)", block.slice(0, 200));
+    check(plain.includes('No caveat phrases found'), 'a result with no caveat phrase says so — "a text search, not a finding"');
+    check(await ev(`(${pendingEntry(NAME + ' — no caveat')}).textContent.includes('I have read the citation')`), 'with no match, the tick still exists ("I have read the citation")');
+    check(disabledBefore === true, 'Accept is disabled with the note written but the tick unticked');
+    await shot('q4c1b_1_caveats_unticked', `#pending-card`);
+    await tickCaveats(pendingEntry(NAME));
+    await sleep(300);
+    check((await buttonDisabled(pendingEntry(NAME), 'Accept')) === false, 'ticked: Accept is enabled');
+    await ev(`(()=>{const e=${pendingEntry(NAME + ' — no caveat')};const r=[...e.querySelectorAll('input[type=radio]')][1];r.click();return true})()`);
+    await setField(pendingEntry(NAME + ' — no caveat'), 'Review note', 'Verification: rejected without the tick.');
+    await sleep(300);
+    check((await buttonDisabled(pendingEntry(NAME + ' — no caveat'), 'Reject')) === false, 'Reject does not need the tick');
+  } else {
+    check(disabledBefore === false, 'B-tick: with the client gate removed, Accept is enabled without the tick — the gate is what holds it');
+  }
+} else if (MODE === 'break-retire-gate') {
+  // The client's steward gate on "Retire this entry…" removed: X can open
+  // the form and submit, and the server's requireSteward still refuses.
+  const NAME = P_STALE;
+  const entry = `([...document.querySelectorAll('h4')].find(h=>h.textContent===${JSON.stringify(NAME)})?.parentElement?.parentElement)`;
+  await signIn(X_EMAIL);
+  await openPack();
+  await waitFor(`!!${entry}`);
+  check((await buttonDisabled(entry, 'Retire this entry…')) === false, 'B-retire: with the client gate removed, X can open the retire form');
+  await click(entry, 'Retire this entry…');
+  await waitFor(`!!(${entry}).querySelector('[data-testid=retire-form]')`);
+  await setField(entry, 'Why it is being retired', 'Verification: X tries to retire this entry.');
+  await sleep(200);
+  await click(entry, 'Retire');
+  await sleep(1500);
+  const said = await ev(`(${entry})?.textContent || ''`);
+  check(/steward/i.test(said) && !said.includes('Retired.'), "B-retire: the server still refuses X (403, the steward's act)", said.slice(-200));
+  check(psql(`SELECT count(*) FROM industry_measures WHERE name = '${NAME.replace(/'/g, "''")}' AND deleted_at IS NULL`) === '1', 'B-retire: the entry is still current');
+} else if (MODE === 'retire' || MODE === 'nonsteward-retire') {
+  // RETIRE_NAME is passed in P_STALE's place for these modes.
+  const RETIRE_NAME = P_STALE;
+  const entry = `([...document.querySelectorAll('h4')].find(h=>h.textContent===${JSON.stringify(RETIRE_NAME)})?.parentElement?.parentElement)`;
+  await signIn(MODE === 'retire' ? S_EMAIL : X_EMAIL);
+  await openPack();
+  await waitFor(`!!${entry}`);
+  if (MODE === 'nonsteward-retire') {
+    check((await buttonDisabled(entry, 'Retire this entry…')) === true && await ev(`(${entry}).textContent.includes(${JSON.stringify(S_NAME)})`),
+      `X: "Retire this entry…" is disabled, naming the steward (${S_NAME})`);
+    await shot('q4c1b_2_nonsteward_retire_disabled', `#root main, body`);
+  } else {
+    await click(entry, 'Retire this entry…');
+    await waitFor(`!!(${entry}).querySelector('[data-testid=retire-form]')`);
+    const reasonEmpty = await fieldValue(entry, 'Why it is being retired');
+    check(reasonEmpty === '', 'the retire form opens with an EMPTY reason box');
+    await setField(entry, 'Why it is being retired', 'short');
+    await sleep(200);
+    check((await buttonDisabled(entry, 'Retire')) === true, 'a reason under 12 characters: Retire stays disabled');
+    await shot('q4c1b_3_retire_form', `[data-testid=retire-form]`);
+    const REASON = 'Verification: the agent flagged its own figure as unverified.';
+    await setField(entry, 'Why it is being retired', REASON);
+    await sleep(200);
+    await click(entry, 'Retire');
+    check(await waitFor(`!(${card('What you can claim against')}).textContent.includes(${JSON.stringify(RETIRE_NAME)}) && !!document.querySelector('[data-testid=retired-details]')`),
+      'retired: the entry leaves the current lists, refreshed in place');
+    await ev(`(()=>{const d=document.querySelector('[data-testid=retired-details]');d.open=true;return true})()`);
+    await sleep(300);
+    const retiredText = await ev(`(${card('Retired')}).textContent`);
+    check(retiredText.includes(RETIRE_NAME) && retiredText.includes(REASON) && retiredText.includes(`Retired by ${S_NAME}`),
+      'the Retired card shows the entry, who retired it, and the reason');
+    check(retiredText.includes('First accepted by'), 'and the review it was first accepted on');
+    check(retiredText.includes('not excluded: a new accepted research result can bring it back'), 'not yet excluded: it says the entry can return');
+    await shot('q4c1b_4_retired_card_open', `#root`);
+    const row = psql(`SELECT m.status || '|' || (m.deleted_at IS NOT NULL) || '|' || p.email || '|' || m.retirement_reason FROM industry_measures m JOIN persons p ON p.id = m.retired_by_person_id WHERE m.name = '${RETIRE_NAME.replace(/'/g, "''")}' AND m.status = 'retired'`);
+    check(row === `retired|true|${S_EMAIL}|${REASON}`, 'database: status retired, deleted_at set, retired by the steward, the reason as typed', row);
+    check(psql(`SELECT review_state FROM research_results WHERE industry_measures_id = (SELECT id FROM industry_measures WHERE name = '${RETIRE_NAME.replace(/'/g, "''")}' AND status = 'retired')`) === 'accepted',
+      'the accepted research result stays accepted');
+  }
 }
 ws.close();
 process.exit(0);

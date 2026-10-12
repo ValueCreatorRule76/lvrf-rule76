@@ -122,7 +122,7 @@ read -r IND_X TEN_X <<< "$(q "SELECT id || ' ' || tenant_id FROM industries WHER
 q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
    VALUES ('$TEN', '$IND', 'Contract fixture: current entry', '%', 'increase', 'd', 'w', false, 'r', 'c', 'Verification fixture, not a source.'),
           ('$TEN', '$IND', 'Contract fixture: retired entry', '%', 'increase', 'd', 'w', true, 'r', 'c', 'Verification fixture, not a source.')" > /dev/null
-q "UPDATE industry_measures SET deleted_at = now(), status = 'retired' WHERE industry_id = '$IND' AND name = 'Contract fixture: retired entry'" > /dev/null
+q "UPDATE industry_measures SET deleted_at = now(), status = 'retired', retired_by_person_id = '$ACTOR', retirement_reason = 'Verification fixture: a retired entry.' WHERE industry_id = '$IND' AND name = 'Contract fixture: retired entry'" > /dev/null
 q "INSERT INTO industry_measure_exclusions (tenant_id, industry_id, name, reason, excluded_by_person_id)
    VALUES ('$TEN', '$IND', 'Contract fixture: excluded', 'Verification: set by the market, not by capability.', '$ACTOR')" > /dev/null
 [ -n "$OTHER" ] && [ -n "$IND2" ] && [ -n "$IND_X" ] && ok "actor (steward) and a second staff person; industries $SLUG and $SLUG2; another tenant's industry; one entry, one retired, one exclusion" || { bad "fixtures"; exit 1; }

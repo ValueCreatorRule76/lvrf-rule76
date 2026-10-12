@@ -373,6 +373,55 @@ function RawMeasure({ raw }: { raw: unknown }) {
   );
 }
 
+// Q4c1b — THE RESEARCH'S OWN CAVEATS. The agent writes them inside its
+// fields (in Q4e both sat in `citation`: "reviewer should confirm…"); the
+// contract has no caveats field yet (Q4g). So: a TEXT SEARCH of every
+// string field for caveat phrases, each matching sentence shown verbatim
+// with its field. A search can miss — which is why the "read" tick is
+// required on EVERY pending result before Accept (Brad, 12 Oct), not only
+// where something matched. UI aid only; the server is unchanged.
+const CAVEAT_PHRASE =
+  /reviewer should|should (?:be )?confirm|confirm (?:in|the|this|before)|secondary (?:summar|source)|per secondary|unverified|not (?:been )?verified|could not (?:verify|confirm|access)|unable to (?:verify|confirm|access)|paywall|gated|estimate/i;
+
+function findCaveats(raw: unknown): { field: string; sentence: string }[] {
+  const out: { field: string; sentence: string }[] = [];
+  const walk = (v: unknown, path: string) => {
+    if (typeof v === 'string') {
+      for (const sentence of v.split(/(?<=[.;!?])\s+/)) {
+        if (CAVEAT_PHRASE.test(sentence)) out.push({ field: path, sentence: sentence.trim() });
+      }
+    } else if (isRecord(v)) {
+      for (const [k, sub] of Object.entries(v)) walk(sub, path ? `${path}.${k}` : k);
+    }
+  };
+  walk(raw, '');
+  return out;
+}
+
+function CaveatBlock({ caveats }: { caveats: { field: string; sentence: string }[] }) {
+  return (
+    <div className="mt-3 border-l-[3px] border-warning bg-offwhite px-3.5 py-3" data-testid="caveats">
+      <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-warning">
+        The research's own caveats
+      </span>
+      {caveats.length === 0 ? (
+        <p className="m-0 mt-1 text-[12px] text-ink-45">
+          No caveat phrases found. This is a text search, not a finding that there are none.
+        </p>
+      ) : (
+        <ul className="m-0 mt-1.5 list-none p-0">
+          {caveats.map((c, i) => (
+            <li key={i} className="py-1 text-[12.5px] text-ink">
+              <span className="mr-1.5 font-mono text-[10.5px] text-ink-45">{c.field}</span>
+              {c.sentence}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ReviewForm({
   result,
   stewardReason,
@@ -384,8 +433,11 @@ function ReviewForm({
 }) {
   const [decision, setDecision] = useState<'accept' | 'reject'>('accept');
   const [note, setNote] = useState('');
+  const [caveatsRead, setCaveatsRead] = useState(false);
+  const caveats = useMemo(() => findCaveats(result.raw_response), [result.raw_response]);
   return (
     <div className="mt-3">
+      <CaveatBlock caveats={caveats} />
       <GovernedForm<{ review_state: string }>
         path={`/api/research-results/${result.id}/${decision}`}
         provenanceLabel="Your review"
@@ -406,6 +458,11 @@ function ReviewForm({
                 </label>
               ))}
             </div>
+            <label className="mb-3 flex items-center gap-2 text-[12.5px] text-ink">
+              <input type="checkbox" checked={caveatsRead} onChange={(e) => setCaveatsRead(e.target.checked)} />
+              {caveats.length > 0 ? "I have read the research's caveats" : 'I have read the citation'}
+              <span className="text-[11px] text-ink-45">(required to accept)</span>
+            </label>
             <label className="block">
               <span className={LABEL_CLASS}>Review note (required)</span>
               <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
@@ -413,7 +470,7 @@ function ReviewForm({
             </label>
           </>
         }
-        canSubmit={note.trim() !== ''}
+        canSubmit={note.trim() !== '' && (decision === 'reject' || caveatsRead)}
         buildBody={() => ({ review_note: note })}
         submitLabel={decision === 'accept' ? 'Accept' : 'Reject'}
         onSuccess={() => onDecided(`${result.field_name}: ${decision === 'accept' ? 'accepted into the pack' : 'rejected'}`)}
