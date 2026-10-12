@@ -7,9 +7,11 @@ import {
   type IndustryMeasure,
   type IndustryPack,
   type IndustryRetiredMeasure,
+  type CatalogOffering,
 } from '../api/packs';
 import { Card, Badge } from '../components/workbench/Card';
 import { PackResearch } from '../components/PackResearch';
+import { PackLevers } from '../components/PackLevers';
 import { FOCUS_RING, GovernedForm } from '../components/GovernedForm';
 
 // Lifecycle statuses this table has ever supported (db/schema.ts's
@@ -102,7 +104,7 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
 // the sentence read aloud; confounders gets its own labeled, bordered
 // block because it is the sentence that stops an overclaim, and burying
 // it beside the definition is how an overclaim happens.
-function MeasureEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetired: () => void }) {
+function MeasureEntry({ measure, onRetired, offerings }: { measure: IndustryMeasure; onRetired: () => void; offerings: CatalogOffering[] }) {
   const m = measure;
   return (
     <div className="border-b border-rule-soft py-4 last:border-b-0">
@@ -169,6 +171,8 @@ function MeasureEntry({ measure, onRetired }: { measure: IndustryMeasure; onReti
         <p className="m-0 mt-3 text-[11px] text-ink-45">No review on record for this entry.</p>
       )}
 
+      {/* O1: the entry's value levers and, per lever, its solutions. */}
+      <PackLevers measure={m} offerings={offerings} onChanged={onRetired} />
       <RetireEntry measure={m} onRetired={onRetired} />
     </div>
   );
@@ -180,19 +184,21 @@ function MeasureGroup({
   measures,
   emptyText,
   onRetired,
+  offerings,
 }: {
   n: string;
   title: string;
   measures: IndustryMeasure[];
   emptyText: string;
   onRetired: () => void;
+  offerings: CatalogOffering[];
 }) {
   return (
     <Card n={n} title={title} badge={<Badge tone="neutral">{measures.length}</Badge>}>
       {measures.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">{emptyText}</p>
       ) : (
-        measures.map((m) => <MeasureEntry key={m.id} measure={m} onRetired={onRetired} />)
+        measures.map((m) => <MeasureEntry key={m.id} measure={m} onRetired={onRetired} offerings={offerings} />)
       )}
     </Card>
   );
@@ -313,6 +319,7 @@ function PackBody({ pack, onRetired }: { pack: IndustryPack; onRetired: () => vo
         measures={claimable}
         emptyText="Nothing in this pack has tested addressable yet."
         onRetired={onRetired}
+        offerings={pack.offerings}
       />
       <MeasureGroup
         n="01"
@@ -320,6 +327,7 @@ function PackBody({ pack, onRetired }: { pack: IndustryPack; onRetired: () => vo
         measures={notClaimable}
         emptyText="Nothing in this pack has tested unaddressable yet."
         onRetired={onRetired}
+        offerings={pack.offerings}
       />
       <ExclusionGroup n="02" exclusions={pack.exclusions} />
       <RetiredGroup n="03" retired={pack.retired} />

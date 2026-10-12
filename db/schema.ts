@@ -147,7 +147,13 @@ export const entityIdentifierType = pgEnum('entity_identifier_type', ['sec_cik',
 export const researchPromptPhase = pgEnum('research_prompt_phase', ['entity', 'facts']);
 
 /** 0034 (Q4h, L8): who refused — the database (a constraint) or the parser (a 422). */
-export const refusalSource = pgEnum('refusal_source', ['database', 'parser']);
+/**
+ * Who refused. 'route' (0035, O1): a request the ROUTE refuses before any
+ * write is attempted — e.g. an effect size sent with a value lever, which
+ * has nowhere to land (LVRF_PLAN §5, no invented targets) — recorded so
+ * the attempt stands on record, as a parser refusal does.
+ */
+export const refusalSource = pgEnum('refusal_source', ['database', 'parser', 'route']);
 
 /* ================================================================== */
 /* Shared builders                                                    */
@@ -1319,7 +1325,7 @@ export const refusals = pgTable('refusals', {
   index('refusals_subject_idx').on(t.subjectTable, t.subjectId),
   index('refusals_refused_at_idx').on(t.refusedAt),
   index('refusals_value_outcome_idx').on(t.valueOutcomeId),
-  check('refusals_source_shape', sql`${t.source} = 'parser' OR ${t.sqlstate} IS NOT NULL`),
+  check('refusals_source_shape', sql`${t.source}::text IN ('parser', 'route') OR ${t.sqlstate} IS NOT NULL`),
 ]);
 
 /* ================================================================== */
@@ -2062,4 +2068,93 @@ export const sessions = pgTable('sessions', {
   index('sessions_person_idx').on(t.personId),
   check('sessions_expiry_is_bounded',
     sql`${t.expiresAt} <= ${t.absoluteExpiresAt}`),
+]);
+
+/* ================================================================== */
+/* Outputs band, O1 — value levers and the solutions that pull them    */
+/* ================================================================== */
+
+/**
+ * 0035 (O1; LVRF_PLAN §5; CAPABILITY_MAP item 8). A VALUE LEVER is the
+ * mechanism by which capability change moves one pack entry — the step
+ * between "a capability" and "a measure". Pack content, so a STEWARD act
+ * (O-D2). It carries a mechanism a CFO can test, a leading indicator (what
+ * moves first) and a citation; it carries NO expected-effect size: a lever
+ * is a mechanism, not a promise (no invented targets, §5).
+ *
+ * Governed (governance(): status proposed → ratified, supersession,
+ * retirement). WITHDRAWN = RETIRED: POST /api/value-levers/:id/retire
+ * (steward) sets deleted_at, status 'retired', who and why together, never
+ * apart (value_levers_retirement_is_complete). A withdrawn lever stays on
+ * the pack page, marked, with its solutions. Only the tenant's steward may
+ * propose or withdraw one — in the route AND in the database
+ * (value_levers_steward_act, hardening section 22). NO partial unique index on (industry_measure_id, name): a
+ * two-step supersession would trip it (the 0014/0015 and 0034 lesson); the
+ * route refuses a second CURRENT lever of the same name on the same entry.
+ */
+export const valueLevers = pgTable('value_levers', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  industryMeasureId: uuid('industry_measure_id').notNull().references(() => industryMeasures.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  /** How capability change moves the measure — one testable sentence. */
+  mechanism: text('mechanism').notNull(),
+  /** What moves first, before the measure does. */
+  leadingIndicator: text('leading_indicator').notNull(),
+  /** A lever without a source is an assertion (rule 5). */
+  citation: text('citation').notNull(),
+  proposedByPersonId: uuid('proposed_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  ...governance(),
+  status: lifecycleStatus('status').notNull().default('proposed'),
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id], name: 'value_levers_superseded_by_fk' }).onDelete('restrict'),
+  /** Withdrawn means all four marks together — deleted_at, status, who, why (≥ 12) — or none (as industry_measures, 0032). */
+  check('value_levers_retirement_is_complete',
+    sql`(${t.deletedAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL
+         AND ${t.status} <> 'retired')
+        OR (${t.deletedAt} IS NOT NULL AND ${t.status} = 'retired' AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
+  index('value_levers_measure_idx').on(t.industryMeasureId),
+  index('value_levers_tenant_idx').on(t.tenantId),
+  check('value_levers_stated',
+    sql`btrim(${t.name}) <> '' AND length(btrim(${t.mechanism})) >= 12
+        AND btrim(${t.leadingIndicator}) <> '' AND length(btrim(${t.citation})) >= 12`),
+]);
+
+/**
+ * 0035 (O1; CAPABILITY_MAP item 10). A Skillsoft solution (a catalog
+ * offering) that pulls a lever, with the steward's basis for saying so
+ * (O-D2). Rendered beside the offering's own evidence_class and
+ * verification_source, so "solutions per lever" also says what each can
+ * EVIDENCE — consumption is not realization.
+ *
+ * APPEND-ONLY but for one act: WITHDRAWAL. POST /api/lever-offerings/:id/
+ * retire (steward) sets retired_at, who and why, together and once
+ * (lever_offerings_retirement_is_complete); lever_offerings_append_only
+ * (hardening section 20) refuses every other UPDATE, and _no_delete every
+ * DELETE. A withdrawn link stays on the pack page, marked. The pair is
+ * unique among CURRENT links only, so a withdrawn pair can be linked again
+ * as a new row (retire, then link: two statements, no two-step trip).
+ */
+export const leverOfferings = pgTable('lever_offerings', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  valueLeverId: uuid('value_lever_id').notNull().references(() => valueLevers.id, { onDelete: 'restrict' }),
+  offeringId: uuid('offering_id').notNull().references(() => offerings.id, { onDelete: 'restrict' }),
+  basis: text('basis').notNull(),
+  linkedByPersonId: uuid('linked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  linkedAt: timestamp('linked_at', { withTimezone: true }).notNull().defaultNow(),
+  retiredAt: timestamp('retired_at', { withTimezone: true }),
+  retiredByPersonId: uuid('retired_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  retirementReason: text('retirement_reason'),
+}, (t) => [
+  uniqueIndex('lever_offerings_pair_key').on(t.valueLeverId, t.offeringId).where(sql`${t.retiredAt} IS NULL`),
+  check('lever_offerings_retirement_is_complete',
+    sql`(${t.retiredAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL)
+        OR (${t.retiredAt} IS NOT NULL AND ${t.retiredByPersonId} IS NOT NULL
+            AND char_length(btrim(${t.retirementReason})) >= 12)`),
+  index('lever_offerings_lever_idx').on(t.valueLeverId),
+  check('lever_offerings_basis_stated', sql`length(btrim(${t.basis})) >= 12`),
 ]);

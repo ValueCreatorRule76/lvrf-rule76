@@ -50,7 +50,7 @@ EXTRA="$(while read -r m p cls; do grep -q "^$m $p " "$W/src.txt" || echo "$m $p
 [ -z "$EXTRA" ] && ok "every classified route exists in the source" || bad "classified but not a route: $(echo "$EXTRA" | tr '\n' '|')"
 WRONG="$(while read -r m p cls; do t="$(grep "^$m $p " "$W/table.txt" | awk '{print $3}')"; { [ "$t" = "steward" ] && [ "$cls" != "steward" ]; } || { [ "$t" = "authorized" ] && [ "$cls" = "steward" ]; } && echo "$m $p (table: $t, source: $cls)"; done < "$W/src.txt"; true)"
 [ -z "$WRONG" ] && ok "steward routes carry requireSteward(pool); authorized routes do not" || bad "mismatch: $(echo "$WRONG" | tr '\n' '|')"
-[ "$(grep -c ' steward$' "$W/table.txt")" = "5" ] && ok "5 steward-only routes: accept, reject, exclusions, engagement retire, pack-entry retire (Q4c1b) (ratify has no route; grant/revoke are scripts; model and thresholds are commit + deploy)" || bad "steward count: $(grep -c ' steward$' "$W/table.txt")"
+[ "$(grep -c ' steward$' "$W/table.txt")" = "9" ] && ok "9 steward-only routes: accept, reject, exclusions, engagement retire, pack-entry retire (Q4c1b), lever, lever-offering, withdraw a lever, withdraw a link (O1) (ratify has no route; grant/revoke are scripts; model and thresholds are commit + deploy)" || bad "steward count: $(grep -c ' steward$' "$W/table.txt")"
 
 step "3. Clone, migrate, harden"
 dropdb --if-exists "$VERIFY_DB"
@@ -107,6 +107,10 @@ check403 "exclude" "/api/industries/$IND/exclusions" "$EXCL" "Excluding a measur
 check403 "retire" "/api/engagements/$ENG/retire" "$RET" "Retiring an engagement"
 # requireSteward runs before any lookup, so a fixed id is enough here.
 check403 "retire a pack entry" "/api/industry-measures/00000000-0000-4000-8000-000000000001/retire" "$RET" "Retiring a pack entry"
+check403 "propose a lever" "/api/industry-measures/00000000-0000-4000-8000-000000000001/levers" '{"name":"x"}' "Proposing a value lever"
+check403 "link a solution" "/api/value-levers/00000000-0000-4000-8000-000000000001/offerings" '{"offering_key":"x"}' "Linking a solution to a lever"
+check403 "withdraw a lever" "/api/value-levers/00000000-0000-4000-8000-000000000001/retire" "$RET" "Withdrawing a value lever"
+check403 "withdraw a link" "/api/lever-offerings/00000000-0000-4000-8000-000000000001/retire" "$RET" "Withdrawing a solution from a lever"
 [ "$(q "SELECT coalesce(max(id), 0) FROM audit_log")" = "$AUD0" ] && ok "  ...no audit row from any of them (nothing written)" || bad "  ...a refused act wrote"
 [ "$(q "SELECT count(*) FROM refusals")" = "$REF0" ] && ok "  ...and none recorded as a refusal" || bad "  ...recorded in refusals"
 grep -q "LVRF steward-only act refused: actor $X POST /api/engagements/:id/retire" "$W/server.log" && ok "  ...logged at info: actor and route" || bad "  ...not logged"

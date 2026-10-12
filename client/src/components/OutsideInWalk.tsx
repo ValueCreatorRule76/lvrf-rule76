@@ -38,7 +38,7 @@ interface WalkState {
       id: string; baseline_value: string; baseline_measured_at: string; target_value: string | null; realization: string; confidence: string;
       capability_name: string | null;
       metric: { id: string; name: string; unit: string; direction: string; source_system: string; industry_measure_id: string | null };
-      evidence: { id: string; kind: string; supports: string; summary: string }[];
+      evidence: { id: string; kind: string; supports: string; summary: string; basis: string | null }[];
     }[];
     runs: { id: string; run_number: number; locked_at: string | null; confidence_band: string }[];
   }[];
@@ -250,7 +250,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink">{e.kind} · supports {e.supports} — <span className="text-ink-45">{e.summary}</span></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span></li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>

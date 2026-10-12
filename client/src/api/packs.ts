@@ -16,9 +16,53 @@ export interface IndustryListItem {
   measure_count: number;
 }
 
+/** O1 (§5): a solution that pulls a lever, beside what it can evidence. */
+/** O1: who withdrew a lever or a link, when and why — never deleted, shown marked. */
+export interface Withdrawal {
+  withdrawn_at: string | null;
+  withdrawn_by: string | null;
+  withdrawal_reason: string | null;
+}
+
+export interface LeverSolution extends Withdrawal {
+  /** The lever_offerings row, for "Withdraw…". */
+  id: string;
+  offering_key: string;
+  name: string;
+  family: string;
+  evidence_class: string;
+  verification_source: string;
+  basis: string;
+  linked_by: string;
+  linked_at: string;
+}
+
+/** O1 (§5): a value lever on a pack entry — a mechanism, not a promise (no effect size). */
+export interface ValueLever extends Withdrawal {
+  id: string;
+  name: string;
+  mechanism: string;
+  leading_indicator: string;
+  citation: string;
+  status: string;
+  proposed_by: string;
+  created_at: string;
+  solutions: LeverSolution[];
+}
+
+export interface CatalogOffering {
+  offering_key: string;
+  name: string;
+  family: string;
+  evidence_class: string;
+  verification_source: string;
+}
+
 export interface IndustryMeasure {
   /** Q4c1b: the entry's id, for the steward's "Retire this entry…". */
   id: string;
+  /** O1: the entry's levers (current, then withdrawn), each with its solutions. */
+  levers: ValueLever[];
   name: string;
   unit: string;
   direction: 'increase' | 'decrease';
@@ -80,6 +124,8 @@ export interface IndustryPack {
   measures: IndustryMeasure[];
   exclusions: IndustryExclusion[];
   retired: IndustryRetiredMeasure[];
+  /** O1: the tenant's offering catalog, for "Link a solution…". */
+  offerings: CatalogOffering[];
 }
 
 export type FetchIndustriesResult =

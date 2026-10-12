@@ -241,6 +241,7 @@ export function produceRunRouter(pool: Pool): Router {
         citation_resolved: boolean;
         simulated: boolean;
         supports: string;
+        basis: string | null;
         attester_name: string | null;
         attester_tenant_id: string | null;
         attester_institution_id: string | null;
@@ -250,7 +251,7 @@ export function produceRunRouter(pool: Pool): Router {
            e.kind, e.summary, e.provenance, e.source_reference,
            e.confidence AS confidence_level, e.source_verified, e.ai_sourced,
            e.citation_resolved, e.simulated,
-           voe.supports,
+           voe.supports, lvrf_evidence_basis(e) AS basis,
            p.full_name AS attester_name,
            p.tenant_id AS attester_tenant_id,
            p.institution_id AS attester_institution_id,
@@ -290,7 +291,48 @@ export function produceRunRouter(pool: Pool): Router {
         supports: r.supports,
         simulated: r.simulated,
         vendor_published: r.kind === 'vendor_publication',
+        // Q9 (O1): the D2 basis, DERIVED by lvrf_evidence_basis
+        // (hardening.sql 21) at the moment the run is produced, and sealed.
+        basis: r.basis,
       }));
+
+      // 3.0 ITEM 10 (O1): A RUN RENDERS FROM ITSELF. The account's current
+      // facts and its pinned entity, each with its derived basis, are sealed
+      // into the payload — under the same payloadHash — so a value case
+      // rendered from this run shows the facts as they were when it was
+      // produced, never as they are later (a fact superseded afterwards does
+      // not change this run). Runs produced before this change carry
+      // neither key; that is accurate, not missing.
+      const { rows: factRows } = await client.query<{
+        id: string; kind: string; value_numeric: string | null; value_text: string | null; unit: string | null;
+        as_of: string; evidence_id: string; evidence_kind: string; basis: string | null; citation_resolved: boolean;
+      }>(
+        `SELECT f.id, f.kind::text, f.value_numeric::text, f.value_text, f.unit, to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
+                e.id AS evidence_id, e.kind::text AS evidence_kind, lvrf_evidence_basis(e) AS basis, e.citation_resolved
+           FROM institution_facts f JOIN evidence e ON e.id = f.evidence_id
+          WHERE f.institution_id = $1 AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
+          ORDER BY f.kind, f.as_of DESC, f.id`,
+        [engagement.institution_id],
+      );
+      const { rows: [entityRow] } = await client.query<{
+        id: string; legal_name: string; identifier_type: string; identifier: string;
+        registry_jurisdiction: string | null; basis: string | null;
+      }>(
+        `SELECT ie.id, ie.legal_name, ie.identifier_type::text, ie.identifier, ie.registry_jurisdiction,
+                lvrf_evidence_basis(e) AS basis
+           FROM institution_entities ie JOIN evidence e ON e.id = ie.evidence_id
+          WHERE ie.institution_id = $1 AND ie.deleted_at IS NULL AND ie.superseded_by_id IS NULL`,
+        [engagement.institution_id],
+      );
+      const institutionFacts = factRows.map((f) => ({
+        id: f.id, kind: f.kind, valueNumeric: f.value_numeric, valueText: f.value_text, unit: f.unit,
+        asOf: f.as_of, evidenceId: f.evidence_id, evidenceKind: f.evidence_kind, basis: f.basis,
+        citationResolved: f.citation_resolved,
+      }));
+      const entity = entityRow
+        ? { id: entityRow.id, legalName: entityRow.legal_name, identifierType: entityRow.identifier_type,
+            identifier: entityRow.identifier, registryJurisdiction: entityRow.registry_jurisdiction, basis: entityRow.basis }
+        : null;
 
       // human_commit_of_record asks "did a named, non-synthetic person
       // commit to THE TARGET?" — answered by the outcome's own committer
@@ -526,6 +568,9 @@ export function produceRunRouter(pool: Pool): Router {
         findings,
         events: payloadEvents,
         evidence: evidenceSnapshot,
+        // 3.0 item 10 (O1): sealed with the run, under the same hash.
+        entity,
+        institutionFacts,
       };
       const payloadHash = sha256Hex(runPayloadBase);
       const runPayload = { ...runPayloadBase, payloadHash };

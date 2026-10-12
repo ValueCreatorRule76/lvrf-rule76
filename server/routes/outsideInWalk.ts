@@ -90,7 +90,7 @@ export function outsideInWalkRouter(pool: Pool): Router {
                     'metric', json_build_object('id', bm.id, 'name', bm.name, 'unit', bm.unit, 'direction', bm.direction,
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
-                                                                            'summary', ev.summary) ORDER BY ev.created_at)
+                                                                            'summary', ev.summary, 'basis', lvrf_evidence_basis(ev)) ORDER BY ev.created_at)
                                             FROM value_outcome_evidence voe JOIN evidence ev ON ev.id = voe.evidence_id
                                            WHERE voe.value_outcome_id = vo.id), '[]'))
                     ORDER BY vo.created_at)

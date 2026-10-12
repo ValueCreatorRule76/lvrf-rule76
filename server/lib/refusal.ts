@@ -163,3 +163,32 @@ export async function handleGovernanceError(
   res.status(status).json({ message: err.message });
   return true;
 }
+
+/**
+ * O1 (0035) — a refusal the ROUTE makes before any write is attempted
+ * (source 'route'): e.g. an effect size sent with a value lever, which a
+ * lever has nowhere to hold. Recorded through `pool` for the reason
+ * recordRefusal above gives (the request's transaction rolls back), with no
+ * sqlstate: the database never saw it. A failure to record never changes
+ * the answer.
+ */
+export async function recordRouteRefusal(
+  pool: Pool,
+  req: Request,
+  context: Omit<RefusalContext, 'valueOutcomeId'> & { tenantId: string },
+  message: string,
+): Promise<void> {
+  try {
+    const actorPersonId = req.actor?.personId;
+    if (!actorPersonId) throw new Error('req.actor missing on a request past requireActor');
+    await pool.query(
+      `INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table, subject_id,
+                             source, sqlstate, constraint_name, message, attempted_payload)
+       VALUES ($1, $2, $3, $4, $5, $6, 'route', NULL, NULL, $7, $8)`,
+      [context.tenantId, context.institutionId, actorPersonId, context.endpoint, context.subjectTable,
+       context.subjectId, message, context.attemptedPayload ?? {}],
+    );
+  } catch (writeErr) {
+    console.error('LVRF: failed to record a route refusal. The 400 still stands.', writeErr);
+  }
+}

@@ -168,6 +168,7 @@ export function institutionViewRouter(pool: Pool): Router {
         citation_resolved: boolean;
         citation_resolved_by: string | null;
         citation_resolved_at: string | null;
+        basis: string | null;
         captured_by: string;
         created_at: string;
       }>(
@@ -181,6 +182,8 @@ export function institutionViewRouter(pool: Pool): Router {
                 e.source_reference, e.confidence, e.source_verified, e.ai_sourced,
                 e.citation_resolved, rp.full_name AS citation_resolved_by,
                 to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS citation_resolved_at,
+                -- Q9 (O1): the D2 basis, derived by the one function (hardening.sql 21).
+                lvrf_evidence_basis(e) AS basis,
                 p.full_name AS captured_by, f.created_at
            FROM institution_facts f
            JOIN evidence e ON e.id = f.evidence_id

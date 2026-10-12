@@ -80,9 +80,12 @@ createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
 DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > "$W/migrate.log" 2>&1 && ok "migrated: 0033 (enum values) and 0034 together — the CHECKs compare the new values as text" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening"; exit 1; }
 N_TRIG="$(q "SELECT count(DISTINCT trigger_name || '.' || event_object_table) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
-[ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && [ "$N_TRIG" = "103" ] && ok "103 distinct triggers (institution_entities: _audit, _touch, _no_delete, _supersession_sane, one_current)" || bad "triggers: $N_TRIG, expected $EXPECT_TRIGGERS"
+# By name, not a pinned total: later migrations add triggers of their own.
+ENT_TRIG="$(q "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_entities'")"
+[ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && [ "$ENT_TRIG" = "institution_entities_audit,institution_entities_no_delete,institution_entities_one_current,institution_entities_supersession_sane,institution_entities_touch" ] \
+  && ok "$N_TRIG distinct triggers, as hardening.sql declares; institution_entities: _audit, _touch, _no_delete, _supersession_sane, one_current" || bad "triggers: $N_TRIG, expected $EXPECT_TRIGGERS; institution_entities: $ENT_TRIG"
 OUT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs || true)"
-case "$OUT" in "schema drift: none"*0034_account_research*) ok "D2: $OUT" ;; *) bad "D2: $OUT" ;; esac
+case "$OUT" in "schema drift: none"*) ok "D2: $OUT" ;; *) bad "D2: $OUT" ;; esac
 OUT="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/drift_report.ts 2>&1 | tail -1 || true)"
 case "$OUT" in *"no findings"*) ok "drift report: $OUT" ;; *) bad "drift report: $OUT" ;; esac
 

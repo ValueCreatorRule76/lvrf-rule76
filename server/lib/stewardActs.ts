@@ -36,6 +36,10 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/research-results/:id/reject': 'steward',
   'POST /api/industries/:industryId/exclusions': 'steward',
   'POST /api/industry-measures/:id/retire': 'steward',
+  'POST /api/industry-measures/:id/levers': 'steward',
+  'POST /api/value-levers/:id/offerings': 'steward',
+  'POST /api/value-levers/:id/retire': 'steward',
+  'POST /api/lever-offerings/:id/retire': 'steward',
   'POST /api/engagements/:id/retire': 'steward',
   // Authorized users (Q3 + D3: classify, offerings, validate, pack-basis and
   // claims are authorized-user acts)
@@ -72,6 +76,10 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/industries/:industryId/exclusions': 'Excluding a measure from a pack',
   'POST /api/engagements/:id/retire': 'Retiring an engagement',
   'POST /api/industry-measures/:id/retire': 'Retiring a pack entry',
+  'POST /api/industry-measures/:id/levers': 'Proposing a value lever',
+  'POST /api/value-levers/:id/offerings': 'Linking a solution to a lever',
+  'POST /api/value-levers/:id/retire': 'Withdrawing a value lever',
+  'POST /api/lever-offerings/:id/retire': 'Withdrawing a solution from a lever',
 };
 
 /** The actor's tenant's steward: { id, full_name }, or null if none is named. */

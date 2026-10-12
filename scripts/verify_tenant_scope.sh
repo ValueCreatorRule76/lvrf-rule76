@@ -123,9 +123,17 @@ ARR_A2="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_i
   VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'disclosure_regime', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"disclosure_regime\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1) RETURNING id" | head -1)"
 MEASURE_A="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
   VALUES ('$TENANT_A', '$IND_A', 'Tenant A measure (verification $TS)', 'count', 'increase', 'Verification fixture.', 'Verification fixture.', true, 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.') RETURNING id" | head -1)"
+# O1: a lever on that entry and a link on it, for the lever routes' cases.
+# Proposed and linked by tenant A's steward: the database refuses anyone
+# else (value_levers_steward_only, lever_offerings_steward_only).
+LEVER_A="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
+  SELECT '$TENANT_A', '$MEASURE_A', 'Tenant A lever (verification $TS)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', steward_person_id FROM tenants WHERE id = '$TENANT_A' RETURNING id" | head -1)"
+LINK_A="$(q "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id)
+  SELECT '$TENANT_A', '$LEVER_A', o.id, 'Verification fixture link.', t.steward_person_id FROM offerings o JOIN tenants t ON t.id = o.tenant_id
+   WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1 RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A ARR_A ARR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A ARR_A ARR_A2; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -141,7 +149,7 @@ curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"actor_header":"off"' && 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A ARR_A ARR_A2
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A ARR_A ARR_A2
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

@@ -400,6 +400,8 @@ export function AccountFactsCard({
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="text-[13.5px] font-semibold text-ink">{factValue(f.kind, f)}</span>
                       <span className="flex items-center gap-1.5">
+                        {/* Q9 (O1): the derived D2 basis — computed by the server's one function. */}
+                        {f.basis && <Badge tone="neutral">{f.basis.replace(/_/g, ' ')}</Badge>}
                         {f.ai_sourced && <Badge tone="warning">AI-sourced</Badge>}
                         <Badge tone={f.source_verified ? 'healthy' : 'warning'}>
                           {f.source_verified ? 'Verified' : 'Unverified'}

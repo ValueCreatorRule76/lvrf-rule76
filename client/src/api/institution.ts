@@ -45,6 +45,8 @@ export interface InstitutionFact {
   citation_resolved: boolean;
   citation_resolved_by: string | null;
   citation_resolved_at: string | null;
+  /** Q9 (O1): the D2 basis, derived server-side — never inferred here. */
+  basis: 'system_of_record' | 'published' | 'client_stated' | 'inferred' | 'assumed' | null;
   captured_by: string;
   created_at: string;
   /** Earlier values this fact replaced, newest first (fact supersession, 0028). */

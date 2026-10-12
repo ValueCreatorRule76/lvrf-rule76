@@ -163,7 +163,51 @@ export function industryPackRouter(pool: Pool): Router {
         [industry.id],
       );
 
-      res.json({ industry, measures, exclusions, retired });
+      // O1 (Outputs band, §5): each current entry's levers, and each lever's
+      // solutions BESIDE what the offering can evidence (evidence_class,
+      // verification_source) — "solutions per lever" says what each can
+      // prove, not only that it exists. Levers carry no effect size.
+      // WITHDRAWN ones stay, marked with who, when and why (after the
+      // current ones); only a superseded lever gives way to its successor.
+      const { rows: leverRows } = await pool.query<{
+        id: string; industry_measure_id: string; name: string; mechanism: string; leading_indicator: string;
+        citation: string; status: string; proposed_by: string; created_at: string;
+        withdrawn_at: string | null; withdrawn_by: string | null; withdrawal_reason: string | null; solutions: unknown;
+      }>(
+        `SELECT l.id, l.industry_measure_id, l.name, l.mechanism, l.leading_indicator, l.citation, l.status,
+                p.full_name AS proposed_by, l.created_at,
+                l.deleted_at AS withdrawn_at, rb.full_name AS withdrawn_by, l.retirement_reason AS withdrawal_reason,
+                coalesce((SELECT json_agg(json_build_object(
+                    'id', lo.id, 'offering_key', o.offering_key, 'name', o.name, 'family', o.family,
+                    'evidence_class', o.evidence_class, 'verification_source', o.verification_source,
+                    'basis', lo.basis, 'linked_by', lp.full_name, 'linked_at', lo.linked_at,
+                    'withdrawn_at', lo.retired_at, 'withdrawn_by', lr.full_name, 'withdrawal_reason', lo.retirement_reason)
+                    ORDER BY lo.retired_at IS NOT NULL, o.name, lo.linked_at)
+                    FROM lever_offerings lo JOIN offerings o ON o.id = lo.offering_id JOIN persons lp ON lp.id = lo.linked_by_person_id
+                    LEFT JOIN persons lr ON lr.id = lo.retired_by_person_id
+                   WHERE lo.value_lever_id = l.id), '[]') AS solutions
+           FROM value_levers l JOIN persons p ON p.id = l.proposed_by_person_id
+           LEFT JOIN persons rb ON rb.id = l.retired_by_person_id
+          WHERE l.industry_measure_id IN (SELECT id FROM industry_measures WHERE industry_id = $1)
+            AND l.superseded_by_id IS NULL
+          ORDER BY l.deleted_at IS NOT NULL, l.name, l.id`,
+        [industry.id],
+      );
+      const leversOf = new Map<string, Omit<(typeof leverRows)[number], 'industry_measure_id'>[]>();
+      for (const { industry_measure_id, ...l } of leverRows) {
+        const list = leversOf.get(industry_measure_id) ?? [];
+        list.push(l);
+        leversOf.set(industry_measure_id, list);
+      }
+      const measuresWithLevers = measures.map((m) => ({ ...m, levers: leversOf.get(m.id) ?? [] }));
+      // The tenant's offering catalog, for the steward's "link a solution".
+      const { rows: offerings } = await pool.query(
+        `SELECT offering_key, name, family, evidence_class, verification_source FROM offerings
+          WHERE tenant_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY name, offering_key`,
+        [tenantId],
+      );
+
+      res.json({ industry, measures: measuresWithLevers, exclusions, retired, offerings });
     } catch (err) {
       res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
     }

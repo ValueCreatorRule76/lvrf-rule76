@@ -155,7 +155,9 @@ DECLARE t text;
     'institution_facts',
     -- 0034 (Q4h): institution_entities, the account's pinned entity —
     -- full governance() columns; corrected by supersession.
-    'institution_entities'
+    'institution_entities',
+    -- 0035 (O1): value_levers — pack content, full governance() columns.
+    'value_levers'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -508,7 +510,9 @@ DECLARE t text;
     -- obey the same sanity rules as every other superseding table.
     'institution_facts',
     -- 0034 (Q4h): an entity is corrected by superseding it (3.0 item 3).
-    'institution_entities'
+    'institution_entities',
+    -- 0035 (O1): a lever is corrected by superseding it.
+    'value_levers'
   ];
 BEGIN
   FOREACH t IN ARRAY supersession_governed LOOP
@@ -1206,6 +1210,186 @@ CREATE CONSTRAINT TRIGGER institution_entities_one_current
   FOR EACH ROW EXECUTE FUNCTION lvrf_one_current_entity();
 
 -- ------------------------------------------------------------------
+-- 20. O1 (0035, 12 Oct 2026) — levers and their solutions: steward acts,
+--     withdrawn, never deleted (placed before section 14 so the manifest
+--     includes these)
+-- ------------------------------------------------------------------
+-- value_levers is governed (the loops above: _audit, _touch, _no_delete,
+-- _supersession_sane). lever_offerings records that a steward judged a
+-- catalog offering to pull a lever, with the basis: _audit (it has an id)
+-- and _no_delete with its own remedy.
+--
+-- Both are STEWARD ACTS (O-D2). The routes check it (requireSteward); the
+-- two *_steward_only triggers below make the database check it too, as
+-- access_grants_steward_only does for grants (section 16), and guard the
+-- tenant: a lever's tenant is its pack entry's, a link's is its lever's
+-- and its offering's.
+--   value_levers     INSERT — proposed_by IS the steward; unretired.
+--                    UPDATE — a withdrawal (retired_by set) is by the
+--                    steward; value_levers_retirement_is_complete holds the
+--                    four marks together.
+--   lever_offerings  INSERT — linked_by IS the steward; unretired.
+--                    UPDATE — APPEND-ONLY but for the withdrawal: nothing
+--                    changes but retired_at/by/reason, written once, by
+--                    the steward.
+-- Same trust root as section 16: guards lvrf_app and every script that
+-- connects as it.
+--
+-- CONSEQUENCE: with value_levers in the governed and supersession loops
+-- above (+4), trigger count goes 103 -> 111.
+
+CREATE OR REPLACE FUNCTION lvrf_value_lever_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  entry_tenant uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF TG_OP = 'INSERT' THEN
+    SELECT tenant_id INTO entry_tenant FROM industry_measures WHERE id = NEW.industry_measure_id;
+    IF entry_tenant IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: value_levers: a lever''s tenant is its pack entry''s (entry % is not of tenant %).', NEW.industry_measure_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
+    END IF;
+    IF steward IS NULL OR NEW.proposed_by_person_id IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: value_levers: only the tenant''s steward may propose a lever (proposed_by % is not the steward).', NEW.proposed_by_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
+    END IF;
+    IF NEW.deleted_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_levers: a lever is inserted current; withdrawal is a later act.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.retired_by_person_id IS NULL AND NEW.retired_by_person_id IS NOT NULL
+     AND (steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: value_levers: only the tenant''s steward may withdraw a lever (retired_by % is not the steward).', NEW.retired_by_person_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_levers_steward_only ON value_levers;
+CREATE TRIGGER value_levers_steward_only
+  BEFORE INSERT OR UPDATE ON value_levers
+  FOR EACH ROW EXECUTE FUNCTION lvrf_value_lever_steward_only();
+
+CREATE OR REPLACE FUNCTION lvrf_lever_offering_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  lever_tenant uuid;
+  offering_tenant uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF TG_OP = 'INSERT' THEN
+    SELECT tenant_id INTO lever_tenant FROM value_levers WHERE id = NEW.value_lever_id;
+    SELECT tenant_id INTO offering_tenant FROM offerings WHERE id = NEW.offering_id;
+    IF lever_tenant IS DISTINCT FROM NEW.tenant_id OR offering_tenant IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: lever_offerings: a link''s tenant is its lever''s and its offering''s (tenant %).', NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+    END IF;
+    IF steward IS NULL OR NEW.linked_by_person_id IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: lever_offerings: only the tenant''s steward may link a solution to a lever (linked_by % is not the steward).', NEW.linked_by_person_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+    END IF;
+    IF NEW.retired_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: lever_offerings: a link is inserted current; withdrawal is a later act.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- UPDATE: only the withdrawal, once, by the steward.
+  IF OLD.retired_at IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: lever_offerings: link % is already withdrawn; a withdrawal is not amended.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+     OR NEW.value_lever_id IS DISTINCT FROM OLD.value_lever_id OR NEW.offering_id IS DISTINCT FROM OLD.offering_id
+     OR NEW.basis IS DISTINCT FROM OLD.basis OR NEW.linked_by_person_id IS DISTINCT FROM OLD.linked_by_person_id
+     OR NEW.linked_at IS DISTINCT FROM OLD.linked_at THEN
+    RAISE EXCEPTION 'LVRF: lever_offerings: only the withdrawal may be written after a link is made.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+  END IF;
+  IF steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward THEN
+    RAISE EXCEPTION 'LVRF: lever_offerings: only the tenant''s steward may withdraw a link (retired_by % is not the steward).', NEW.retired_by_person_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS lever_offerings_audit ON lever_offerings;
+CREATE TRIGGER lever_offerings_audit
+  AFTER INSERT OR UPDATE ON lever_offerings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS lever_offerings_no_delete ON lever_offerings;
+CREATE TRIGGER lever_offerings_no_delete
+  BEFORE DELETE ON lever_offerings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A link between a lever and a solution is never deleted; withdraw it (POST /api/lever-offerings/:id/retire, the steward''s act) and it stays on record, marked.'
+  );
+
+DROP TRIGGER IF EXISTS lever_offerings_steward_only ON lever_offerings;
+CREATE TRIGGER lever_offerings_steward_only
+  BEFORE INSERT OR UPDATE ON lever_offerings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_lever_offering_steward_only();
+
+-- ------------------------------------------------------------------
+-- 21. Q9 (O1, 12 Oct 2026) — the D2 basis, DERIVED (decision D2, plan §3)
+-- ------------------------------------------------------------------
+-- ONE function computes the basis of an evidence row; every renderer calls
+-- it and none infers it (LVRF_PLAN §5). Nothing is stored beside it, so
+-- there is nothing to drift. Strongest first: system_of_record > published
+-- > client_stated > inferred > assumed (the floor). Rules in D2's order;
+-- the first that matches decides:
+--   1 simulated                                   -> assumed, always
+--   2 ai_sourced AND NOT citation_resolved        -> assumed, whatever the kind
+--   3 system_export                               -> system_of_record
+--   4 public_filing                               -> published
+--   5 attestation, customer-side attester + date  -> client_stated
+--   6 attestation otherwise                       -> assumed
+--   7 vendor_publication                          -> published if about the
+--                                                    tenant itself, else inferred
+--   8 artifact                                    -> client_stated with a
+--                                                    customer-side attester,
+--                                                    else inferred
+--   9 observation                                 -> inferred with a source
+--                                                    reference, else assumed
+--  10 assessment_result                           -> NULL: outside the
+--                                                    account-fact vocabulary
+-- source_verified does NOT raise the basis (it is the disclosure gate, Rule
+-- 6), and self-declared confidence never does. A customer-side attester is
+-- a non-simulated person of the evidence's own institution.
+
+CREATE OR REPLACE FUNCTION lvrf_evidence_basis(e evidence) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN e.simulated THEN 'assumed'
+    WHEN e.ai_sourced AND NOT e.citation_resolved THEN 'assumed'
+    WHEN e.kind = 'system_export' THEN 'system_of_record'
+    WHEN e.kind = 'public_filing' THEN 'published'
+    WHEN e.kind = 'attestation' THEN
+      CASE WHEN e.attested_at IS NOT NULL AND EXISTS (
+             SELECT 1 FROM persons p WHERE p.id = e.attested_by_person_id
+                AND p.institution_id = e.institution_id AND NOT p.simulated)
+           THEN 'client_stated' ELSE 'assumed' END
+    WHEN e.kind = 'vendor_publication' THEN
+      CASE WHEN EXISTS (SELECT 1 FROM institutions i WHERE i.id = e.institution_id AND i.is_tenant_self)
+           THEN 'published' ELSE 'inferred' END
+    WHEN e.kind = 'artifact' THEN
+      CASE WHEN EXISTS (
+             SELECT 1 FROM persons p WHERE p.id = e.attested_by_person_id
+                AND p.institution_id = e.institution_id AND NOT p.simulated)
+           THEN 'client_stated' ELSE 'inferred' END
+    WHEN e.kind = 'observation' THEN
+      CASE WHEN e.source_reference IS NOT NULL AND btrim(e.source_reference) <> ''
+           THEN 'inferred' ELSE 'assumed' END
+    ELSE NULL  -- assessment_result: no basis (D2 rule 10)
+  END
+$$;
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1262,20 +1446,23 @@ COMMIT;
 -- right things are present. Do not re-derive a total here and trust it —
 -- diff the SELECT below against the full list this file declares:
 --
---   16 governed tables (0005 added 'offerings'; 0019 added
+--   17 governed tables (0005 added 'offerings'; 0019 added
 --   'industry_measures'; 0024 added 'institution_facts'; 0034 added
---   'institution_entities') × 3 (_audit, _touch, _no_delete) — 48
+--   'institution_entities'; 0035 added 'value_levers') × 3 (_audit, _touch,
+--   _no_delete) — 51
 --   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
 --   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   5e: <table>_supersession_sane × 17 (assessments, business_metrics,
+--   5e: <table>_supersession_sane × 18 (assessments, business_metrics,
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
 --   value_outcomes, value_runs, industry_measures, institution_facts,
---   institution_entities) — 17
+--   institution_entities, value_levers) — 18
 --   19: institution_entities_one_current (a deferred constraint trigger) — 1
+--   20: lever_offerings_audit, lever_offerings_no_delete,
+--   lever_offerings_steward_only, value_levers_steward_only — 4
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
@@ -1292,25 +1479,26 @@ COMMIT;
 --   offering_capabilities, person_roles, reflection_evidence — 8
 --   18: research_prompts_audit, research_prompts_no_delete,
 --   research_prompts_immutable — 3
---   Total: 103 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 111 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
 --   institution_entities _audit, _touch, _no_delete, _supersession_sane.
---   Section 19 took it 102 -> 103: institution_entities_one_current.)
+--   Section 19 took it 102 -> 103: institution_entities_one_current.
+--   0035 (O1) took it 103 -> 111: value_levers' four, section 20's four.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 103.
+-- TRUNCATE in section 14 fail. Total stays 111.
 --
--- Expect 155 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×16 = 64;
+-- Expect 168 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×17 = 68;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
--- each 5e trigger fires on INSERT and UPDATE, ×17 (+34); refusals_no_delete
+-- each 5e trigger fires on INSERT and UPDATE, ×18 (+36); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
 -- research_results_touch on INSERT and UPDATE (+2, since Q4b), research_results_no_delete on
@@ -1327,7 +1515,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 64 + 2 + 1 + 4 + 3 + 6 + 34 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 = 155 (Q4b's research_results_touch on INSERT is the +1 before last; 0034's institution_entities is in the 64 and the 34; the last +2 is section 19's one_current on INSERT and UPDATE).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

@@ -246,6 +246,13 @@
       "when": 1791786161792,
       "tag": "0034_account_research",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791828441898,
+      "tag": "0035_value_levers",
+      "breakpoints": true
     }
   ]
 }
