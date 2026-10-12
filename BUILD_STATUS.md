@@ -8828,3 +8828,34 @@ There is **no migration, no hardening change, and no new route.**
   - `verify_tenant_scope` passes 134 cases.
   - The client `tsc`, build and lint pass; the bundle is **`index-CXIIVY7G.js`**. The
     one lint warning predates this work.
+
+### Deployed — 12 October 2026 (UTC)
+
+`9605859..4db8808` went to production: `98be28e` (docs, never pulled), `30f7dc6`
+(feat) and `4db8808` (docs). There was no migration and no hardening change.
+
+- **Backup:** `~/lvrf_pre_q4g_20261012_045558.dump` (635,755 bytes, `-rw-------`, 458
+  TOC entries), taken with the box at `9605859`.
+- **Deploy:**
+  - no re-exec; pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 33 migrations, newest
+    0032_retire_pack_entry; 735 schema objects match 0032_snapshot.json)", and no drift
+    findings;
+  - all smoke checks passed; deploy OK, exit 0, HEAD `4db8808`;
+  - bundle **`index-CXIIVY7G.js`** / `index-Ub0JxAcc.css`. Up since **04:56:59 UTC**.
+- **The legacy check, on the box:** "research results: 26 (26 accepted); 13 predate
+  prompts, all prompt_tracked = false; each validates against the version it was
+  parsed under (v3: 26)".
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `4db8808`;
+  - D2 none; D1/D3/D4 no findings;
+  - the legacy check as above;
+  - **98 triggers**, and `hardening_manifest` holds 98 rows;
+  - 0 pending research results, so no v3-era result is stranded at accept;
+  - **0 audit rows and 0 refusals since 04:56:59**; the last audit id is still 256;
+  - the served assets are `index-CXIIVY7G.js` and `index-Ub0JxAcc.css`.
+- **Every IT prompt on record is now stale (v3), as designed.** The next research run
+  generates a v4 prompt.
+- **For the record (Brad, 12 Oct):** the two missing exclusions (breach lifecycle;
+  Revenue per billable consultant) are **still intended**. Brad will record them
+  himself, with specific reasons.
