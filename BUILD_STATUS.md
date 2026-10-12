@@ -8497,3 +8497,39 @@ requirement.
   `verify_tenant_scope` has 131 cases. The client `tsc`, build and lint pass. The
   bundle is **`index-Bm3_iJwj.js`**, new because the client changed. The one lint
   warning predates this work.
+
+### Deployed — 12 October 2026 (UTC)
+
+`0ee288d..6f44b7a` went to production. That covers the Q4b docs commit `90db8c6`,
+which had never been pulled, plus `20c1fa9` (plan), `349fa5e` (feat) and `6f44b7a`
+(docs). There was no migration and no hardening change.
+
+- **Backup:** `~/lvrf_pre_q4c1_20261012_012051.dump` (592,591 bytes, `-rw-------`, 457
+  TOC entries), taken with the box at `0ee288d`. `chmod 600`, no `umask`.
+- **Deploy:**
+  - no re-exec (the script was unchanged); pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 32 migrations, newest
+    0031_research_prompts; 731 schema objects match 0031_snapshot.json)" and "drift
+    checks D1, D3, D4: no findings";
+  - all smoke checks passed; deploy OK, exit 0, HEAD `6f44b7a`;
+  - bundle **`index-Bm3_iJwj.js`** / `index-CT06A5RP.css`. Up since **01:21:48 UTC**.
+- **The browser, confirmed by Brad:** Packs → Information Technology shows "No measures
+  have been proposed for this industry yet", then RESEARCH:
+  - R1, Generate research prompt;
+  - R2, 0 prompts;
+  - R3, the JSON box with Parse disabled;
+  - R4, "Nothing is waiting for review";
+  - R5, enabled for him (the steward), with an **empty "Your reason (required)" box**
+    and separate "Proposed by research tool" / "The research's proposal, verbatim"
+    fields.
+  - Nothing was generated.
+- **Gate C, read-only, over ssh, as `lvrf_app`** (`current_user` confirmed):
+  - HEAD `6f44b7a`;
+  - `check_schema_drift.mjs`: none (731 objects). `drift_report.ts`: no findings;
+  - **98 triggers**, and `hardening_manifest` holds 98 rows;
+  - 0 research prompts and 0 tracked results;
+  - **0 audit rows and 0 refusals since 01:21:48**; the last audit id is still 207;
+  - the served assets are `index-Bm3_iJwj.js` and `index-CT06A5RP.css`.
+
+**Next: Q4e is Brad's.** He generates the `information-technology` prompt on prod and
+runs it in his research tool, then parses, reviews and excludes, all in the UI.
