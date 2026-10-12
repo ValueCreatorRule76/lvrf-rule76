@@ -169,6 +169,8 @@ placement is a judgement.
 | ~~Q5~~ | ~~**Recons: 3.0 items 9 and 10**~~ **DONE.** Item 9 (11 Oct 2026): the pack prompt is **not** composed from live rows — it is hand-written per run, outside the repo — and the parser validates hand-written copies of the contract (`industryResearch.ts` lines 148–189 and 460–464); the metric prompt (`researchPrompt.ts`) does follow the one-definition pattern. Fix queued as Q4b. Item 10: no account fact is a run input today | — | the draft puts recons before item 6 |
 | ~~Q6~~ | ~~Decide D1 (Compass), D2 (mapping), D7, D8; ratify or revise the 3.0 draft~~ **DONE 11 Oct 2026**: all decided; revision 3 adopted as the working plan (not ratified). D13 remains, blocking item 6 only | — | — |
 | ~~Q4c1~~ | **DONE 12 Oct 2026**: deployed `6f44b7a` (no migration; step 5c clean; Gate C clean; Brad confirmed the five cards in the browser). ~~**Pack-research cards on the pack page**~~: generate the prompt (Q4b route), paste the agent's response to parse, accept or reject each pending result, and record exclusions. Accept, reject and exclude stay steward-only (Band A); generate and parse are authorized acts. Same routes, same session, no new actor path. Detailed plan in §4b | Q4b | unblocks Q4e (Datacom) |
+| Q4c1b | **Retire a pack entry** (steward-only, reason required, migration 0032), retired entries shown on the pack page, and the R4 caveats aid. Plan in §4d, **approved by Brad 12 Oct** | Q4c1 | Q4e accepted six IT entries Brad now judges should not stand, and no route can correct an accepted entry |
+| Q4g | **Contract v4: a required `caveats` field per measure** (Brad, 12 Oct). It is a list of strings, and an empty list is allowed but must be stated explicitly; a missing key is refused as drift. The prompt asks for it, and R4 shows it as its own block, above the text-search block. Prompts generated under v3 go stale, as designed (parse refuses them, naming both versions). `PROMPT_TEMPLATE_VERSION` bumps too. The legacy and v3-era accepted results are untouched; `check_legacy_research` checks them against the version they were parsed under | Q4c1b | turns the R4 caveat search into a structural field |
 | Q4c2 | **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
 | Q4d | **Reference test A: Scotts Miracle-Gro on an existing pack** (Manufacturing; TRIR accepted). Outside-in, published material only; not D13. Step plan in §4a; R1 and R5 decided | Q4c2 | tests a second account on a pack that already exists |
 | Q4e | **Reference test B: Datacom, a pack-only test** under the existing `information-technology` industry (R2, R3). The first real use of the Q4b prompt route. Step plan in §4a; no run, because no published Datacom baseline exists | Q4c1 | tests the pack loop end to end on a pack that does not exist yet |
@@ -390,3 +392,261 @@ script is unchanged, so no re-exec.
 then parses, reviews and excludes, all in the UI. Per R4, the Datacom story is quoted
 verbatim in BUILD_STATUS, as the test's subject. R3 means it is not recorded as
 evidence: there is no outcome to attach it to.
+
+### 4c. Q4c2: the outside-in walk card on the account page (plan, 12 Oct 2026; not yet approved)
+
+**Spine stages:** `attach` (offering, capability, claim), `model` (pack basis),
+`commit` and `measure` up to the baseline (the value outcome), and `return` (produce,
+lock, retire).
+
+**Same routes, same session, no new actor path.** It adds **no migration, no new write
+route and no hardening change.** It adds **one read**, and **reuses the evidence card**
+with one prop.
+
+**What exists, and what the walk needs.** The account page's read
+(`GET /api/institutions/:id/view`) gives the institution, facts, pack entries (with
+id), metrics (with `industry_measure_id`) and engagements (id, name). The walk needs
+three more things:
+
+- **The institution's people.** `GET /api/persons?institution_id=` already lists them.
+- **Its capabilities and their claims, and its value outcomes:** none of these is
+  readable today. **S1: `GET /api/institutions/:id/walk`**, a new read.
+  - It returns:
+    - the capabilities, each with its claims (pack entry, claim text, who, when);
+    - the value outcomes per engagement: id, metric, baseline value and date,
+      realization, confidence, and the evidence linked, by `supports`;
+    - each engagement's runs: number, locked or not;
+    - whether the engagement is retired.
+  - It is tenant-checked like `/view` (`isOtherTenant`, logged), with a tenant-scope
+    case.
+  - **A separate read, not more fields on `/view`:** `/view` is the account manager's
+    read and stays byte-identical, as Q4c1 kept the pack GET.
+- **The pack entry's confounders.** `GET /api/industries/:slug/pack` already returns
+  them.
+
+**The walk, for Scotts.** A1 (create the account) and A3 (facts) are already in the
+UI. The card's steps are numbered as in §4a.
+
+| # | Step | Route (existing) | Who | What the card shows and requires |
+|---|---|---|---|---|
+| A2 | **Analyst of record**: a customer-side person on the institution, e.g. "Brad Piver (external analyst of record)", titled as Curia's is | `POST /api/institutions/:id/inputs` (`persons`: full_name, email, title) | authorized | **Email is required by the route** (decision W1). Not simulated |
+| A4 | **Offering and capability**: `skillsoft_compliance_suite`, a new capability (W2), owned by A2, primary | `POST /api/institutions/:id/offerings` (offering_key, capability_name, owner_person_id, is_primary, basis) | authorized | The offering is chosen from the tenant's catalog. **`basis` states "EHS solution"** (R5). The owner must be the institution's own non-simulated person |
+| A5 | **The capability's claim on a pack entry**: TRIR | `POST /api/capabilities/:id/industry-measures` (industry_measure_id, claim) | authorized | **The pack entry's definition, unit and CONFOUNDERS are shown above the claim box**, from the pack GET, in the pack page's "What moves this that is NOT capability" block. The claim text is the person's. **Refused unless the account is classified into the measure's industry** (`manufacturing`). **Final: a claim is not amended** (supersede the capability) |
+| A6 | **The value outcome, with its published baseline**: engagement "Scotts Miracle-Gro — reference example, not an engagement", owned by A2; metric "Total Incident Rate" (unit as the CR report states it, direction decrease, source_system naming the CR report); capability from A4; **baseline 2.28** at FY2021 year-end; **no target** | `POST /api/institutions/:id/value-outcomes` | authorized | Creates the engagement and the metric. **Target is optional and left empty when the source states none.** The card says "a hypothesis with no target is complete; never derive one from a vendor claim". **Zero is data:** the baseline field takes 0. **Before A6, check the unit:** Scotts' "Total Incident Rate" must be the OSHA rate per 200,000 hours, the TRIR entry's unit (§4a) |
+| A7 | **Pack basis**: the metric → TRIR | `POST /api/business-metrics/:id/pack-basis` (industry_measure_id, basis_note) | authorized | Offered only for an entry the capability claims. Refused across industries. **Final: a basis is not amended** |
+| A8–A9 | **Evidence**: the baseline (`public_filing`, `supports = baseline`; the CR report URL and page; the FY2019–FY2021 series quoted; Scotts' own reason for the 2021 rise, in Scotts' words), and the vendor claim (`vendor_publication`, `supports = impact_basis`; "75%… no period stated") | `POST /api/value-outcomes/:id/evidence` | authorized | **Reuse `AddEvidenceCard`.** Today it is bound to a run (`run.payload.valueOutcomeId`), so evidence can only be added after a run exists. **Change: it takes an `outcomeId` prop**, so evidence is added before the first run, and only one run is produced and locked. `lvrf_block_ai_actual` refuses `vendor_publication` as `actual`, and the card does not offer that pairing |
+| A10a | **Produce** the run: banner "OUTSIDE-IN HYPOTHESIS", with a note | `POST /api/engagements/:id/produce-run` (banner_title, note, source_fixture) | authorized | Shows the run's realization (claimed), confidence and banner, and links to the run page. Refused while there is no value outcome |
+| A10b | **Lock** the run, with a lock reason | `POST /api/value-runs/:id/lock` (lock_reason) | authorized | "Locking is final: the run cannot change." A second lock → 409 |
+| A11 | **Retire** the reference engagement, with a retirement reason (the cohort decision) | `POST /api/engagements/:id/retire` (retirement_reason) | **steward-only** | Offered only once a locked run exists. Disabled for anyone else, naming the steward |
+
+**Steward-only steps: one, A11 (retire).** A2–A10 are authorized acts under
+`MUTATING_ROUTE_CLASS`. The classification is unchanged, and the client gate is a
+courtesy: the server's 403 decides.
+
+**The card's shape** (on `InstitutionPage`, below the facts):
+
+- One card, "Outside-in walk", with the steps in order.
+- Each step shows **done** (what was recorded and by whom, from S1), **next** (its
+  form), or **waiting** (with what it waits for).
+- Every form is a `GovernedForm`, and refusals render verbatim, with issues.
+- After each write, `/view` and S1 refetch in place.
+- **Nothing is prefilled from a source.** The person types every figure and citation;
+  the card only orders the steps.
+
+**Gate A**
+
+- **`verify_outside_in_walk.sh`:**
+  - **API:** S1's shape; tenant 404; the walk end to end on a clone, with a fictional
+    account. **Scotts' real figures are not used as test data.**
+  - **A headless-Chrome walk by session**, steward and non-steward, with screenshots
+    looked at:
+    - the confounders block above the claim;
+    - no target derived;
+    - evidence before the run;
+    - the run locked;
+    - retire disabled for a non-steward.
+  - **Cases:**
+    - a claim or basis across industries is refused;
+    - a second claim or basis is refused as final;
+    - `vendor_publication` as `actual` is refused;
+    - a baseline of 0 is accepted;
+    - a second lock → 409;
+    - retire by a non-steward → 403.
+  - **Breaks:**
+    - the retire gate in the client (the server still 403s);
+    - S1's tenant check;
+    - the evidence card's `outcomeId` path (without it, evidence cannot be added
+      before a run).
+- **Also:** the regression; prod-copy equivalence (every existing GET identical,
+  `/view` included); the client `tsc`, build and lint.
+
+**Decisions for Brad**
+
+- **W1:** the analyst-of-record person's email on Scotts (the route requires one).
+  Curia's precedent is a named external-analyst person on that institution.
+- **W2:** the capability's name, e.g. "Workplace safety: EHS".
+- **W3:** whether the walk card shows on every account (recommended: it is the same
+  governed routes) or only on reference examples.
+
+**Then Q4d (Scotts) is Brad's in the UI:** A1 and A3 in the existing cards, A2–A11 in
+the walk card.
+
+### 4d. Q4c1b: retire a pack entry, and the R4 caveats aid (plan approved by Brad, 12 Oct 2026)
+
+**Why:** Q4e accepted all 13 IT results (see BUILD_STATUS, *Q4e*). No route retires,
+demotes, supersedes or annotates a pack entry. The exclusions route already says
+"Retire or supersede the entry first", to a route that does not exist.
+
+**Spine stage:** `model`. The pack is the industry-level model.
+
+**Migration 0032 (`industry_measures`):**
+
+- **New columns:** `retired_by_person_id` (uuid, FK → persons, ON DELETE RESTRICT) and
+  `retirement_reason` (text), both nullable.
+- **CHECK `industry_measures_retirement_is_complete`:**
+  - either `deleted_at`, `retired_by_person_id` and `retirement_reason` are all null,
+    and `status <> 'retired'`;
+  - or `deleted_at` is set, `status = 'retired'`, `retired_by_person_id` is set, and
+    `char_length(btrim(retirement_reason)) >= 12`.
+- **Header:** what it changes, what it could orphan (nothing), BACK UP FIRST.
+- **Prod today:** 26 entries, all `proposed`, none deleted or superseded, so the CHECK
+  holds on every existing row.
+- **Triggers:** unchanged at 98. `industry_measures` is already in the governed loop
+  (`_audit`, `_touch`, `_no_delete`, `_supersession_sane`).
+
+**Route: `POST /api/industry-measures/:id/retire`** (new router, mounted at
+`/api/industry-measures`; a pack act, outside the research seam like
+`industryExclusions.ts`):
+
+- **Steward-only:** `requireSteward(pool)`, `MUTATING_ROUTE_CLASS` `steward`, labelled
+  "Retiring a pack entry". **`verify_steward_acts.sh`'s count goes 4 → 5.**
+- **Body:** `retirement_reason`, required, at least 12 characters after trimming
+  (422). The route checks it and so does the CHECK.
+- **Tenant-checked** with `isOtherTenant`: another tenant's entry → 404, logged, with a
+  tenant-scope case.
+- **The entry must be current** (not retired, not superseded); otherwise 409 naming its
+  state. The row is locked (`FOR UPDATE`) against a concurrent retire.
+- **It refuses (409, naming each dependent) while anything current depends on it:**
+  - a claim (`capability_industry_measures`) on a capability that is not retired or
+    superseded;
+  - a pack basis (`business_metrics.industry_measure_id`) on a metric that is not
+    retired or superseded.
+  - "Supersede the capability or metric first." Today nothing depends on any IT entry.
+- **It writes** `status = 'retired'`, `deleted_at = now()`, `retired_by_person_id = the
+  actor`, and `retirement_reason`. Audited by `industry_measures_audit` with the actor.
+- **The accepted `research_result` is untouched:** it stays accepted, and its
+  `industry_measures_id` still points at the now-retired entry. History reads "accepted
+  by Brad at 01:32, retired by Brad at …, because …".
+
+**After retirement:**
+
+- **The name can be excluded through the existing route.** Its "in the pack" test
+  already filters `deleted_at IS NULL`, so the 409 no longer applies.
+- **A retired, unexcluded name can return:** a later accept of a new result creates a
+  new row. The unique `(industry_id, name)` index is partial, over current entries only.
+- **An excluded name cannot return:** accept's exclusion check refuses it. That is the
+  difference between Brad's two groups below.
+
+**The pack page shows retired entries; it does not hide them:**
+
+- **`GET /api/industries/:slug/pack` gains `retired`:** name, unit, direction, citation,
+  retired_at, retired_by, retirement_reason, and the original review (note, reviewer,
+  date).
+- **The prod-copy equivalence must show this as the only change:** the pack GET gains
+  `retired: []`, and every other GET is byte-identical.
+- **A "Retired" card after "Tested and excluded"**, collapsed by default (`<details>`),
+  with a count.
+  - Each entry shows who retired it, when, and the reason (leading), then its original
+    review in muted text.
+  - It also says whether the name has since been excluded.
+- **`/view`'s pack list and the industries list count current entries only**, as now.
+
+**UI:**
+
+- **"Retire this entry…"** on each current pack entry. It opens an inline
+  `GovernedForm`: a reason box, empty, at least 12 characters, with
+  "Final: a retired entry is not restored. It can return only by a new accepted
+  research result."
+  - It is disabled for non-stewards, naming the steward. The server's 403 decides.
+- **After a retirement,** the pack refetches in place, and the entry moves to
+  "Retired".
+- **When the retired name is one the agent listed** in the current parse,
+  "Record as exclusion…" works as in Q4c1. Otherwise R5 takes the name typed by hand.
+
+**The R4 caveats aid (client-only; the server is unchanged):**
+
+- **Where the caveats are:** the agent writes them inside its fields; in Q4e both sat
+  in `citation` ("reviewer should confirm…"). There is no caveats field.
+- **The card searches every string field of `raw_response`** for caveat phrases:
+  - "reviewer should", "should confirm", "confirm in";
+  - "secondary summar…", "per secondary";
+  - "unverified", "not verified";
+  - "could not (verify|confirm|access)";
+  - "paywall", "gated", "estimate…".
+  - Each matching sentence is shown, verbatim and with the field it came from, in a
+    `--warning`-bordered block above the review form: **"The research's own
+    caveats"**.
+- **A tick, "I have read the research's caveats", is required before Accept is
+  enabled.** Reject does not need it.
+  - **Decided by Brad (12 Oct): required on every pending result,** not only where
+    the search matched.
+  - Where nothing matched, the block says "No caveat phrases found. This is a text
+    search, not a finding that there are none", and the tick reads "I have read the
+    citation".
+  - A missed phrase should not lower the bar.
+- **Later, not here:** a dedicated `caveats` field in the contract (v4), queued as
+  **Q4g**.
+
+**Gate A**
+
+- **`verify_pack_entry_retire.sh`:**
+  - **Route cases:**
+    - the steward → 200;
+    - a non-steward → 403;
+    - a reason under 12 characters → 422;
+    - another tenant → 404;
+    - already retired → 409;
+    - a current claim → 409 naming it, and a current pack basis → 409 naming it;
+    - a retired capability's claim does not block.
+  - **The database:**
+    - the CHECK refuses a direct `status = 'retired'` without a reason or person, and
+      a `deleted_at` without `status = 'retired'`;
+    - the audit row names the actor;
+    - the accepted result is unchanged.
+  - **Pack GET:** the entry moves to `retired` with who, when and why; the current
+    lists lose it.
+  - **Exclusion:** a retired name can now be excluded (201); a current name still
+    gets 409.
+  - **A retired, unexcluded name can be re-accepted** from a new result (a new row); an
+    excluded one cannot (409).
+- **A headless-Chrome walk by session, with screenshots looked at:**
+  - retire as the steward; the Retired card collapsed and then expanded;
+  - a non-steward's disabled control;
+  - a pending result whose citation says "reviewer should confirm…": the caveat block
+    and Accept disabled until the tick.
+- **Breaks:**
+  - the dependency check removed: a claimed entry is retired, and the test catches it;
+  - the CHECK dropped, in a rolled-back transaction;
+  - the client tick gate removed: Accept is enabled without it, and the test catches
+    it;
+  - the client steward gate removed: the server still 403s.
+- **Also:**
+  - `verify_steward_acts` updated to 5 steward routes;
+  - D2 clean with 0032;
+  - the regression;
+  - the prod-copy equivalence (only the pack GET's `retired` key differs);
+  - the client `tsc`, build and lint.
+- **Deploy:** backup, migrate 0032, harden (still 98), then deploy. D2 at step 5c
+  expects 0032.
+
+**Brad's intent once it ships** (his acts, in the UI; recorded here so the record of
+intent precedes the acts):
+
+- **Retire, then exclude each with his own reason:** Phish-prone percentage; Mean time
+  to identify and contain a data breach (breach lifecycle); Revenue per billable
+  consultant.
+- **Retire, not excluded** (they can return with verified citations): Wasted cloud
+  spend; Project budget adherence rate; Human-error-attributed outage rate.
+- **Keep:** Billable utilization; Change failure rate; Change lead time; Deployment
+  frequency; Failed deployment recovery time; Net first contact resolution rate; Net
+  first level resolution rate.

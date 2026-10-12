@@ -8533,3 +8533,33 @@ which had never been pulled, plus `20c1fa9` (plan), `349fa5e` (feat) and `6f44b7
 
 **Next: Q4e is Brad's.** He generates the `information-technology` prompt on prod and
 runs it in his research tool, then parses, reviews and excludes, all in the UI.
+
+## Q4e — the Information Technology pack, first real use of the generated prompt — 12 October 2026
+
+Recorded plainly, read-only from prod as `lvrf_app`.
+
+- **The prompt:** Brad generated prompt `3d475c38-e344-4036-be4d-a40483465d10` at
+  01:25:57 UTC (contract v3; it listed 0 entries and 0 exclusions). He ran it in his
+  research tool and parsed the response at 01:29:47: 13 results.
+- **All 13 were accepted, between 01:31:00 and 01:33:29 UTC.** The first three carry
+  the notes "Stong", "Excellent" and "Good". **The last ten were accepted within 60
+  seconds, each with the note "Solid citation and origin."**
+- **Two of them the agent itself flagged as unverified,** in their citations:
+  - Project budget adherence rate: "figures per secondary summaries …; reviewer should
+    confirm in the PMI report";
+  - Wasted cloud spend: "Secondary summaries report the estimated wasted share at 27%;
+    reviewer should confirm the figure in the report itself".
+- **Each accept created a `proposed` entry; none is ratified.** All 13 are
+  addressable. Nothing depends on them: 0 claims, 0 pack bases, and 0 accounts
+  classified Information Technology.
+- **Two exclusions were recorded, the agent's wording kept as the proposal and Brad's
+  as the reason:**
+  - Power-related data center outage frequency: "Power outages come from utility
+    supply and equipment design, not from what staff know."
+  - Year-over-year cloud spend growth: "A person's judgement cannot be measured in a
+    quantitative manner or is immaterial." **This reason is generic;** it does not
+    speak to cloud spend.
+- **Both stand as written.** A decision is not amended, and an exclusion is final. The
+  correction path for the accepted entries is Q4c1b (retire, steward-only), planned in
+  `docs/LVRF_PLAN.md` §4d, together with an R4 aid that surfaces the agent's own
+  caveats and requires a tick before Accept.
