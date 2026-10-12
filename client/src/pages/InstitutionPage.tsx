@@ -11,6 +11,7 @@ import {
 import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
+import { AccountResearch } from '../components/AccountResearch';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -454,6 +455,12 @@ export function InstitutionPage() {
           </ul>
         )}
       </Card>
+
+      {/* Q4h: account research intake (3.0 item 6). Hidden for the tenant's own
+          record, which is not an account to research. */}
+      {!view.institution.is_tenant_self && (
+        <AccountResearch institutionId={view.institution.id} onFactsChanged={refresh} />
+      )}
     </div>
   );
 }

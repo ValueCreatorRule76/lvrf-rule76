@@ -13,6 +13,7 @@ const KIND_LABEL: Record<InstitutionFactKind, string> = {
   headcount: 'Headcount',
   stated_priority: 'Stated priority',
   system: 'System',
+  disclosure_regime: 'Disclosure regime',
 };
 const KIND_ORDER: InstitutionFactKind[] = ['revenue', 'headcount', 'stated_priority', 'system'];
 const NUMERIC_KINDS: InstitutionFactKind[] = ['revenue', 'headcount'];

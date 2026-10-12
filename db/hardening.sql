@@ -152,7 +152,10 @@ DECLARE t text;
     -- governance() column set — deleted_at, updated_at, superseded_by_id —
     -- so the generic triad applies as written, and "Set deleted_at
     -- instead" is a true remedy for it.
-    'institution_facts'
+    'institution_facts',
+    -- 0034 (Q4h): institution_entities, the account's pinned entity —
+    -- full governance() columns; corrected by supersession.
+    'institution_entities'
   ];
 BEGIN
   FOREACH t IN ARRAY governed LOOP
@@ -503,7 +506,9 @@ DECLARE t text;
     'industry_measures',
     -- 0024: institution_facts — corrections supersede, so the chain must
     -- obey the same sanity rules as every other superseding table.
-    'institution_facts'
+    'institution_facts',
+    -- 0034 (Q4h): an entity is corrected by superseding it (3.0 item 3).
+    'institution_entities'
   ];
 BEGIN
   FOREACH t IN ARRAY supersession_governed LOOP
@@ -1161,6 +1166,46 @@ CREATE TRIGGER research_prompts_immutable
   FOR EACH ROW EXECUTE FUNCTION lvrf_research_prompt_is_final();
 
 -- ------------------------------------------------------------------
+-- 19. Q4h (0034, 12 Oct 2026) — one current entity per account, at COMMIT
+--     (placed before section 14 so the manifest includes it)
+-- ------------------------------------------------------------------
+-- institution_entities (db/schema.ts) may have ONE current row (not
+-- retired, not superseded) per institution. Not a partial unique index: a
+-- correction inserts the successor and THEN points the old row at it
+-- (lvrf_supersession_is_sane requires the successor to exist first), and an
+-- immediate index refuses the instant both are current — the latent gap
+-- 0015 recorded for business_metrics. A CONSTRAINT TRIGGER, DEFERRABLE
+-- INITIALLY DEFERRED, runs at COMMIT: by then a correction has pointed the
+-- old row, and anything that still leaves two current entities is refused
+-- whole. Race: two pinning transactions each see one current row of their
+-- own; the routes take the institution's entity rows FOR UPDATE, and this
+-- trigger is the database's own backstop.
+--
+-- CONSEQUENCE: trigger count goes 102 -> 103.
+
+CREATE OR REPLACE FUNCTION lvrf_one_current_entity() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  n int;
+BEGIN
+  SELECT count(*) INTO n FROM institution_entities
+   WHERE institution_id = NEW.institution_id AND deleted_at IS NULL AND superseded_by_id IS NULL;
+  IF n > 1 THEN
+    RAISE EXCEPTION
+      'LVRF: institution % would have % current entities; an account has one. '
+      'Correct an entity by superseding it (POST /api/institutions/:id/entity/supersede).', NEW.institution_id, n
+      USING ERRCODE = 'unique_violation';
+  END IF;
+  RETURN NULL;
+END $$;
+
+DROP TRIGGER IF EXISTS institution_entities_one_current ON institution_entities;
+CREATE CONSTRAINT TRIGGER institution_entities_one_current
+  AFTER INSERT OR UPDATE ON institution_entities
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION lvrf_one_current_entity();
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -1217,18 +1262,20 @@ COMMIT;
 -- right things are present. Do not re-derive a total here and trust it —
 -- diff the SELECT below against the full list this file declares:
 --
---   15 governed tables (0005 added 'offerings'; 0019 added
---   'industry_measures'; 0024 added 'institution_facts') × 3 (_audit,
---   _touch, _no_delete) — 45
+--   16 governed tables (0005 added 'offerings'; 0019 added
+--   'industry_measures'; 0024 added 'institution_facts'; 0034 added
+--   'institution_entities') × 3 (_audit, _touch, _no_delete) — 48
 --   value_outcome_evidence_no_ai_actual, value_runs_locked_immutable — 2
 --   5c: value_runs_audit, value_runs_touch, value_runs_no_delete,
 --   record_documents_audit, record_documents_no_delete — 5
 --   5d: assessments_no_simulated_attestor, evidence_no_simulated_attestor,
 --   value_outcomes_no_simulated_attestor — 3
---   5e: <table>_supersession_sane × 16 (assessments, business_metrics,
+--   5e: <table>_supersession_sane × 17 (assessments, business_metrics,
 --   capabilities, engagements, evidence, heartbeats, institutions,
 --   offerings, persons, reflections, stewardship_returns, tenants,
---   value_outcomes, value_runs, industry_measures, institution_facts) — 16
+--   value_outcomes, value_runs, industry_measures, institution_facts,
+--   institution_entities) — 17
+--   19: institution_entities_one_current (a deferred constraint trigger) — 1
 --   8: refusals_no_delete — 1
 --   9: evidence_resolution_is_final — 1
 --   10: research_results_audit, research_results_touch,
@@ -1245,23 +1292,25 @@ COMMIT;
 --   offering_capabilities, person_roles, reflection_evidence — 8
 --   18: research_prompts_audit, research_prompts_no_delete,
 --   research_prompts_immutable — 3
---   Total: 98 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 103 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
---   Section 18, Q4b (0031), took it 95 -> 98.)
+--   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
+--   institution_entities _audit, _touch, _no_delete, _supersession_sane.
+--   Section 19 took it 102 -> 103: institution_entities_one_current.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 98.
+-- TRUNCATE in section 14 fail. Total stays 103.
 --
--- Expect 147 rows here: information_schema.triggers emits one row per event
--- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×15 = 60;
+-- Expect 155 rows here: information_schema.triggers emits one row per event
+-- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×16 = 64;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
 -- contributes 3 (2 + 1); each 5d trigger fires on INSERT and UPDATE, ×3 (+6);
--- each 5e trigger fires on INSERT and UPDATE, ×16 (+32); refusals_no_delete
+-- each 5e trigger fires on INSERT and UPDATE, ×17 (+34); refusals_no_delete
 -- fires on DELETE only (+1); evidence_resolution_is_final fires on UPDATE
 -- only (+1); research_results_audit fires on INSERT and UPDATE (+2),
 -- research_results_touch on INSERT and UPDATE (+2, since Q4b), research_results_no_delete on
@@ -1278,7 +1327,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 60 + 2 + 1 + 4 + 3 + 6 + 32 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 = 147 (the last +1: research_results_touch on INSERT, Q4b).
+-- 64 + 2 + 1 + 4 + 3 + 6 + 34 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 = 155 (Q4b's research_results_touch on INSERT is the +1 before last; 0034's institution_entities is in the 64 and the 34; the last +2 is section 19's one_current on INSERT and UPDATE).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

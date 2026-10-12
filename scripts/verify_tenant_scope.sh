@@ -113,11 +113,19 @@ IND_A="$(A1 "SELECT id FROM industries WHERE tenant_id = '$TENANT_A' ORDER BY sl
 SLUG_A="$(q "SELECT slug FROM industries WHERE id = '$IND_A'")"
 # Q4c1b: a live pack entry of tenant A's, for the retire route's case — a
 # fixture, labelled as one in every text column, on the throwaway clone only.
+# Q4h: two pending account-research results of tenant A's (not-found
+# fields, so accept needs no citation), for the account review routes' cases.
+ARP_A="$(q "INSERT INTO research_prompts (tenant_id, institution_id, result_kind, phase, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
+  VALUES ('$TENANT_A', '$INST_A', 'institution_fact', 'entity', 1, 1, 'tenant scope fixture', encode(sha256(convert_to('tenant scope fixture', 'UTF8')), 'hex'), '$STAFF_A') RETURNING id" | head -1)"
+ARR_A="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
+  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'entity', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"entity\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1) RETURNING id" | head -1)"
+ARR_A2="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
+  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'disclosure_regime', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"disclosure_regime\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1) RETURNING id" | head -1)"
 MEASURE_A="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
   VALUES ('$TENANT_A', '$IND_A', 'Tenant A measure (verification $TS)', 'count', 'increase', 'Verification fixture.', 'Verification fixture.', true, 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.') RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A ARR_A ARR_A2; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -133,7 +141,7 @@ curl -s "http://127.0.0.1:$PORT/api/health" | grep -q '"actor_header":"off"' && 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A ARR_A ARR_A2
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

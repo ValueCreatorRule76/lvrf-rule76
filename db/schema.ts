@@ -73,6 +73,9 @@ export const evidenceKind = pgEnum('evidence_kind', [
  */
 export const institutionFactKind = pgEnum('institution_fact_kind', [
   'revenue', 'headcount', 'stated_priority', 'system',
+  // 0033 (Q4h): the account's disclosure regime (3.0 item 4's minimum) —
+  // value_text is one of four labels (institution_facts_regime_shape).
+  'disclosure_regime',
 ]);
 
 export const returnKind = pgEnum('return_kind', [
@@ -134,7 +137,17 @@ export const researchReviewState = pgEnum('research_review_state', [
 export const researchResultKind = pgEnum('research_result_kind', [
   'metric_value',     // a published figure for one metric at one institution. Scalar: value + citation.
   'industry_measure', // a candidate pack entry for an industry. Rich shape, carried in raw_response.
+  'institution_fact', // 0033 (Q4h): one researched field about an account — a fact, its entity, its regime, or a not-found.
 ]);
+
+/** 0034 (Q4h): what makes an entity unambiguous (3.0 item 3's minimum). */
+export const entityIdentifierType = pgEnum('entity_identifier_type', ['sec_cik', 'ticker', 'registry']);
+
+/** 0034 (Q4h): an account research prompt asks for the entity first, then facts. */
+export const researchPromptPhase = pgEnum('research_prompt_phase', ['entity', 'facts']);
+
+/** 0034 (Q4h, L8): who refused — the database (a constraint) or the parser (a 422). */
+export const refusalSource = pgEnum('refusal_source', ['database', 'parser']);
 
 /* ================================================================== */
 /* Shared builders                                                    */
@@ -711,6 +724,50 @@ export const evidence = pgTable('evidence', {
  * is updated in place. Two revenue rows with different as_of dates are
  * both current — a time series, not a conflict.
  */
+/**
+ * 0034 (Q4h) — the entity an account is, pinned before any researched fact
+ * about it is accepted (3.0 item 3's minimum; the Zachry lesson). Legal name
+ * plus ONE identifier that makes it unambiguous: an SEC CIK, a ticker, or a
+ * registry number with its jurisdiction. Its provenance is an evidence row
+ * (NOT NULL). Governed: a wrong entity is corrected by SUPERSESSION, never
+ * edited; one current entity per account (the partial unique index).
+ * Parse refuses a facts response about a different entity, naming both.
+ * Not yet: parent and affiliate relationships, the run sealing its entity
+ * (L4, item 10), website (L9) — Q7.
+ */
+export const institutionEntities = pgTable('institution_entities', {
+  id: id(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  legalName: text('legal_name').notNull(),
+  identifierType: entityIdentifierType('identifier_type').notNull(),
+  identifier: text('identifier').notNull(),
+  /** Required for a registry number (e.g. NZ for the Companies Office); null otherwise. */
+  registryJurisdiction: text('registry_jurisdiction'),
+  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  capturedByPersonId: uuid('captured_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  /** Why this entity was corrected — set with superseded_by_id, never apart (as institution_facts, 0028). */
+  supersessionReason: text('supersession_reason'),
+  ...governance(),
+}, (t) => [
+  foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
+    name: 'institution_entities_superseded_by_fk' }).onDelete('restrict'),
+  // ONE CURRENT ENTITY PER ACCOUNT is NOT a partial unique index: a
+  // correction inserts the successor THEN points the old row at it, and an
+  // immediate index refuses the moment both are current (the 0014/0015
+  // business_metrics lesson). It is the DEFERRED constraint trigger
+  // institution_entities_one_current (hardening.sql section 19), checked
+  // at commit.
+  check('institution_entities_supersession_reason',
+    sql`(${t.supersededById} IS NULL) = (${t.supersessionReason} IS NULL)
+        AND (${t.supersessionReason} IS NULL OR length(btrim(${t.supersessionReason})) >= 12)`),
+  unique('institution_entities_evidence_key').on(t.evidenceId),
+  check('institution_entities_identifier_shape',
+    sql`btrim(${t.legalName}) <> '' AND btrim(${t.identifier}) <> ''
+        AND (${t.identifierType} <> 'registry' OR (${t.registryJurisdiction} IS NOT NULL AND btrim(${t.registryJurisdiction}) <> ''))
+        AND (${t.identifierType} = 'registry' OR ${t.registryJurisdiction} IS NULL)
+        AND (${t.identifierType} <> 'sec_cik' OR ${t.identifier} ~ '^[0-9]{10}$')`),
+]);
+
 export const institutionFacts = pgTable('institution_facts', {
   id: id(),
   institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
@@ -749,6 +806,15 @@ export const institutionFacts = pgTable('institution_facts', {
             AND ${t.valueNumeric} IS NULL AND ${t.unit} IS NULL)`),
   check('institution_facts_revenue_currency',
     sql`${t.kind} <> 'revenue' OR ${t.unit} ~ '^[A-Z]{3}$'`),
+  /**
+   * 0034 (Q4h): the disclosure regime is one of four labels, as text. The
+   * kind is compared as text so this CHECK is safe in the same transaction
+   * that adds the enum value (0033).
+   */
+  check('institution_facts_regime_shape',
+    sql`${t.kind}::text <> 'disclosure_regime'
+        OR (${t.valueText} IN ('public_filer', 'private', 'subsidiary_of_filer', 'public_sector')
+            AND ${t.valueNumeric} IS NULL AND ${t.unit} IS NULL)`),
   check('institution_facts_headcount_whole_people',
     sql`${t.kind} <> 'headcount'
         OR (${t.unit} = 'people' AND ${t.valueNumeric} = trunc(${t.valueNumeric}))`),
@@ -1238,7 +1304,9 @@ export const refusals = pgTable('refusals', {
   valueOutcomeId: uuid('value_outcome_id')
     .references((): AnyPgColumn => valueOutcomes.id, { onDelete: 'restrict' }),
   /** Postgres SQLSTATE, e.g. '23514', '23505'. */
-  sqlstate: text('sqlstate').notNull(),
+  /** 0034 (Q4h, L8): a parser's 422 has no SQLSTATE; a database refusal always does. */
+  sqlstate: text('sqlstate'),
+  source: refusalSource('source').notNull().default('database'),
   /** Postgres does not always supply one. */
   constraintName: text('constraint_name'),
   /** VERBATIM. Never truncated, rewritten or summarised. That sentence is the product. */
@@ -1251,6 +1319,7 @@ export const refusals = pgTable('refusals', {
   index('refusals_subject_idx').on(t.subjectTable, t.subjectId),
   index('refusals_refused_at_idx').on(t.refusedAt),
   index('refusals_value_outcome_idx').on(t.valueOutcomeId),
+  check('refusals_source_shape', sql`${t.source} = 'parser' OR ${t.sqlstate} IS NOT NULL`),
 ]);
 
 /* ================================================================== */
@@ -1370,7 +1439,18 @@ export const hardeningManifest = pgTable('hardening_manifest', {
 export const researchPrompts = pgTable('research_prompts', {
   id: id(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
-  industryId: uuid('industry_id').notNull().references(() => industries.id, { onDelete: 'restrict' }),
+  /** An industry_measure prompt's industry; null for an account prompt (0034). */
+  industryId: uuid('industry_id').references(() => industries.id, { onDelete: 'restrict' }),
+  /** 0034 (Q4h): an institution_fact prompt's account; null for a pack prompt. */
+  institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
+  /** 0034: an account prompt's phase — the entity first, then facts. */
+  phase: researchPromptPhase('phase'),
+  /**
+   * 0034: a facts-phase prompt's entity — the one it named and parse checks
+   * against. Accept refuses a fact whose prompt's entity is no longer
+   * current (corrected since): re-run under the current one.
+   */
+  entityId: uuid('entity_id').references((): AnyPgColumn => institutionEntities.id, { onDelete: 'restrict' }),
   resultKind: researchResultKind('result_kind').notNull(),
   /** The contract's version when this prompt was generated (contracts.ts). */
   contractVersion: integer('contract_version').notNull(),
@@ -1385,6 +1465,12 @@ export const researchPrompts = pgTable('research_prompts', {
   generatedByPersonId: uuid('generated_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
 }, (t) => [
   index('research_prompts_industry_idx').on(t.industryId),
+  index('research_prompts_institution_idx').on(t.institutionId),
+  /** 0034: a pack prompt names an industry; an account prompt names an account and a phase. Kind compared as text (0033). */
+  check('research_prompts_subject_shape',
+    sql`(${t.resultKind}::text = 'industry_measure' AND ${t.industryId} IS NOT NULL AND ${t.institutionId} IS NULL AND ${t.phase} IS NULL)
+        OR (${t.resultKind}::text = 'institution_fact' AND ${t.institutionId} IS NOT NULL AND ${t.industryId} IS NULL AND ${t.phase} IS NOT NULL
+            AND ((${t.phase} = 'facts') = (${t.entityId} IS NOT NULL)))`),
   check('research_prompts_versions_positive', sql`${t.contractVersion} > 0 AND ${t.templateVersion} > 0`),
   check('research_prompts_sha256_is_the_text',
     sql`${t.promptSha256} = encode(sha256(convert_to(${t.promptText}, 'UTF8')), 'hex')`),
@@ -1432,6 +1518,10 @@ export const researchResults = pgTable('research_results', {
   evidenceId: uuid('evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
   /** Set when accepted and an industry_measures row was written from this result. industry_measure only — see researchResultsAcceptedHasRecord. */
   industryMeasuresId: uuid('industry_measures_id').references(() => industryMeasures.id, { onDelete: 'restrict' }),
+  /** 0034 (Q4h): set when an accepted institution_fact result wrote a fact (a figure, or the regime). */
+  institutionFactId: uuid('institution_fact_id').references(() => institutionFacts.id, { onDelete: 'restrict' }),
+  /** 0034 (Q4h): set when an accepted institution_fact result pinned the entity. */
+  institutionEntityId: uuid('institution_entity_id').references(() => institutionEntities.id, { onDelete: 'restrict' }),
 
   parsedAt: timestamp('parsed_at', { withTimezone: true }).notNull().defaultNow(),
   parsedByPersonId: uuid('parsed_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
@@ -1483,7 +1573,12 @@ export const researchResults = pgTable('research_results', {
         OR (${t.resultKind} = 'industry_measure'
            AND ${t.industryId} IS NOT NULL
            AND ${t.institutionId} IS NULL
-           AND ${t.businessMetricId} IS NULL)`),
+           AND ${t.businessMetricId} IS NULL)
+        OR (${t.resultKind}::text = 'institution_fact'
+           AND ${t.institutionId} IS NOT NULL
+           AND ${t.industryId} IS NULL
+           AND ${t.businessMetricId} IS NULL
+           AND ${t.industryMeasuresId} IS NULL)`),
   /**
    * The response shape is enforced, not trusted. 0018 required
    * value+citation whenever found = true, full stop — that conflicted
@@ -1499,6 +1594,8 @@ export const researchResults = pgTable('research_results', {
         OR (${t.found} = true AND ${t.resultKind} = 'metric_value'
               AND ${t.value} IS NOT NULL AND ${t.citation} IS NOT NULL)
         OR (${t.found} = true AND ${t.resultKind} = 'industry_measure'
+              AND ${t.value} IS NULL AND ${t.citation} IS NULL)
+        OR (${t.found} = true AND ${t.resultKind}::text = 'institution_fact'
               AND ${t.value} IS NULL AND ${t.citation} IS NULL)`),
   /**
    * Accepting means the kind's own record exists — renamed from
@@ -1522,7 +1619,11 @@ export const researchResults = pgTable('research_results', {
         OR (${t.resultKind} = 'metric_value'
               AND ${t.evidenceId} IS NOT NULL AND ${t.industryMeasuresId} IS NULL)
         OR (${t.resultKind} = 'industry_measure'
-              AND ${t.industryMeasuresId} IS NOT NULL AND ${t.evidenceId} IS NULL)`),
+              AND ${t.industryMeasuresId} IS NOT NULL AND ${t.evidenceId} IS NULL)
+        OR (${t.resultKind}::text = 'institution_fact' AND ${t.found} = false
+              AND ${t.evidenceId} IS NULL AND ${t.institutionFactId} IS NULL AND ${t.institutionEntityId} IS NULL)
+        OR (${t.resultKind}::text = 'institution_fact' AND ${t.found} = true AND ${t.evidenceId} IS NOT NULL
+              AND ((${t.institutionFactId} IS NOT NULL) <> (${t.institutionEntityId} IS NOT NULL)))`),
   index('research_results_tenant_idx').on(t.tenantId),
   index('research_results_institution_idx').on(t.institutionId),
   index('research_results_business_metric_idx').on(t.businessMetricId),

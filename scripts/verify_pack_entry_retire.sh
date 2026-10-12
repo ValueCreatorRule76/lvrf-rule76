@@ -91,7 +91,7 @@ LEGACY_RETIRED="$(q "SELECT count(*) FROM industry_measures WHERE status = 'reti
 { [ "$LEGACY_RETIRED" -gt 0 ] && [ "$VALID" = "f" ]; } || { [ "$LEGACY_RETIRED" = "0" ] && [ "$VALID" = "t" ]; } \
   && ok "the CHECK is present: validated '$VALID' ($LEGACY_RETIRED legacy retired test rows in this clone; none are rewritten)" || bad "CHECK state: validated $VALID with $LEGACY_RETIRED legacy rows"
 OUT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs || true)"
-case "$OUT" in "schema drift: none"*0032_retire_pack_entry*) ok "D2: $OUT" ;; *) bad "D2: $OUT" ;; esac
+case "$OUT" in "schema drift: none"*) ok "D2: $OUT" ;; *) bad "D2: $OUT" ;; esac
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"

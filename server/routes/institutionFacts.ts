@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { type FactFields, insertFactWithEvidence, pointFactAtSuccessor } from '../lib/institutionFactWriter.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -135,31 +136,9 @@ function requireDate(obj: Record<string, unknown>, field: string, path: string):
   return v;
 }
 
-const KIND_LABEL: Record<(typeof FACT_KINDS)[number], string> = {
-  revenue: 'Revenue',
-  headcount: 'Headcount',
-  stated_priority: 'Stated priority',
-  system: 'System',
-};
 
 
 type FactKind = (typeof FACT_KINDS)[number];
-
-/** Everything a fact carries except its kind — shared by both routes. */
-interface FactFields {
-  valueNumeric: number | null;
-  valueText: string | null;
-  unit: string | null;
-  asOf: string;
-  evidenceKind: (typeof EVIDENCE_KINDS)[number];
-  provenance: string;
-  confidence: (typeof CONFIDENCE_LEVELS)[number];
-  sourceReference: string | null;
-  sourceVerified: boolean;
-  aiSourced: boolean;
-  researchQuery: string | null;
-  researchTool: string | null;
-}
 
 function parseFactFields(body: Record<string, unknown>): FactFields {
   const valueNumeric = optionalNullableNumber(body, 'value_numeric', 'body');
@@ -193,51 +172,6 @@ function parseFactFields(body: Record<string, unknown>): FactFields {
     valueNumeric, valueText, unit, asOf, evidenceKind, provenance, confidence,
     sourceReference, sourceVerified, aiSourced, researchQuery, researchTool,
   };
-}
-
-/**
- * The evidence row, then the fact — the one insert both routes use. Runs on
- * the request's client, inside actorContext's transaction. `onTable` names
- * the write in flight, for handleGovernanceError's refusal record.
- */
-async function insertFactWithEvidence(
-  client: PoolClient,
-  institutionId: string,
-  kind: FactKind,
-  f: FactFields,
-  actorPersonId: string,
-  onTable: (table: string) => void,
-): Promise<{ factId: string; evidenceId: string }> {
-  // summary is a mechanical restatement of the submitted fact, not
-  // authored prose — the provenance is what the person states.
-  const shown = f.valueText ?? (f.valueNumeric === null ? '' : `${f.valueNumeric}${f.unit ? ` ${f.unit}` : ''}`);
-  const summary = `${KIND_LABEL[kind]}: ${shown} (as of ${f.asOf})`;
-
-  onTable('evidence');
-  const { rows: [evidenceRow] } = await client.query<{ id: string }>(
-    `INSERT INTO evidence (
-       institution_id, kind, summary, provenance, source_reference,
-       confidence, source_verified, ai_sourced, research_query, research_tool,
-       simulated, captured_by_person_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11)
-     RETURNING id`,
-    [
-      institutionId, f.evidenceKind, summary, f.provenance, f.sourceReference,
-      f.confidence, f.sourceVerified, f.aiSourced, f.researchQuery, f.researchTool,
-      actorPersonId,
-    ],
-  );
-
-  onTable('institution_facts');
-  const { rows: [fact] } = await client.query<{ id: string }>(
-    `INSERT INTO institution_facts (
-       institution_id, kind, value_numeric, value_text, unit, as_of,
-       evidence_id, captured_by_person_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-     RETURNING id`,
-    [institutionId, kind, f.valueNumeric, f.valueText, f.unit, f.asOf, evidenceRow.id, actorPersonId],
-  );
-  return { factId: fact.id, evidenceId: evidenceRow.id };
 }
 
 export function institutionFactsRouter(pool: Pool): Router {
@@ -398,13 +332,7 @@ export function institutionFactsRouter(pool: Pool): Router {
       // second blocks on the row lock, then matches nothing and answers 409
       // — and its new fact and evidence roll back with it.
       refusalSubjectTable = 'institution_facts';
-      const { rows: [updated] } = await client.query<{ id: string }>(
-        `UPDATE institution_facts
-            SET superseded_by_id = $1, supersession_reason = $2
-          WHERE id = $3 AND superseded_by_id IS NULL
-          RETURNING id`,
-        [written.factId, reason, factId],
-      );
+      const updated = await pointFactAtSuccessor(client, factId, written.factId, reason);
       if (!updated) {
         res.status(409).json({
           message: `fact ${factId} was corrected by another request just now; reload to see the current fact`,

@@ -17,7 +17,9 @@ export interface InstitutionViewInstitution {
   is_tenant_self: boolean;
 }
 
-export type InstitutionFactKind = 'revenue' | 'headcount' | 'stated_priority' | 'system';
+// 'disclosure_regime' (Q4h): recorded through account research and shown in its
+// Research section; the facts card lists and types the other four.
+export type InstitutionFactKind = 'revenue' | 'headcount' | 'stated_priority' | 'system' | 'disclosure_regime';
 
 /**
  * One current institution_facts row, with its evidence row's disclosure

@@ -232,6 +232,20 @@
       "when": 1791769486376,
       "tag": "0032_retire_pack_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791781175650,
+      "tag": "0033_account_research_enums",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791786161792,
+      "tag": "0034_account_research",
+      "breakpoints": true
     }
   ]
 }
