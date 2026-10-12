@@ -165,9 +165,13 @@ placement is a judgement.
 | ~~Q3~~ | ~~**3.0 item 2 — Brad-only acts, one shared check**~~ **DONE 11 Oct 2026**: deploy C (`9560bfd`); four steward-only routes; coverage guard. **3.0 Band A complete.** | Q2; D3, D4, D6 (decided) | the same shape as P3's helper and coverage guard: a route list, a guard that fails an unlisted route |
 | ~~Q3a~~ | ~~Hygiene batch: L5, L2, L3 (0030), L21~~ **DONE 11 Oct 2026**: deployed `177eb49` | — | small, each a correctness or honesty fix; batched so it costs one Gate pass, done before the schema grows |
 | ~~Q4~~ | ~~**D2–D4 drift checks**, with L16 and L26~~ **DONE 11 Oct 2026**: deployed `384e0bc`; step 5c ran before the restart (D2 none; D1/D3/D4 no findings); 95 triggers. D2 enforces never new code against an unmigrated database | — | — |
-| Q4b | **The research contract module — the first step of Band B.** `server/research/contracts.ts` (under the D1 seam): the industry-measure contract extracted from `industryResearch.ts`; the pack research prompt **generated from live rows**, with the pack's current entries and exclusions; the parser and the accept mapping reading **the same definition**. — **built, Gate A 11 Oct 2026; deploy pending** (`65f8486` refactor, proven behaviour-neutral; feat with 0031: `research_prompts`, immutable, 98 triggers; parse requires `prompt_id`, refuses a prompt of another contract version or another industry) Item 6 then adds the `institution_fact` contract to the same module | the Q4 deploy | the item 9 recon (11 Oct) found the pack prompt hand-written and unversioned, outside the repo, and the parser's contract hand-written twice. Account research must not become a third prompt |
+| ~~Q4b~~ | ~~**The research contract module — the first step of Band B.**~~ **DONE 12 Oct 2026**: deployed `0ee288d` (0031, 98 triggers; step 5c D2 none; Gate C clean; 13 legacy results valid v3). `server/research/contracts.ts` (under the D1 seam): the industry-measure contract extracted from `industryResearch.ts`; the pack research prompt **generated from live rows**, with the pack's current entries and exclusions; the parser and the accept mapping reading **the same definition**. Built (`65f8486` refactor, proven behaviour-neutral; feat with 0031: `research_prompts`, immutable, 98 triggers; parse requires `prompt_id`, refuses a prompt of another contract version or another industry) Item 6 then adds the `institution_fact` contract to the same module | the Q4 deploy | the item 9 recon (11 Oct) found the pack prompt hand-written and unversioned, outside the repo, and the parser's contract hand-written twice. Account research must not become a third prompt |
 | ~~Q5~~ | ~~**Recons: 3.0 items 9 and 10**~~ **DONE.** Item 9 (11 Oct 2026): the pack prompt is **not** composed from live rows — it is hand-written per run, outside the repo — and the parser validates hand-written copies of the contract (`industryResearch.ts` lines 148–189 and 460–464); the metric prompt (`researchPrompt.ts`) does follow the one-definition pattern. Fix queued as Q4b. Item 10: no account fact is a run input today | — | the draft puts recons before item 6 |
 | ~~Q6~~ | ~~Decide D1 (Compass), D2 (mapping), D7, D8; ratify or revise the 3.0 draft~~ **DONE 11 Oct 2026**: all decided; revision 3 adopted as the working plan (not ratified). D13 remains, blocking item 6 only | — | — |
+| Q4c1 | **Pack-research cards on the pack page**: generate the prompt (Q4b route), paste the agent's response to parse, accept or reject each pending result, and record exclusions. Accept, reject and exclude stay steward-only (Band A); generate and parse are authorized acts. Same routes, same session, no new actor path. Detailed plan in §4b | Q4b | unblocks Q4e (Datacom) |
+| Q4c2 | **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
+| Q4d | **Reference test A: Scotts Miracle-Gro on an existing pack** (Manufacturing; TRIR accepted). Outside-in, published material only; not D13. Step plan in §4a; R1 and R5 decided | Q4c2 | tests a second account on a pack that already exists |
+| Q4e | **Reference test B: Datacom, a pack-only test** under the existing `information-technology` industry (R2, R3). The first real use of the Q4b prompt route. Step plan in §4a; no run, because no published Datacom baseline exists | Q4c1 | tests the pack loop end to end on a pack that does not exist yet |
 | Q7 | **3.0 item 3 — the entity is pinned**, with L4 (the run seals its entity and account name) and L9 (`website` into the entity record) | Q6 | 3 → 4 → 5 before 6, per the draft |
 | Q8 | **3.0 item 4 — disclosure regime** | Q7 | — |
 | Q9 | **3.0 item 5 — one trust vocabulary (derived)** | D2 | — |
@@ -180,3 +184,108 @@ placement is a judgement.
 | — | L15 tenant backstop | D12; trigger: a second tenant | own plan |
 | — | UI pass: L11, L12 | — | unscheduled; when a demo or a second user needs it |
 | — | 3.0 Band D: items 16–18 | **a second real engagement** | must not be built before the trigger |
+
+### 4a. Outside-in reference tests: step plans (Brad's decision, 11 Oct 2026)
+
+These are two tests like Curia: **published material only, not D13, owned by "Brad Piver
+(external analyst of record)"**, a customer-side person on each institution (Curia's
+precedent). Each step is marked: **(a)** Brad in the UI; **(b)** Brad runs an existing
+script; **(c)** needs building (Q4c unless noted).
+
+**A. Scotts Miracle-Gro: an existing pack (Manufacturing, TRIR)**
+
+| # | Step | Route | Mark |
+|---|---|---|---|
+| A1 | Create the account, classified `manufacturing`, with a classification note | `POST /api/account-inputs` (Create account card) | (a) |
+| A2 | The analyst-of-record person on the institution | `POST /api/institutions/:id/inputs` | (c) |
+| A3 | Facts: revenue and headcount from the 10-K, as `public_filing` with the URL | `POST /api/institutions/:id/facts` (facts card) | (a) |
+| A4 | The capability and its offering. **No EHS offering exists in the catalog**; the nearest is `skillsoft_compliance_suite`. Adding an EHS offering is a catalog change (decision R5) | `POST /api/institutions/:id/offerings` | (c) |
+| A5 | The capability's claim on the TRIR pack entry | `POST /api/capabilities/:id/industry-measures` | (c) |
+| A6 | The value outcome, which creates the engagement and the metric. The baseline is **2.28**, Total Incident Rate, **FY2021** (fiscal year end), owned by A2. **No target** (see below) | `POST /api/institutions/:id/value-outcomes` | (c) |
+| A7 | The metric's pack basis is TRIR | `POST /api/business-metrics/:id/pack-basis` | (c) |
+| A8 | Baseline evidence: `public_filing`, `supports = baseline`. The provenance is the CR report with its URL and page. The summary quotes the series FY2019 2.2 / FY2020 1.7 / FY2021 2.28, and Scotts' own stated reason for the 2021 rise, quoted, not paraphrased | `POST /api/value-outcomes/:id/evidence` (evidence card) | (a) |
+| A9 | The vendor claim: `vendor_publication`, `supports = impact_basis`. The provenance is Skillsoft's story, and the summary says "75% reduction in recordable incidents; no period stated; no baseline year stated" | same | (a) |
+| A10 | Produce the run with the banner "OUTSIDE-IN HYPOTHESIS", then lock it | `POST /api/engagements/:id/produce-run`, `POST /api/value-runs/:id/lock` | (c) |
+
+How A stays honest:
+
+- **The 2.28 is recorded as published evidence about the customer, from the customer's
+  own report.** Today that is evidence kind `public_filing`, Curia's precedent for an
+  earnings release. **The D2 basis ("published") is not computed anywhere yet**: that is
+  Q9. **D2's mapping also does not name `public_filing`** (it names system_export,
+  observation, vendor_publication, artifact and assessment_result), so a ruling is needed:
+  **R1, proposed: `public_filing` is published, whoever it describes.** The source is
+  the subject's own statement on the public record, unlike `vendor_publication` about a
+  customer.
+- **Scotts' confounder.** Incidents rose in FY2021 on Scotts' own account. It goes in
+  the baseline evidence summary in Scotts' words. **No outcome-level confounder field
+  exists**; the pack entry's `confounders` is industry-level. That is enough for this
+  test, and a field is a later decision.
+- **The 75% is a vendor claim and never the actual.** `lvrf_block_ai_actual`
+  (`hardening.sql`) refuses `vendor_publication` evidence as `supports = actual`, so it
+  is enforced, not only a convention. It also sets **no target**. With no period and no
+  baseline year, applying 75% to 2.28 (giving 0.57) would invent the claim's terms, and
+  Scotts' published series shows no 75% fall. The run states the claim beside the
+  published series. That gap is the test's finding, not something to smooth over.
+- **To confirm before A6:** Scotts' "Total Incident Rate" is the OSHA rate per 200,000
+  hours, the pack entry's unit. If the report says otherwise, the metric does not match
+  the pack entry, and A7 stops. FY2019 is given as 2.2 against 2.28's two decimals; it
+  is recorded as published.
+
+**B. Datacom: a new pack (service desk)**
+
+| # | Step | Route | Mark |
+|---|---|---|---|
+| B0 | **The industry.** `information-technology` already exists, with an empty pack. **Recommended (R2): use it.** Datacom is an IT services provider, and for it service desk measures are the product line. No route or script creates an industry; see "a new industry" below if Brad wants a separate one | — | — |
+| B1 | Generate the prompt from live rows (the first real use of Q4b) | `POST /api/industries/:id/research-prompts` | (c) |
+| B2 | Brad runs it in his research tool, for FCR, first-level resolution, CSAT, MTTR, SLA attainment and reopen rate. MetricNet/HDI are partly gated, so only what Brad can actually read and cite is returned | outside LVRF | Brad |
+| B3 | Parse the response; it must echo the `prompt_id` and the slug | `POST /api/industries/:id/research-results` | (c) |
+| B4 | Accept or reject each result, and record exclusions (steward-only) | `POST /api/research-results/:id/accept\|reject`, `POST /api/industries/:id/exclusions` | (c) |
+| B5 | The pack renders | `GET /api/industries/:slug/pack` (pack page) | (a) |
+| B6–B13 | The account, as A1–A10: Datacom classified `information-technology`; the analyst person; facts; the offering (**R4: which Skillsoft offering the case study names**); the claim on the FCR entry; outcome; basis; evidence; run | as A | as A |
+
+How B stays honest:
+
+- **R3: there is no published Datacom baseline.** The case study gives only relative
+  changes: "30% rise in customer satisfaction" and "100% increase in first-contact
+  resolution despite doubled call volumes". `baseline_value` is required on a value
+  outcome. **An HDI/MetricNet benchmark is the industry's figure, not Datacom's**;
+  entering one as Datacom's baseline would manufacture it.
+  - So B stops at B5, a pack test, unless Brad finds a figure Datacom itself published.
+  - Both claims are recorded as `vendor_publication`, `supports = impact_basis`, once an
+    outcome exists. The source is the original Skillsoft story; casestudies.com is a
+    republisher.
+
+**A new industry.** No route or script exists. The ten industries were seeded by
+migration 0019. The smallest governed way, if Brad wants one:
+
+- **A steward-only script, `scripts/add_industry.ts`**, in the shape of
+  `grant_access.ts`: the steward proves the act with their own password; the actor is
+  set for the audit; it refuses anyone but the tenant's steward.
+- **Migration 0032:** `industries.added_by_person_id` and `added_reason`, both or
+  neither, and required after a fixed cut-off, as Q4b did for `prompt_tracked`. The
+  ten seeded rows stay null.
+- **`industries` already has `_audit` and `_no_delete`** (section 11).
+- **A script, not a route:** taxonomy changes are rare, there is no UI to put it in,
+  and grants already set the pattern for steward acts done from the box.
+
+**Decided by Brad, 11 Oct 2026:**
+
+- **R1, yes:** `public_filing` about the company itself counts as published. Scotts'
+  CR report is published evidence of Scotts' baseline. It is recorded as
+  `public_filing` now and derived as published once Q9 builds the basis.
+- **R2:** use the existing `information-technology` industry. There is no
+  `add_industry` script; the design above is kept only as a record.
+- **R3, yes:** B is a pack-only test. No benchmark is entered as Datacom's baseline,
+  and there is no Datacom value outcome or run.
+- **R4:** Datacom's offering is **unnamed in the source**.
+  - The source says "the broad range of courses, books and video resources",
+    SFIA-mapped.
+  - It is recorded as the general library, noted as unnamed; no product is picked.
+  - **The story is dated 2016**, and the PDF's "100%" may refer to call volume, not
+    FCR.
+  - Wherever the story is recorded, it is quoted verbatim from
+    https://cdn.featuredcustomers.com/CustomerCaseStudy.document/skillsoft_datacom-systems_118621.pdf.
+- **R5:** use `skillsoft_compliance_suite`, with "EHS solution" stated in the claim.
+- **The cohort:** each reference engagement is retired once its run is locked (Q4c2's
+  last step, as Curia's were).

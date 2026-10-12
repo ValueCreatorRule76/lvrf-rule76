@@ -8355,3 +8355,52 @@ drives all three, and a parsed result names the prompt it answered.
     parse.
   - The client `tsc`, build and lint pass. The bundle is unchanged
     (**`index-B5F5IDzI.js`**); the one lint warning predates this work.
+
+### Deployed — 12 October 2026 (UTC)
+
+`384e0bc..0ee288d` (`65f8486` refactor, `a34905c` feat, `0ee288d` docs) went to
+production, with migration 0031.
+
+- **The box was at `384e0bc`, not `17d7915`:** the docs commits `8aa2d46` and
+  `17d7915` had never been pulled.
+- **The checkout is `/srv/lvrf`.** The pastes said `~/lvrf-rule76`, and Brad corrected
+  them.
+- **Pastes never set `umask`:** it persists in the SSH session and would make the
+  deploy's built client files unreadable to Caddy. The dump gets `chmod 600` instead.
+- **Backup:** `~/lvrf_pre_q4b_20261012_001827.dump` (579,276 bytes, `-rw-------`, 460
+  TOC entries).
+- **Migration:**
+  - The pre-check gave 13 results, 0 at or after the cut-off; the newest was parsed
+    2026-10-10 12:06:02.
+  - `0031` applied (row 32, `1791763319829`).
+  - `hardening.sql`: exit 0 with the 3 expected notices; **98 triggers**.
+  - `prompt_tracked` is `f` on all 13.
+  - `check_legacy_research.ts`: "13 (13 accepted); all prompt_tracked = false; all
+    validate against contract v3".
+  - `\d research_prompts` shows `research_prompts_sha256_is_the_text`,
+    `research_prompts_versions_positive`, and the triggers `_audit`, `_immutable` and
+    `_no_delete`.
+  - `\d research_results` shows `research_results_prompt_named`,
+    `research_results_untracked_predates_prompts`, and `research_results_touch` as
+    `BEFORE INSERT OR UPDATE`.
+- **Deploy:**
+  - no re-exec (the script was unchanged); pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 32 migrations, newest
+    0031_research_prompts; 731 schema objects match 0031_snapshot.json)" and "drift
+    checks D1, D3, D4: no findings";
+  - deploy OK, exit 0, HEAD `0ee288d`; bundle **`index-B5F5IDzI.js`** (unchanged). Up
+    since **00:21:24 UTC**.
+- **Gate C, read-only, on the box at `/srv/lvrf`** (Brad ran it; the time columns are
+  `audit_log.at` and `refusals.refused_at`):
+  - HEAD `0ee288d`.
+  - `check_schema_drift.mjs`: none (731 objects, newest 0031). `drift_report.ts`: no
+    findings.
+  - `check_legacy_research.ts`: 13 accepted, all `prompt_tracked = false`, all valid
+    against v3.
+  - **98 triggers**; `hardening_manifest` holds 98 rows; `lvrf_touch_reviewed_at` is
+    gone.
+  - 0 research prompts and 0 tracked results: nothing has been parsed since.
+  - No audit rows or refusals since the restart; the last audit id is still 207.
+- **For future read-only Gate Cs:** `ssh -o BatchMode=yes brad@72.60.69.221` works from
+  the dev Mac (checked 12 Oct: `srv1862778`, `0ee288d`). Prod is read through
+  `lvrf_app`'s `DATABASE_URL`. Backup, migrate and deploy stay as pastes Brad runs.
