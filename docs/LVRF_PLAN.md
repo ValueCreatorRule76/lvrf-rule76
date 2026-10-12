@@ -289,3 +289,104 @@ migration 0019. The smallest governed way, if Brad wants one:
 - **R5:** use `skillsoft_compliance_suite`, with "EHS solution" stated in the claim.
 - **The cohort:** each reference engagement is retired once its run is locked (Q4c2's
   last step, as Curia's were).
+
+### 4b. Q4c1: pack-research cards on the pack page (plan approved by Brad, 12 Oct 2026, with his three recommendations)
+
+**Spine stage:** `model`. The pack is the industry-level model of what carries money,
+and Q4c1 is how it gets entries. It adds **no migration, no new write route, and no
+hardening change.** The five existing routes get a UI; one read route is added.
+
+**Server**
+
+- **S1: `GET /api/industries/:slug/research`**, a new read. It is tenant-scoped like
+  the pack GET: another tenant's slug gives 404, and it is added to the tenant-scope
+  cases. It returns:
+  - `industry`: `{ id, name, slug }`;
+  - `contract_version_now`;
+  - `prompts`, newest first: id, generated_at, generated_by, contract and template
+    versions, sha256, listed counts, results_count and the text;
+  - `pending`: each pending `industry_measure` result with its id, field_name,
+    parsed_at, parsed_by, research_tool, prompt_id (or "predates prompts"),
+    contract_version and raw_response.
+- **Why a separate route:** the pack GET is the account manager's read. A separate
+  route keeps that GET byte-identical, so the prod-copy equivalence must show it
+  unchanged.
+- **Where it lives:** in `industryResearch.ts`, inside the D1 seam. Reads are allowed
+  anywhere; writes stay there.
+
+**Client** (`IndustryPackPage`, a "Research" section below the pack; every card is
+built on `GovernedForm` or `GovernedAction`)
+
+- **C0: 422 issues render.** `PostResult.refused` gains optional `issues: string[]`,
+  and `ResultBlock` lists them. Without this, a parse refusal shows only "N issue(s)
+  found; nothing was written." Any route that already sends `issues` gains the list,
+  and nothing else changes.
+- **C1: Generate prompt** (`GovernedAction`, any authorized user). On success it shows:
+  - the text in mono, with a Copy button;
+  - the id and sha256 in mono;
+  - the contract and template versions;
+  - "lists N entries, M exclusions";
+  - "Give the agent this whole text; it must return the prompt_id and slug as shown."
+- **C2: Prompts on record.** The list from S1; each prompt's text expands and copies.
+  A prompt whose contract version is not the current one is marked **STALE**, in
+  `--warning`, with "generate a new prompt".
+- **C3: Parse a response** (`GovernedForm`, any authorized user). A textarea takes the
+  JSON.
+  - **The provenance block states:** "Records what the agent returned, parsed by you.
+    Nothing enters the pack until the steward accepts it."
+  - **Invalid JSON is refused locally,** and no request is sent.
+  - **The form shows the response's `prompt_id`** and whether it is a prompt on record.
+    This is informational; the server decides.
+  - **The body is the pasted JSON, verbatim.**
+  - **After a 201:** the agent's `measures_tested_and_excluded_as_unaddressable`, read
+    from the pasted text, is listed with "Record as exclusion…" on each line. **Parse
+    stores none of them**, so this list exists only on screen until a person records
+    them.
+- **C4: Pending review.** Each result is rendered from its `raw_response`: every
+  contract field, the prompt and contract version (or "predates prompts"), and who
+  parsed it, when and with which tool.
+  - Accept and Reject each require a review note.
+  - **Steward-only:** for anyone else they are disabled, with "Accepting is the
+    steward's act (`steward_name`)". The server's 403 stays the authority.
+  - A 409, such as an excluded name, renders as a conflict, as everywhere.
+- **C5: Exclude a measure** (steward-only, `GovernedForm`).
+  - Fields: name, reason (the person's own), and optionally the research's proposal:
+    tool and text, both or neither, as `industry_measure_exclusions_proposal_is_complete`
+    requires.
+  - It is prefilled from C3's "Record as exclusion…": the name, the research tool, and
+    the agent's line as the proposal text. **The reason is always typed by the
+    steward.**
+  - **Brad's requirement (12 Oct):** from the agent's list, the agent's wording goes
+    only into `proposed_by_research_tool` / `proposal_text` (0026), **never into
+    `reason`. The reason box starts empty**, and only the steward types in it.
+    Verified by a case and a screenshot of the empty reason box.
+- **After every write,** both the pack and S1 are refetched.
+- **Design tokens are cited, never restated.**
+
+**Verification (Gate A)**
+
+- **`verify_pack_research.sh`:**
+  - S1's shape, pending-only results, the stale flag, another tenant → 404;
+  - the pack GET is byte-identical before and after;
+  - a full walk through the routes the cards call: generate → parse → pending → accept
+    → the pack entry → an exclusion from the agent's list.
+- **A headless-browser walk on a clone, with screenshots looked at:**
+  - the steward walks the whole loop;
+  - a non-steward sees accept, reject and exclude disabled with the steward's name;
+  - a refused parse shows its issues list;
+  - a stale prompt is flagged.
+- **Deliberate breaks:**
+  - the client's steward gate removed: the button is enabled, and the server still
+    answers 403;
+  - S1's tenant check removed: the tenant-scope case fails;
+  - C0 removed: the issues list is gone from the screenshot.
+- **Also:** the tenant-scope coverage including S1; the regression; the client `tsc`,
+  build and lint; and a prod-copy equivalence showing every existing GET identical.
+
+**Deploy:** no migration. A backup is still taken first, as Q4's was. The deploy
+script is unchanged, so no re-exec.
+
+**Then Q4e:** Brad generates the `information-technology` prompt on prod and runs it,
+then parses, reviews and excludes, all in the UI. Per R4, the Datacom story is quoted
+verbatim in BUILD_STATUS, as the test's subject. R3 means it is not recorded as
+evidence: there is no outcome to attach it to.
