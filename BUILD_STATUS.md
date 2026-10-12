@@ -9093,3 +9093,29 @@ verify-stage value:** the contract has no field for one, and the prompt says so.
 
 **Next: Q4d's research half, Scotts Miracle-Gro, by Brad in the browser,** through
 the entity phase and the facts-phase prompt.
+
+## Q4d begins — Scotts Miracle-Gro created on prod — 12 October 2026
+
+Read-only from prod, as `lvrf_app`:
+
+- **The account:** `Scotts Miracle-Gro`, institution
+  `453d2717-3ff8-4fff-b9db-be6464ebdd7b`, created by Brad at **11:35:43 UTC** through
+  Create account.
+- **Classified `manufacturing`, with the reason "Research".** The reason is recorded
+  as `observation` evidence, "Asserted at industry classification by Brad Piver".
+  **It is terse;** it does not say why Manufacturing.
+- **The website: not on record.** Brad reports entering one with a tracking
+  parameter, but `institutions.website` is empty. "Industry as stated" is empty too.
+  - Either the field was not submitted, or the value went elsewhere; the record cannot
+    say which.
+  - **L9 has no update path,** so the website cannot be added now except by L9's later
+    fix (`website` into the entity record, Q7).
+- **Audit:** 3 rows (the institution insert, its evidence, the classification
+  update), all with Brad as actor. No entity is pinned yet.
+- **Both stand as written,** the classification reason and the absent website.
+
+**UI fix queued for the next batch (built, verified, not deployed):** after Create
+account succeeds, the "Recorded" block carries **"Open account →"**, linking to
+`/accounts/<institution_id>`. Until now there was no way into a new account from the
+card. Verified in `verify_account_research.sh` (156/0): created through the card, the
+link points at the new id and opens the account with its Research section.
