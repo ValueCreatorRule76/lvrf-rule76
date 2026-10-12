@@ -9487,3 +9487,44 @@ triggers** (103 + 8). Not deployed.
   - A first run caught `scripts/check_run_hashes.ts` importing `hash.ts` where
     scripts import `.js`; the scripts' tsc failed in two scripts. Fixed, and the
     regression re-run.
+
+### Deployed — 12 October 2026 (UTC): O1
+
+`3388444..1db189b` went to production: `b015984`, `3053503` and `3c16984` (docs, never
+pulled), `90123ec` (O1) and `1db189b` (docs). **Migration 0035.**
+
+- **Run-hash check before the deploy** (read-only, inline at the box's `3388444`):
+  **23 runs, recompute 23/23 and embedded `payloadHash` 23/23.** Prod has none of the
+  6 local seed mismatches; their fix stays undecided.
+- **Backup:** `~/lvrf_pre_o1_20261012_182657.dump` (683,449 bytes, `-rw-------`, 481 TOC
+  entries), taken with the box at `3388444`.
+- **Pull, migrate, harden:**
+  - 0035 applied; migrations `36|1791828441898` and `35|1791786161792`;
+  - hardening exit 0, 0 ERROR lines; **111 triggers, manifest 111**;
+  - the 8 lever triggers present; all 5 CHECKs validated;
+  - `refusal_source` `{database,parser,route}`; `lvrf_evidence_basis` present;
+  - 0 levers, 0 links;
+  - **the run-hash check after 0035: 23/23.**
+  - **A paste defect, not a system one:** paste 3's last line ran
+    `check_run_hashes.ts` with the URL in `DB`, not `DATABASE_URL` (that script does
+    not read `.env`). It failed with "SASL: client password must be a string" and
+    passed when re-run with `DATABASE_URL` set inline. From now on, every paste that
+    runs a tsx script sets `DATABASE_URL` on the same line.
+- **Deploy:**
+  - step 5c: "schema drift: none (journal 36 migrations, newest 0035_value_levers; 822
+    schema objects match 0035_snapshot.json)", and D1/D3/D4 no findings;
+  - all smoke checks passed; deploy OK, exit 0, HEAD `1db189b`;
+  - bundle **`index-CnB3nt9a.js`** / `index-CFD9gV0c.css`;
+  - up since **18:29:26 UTC** (systemctl `ActiveEnterTimestamp`; 0 restarts).
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `1db189b`, a clean tree;
+  - D2 none (822 objects); D1/D3/D4 no findings;
+  - the legacy check: 26, all valid v3;
+  - **111 triggers, 168 trigger rows, `hardening_manifest` 111**;
+  - the served `index.html` names the built assets;
+  - **run-hash check: 23/23 recompute, 23/23 embedded**;
+  - **0 audit rows and 0 refusals since 18:29:26; the last audit id is 293**,
+    unchanged since Q4c2's Gate C;
+  - 0 levers, 0 links; 1 tenant, with its steward set;
+  - the current account facts' basis, by the function: **published ×4, inferred ×3,
+    assumed ×1.**
