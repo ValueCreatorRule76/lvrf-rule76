@@ -9771,3 +9771,49 @@ Outputs band, phase 2 (LVRF_PLAN §5; decisions O2-D1–O2-D4 in §3). **Migrati
   and lint clean apart from the pre-existing warning; bundle `index-BfJpyu1D.js`. Prod copy
   against the deployed code: 62 GETs identical, 126 triggers and manifest, D2 none, run
   hashes 23/23.
+
+### Deployed — 12 October 2026 (UTC): O2
+
+`1db189b..f352e89` went to production: `5017c35`, `07abb94` and `6c8c787` (docs, never
+pulled), `a34af19` (O2), `9f83cf0` (docs), `bf82326` (the review fixes) and `f352e89`
+(docs). **Migration 0036.**
+
+- **Run hashes before the deploy:** 23/23 recompute and embedded, at `1db189b`.
+- **Backup:** `~/lvrf_pre_o2_20261012_195623.dump`: 724,331 bytes, `-rw-------`, 513 TOC
+  entries. The estimate was about 490; 0035 and 0036 added more objects than allowed
+  for.
+- **Pull, migrate, harden:**
+  - 0036 applied; migrations `37|1791831328188` and `36|1791828441898`;
+  - hardening exit 0, 0 ERROR lines; **126 triggers, manifest 126**;
+  - all 15 O2 triggers; all 9 CHECKs validated; both functions;
+  - 0 hypotheses, summaries and markers;
+  - run hashes after 0036: 23/23.
+- **Deploy:**
+  - step 5c: "schema drift: none (journal 37 migrations, newest 0036_hypotheses; 909
+    schema objects match 0036_snapshot.json)", and D1/D3/D4 no findings;
+  - smoke checks passed; deploy OK, exit 0, HEAD `f352e89`;
+  - bundle **`index-BfJpyu1D.js`** / `index-CG5rAQYO.css`;
+  - up since **19:57:39 UTC** (systemctl; 0 restarts).
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `f352e89`, a clean tree;
+  - D2 none (909 objects); D1/D3/D4 no findings; the legacy check: 26, all valid v3;
+  - **126 triggers, 192 trigger rows, manifest 126**;
+  - **run hashes 23/23** (recompute and embedded);
+  - the served `index.html` names the built assets;
+  - 0 audit rows and 0 refusals since 19:57:39; the last audit id is 293;
+  - refusals on record: 3 (database 2, parser 1);
+  - 0 levers, links, hypotheses, summaries or markers.
+  - **Cross-tenant refusals: 0.** Of the 2 ids referenced across the 3 refusals, none
+    belongs to another tenant, so the old probe path never left a row on prod.
+  - **OWN-1 baseline:**
+    - `lvrf_app` owns all 39 tables, 2 sequences, 26 enum types and the drizzle schema;
+    - on `audit_log` and `heartbeat_events`: SELECT and INSERT true; UPDATE, DELETE and
+      TRUNCATE false;
+    - 0 disabled triggers.
+  - **Also read, for OWN-1:**
+    - **database `lvrf` is owned by `lvrf_app`**, and schema `public` by
+      `pg_database_owner` (that is, `lvrf_app`). So `lvrf_app` can CREATE in `public`
+      and in the database, and as the schema's owner can drop any object in it;
+    - every function is owned by `postgres`;
+    - roles: `lvrf_app` (login) and `postgres` (super);
+    - extensions plpgsql, uuid-ossp and vector, owned by `postgres`.
