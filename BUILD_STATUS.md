@@ -8668,3 +8668,45 @@ approved by Brad, with the caveats tick required on every pending result.
   - `verify_steward_acts` passes 28.
   - The client `tsc`, build and lint pass. The bundle is **`index-C7TkKSVp.js`**, new
     because the client changed. The one lint warning predates this work.
+
+### Deployed — 12 October 2026 (UTC)
+
+`6f44b7a..9605859` went to production, with migration 0032. That covers `c556f30` and
+`cbe0089` (docs, never pulled), `f876c2c` (feat), `cce8eef` (docs) and `9605859` (the
+Q4h plan).
+
+- **Backup:** `~/lvrf_pre_q4c1b_20261012_041101.dump` (631,155 bytes, `-rw-------`, 457
+  TOC entries), taken with the box at `6f44b7a`. `chmod 600`, no `umask`.
+- **Migration:**
+  - the pre-check gave `proposed|f|26`, with no retired or deleted entry;
+  - `0032` applied (row 33, `1791769486376`);
+  - `hardening.sql`: exit 0. One harmless notice: `lvrf_touch_reviewed_at` does not
+    exist, skipping. Q4b's `DROP FUNCTION IF EXISTS` finds it already gone.
+  - **98 triggers**;
+  - **`industry_measures_retirement_is_complete` is VALIDATED on prod**
+    (`convalidated = t`);
+  - `\d industry_measures` shows `retired_by_person_id`, `retirement_reason`, the
+    CHECK and the FK to `persons`.
+- **Deploy:**
+  - no re-exec; pre-check 0;
+  - **step 5c, before the restart:** "schema drift: none (journal 33 migrations, newest
+    0032_retire_pack_entry; 735 schema objects match 0032_snapshot.json)", and no drift
+    findings;
+  - all smoke checks passed; deploy OK, exit 0, HEAD `9605859`;
+  - bundle **`index-C7TkKSVp.js`** / `index-Ub0JxAcc.css`. Up since **04:12:53 UTC**.
+- **The browser, confirmed by Brad:** "Retire this entry…" is on each entry; nothing was
+  retired.
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `9605859`;
+  - D2 none (735 objects); D1/D3/D4 no findings;
+  - **98 triggers**, and `hardening_manifest` holds 98 rows;
+  - the CHECK is validated;
+  - `industry_measures`: 26, all `proposed`;
+  - **0 audit rows and 0 refusals since 04:12:53.** The last audit id is 249, up from
+    207 before Q4e: Brad's prompt, parse, 13 accepts and 2 exclusions.
+  - The served assets are `index-C7TkKSVp.js` and `index-Ub0JxAcc.css`.
+
+**Next: Brad's acts** (§4d). Retire, then exclude: Phish-prone percentage; Mean time
+to identify and contain a data breach; Revenue per billable consultant. Retire only:
+Wasted cloud spend; Project budget adherence rate; Human-error-attributed outage rate.
+Then Q4g.
