@@ -1275,3 +1275,186 @@ governance in force was checked:
   pipeline" generically, and a browser print of the rendered page meets it more
   directly. Its Article V (tokens defined once, in `CLAUDE.md`) is untouched.
 - **The O-D5 row in §3 is the history.**
+
+### O2, the build plan (planned 12 Oct 2026; **not yet approved**)
+
+**Spine stages:** `model` (a hypothesis ties a capability, through a lever, to an
+account metric, with its falsifier), and `return` (the POV puts it in front of a reader).
+**Visual reference:** the canvas "LVRF Outputs — mock-ups" (Scotts POV, Curia POV,
+Client 0), for **layout and structure only**. Where it departs from `CLAUDE.md` or §5,
+the departure is named below and not built.
+
+#### What the mock-ups get right, and O2 keeps
+
+- **The page order:**
+  - a banner strip;
+  - the header with the confidence box and the stage bar;
+  - the executive summary beside the hypothesis, with **"What would disprove it"**
+    under the statement;
+  - the value chain as one row of cells, the gap cell tinted;
+  - the vendor claim shown **as a claim** ("never applied to the baseline, never a
+    target");
+  - the pack entry's confounders;
+  - account facts with their basis and "citation opened";
+  - the locked runs.
+- **Placeholders, never filler:** "[EXECUTIVE SUMMARY — written by a named person]".
+  An absent row renders as absent, in words.
+
+#### Where the mock-ups depart, named and not built
+
+| # | The mock-up shows | The rule it meets | O2 does |
+|---|---|---|---|
+| M1 | IBM Plex, a green/navy palette, raw hex values | `CLAUDE.md` tokens: Bebas Neue / Barlow / mono, ink, gold, `--gold-ink`, the semantic palette; no restated hex values | Rule76 tokens only. The OUTSIDE-IN banner on ink; UNVERIFIED in `--warning`, as everywhere |
+| M2 | Stage bar "Researched · Classified · Hypothesis · Committed · Baseline verified · Measured · Verified" | The value spine of record is `baseline → attach → model → commit → measure → verify → return` (`CLAUDE.md`); "researched/classified" are not stages | The bar shows the seven spine stages from `engagements.value_stage`, one per engagement, each done, current or not reached. No engagement renders "no engagement yet" |
+| M3 | A five-cell chain: industry money → lever → solution → outcome → evidence | §5's chain is **offering → capability → lever → pack entry → account metric → outcome**; the capability and the account metric are where gaps show | §5's six nodes, plus the hypothesis' status; a missing node is a gap cell |
+| M4 | Scotts' header "Confidence: Low" with "No locked run yet" | Every number from the record: computed confidence belongs to a locked run | The header shows the latest locked run's sealed confidence (score, band, run number, locked date), or "No computed confidence: no locked run" |
+| M5 | A TRIR bar chart FY23 1.5 / FY24 1.7 / FY25 1.4 | A figure only from a row. FY23 and FY24 are not recorded rows (the baseline is one value) | No chart. The baseline renders with its as-of date and basis. A series needs a recorded series: not in O2 |
+| M6 | CFO and CHRO lens panels ("REFUSED", "CAPABILITY, NOT VALUE") | Lenses are `lens_policies`, O3 | Not in O2. The POV links to each locked run; the lens pages come in O3 |
+| M7 | Curia's hypothesis "survived as of run 21" | A hypothesis written after its result is hindsight, not a test | See O2-D3 |
+| M8 | Client 0 "value book" with a "Commercial line" (ARR, renewals, expansion "from Skillsoft CRM") | Output 5 and the board view are O3/Band D; the CRM figures have no source in LVRF | Not in O2. The commercial line has no data source: recorded as needing one, not planned |
+| M9 | "Proposed value levers and outcomes" table across all pack entries | Output 5 (outcomes by lever) is O3 | O2 shows each hypothesis' chain. The cross-entry table waits for O3 |
+
+#### The objects (migration 0036)
+
+**`value_hypotheses`** (governed: `_audit`, `_touch`, `_no_delete`,
+`_supersession_sane`; authorized acts):
+
+- **The chain:** `institution_id`, `capability_id`, `value_lever_id`,
+  `business_metric_id`, `value_outcome_id` (**required**: the falsifier needs a
+  recorded value, and every outcome has a NOT NULL baseline), and `statement` (≥ 24).
+- **Coherence, by a trigger at INSERT** (`value_hypotheses_coherent`). The chain must
+  be one chain:
+  - the capability, the metric and the outcome are the account's;
+  - the outcome is the metric's and the capability's;
+  - the metric's pack basis is the lever's pack entry;
+  - the capability claims that entry;
+  - the lever is current.
+
+  A lever on TRIR cannot be argued through an OTIF metric.
+- **The falsifier, structured so that it cannot carry a new number (O-D4):**
+  - `falsifier_reference` is either `baseline` (the outcome's recorded baseline) or
+    `committed_target` (the outcome's `target_value`, only when a named person
+    committed it, checked by the trigger);
+  - `falsifier_due` (a date);
+  - `falsifier_conditions` (text, **no digits**: CHECK `falsifier_conditions !~ '[0-9]'`).
+    For example: "on the same denominator, among the covered population".
+  - **The direction is derived from the metric's** `direction`: the falsifier is
+    always "no better than the reference by the due date". It renders, for a
+    `decrease` metric, as **"TRIR at or above its baseline of 1.4 (as of 2025-09-30,
+    published) on [due], on the same denominator, among the covered population."**
+    Every number in that sentence is quoted from a row by the renderer. The author
+    types none.
+- **The falsifier is frozen** (`value_hypotheses_frozen`, UPDATE): the statement, the
+  chain and the falsifier never change. A changed hypothesis is a **new version**
+  (supersession, with a reason ≥ 12), and the superseded one stays visible. **Moving
+  the goalposts happens on the record.**
+- **Status:**
+  - the values: `open`, then once to `confirmed`, `refuted` or `withdrawn`;
+  - a decision needs `decided_by_person_id` (non-simulated), `decided_at`,
+    `decision_evidence_id` (evidence on the outcome; for confirmed or refuted) and
+    `decision_note` (≥ 12);
+  - **refuted is a first-class result**, counted by the confirmation-gap report;
+  - a CHECK holds the decision fields together.
+
+**`executive_summaries`** (append-only versions: `_audit`, `_no_delete`, and a
+`_immutable` trigger; authorized acts):
+
+- **Columns:**
+  - `institution_id`, optional `value_run_id`, and `body` (≥ 40);
+  - `lens`: `cfo`, `chro`, `board` or `general`, as text for now. `lens_policies` is
+    O3;
+  - `author_person_id` **is the session's actor**: set by the route, never taken from
+    the body. Non-simulated vendor staff, checked by the trigger;
+  - `drafted_with_ai` and `drafting_tool`, the tool required exactly when AI drafted
+    it (CHECK; O-D6);
+  - `supersedes_id`.
+- **LVRF generates no prose.** A new version supersedes; the old ones stay listed.
+
+**Triggers, estimated:**
+
+- value_hypotheses: 4 governed, plus `_coherent` and `_frozen`;
+- executive_summaries: `_audit`, `_no_delete` and `_immutable`;
+- about **111 → 120**, the exact total in hardening.sql;
+- **no new heartbeat.** If "a hypothesis was refuted" should be a register event, that
+  is a governance act for Brad, not part of O2.
+
+#### Routes
+
+**Authorized acts,** each tenant-checked, with a coverage-guard case and a
+tenant-scope case; strict bodies as in O1, so an unknown field gets a 400 recorded with
+source `route`:
+
+- `POST /api/institutions/:id/hypotheses`;
+- `POST /api/value-hypotheses/:id/supersede`;
+- `POST /api/value-hypotheses/:id/decide` (`confirmed` or `refuted`, with evidence and
+  note);
+- `POST /api/value-hypotheses/:id/withdraw`;
+- `POST /api/institutions/:id/executive-summaries`.
+
+**One read, `GET /api/institutions/:id/pov`.** It assembles the page, and the server
+computes every derived flag in one place:
+
+- each figure's basis, by `lvrf_evidence_basis`;
+- **`outside_in`:** no system-of-record or client-stated basis among the page's
+  figures;
+- **`unverified`:** any outcome on the page not source-verified (rule 6);
+- the latest locked run per engagement, with its sealed confidence;
+- each hypothesis' rendered falsifier;
+- the gap register's asks per outcome, with **draft-and-refuse**'s drafted request.
+  This is the current view, labelled as such, and it never touches a score.
+
+#### Pages
+
+- **`/accounts/:id/pov`** is **read-only**: the document, in M-order above, built
+  with tokens.
+  - **Banners:** OUTSIDE-IN HYPOTHESIS and UNVERIFIED cannot be suppressed.
+  - **Reference examples:** the header reads "Reference example, not an engagement"
+    when O2-D2 marks the account so.
+- **Authoring stays on the account page** (`/accounts/:id`), as cards:
+  - "State a hypothesis…", with the chain chosen from the account's own rows and the
+    falsifier composed from the structured fields, previewed exactly as the POV will
+    render it;
+  - "Write the executive summary…";
+  - decide, supersede and withdraw on each hypothesis.
+
+#### Decisions for Brad
+
+- **O2-D1, who may decide a hypothesis.** Recommendation: any authorized person
+  **except its author** (two people per test), with the decider named on the page.
+  Alternative: the steward only.
+- **O2-D2, how an account is marked a reference example** (needed here for the
+  header, and by O3 under O-D3). Today nothing marks it: Curia is "a reference
+  example" only by its retired engagements, and retirement means something else.
+  Recommendation: `institutions.reference_example_note` (≥ 12, set by the steward,
+  audited). Set means a reference example.
+- **O2-D3, hindsight.** A hypothesis created after its `falsifier_due`, or after its
+  outcome already had a measured actual, is a description, not a test.
+  Recommendation: the database computes it as **post hoc**. The page says "written
+  after the result". It can be decided, but it never counts as confirmed in the
+  confirmation gap. This is what keeps a Curia hypothesis honest (M7).
+- **O2-D4, the falsifier's shape.** Only "no better than the reference (baseline or
+  committed target) by the due date", plus digit-free conditions. Confirm, or name
+  another shape that still introduces no number.
+
+#### Gate A for O2 (planned)
+
+- **`verify_value_hypotheses.sh`, on a throwaway clone:**
+  - **coherence:** each broken link refused by the trigger;
+  - **the falsifier:**
+    - digits in the conditions refused;
+    - a `committed_target` reference without a committer refused;
+    - the rendered sentence quotes the row exactly, zero included;
+  - **freezing:** an edit refused; supersession visible;
+  - **decisions:** the decision rules, and refuted counted;
+  - **post hoc,** per O2-D3;
+  - **executive summaries:** the author is the actor; the AI disclosure is required
+    exactly when declared; immutable;
+  - **the POV GET:** the banners for an all-published account (Scotts-like) and for a
+    customer-evidenced one;
+  - **the browser walk:** authoring on the account page, then the POV read-only;
+    screenshots looked at, at 1280 and at phone width;
+  - **deliberate breaks:** the coherence trigger, the digit CHECK, the freeze, the
+    banner computation.
+- **The rest:** the full regression; prod-copy equivalence (only the new routes and
+  the account page change); Gate B and Gate C as for O1, with the run-hash check in
+  both.
