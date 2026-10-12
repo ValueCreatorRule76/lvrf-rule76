@@ -136,6 +136,12 @@ on institution routes (P3).
 | D11 | **No amendment** for the entity record (product schema) or the vocabulary (derived, no new stored class) | Brad Piver, 11 Oct 2026 |
 | — | **3.0 revision 3 is adopted as the working plan.** Not ratified; Q1 (the doctrine source) stays open | Brad Piver, 11 Oct 2026 |
 | D6 | **Model versions and thresholds change by commit and deploy** (the commit author is the decider). Weights as data is **optional** (L24) | Brad Piver, 11 Oct 2026 |
+| O-D1 | **The CFO lens threshold is 55** (the computed confidence's medium floor). A `lens_policies` value, ratified and versioned; below it the CFO lens refuses, with the reason and the gap register's asks | Brad Piver, 12 Oct 2026 |
+| O-D2 | **The steward ratifies value levers and lever↔offering links**, as pack entries (Band A) | Brad Piver, 12 Oct 2026 |
+| O-D3 | **Reference examples render only as reference examples**: never as an account's value case, and never under the CFO lens | Brad Piver, 12 Oct 2026 |
+| O-D4 | **A falsifier may reference only recorded values: no new number.** It **may state a direction relative to a recorded value** (e.g. "TRIR ≥ baseline over the committed period"), which introduces no number. Enforced by CHECK on `value_hypotheses` | Brad Piver, 12 Oct 2026 |
+| O-D5 | **The PDF is a browser print of the rendered value case page, by a print stylesheet** (option c, added and adopted): no new dependency, no WeasyPrint. *Conflict named:* `CLAUDE.md`'s stack and "WeasyPrint constraints" assume WeasyPrint; the amendment wording is proposed in §5, not yet applied | Brad Piver, 12 Oct 2026 |
+| O-D6 | **An AI-drafted executive summary says so**, small, beside its author (`drafted_with_ai` and the tool, shown on the document) | Brad Piver, 12 Oct 2026 |
 
 ### Open: blocks the next item (Band A)
 
@@ -182,7 +188,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | O1 | **Outputs band, phase 1: the grounding** (plan §5). Q9 (the D2 basis, derived) and item 10 (a run seals the fact ids and values it used) are **prerequisites, built here**; then `value_levers` and `lever_offerings` (steward acts); the pack page shows levers per measure and Skillsoft solutions per lever (outputs 3, 4) | Q4c2 deployed | every later output states each number's basis; nothing can until the basis is computed |
 | O2 | **Outputs, phase 2: hypotheses and the account POV** (plan §5): `value_hypotheses` (with falsifiers), `executive_summaries` (human-authored, attributed), the POV page (value-chain visual, stage progress bar, "what it takes to raise confidence") (output 1) | O1 | the hypothesis is what a POV argues; it must be falsifiable before it is shown |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
-| O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15): `render_record.py` from the API, WeasyPrint placement decided, flexbox and tables only, `pdftoppm` QA, the banner on every page of an unverified record, the bytes traced to the run's `payload_hash` | O3 | the PDF renders what O3 already shows; no new claim enters at print |
+| O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15; **O-D5: a print stylesheet**): the browser prints the rendered page; no new dependency; both banners and the run's `payload_hash` on every printed page; QA by printing and looking | O3 | the PDF renders what O3 already shows; no new claim enters at print |
 | Q7 | **3.0 item 3, the rest** (after Q4h's minimal entity): parent and affiliate relationships with their own evidence; L4 (the run seals its entity and account name); L9 (`website` into the entity record); item 11's entity mismatch rate | Q4h | — |
 | Q8 | **3.0 item 4, the rest** (after Q4h's minimal regime): the gap register computes *structurally unobtainable by research* per account from its regime, rather than asserting it | Q4h | — |
 | Q9 | **3.0 item 5 — one trust vocabulary (derived)** | D2 | — |
@@ -1023,7 +1029,7 @@ not-found kinds with reasons.
   prod-copy equivalence (every GET identical); the client `tsc`, build and lint.
 - **Deploy:** no migration and no hardening change. A backup is still taken first.
 
-## 5. The Outputs band: the monetizable surface (plan, 12 Oct 2026; not yet approved)
+## 5. The Outputs band: the monetizable surface (plan approved by Brad, 12 Oct 2026; decisions O-D1–O-D6 in §3)
 
 **What it is.** The documents a value engineer puts in front of a customer's CFO,
 CHRO or board. It rests on CAPABILITY_MAP items:
@@ -1099,8 +1105,10 @@ CHRO or board. It rests on CAPABILITY_MAP items:
     **recorded values only**. For example, "TRIR at or above its FY25 baseline of 1.4
     at the first period end after deployment".
     - The falsifier may reference the baseline and the period; **it may not introduce
-      a new number.** A CHECK enforces the reference to a recorded value; the
-      renderer quotes it.
+      a new number.** It **may state a direction relative to a recorded value**, for
+      example "TRIR ≥ baseline over the committed period", which introduces none
+      (O-D4). A CHECK enforces the reference to a recorded value; the renderer quotes
+      it.
   - `falsifier_due` (a date or a period end); `status`: open · **confirmed** ·
     **refuted** · withdrawn.
   - **A decision** (confirmed or refuted) needs a named person and evidence;
@@ -1166,13 +1174,20 @@ CHRO or board. It rests on CAPABILITY_MAP items:
   (output 2).
 - Outcomes by lever (output 5).
 
-**O4, the PDF** (3.0 item 15).
+**O4, the PDF: a print stylesheet** (3.0 item 15; O-D5 option c, adopted).
 
-- `render_record.py` reads the API; the decision is WeasyPrint on the box or
-  rendering on the Mac.
-- Flexbox and tables only, `pdftoppm` QA looked at, the banners on every page.
-- The rendered bytes' hash and the run's `payload_hash` are recorded in
-  `record_documents`.
+- **The PDF is the browser's print of the value case page** (`@media print`).
+  **No new dependency:** no WeasyPrint, no `render_record.py` rendering path.
+- **Every printed page carries both banners** (OUTSIDE-IN HYPOTHESIS, and the
+  disclosure gate's UNVERIFIED), and a footer with the run, its `payload_hash`, the
+  lens, and the print time. Print CSS must repeat them per page; QA by printing to
+  PDF and looking at every page.
+- **The browser renders it,** so CSS Grid is usable. `CLAUDE.md`'s "Grid is
+  unreliable" applies to WeasyPrint, which this replaces.
+- **What changes in tracing:** the PDF is produced in the reader's browser, so the
+  server never holds its bytes. The `record_documents` row records the run, its
+  `payload_hash`, the lens and who printed it, not a hash of the PDF bytes. **The
+  printed `payload_hash` is the trace.**
 
 ### What Scotts would show (from the record as it stands, plus Q4d)
 
@@ -1210,7 +1225,10 @@ CHRO or board. It rests on CAPABILITY_MAP items:
 - **Its history shows the instrument's point:** confidence rising from the
   outside-in hypothesis to validated, each step a locked run that is never rewritten.
 
-### Decisions for Brad
+### Decisions (decided by Brad, 12 Oct 2026; recorded in §3)
+
+**O-D1 = 55. O-D2, O-D3 and O-D6 as recommended. O-D4 confirmed, with the
+direction rule. O-D5 = option (c).** As proposed, for the record:
 
 - **O-D1, the lens thresholds.** For example, CFO at least 55 (the medium floor) or at
   least 80 (high). A policy value, ratified, versioned. Recommendation: 55, with the
@@ -1221,9 +1239,23 @@ CHRO or board. It rests on CAPABILITY_MAP items:
   "reference example", never as an account's value case, and never under the CFO lens.
 - **O-D4, the falsifier rule.** The CHECK limits numbers to recorded values;
   confirm.
-- **O-D5, the PDF's home** (3.0 item 15): WeasyPrint on the VPS (fonts, then
-  `fc-cache -f`), or rendering on the Mac by decision.
+- **O-D5, the PDF's home** (3.0 item 15): (a) WeasyPrint on the VPS (fonts, then
+  `fc-cache -f`); (b) rendering on the Mac by decision; **(c) a print stylesheet, the
+  PDF being a browser print of the rendered page: no new dependency. Adopted.**
 - **O-D6, AI drafting disclosure:** `drafted_with_ai` and the tool shown on the
   document. Recommendation: shown, small, beside the author.
 - **Named, not resolved:** `record_documents` stays **provisional** until the
   Repository Constitution ratifies (CLAUDE.md). O4 builds on it as provisional.
+
+**The conflict O-D5 creates with `CLAUDE.md`, named and not resolved silently.**
+`CLAUDE.md`'s Stack lists "WeasyPrint 69.0 on the VPS" under **Not yet**, and its
+"WeasyPrint constraints" section governs the PDF pipeline. Under O-D5 there is no
+WeasyPrint. Proposed amendment wording, **not applied until Brad approves it:**
+
+> **PDF:** a value case's PDF is the browser's print of its rendered page, by a print
+> stylesheet (decision O-D5, 12 Oct 2026): no WeasyPrint, no new dependency. Every
+> printed page carries the disclosure banner and the run's `payload_hash`. QA every
+> template by printing to PDF and looking at every page.
+
+It replaces the WeasyPrint entry in **Not yet** and the "WeasyPrint constraints"
+section.
