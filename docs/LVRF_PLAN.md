@@ -150,6 +150,7 @@ on institution routes (P3).
 | O2-D2 | **A reference example is marked by a typed, steward-set, audited, supersedable marker on the account**; O-D3 reads it | Brad Piver, 12 Oct 2026 |
 | O2-D3 | **Hindsight is marked.** A hypothesis created after its due date, or after its outcome already had a measured actual, is **post hoc**, computed by the database. The page says "written after the result", and a post hoc hypothesis never counts as survived | Brad Piver, 12 Oct 2026 |
 | O2-D4 | **The falsifier's shape is confirmed:** "no better than the reference (recorded baseline or committed target) by the due date", plus conditions with no digits. **The measure's direction (lower or higher is better) comes only from the pack entry row** and is shown on the page; a hypothesis cannot set it. The digit refusal explains itself: "numbers belong in recorded values, not falsifier conditions" | Brad Piver, 12 Oct 2026 |
+| R1 (refined) | **A company's formal annual disclosure report is `public_filing`** (10-K, annual report, CR, sustainability or ESG report); **looser company material is `observation`** (press releases, web pages, blog posts, job postings, marketing). The basis follows from D2 unchanged: published, or inferred with a source reference (§4k) | Brad Piver, 12 Oct 2026 |
 
 ### Open: blocks the next item (Band A)
 
