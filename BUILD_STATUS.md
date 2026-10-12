@@ -9528,3 +9528,195 @@ pulled), `90123ec` (O1) and `1db189b` (docs). **Migration 0035.**
   - 0 levers, 0 links; 1 tenant, with its steward set;
   - the current account facts' basis, by the function: **published ×4, inferred ×3,
     assumed ×1.**
+
+## O2 — hypotheses, executive summaries, reference examples, the account POV — 12 October 2026
+
+Outputs band, phase 2 (LVRF_PLAN §5; decisions O2-D1–O2-D4 in §3). **Migration 0036**;
+`hardening.sql` section 22; **126 triggers** (111 + 15). Not deployed.
+
+### What was built
+
+- **`value_hypotheses`** (governed). A hypothesis names an outcome (which carries the
+  capability and the metric) and a lever, with a statement (≥ 24 characters).
+  - **The falsifier** is "no better than the reference by the due date":
+    - the reference is the recorded baseline, or a target a named person committed;
+    - `reference_value` and its date are **copied by the database** at INSERT, so a
+      value sent with the request is replaced;
+    - the conditions hold **no digit**: refused in the route and in the database with
+      "numbers belong in recorded values, not falsifier conditions";
+    - **the direction** (lower or higher is better) is read only from the lever's pack
+      entry and shown on the page. The table has no direction column, and a
+      `direction` field is refused (400, recorded).
+  - **`value_hypotheses_guard`** (INSERT):
+    - the chain is one chain: the outcome's metric rests on the lever's pack entry, and
+      the outcome's capability claims it;
+    - the author is current, non-simulated staff;
+    - `post_hoc` is computed (O2-D3): created after the due date, or after a measured
+      actual;
+    - a person who verified the outcome cannot author a hypothesis on it.
+  - **Frozen** (the guard, on UPDATE): nothing changes after INSERT except one
+    withdrawal or one supersession, while the verdict is open. A restated hypothesis is
+    a new version, and the old one stays visible with its reason.
+- **The verdict is computed, never decided (O2-D1).** `lvrf_hypothesis_verdict()`
+  returns:
+  - `open` until the named outcome has a **verified** actual (`source_verified`, a
+    named verifier) measured on or after the due date;
+  - then `refuted` if the actual is no better than the reference in the pack entry's
+    direction, else `survived`;
+  - `survived_post_hoc` or `refuted_post_hoc` for post hoc hypotheses, never plain
+    `survived`;
+  - `withdrawn` and `superseded` from the row.
+
+  No route decides, and no column stores it.
+- **The verifier may not be the author:** `value_outcomes_verifier_not_author`
+  (UPDATE on `value_outcomes`), and its mirror in the hypothesis guard.
+- **`executive_summaries`** (append-only versions):
+  - the author is the session's actor; a request naming another author is refused
+    (400);
+  - non-simulated staff (the guard);
+  - an AI-drafted summary names its tool, and only then (CHECK, O-D6);
+  - one current summary per account and lens, and a new version names the one it
+    supersedes;
+  - never updated, never deleted.
+- **`reference_example_markers`** (O2-D2):
+  - typed (published case study or demonstration) and cited;
+  - steward-set, in the routes and in the database;
+  - audited, supersedable (a correction, with its reason) and retirable (unmarking);
+  - one current marker per account (a deferred constraint trigger).
+- **Routes:**
+  - authorized: state, supersede and withdraw a hypothesis; write a summary;
+  - steward: mark, correct and unmark a reference example;
+  - `GET /api/institutions/:id/pov` assembles the page and computes every derived
+    value in one place: basis, verdicts, the falsifier sentence, the banners, the
+    spine order (read from the enum).
+  - Strict bodies: O1's refusal helper moved to `server/lib/strictBody.ts`, shared
+    by both bands.
+- **The account page** gains three cards: Value hypotheses (with a live preview of the
+  falsifier), Executive summary, and Reference example (steward). There is no
+  "decide".
+- **The POV page** (`/accounts/:id/pov`) is read-only and built with Rule76 tokens:
+  - the banners: REFERENCE EXAMPLE, OUTSIDE-IN HYPOTHESIS, UNVERIFIED;
+  - computed confidence only from a locked run;
+  - the stage bars;
+  - the executive summary and the hypotheses;
+  - a six-node chain per current hypothesis, with a missing node shown as a gap;
+  - the baseline, the target ("No target: a hypothesis") and the actual, beside their
+    basis;
+  - vendor claims shown as claims, and the pack entry's confounders;
+  - "What it takes", the gap register's asks;
+  - account facts, locked runs, and earlier versions.
+- **The mock-up departures M1–M9 (§5) are not built.**
+- **The shell header wraps** at phone width: NavBar and ActorBar shared one row and
+  pushed every page to about 434px at 390.
+
+### Departures from the approved plan, named
+
+- **The stage bars.** The plan said "from `engagements.value_stage`". In the data, the
+  outcome routes advance the outcome, not the engagement, so that reading showed
+  "baseline" on engagements whose outcomes were verified. The bar now shows the
+  furthest stage of the engagement **and its current outcomes**. Stages before it are
+  "passed", never ticked. **Commit shows as a gap ("no committed target") unless a
+  current outcome has a named committer**, because measure and verify do not require
+  a commitment, and a tick there would be a claim the record does not hold.
+- **The tenant-scope fixture** `HYP_A` is inserted with the guard disabled inside its
+  own transaction on the throwaway clone. It only needs to exist for the routes'
+  404 cases.
+
+### Gate A
+
+- **`verify_value_hypotheses.sh`: 137 passed, 0 failed.**
+  - **The schema:** 126 triggers and manifest rows; the 15 O2 triggers by name; no
+    direction, verdict or decision column; D2 none.
+  - **Stating a hypothesis:**
+    - refused with 400 and recorded (source `route`): a direction, a verdict,
+      `post_hoc`, a reference value, another author;
+    - refused with 422: a digit, an uncommitted target, a lever on another entry, a bad
+      date;
+    - 404 for another tenant's account;
+    - the reference copied by the database (1.4, 2025-09-30), audited;
+    - **the falsifier sentence**, exactly: "Hyp TRIR one at or above its baseline of
+      1.4 incidents per 200,000 hours (recorded 2025-09-30) on \<today\>, on the same
+      denominator, among the covered population.";
+    - a zero baseline quoted as 0.
+  - **Frozen:**
+    - editing the conditions, the reference value, the due date or `post_hoc` is
+      refused;
+    - a reference value sent by SQL is replaced by the recorded one;
+    - a restatement is a new version with its reason;
+    - withdrawn stays withdrawn.
+  - **Verdicts:**
+    - measured but unverified: open;
+    - the author as verifier: refused in both directions;
+    - verified 1.1 against 1.4: **survived**, and the same numbers through a
+      higher-is-better entry: **refuted**;
+    - an actual measured before the due date: open;
+    - 1.6: **refuted**, and a refuted hypothesis cannot be withdrawn or restated
+      (route and SQL);
+    - written after its actual: **survived_post_hoc**.
+  - **Summaries:**
+    - the author is the actor; the AI disclosure rule; one current summary per lens;
+      versions;
+    - edit, delete and a simulated author refused.
+  - **Markers:**
+    - steward-only; one current, checked at commit;
+    - correction kept with its reason; unmarking keeps both.
+  - **The banners:** OUTSIDE-IN until customer-side evidence exists; UNVERIFIED while
+    any outcome is unverified; the stage reached.
+  - **The browser walk** (X, by session; screenshots looked at, at 1280 and 390):
+    - **the account page:**
+      - the steward's marker actions disabled, naming the steward;
+      - no "decide";
+      - a digit in the conditions shows the decision's words and keeps the button
+        disabled;
+      - the preview quotes the zero baseline, and **the recorded sentence equals the
+        preview** (the client and server templates agree);
+    - **the POV:**
+      - the banners;
+      - the stage bars in the enum's order, verify reached, commit a gap, nothing
+        ticked by inference;
+      - no confidence without a locked run;
+      - one six-node chain per current hypothesis;
+      - every verdict, post hoc labelled;
+      - the vendor claim as a claim;
+      - "No target: a hypothesis";
+      - the summary attributed;
+      - the gap register's asks;
+      - **no horizontal scroll at 390.**
+  - **Deliberate breaks (Brad's six),** each restored:
+    - **B1, an author verifies their own actual:** without
+      `value_outcomes_verifier_not_author`, H2's author is recorded as its outcome's
+      verifier.
+    - **B2, a verdict without a verified actual:** without the verification condition,
+      H5 reads survived on an unverified actual.
+    - **B3, a hypothesis setting its own direction:** with `direction` let through,
+      the request "succeeds" and the author's value silently vanishes; the 400 is what
+      tells them. The direction stays the pack entry's.
+    - **B4, a digit in the conditions:**
+      - (a) without the route's check, the database refuses in the same words;
+      - (b) without the CHECK and the guard, "by 3 percent" lands.
+    - **B5, a falsifier edited in place:** without the guard, the conditions are
+      edited.
+    - **B6, post hoc read as survived:** without the post hoc branch, H4 reads plain
+      survived.
+- **Prod copy, HEAD `6c8c787` (code as deployed, `1db189b`) against O2,** each clone
+  migrated and hardened by its own code (36/111 and 37/126, the manifest matching):
+  - **62 GETs, all 62 identical**;
+  - D2 none (909 objects); D1/D3/D4 no findings;
+  - **run hashes 23/23** after 0036;
+  - the new POV read answers 200 on the copy's account (Curia).
+- **Regression:** all **28** verify scripts pass.
+  - `verify_steward_acts` 35/0: 12 steward routes.
+  - **`verify_tenant_scope`: 193 cases.** The first full run caught one failure:
+    "refusals 1 -> 3". The hypothesis body-id case reached the database guard,
+    which refused it, and each refusal was recorded, so probing with another
+    tenant's ids left rows. That case had also tested the wrong check (its
+    outcome was not the path's account).
+    - **Fixed:** the hypothesis route now checks that its outcome is this account's
+      and its lever this tenant's, and the summary route its run, before any write.
+      An unknown id and another tenant's id get the same answer, nothing is
+      recorded, and the guard stays as the backstop.
+    - The case now targets the outcome's own account, and the driver compares each
+      422's issues as well as its message.
+    - Re-run: tenant scope 193/0 ("no mismatch recorded in refusals"), O2 137/0.
+  - Client tsc, build and lint are clean apart from the pre-existing `ActorContext`
+    warning. The bundle is **`index-BfJpyu1D.js`**.
