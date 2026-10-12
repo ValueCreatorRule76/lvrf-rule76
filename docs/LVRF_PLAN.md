@@ -143,6 +143,10 @@ on institution routes (P3).
 | O-D4 | **A falsifier may reference only recorded values: no new number.** It **may state a direction relative to a recorded value** (e.g. "TRIR ≥ baseline over the committed period"), which introduces no number. Enforced by CHECK on `value_hypotheses` | Brad Piver, 12 Oct 2026 |
 | O-D5 | **The PDF is a browser print of the rendered value case page, by a print stylesheet** (option c, added and adopted): no new dependency, no WeasyPrint. *Conflict named:* `CLAUDE.md`'s stack and "WeasyPrint constraints" assume WeasyPrint; the amendment wording is proposed in §5, not yet applied | Brad Piver, 12 Oct 2026 |
 | O-D6 | **An AI-drafted executive summary says so**, small, beside its author (`drafted_with_ai` and the tool, shown on the document) | Brad Piver, 12 Oct 2026 |
+| O2-D1 | **No person decides a hypothesis.** Its verdict (survived or refuted) is **computed by one database function** from the falsifier, the recorded baseline or committed target, the due date and the recorded actual. The human act is **verifying the actual**, and **the verifier may not be the hypothesis' author** (enforced in the database). Until a verified actual exists past the due date, the verdict is **open** | Brad Piver, 12 Oct 2026 |
+| O2-D2 | **A reference example is marked by a typed, steward-set, audited, supersedable marker on the account**; O-D3 reads it | Brad Piver, 12 Oct 2026 |
+| O2-D3 | **Hindsight is marked.** A hypothesis created after its due date, or after its outcome already had a measured actual, is **post hoc**, computed by the database. The page says "written after the result", and a post hoc hypothesis never counts as survived | Brad Piver, 12 Oct 2026 |
+| O2-D4 | **The falsifier's shape is confirmed:** "no better than the reference (recorded baseline or committed target) by the due date", plus conditions with no digits. **The measure's direction (lower or higher is better) comes only from the pack entry row** and is shown on the page; a hypothesis cannot set it. The digit refusal explains itself: "numbers belong in recorded values, not falsifier conditions" | Brad Piver, 12 Oct 2026 |
 
 ### Open: blocks the next item (Band A)
 
@@ -1276,7 +1280,46 @@ governance in force was checked:
   directly. Its Article V (tokens defined once, in `CLAUDE.md`) is untouched.
 - **The O-D5 row in §3 is the history.**
 
-### O2, the build plan (planned 12 Oct 2026; **not yet approved**)
+### O2, the build plan (planned 12 Oct 2026; **approved by Brad, 12 Oct 2026**, with O2-D1–O2-D4 in §3)
+
+**As approved, these supersede the plan text below where they differ:**
+
+- **No `decide` route, and no stored status.** A hypothesis' verdict is computed by
+  `lvrf_hypothesis_verdict(value_hypotheses)`:
+  - `open` until the outcome it names has a **verified** actual (`source_verified`, a
+    named verifier) measured **on or after** `falsifier_due`;
+  - then **`refuted`** if the actual is no better than the reference, in the pack
+    entry's direction, else **`survived`**;
+  - **post hoc** hypotheses read `survived_post_hoc` or `refuted_post_hoc`, and never
+    `survived`;
+  - withdrawn and superseded ones read `withdrawn` and `superseded`.
+- **The verifier may not be the hypothesis' author.** A database trigger enforces it
+  on `value_outcomes` (verifying an actual) and on `value_hypotheses` (a hypothesis
+  on an outcome its author verified).
+- **The reference value is quoted once, by the database:** at INSERT, the trigger
+  copies the baseline (or the committed target) and its date into the hypothesis.
+  The body cannot set them, and they never change.
+- **Direction:** read only from the lever's pack entry (`industry_measures.direction`)
+  and shown as "lower is better" or "higher is better". `value_hypotheses` has no
+  direction column, and a `direction` field in a request is refused (400, recorded).
+- **The digit refusal explains itself** in the route and in the database: "numbers
+  belong in recorded values, not falsifier conditions".
+- **The reference-example marker** is its own governed table,
+  `reference_example_markers`:
+  - typed by `kind`: published case study or demonstration;
+  - a source citation and a note;
+  - steward-set, enforced in the database too;
+  - audited, supersedable, and retirable (unmarking);
+  - one current marker per account.
+- **The chain is named by the outcome** (it carries the capability and the metric)
+  plus the lever. The trigger checks that they form one chain.
+- **Deliberate breaks for Gate A,** as named by Brad:
+  - an author verifying their own actual;
+  - a verdict without a verified actual;
+  - a hypothesis setting its own direction;
+  - a digit in the conditions;
+  - a falsifier edited in place;
+  - a post hoc hypothesis read as survived.
 
 **Spine stages:** `model` (a hypothesis ties a capability, through a lever, to an
 account metric, with its falsifier), and `return` (the POV puts it in front of a reader).
