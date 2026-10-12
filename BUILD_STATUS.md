@@ -9917,3 +9917,44 @@ already holds that email. **Migration 0037; hardening section 23; 129 triggers**
   - **62 GETs:** 60 identical, and the 2 walk reads differ only by the added
     `analysts` and `staff`;
   - 129 triggers and manifest; D2 none (930 objects); run hashes 23/23.
+
+### Deployed — 12 October 2026 (UTC): the W1 fix
+
+`f352e89..901fc91` went to production: `a683b08` and `31fb16e` (docs, never pulled),
+`4b708e3` (the W1 fix) and `901fc91` (docs). **Migration 0037.**
+
+- **Run hashes before the deploy:** 23/23, at `f352e89`.
+- **Backup:** `~/lvrf_pre_w1fix_20261012_202540.dump`: 808,097 bytes, `-rw-------`, 570
+  TOC entries. That is above the estimate of about 730 KB and 515–520, because the
+  estimate was taken from the pre-O2 dump and left out what 0036 added.
+- **Pull, migrate, harden:**
+  - 0037 applied; migrations `38|1791835683232` and `37|1791831328188`;
+  - hardening exit 0, 0 ERROR lines; **129 triggers, manifest 129**;
+  - the 3 link triggers; both CHECKs validated; the partial unique index `WHERE
+    (retired_at IS NULL)`;
+  - 0 links;
+  - run hashes after 0037: 23/23.
+- **Deploy:**
+  - step 5c: "schema drift: none (journal 38 migrations, newest
+    0037_account_person_links; 930 schema objects match 0037_snapshot.json)", and
+    D1/D3/D4 no findings;
+  - smoke checks passed; deploy OK, exit 0, HEAD `901fc91`;
+  - bundle **`index-DPskA7fH.js`** / `index-CG5rAQYO.css`;
+  - up since **20:28:07 UTC** (systemctl; 0 restarts).
+- **Gate C, read-only, over ssh, as `lvrf_app`:**
+  - HEAD `901fc91`, a clean tree;
+  - D2 none (930 objects); D1/D3/D4 no findings; the legacy check: 26, all valid v3;
+  - **129 triggers, 197 trigger rows, manifest 129**;
+  - **run hashes 23/23**;
+  - the served `index.html` names the built assets;
+  - 0 audit rows and 0 refusals since 20:28:07; the last audit id is 293;
+  - 0 account person links, levers, hypotheses, summaries or markers.
+  - **Refusals: 5** (database 4, parser 1). **The 2 new ones are Brad's two W1
+    attempts on Scotts Miracle-Gro**, at 20:03:45 and 20:04:50 UTC, both
+    `persons_email_key` on `POST …/inputs`, before the fix. They stand on record, as
+    designed.
+  - **Cross-tenant refusals: 0**, from 2 ids referenced across the 5 refusals.
+  - **Ownership baseline, unchanged:**
+    - `lvrf_app` owns all 40 tables, 2 sequences, 27 enum types and the drizzle schema;
+    - on the append-only tables: SELECT and INSERT only;
+    - 0 disabled triggers.
