@@ -8564,6 +8564,46 @@ Recorded plainly, read-only from prod as `lvrf_app`.
   `docs/LVRF_PLAN.md` §4d, together with an R4 aid that surfaces the agent's own
   caveats and requires a tick before Accept.
 
+### The correction — 12 October 2026, after Q4c1b's deploy (read-only, as `lvrf_app`)
+
+Brad retired six entries through Q4c1b's route, between **04:33:57 and 04:35:46 UTC**:
+
+- Phish-prone percentage;
+- Wasted cloud spend;
+- Mean time to identify and contain a data breach (breach lifecycle);
+- Revenue per billable consultant;
+- Project budget adherence rate;
+- Human-error-attributed outage rate.
+
+Each is complete: `status = 'retired'`, `deleted_at` set, `retired_by` = Brad Piver.
+**All six carry the same reason: "Retire this entry not measured."** Their accepted
+research results stay accepted. **Seven entries remain current:** Billable
+utilization; Change failure rate; Change lead time; Deployment frequency; Failed
+deployment recovery time; Net first contact resolution rate; Net first level
+resolution rate.
+
+**Exclusions: one is on record, not the three Brad intended.**
+
+- **Phish-prone percentage** was excluded at 04:36:46 by Brad, with the reason "Retire
+  this entry not measured". The proposal fields are empty: it was typed, not taken from
+  an agent list.
+- **No exclusion exists for the breach lifecycle measure or for Revenue per billable
+  consultant.** No refusal is recorded. `refusals` holds database refusals only; a
+  form that was not submitted, or an app-level 4xx, leaves nothing (L8 covers parse
+  refusals only, in Q4h). So the record cannot say why.
+- **As things stand,** those two are retired but not excluded, so a new accepted result
+  could bring them back.
+
+**What the record does and does not say.** The single shared reason does not
+distinguish Brad's two intents (§4d): retired *and excluded* versus retired *to return
+with verified citations*. That distinction exists only in §4d's record of intent and
+in whether an exclusion follows. **The reasons stand as written.** A retirement is not
+amended, and an exclusion is final.
+
+**Audit:** 7 rows since the restart (ids 250–256): six `industry_measures`
+`soft_delete` and one `industry_measure_exclusions` `insert`, every one with Brad
+Piver as actor. **0 refusals.**
+
 ## Q4c1b — retire a pack entry; retired entries shown; the R4 caveats aid — 12 October 2026
 
 The correction path Q4e showed was missing: accepting a result is final, and nothing
@@ -8710,3 +8750,81 @@ Q4h plan).
 to identify and contain a data breach; Revenue per billable consultant. Retire only:
 Wasted cloud spend; Project budget adherence rate; Human-error-attributed outage rate.
 Then Q4g.
+
+## Q4g — contract v4: a required `caveats` field per measure — 12 October 2026
+
+Q4e showed the gap: the agent's own caveats ("reviewer should confirm…") were buried
+in `citation` and accepted unread. Plan: §4f of `docs/LVRF_PLAN.md`, approved by Brad.
+There is **no migration, no hardening change, and no new route.**
+
+### What was built
+
+- **`server/research/contracts.ts`:**
+  - **Every version is kept, by number** (`INDUSTRY_MEASURE_CONTRACTS` = { 3, 4 }).
+    `INDUSTRY_MEASURE_CONTRACT` is v4.
+  - **v4 adds `caveats`:** a list of strings, **the key required**. `[]` states there
+    are none. A missing key is refused as drift; a non-list or a blank entry is
+    refused.
+  - **It is review-only:** it maps to no `industry_measures` column and is kept in
+    `raw_response`.
+  - **The prompt asks for it** (`PROMPT_TEMPLATE_VERSION` 2), with its own rule.
+- **Prompts generated under v3 are stale:** parse refuses them, naming both versions.
+- **Accept still judges against the contract as it is now,** so a v3-era result still
+  pending would be refused: "raw_response.caveats is missing … predates the accept
+  mapping". **Prod has none pending.**
+- **`check_legacy_research.ts` now judges every industry-measure result against the
+  version it was parsed under:** v3 for the pre-prompt rows, `contract_version`
+  otherwise. Nothing is re-judged against a later version.
+- **R4:**
+  - "The research's stated caveats" is its own block. It shows the list, "The research
+    stated none." for `[]`, or "predates stated caveats (contract v3)".
+  - It sits above the Q4c1b text search, now titled "Caveat phrases elsewhere in the
+    response", which no longer reads the `caveats` field itself.
+  - The tick is unchanged: required on every pending result.
+- **Every verify script's parse payload carries `caveats`.**
+
+### A gap in the browser-walk harness, found and closed
+
+- **What happened:** `verify_pack_research.sh` and `verify_pack_entry_retire.sh` piped
+  each walk through `tee … || true`. **A walk that crashed printed no FAIL lines and
+  counted as nothing.** This run's caveats walk crashed: its prompt lookup was pinned
+  to v3. The script still reported "63 passed, 1 failed", and the 1 was a different
+  check.
+- **Now:** a walk's exit code is read, with `set -e` suspended around the pipe so
+  pipefail cannot end the script first. **A non-zero exit is a failure.**
+- **The earlier runs were checked:** in the Q4c1 and Q4c1b runs every walk mode
+  printed its own PASS lines, so none of them had crashed silently.
+
+### Gate A
+
+- **`verify_research_contract.sh`: 100 passed, 0 failed.** Contract-driven, so
+  `caveats`-missing is tested by the existing loop. Plus:
+  - `caveats` not a list → 422; a blank caveat → 422;
+  - a stated caveat → 201, kept verbatim;
+  - the v4 prompt asks for it;
+  - a v3 prompt → 422 "generated against v3; the contract is now v4";
+  - a v3-era pending result: accept → 422, and the checker passes it against v3,
+    reporting both versions.
+  - **Breaks:**
+    - **B7, `caveats` removed from v4:** a response without caveats is written.
+      Restored, it is refused again.
+    - **B8, the checker judging by the current contract:** the v3-era result is named
+      as failing.
+- **`verify_pack_entry_retire.sh`: 73 passed, 0 failed.** The walk adds:
+  - the stated caveat in its own block, not repeated by the search;
+  - `[]` reads "The research stated none.";
+  - a v3-era result reads "predates stated caveats (contract v3)".
+- **Prod copy:**
+  - 48 GETs identical to HEAD;
+  - D2 none;
+  - the checker passes all 13 rows against v3 (on prod it will see 26: the 13
+    pre-prompt rows and the 13 from Q4e, all v3).
+  - `GET /api/industries/:slug/research` reports `contract_version_now` 4 instead of 3,
+    as intended.
+- **Regression, at the feat commit's state:** all 24 verify scripts pass, 0 failed.
+  - `verify_pack_research` failed twice on the first run, on two v3 expectations I had
+    written (`contract_version_now === 3`, and the stale text "now v3"). Both now read
+    the contract's own version, and it passes 62.
+  - `verify_tenant_scope` passes 134 cases.
+  - The client `tsc`, build and lint pass; the bundle is **`index-CXIIVY7G.js`**. The
+    one lint warning predates this work.

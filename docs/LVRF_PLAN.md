@@ -173,7 +173,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q6~~ | ~~Decide D1 (Compass), D2 (mapping), D7, D8; ratify or revise the 3.0 draft~~ **DONE 11 Oct 2026**: all decided; revision 3 adopted as the working plan (not ratified). D13 remains, blocking item 6 only | — | — |
 | ~~Q4c1~~ | **DONE 12 Oct 2026**: deployed `6f44b7a` (no migration; step 5c clean; Gate C clean; Brad confirmed the five cards in the browser). ~~**Pack-research cards on the pack page**~~: generate the prompt (Q4b route), paste the agent's response to parse, accept or reject each pending result, and record exclusions. Accept, reject and exclude stay steward-only (Band A); generate and parse are authorized acts. Same routes, same session, no new actor path. Detailed plan in §4b | Q4b | unblocks Q4e (Datacom) |
 | ~~Q4c1b~~ | **DONE 12 Oct 2026**: deployed `9605859` (0032, the CHECK validated on prod; step 5c clean; Gate C clean; Brad confirmed the retire control). ~~**Retire a pack entry** (steward-only, reason required, migration 0032), retired entries shown on the pack page, and the R4 caveats aid. Plan in §4d, **approved by Brad 12 Oct** | Q4c1 | Q4e accepted six IT entries Brad now judges should not stand, and no route can correct an accepted entry |
-| Q4g | **Contract v4: a required `caveats` field per measure** (Brad, 12 Oct). It is a list of strings, and an empty list is allowed but must be stated explicitly; a missing key is refused as drift. The prompt asks for it, and R4 shows it as its own block, above the text-search block. Prompts generated under v3 go stale, as designed (parse refuses them, naming both versions). `PROMPT_TEMPLATE_VERSION` bumps too. The legacy and v3-era accepted results are untouched; `check_legacy_research` checks them against the version they were parsed under | Q4c1b | turns the R4 caveat search into a structural field |
+| Q4g | **Built, Gate A 12 Oct 2026; deploy pending** (no migration; `verify_research_contract.sh` 100/0, `verify_pack_entry_retire.sh` 73/0). Plan §4f. **Contract v4: a required `caveats` field per measure** (Brad, 12 Oct). It is a list of strings, and an empty list is allowed but must be stated explicitly; a missing key is refused as drift. The prompt asks for it, and R4 shows it as its own block, above the text-search block. Prompts generated under v3 go stale, as designed (parse refuses them, naming both versions). `PROMPT_TEMPLATE_VERSION` bumps too. The legacy and v3-era accepted results are untouched; `check_legacy_research` checks them against the version they were parsed under | Q4c1b | turns the R4 caveat search into a structural field |
 | Q4c2 | **The outside-in walk card on the account page**: the analyst-of-record person, the offering and capability, the capability's claim on a pack entry, the value outcome (which creates the engagement and metric), pack basis, produce, lock, then retire the reference engagement | Q4c1 (shared card patterns) | unblocks Q4d (Scotts) |
 | Q4d | **Reference test A: Scotts Miracle-Gro on an existing pack** (Manufacturing; TRIR accepted). Outside-in, published material only; not D13. Step plan in §4a; R1 and R5 decided | Q4c2 | tests a second account on a pack that already exists |
 | Q4e | **Reference test B: Datacom, a pack-only test** under the existing `information-technology` industry (R2, R3). The first real use of the Q4b prompt route. Step plan in §4a; no run, because no published Datacom baseline exists | Q4c1 | tests the pack loop end to end on a pack that does not exist yet |
@@ -946,3 +946,60 @@ not-found kinds with reasons.
   `as_of` rule, and L8's writer.
 - **Also:** the regression; prod-copy equivalence (only the additive reads differ);
   backup → migrate 0033 and 0034 → harden (102) → deploy.
+
+### 4f. Q4g: contract v4, a required `caveats` field per measure (approved by Brad, 12 Oct 2026)
+
+**Spine stage:** `model` (pack research).
+
+**What it does, as approved:**
+
+- `INDUSTRY_MEASURE_CONTRACT` goes from v3 to **v4**, adding `caveats`, a list of
+  strings, to every measure.
+  - **The key is required.** An empty list `[]` is allowed and means "the research
+    states there are none".
+  - A missing key is refused as drift ("predates the current contract").
+  - A non-list, or a blank string inside the list, is refused.
+- **The prompt asks for it** (`PROMPT_TEMPLATE_VERSION` 1 → 2).
+- **R4 shows it as its own block,** "The research's stated caveats", above the Q4c1b
+  text-search block. The text search no longer reads the `caveats` field itself, to
+  avoid showing each caveat twice.
+  - A v3 or legacy result shows "This result predates stated caveats (contract v3)".
+- **Prompts generated under v3 go stale,** as designed: parse refuses them, naming both
+  versions.
+
+**Details resolved in building:**
+
+- **Every version is kept, by number:** `INDUSTRY_MEASURE_CONTRACTS` = { 3, 4 };
+  `INDUSTRY_MEASURE_CONTRACT` is the current one.
+- **`check_legacy_research` checks each result against the version it was parsed
+  under:** `contract_version` if set; v3 for the pre-Q4b rows, whose shape was v3 and
+  which were verified against v3 at Q4b's Gate C. So the 13 Q4e results, all v3, stay
+  valid, and nothing is rewritten.
+- **Accept still validates against the contract as it is now** (Q4b's second gate).
+  **A v3 result still pending at deploy cannot be accepted:** it must be re-run under
+  a v4 prompt. Prod has 0 pending.
+- **`caveats` maps to no `industry_measures` column.** It is review-only; the
+  accepted result keeps it in `raw_response`. Showing an accepted entry's stated
+  caveats on the pack page is a later choice; the reviewer's note is where a caveat
+  that survives review is written today.
+- **No migration.** `research_prompts.contract_version` simply stores 4.
+
+**Gate A:**
+
+- **`verify_research_contract.sh`,** contract-driven, so `caveats` is tested by the
+  existing loop. Plus:
+  - `caveats` not a list → 422;
+  - a blank caveat → 422;
+  - `[]` and a non-empty list → 201;
+  - a v3 prompt → 422 "generated against v3; the contract is now v4";
+  - accepting a pending v3 result → 422 "predates the accept mapping";
+  - the legacy checker validates each row against its own version.
+- **The browser walk:** stated caveats shown; "stated none"; "predates stated caveats"
+  for a v3 result.
+- **Breaks:**
+  - `caveats` removed from the contract: a response without it is accepted;
+  - the legacy checker made to use the current contract only: the v3 rows are named
+    as failing.
+- **Also:** the regression, with every script's payload carrying `caveats`; the
+  prod-copy equivalence (every GET identical); the client `tsc`, build and lint.
+- **Deploy:** no migration and no hardening change. A backup is still taken first.
