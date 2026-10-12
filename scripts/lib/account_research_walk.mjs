@@ -158,6 +158,12 @@ if (MODE === 'walk') {
   check(await waitFor(`!${field('Revenue')}`), 'the revenue is accepted');
   check(psql(`SELECT f.value_numeric::text || '|' || f.unit || '|' || f.as_of || '|' || ev.citation_resolved FROM institution_facts f JOIN evidence ev ON ev.id = f.evidence_id WHERE f.institution_id = '${INST}' AND f.kind = 'revenue'`) === '4321.5|USD|2024-09-30|true',
     'database: the fact with as_of = the period end, its evidence citation resolved');
+  // Q4i: the facts card shows the citation opened, apart from Unverified.
+  check(await waitFor(`[...document.querySelectorAll('[data-testid=citation-opened]')].some(e=>e.textContent.startsWith('Citation opened by Authorized X (verification), 20') && e.closest('li').textContent.includes('Unverified'))`),
+    'Q4i: the revenue fact card reads "Citation opened by <reviewer>, <date>", beside its Unverified badge');
+  await shot('q4i_citation_opened', '[data-testid=citation-opened]');
+  await ev(`(()=>{const e=document.querySelector('[data-testid=citation-opened]');e.closest('li').setAttribute('data-shot','fact');return true})()`);
+  await shot('q4i_fact_card', '[data-shot=fact]');
   await setField(field('System — not found'), 'Review note', 'Verification: not in the filings.');
   await sleep(200);
   check((await disabled(field('System — not found'), 'Accept as not found')) === false, 'a not-found needs no citation tick');

@@ -186,6 +186,13 @@ RHC="$(rj "b.results.find(r=>r.field_name==='headcount').id")"; RSYS="$(rj "b.re
 expect POST "/api/account-research-results/$RREV/accept" '{"review_note":"Verification: matches Item 8.","citation_opened":true}' 200 "accept revenue 0 (zero is data)"
 [ "$(q "SELECT f.value_numeric::text || '|' || f.unit || '|' || f.as_of || '|' || ev.kind || '|' || ev.citation_resolved || '|' || (ev.provenance LIKE '%Net sales were nil (fixture).%fiscal year ended 30 September 2024%') FROM institution_facts f JOIN evidence ev ON ev.id = f.evidence_id WHERE f.institution_id = '$INST' AND f.kind = 'revenue'")" = "0|USD|2024-09-30|public_filing|true|true" ] \
   && ok "  ...the fact: 0 USD, as_of = the period end (L6), public_filing, citation resolved, the quote and period in the provenance" || bad "  ...revenue fact: $(q "SELECT value_numeric, unit, as_of FROM institution_facts WHERE institution_id = '$INST' AND kind = 'revenue'")"
+# Q4i: the account page's read carries citation_resolved, by whom, when —
+# apart from source_verified. A typed fact has none.
+expect POST "/api/institutions/$INST/facts" '{"kind":"system","value_text":"A typed system (fixture)","as_of":"2024-09-30","evidence_kind":"observation","provenance":"Typed by the verifier (fixture, not a source)","confidence":"low"}' 201 "Q4i: a typed fact, for contrast"
+expect GET "/api/institutions/$INST/view" "" 200 "Q4i: GET /view"
+[ "$(rj "(f=>[f.citation_resolved, f.citation_resolved_by, /^\\d{4}-\\d{2}-\\d{2}$/.test(f.citation_resolved_at), f.source_verified].join())(b.facts.find(f=>f.kind==='revenue'))")" = "true,Authorized X (verification),true,false" ] \
+  && [ "$(rj "(f=>[f.citation_resolved, f.citation_resolved_by, f.citation_resolved_at].join())(b.facts.find(f=>f.value_text==='A typed system (fixture)'))")" = "false,," ] \
+  && ok "  ...the researched revenue: citation opened by X, dated, still source-unverified; the typed fact: not opened" || bad "  ...$(rj "JSON.stringify(b.facts.map(f=>[f.kind,f.citation_resolved,f.citation_resolved_by]))")"
 expect POST "/api/account-research-results/$RPRI/accept" '{"review_note":"Verification: the company says so.","citation_opened":true}' 200 "accept a stated priority from the company's own publication"
 [ "$(q "SELECT ev.kind || '|' || ev.source_reference FROM institution_facts f JOIN evidence ev ON ev.id = f.evidence_id WHERE f.institution_id = '$INST' AND f.kind = 'stated_priority'")" = "observation|Company annual review 2024, p. 3 (fixture)" ] \
   && ok "  ...H3: recorded as observation with a source reference (derives inferred); the stated source kind kept in raw_response" || bad "  ...H3"
@@ -199,7 +206,7 @@ expect GET "/api/institutions/$INST/research" "" 200 "GET research after review"
   && ok "  ...facts phase; the entity, the regime, the not-found, nothing pending" || bad "  ...$(head -c 300 "$W/r.json")"
 expect POST "/api/institutions/$INST/research-prompts" '{}' 201 "the next facts prompt"
 rj b.prompt > "$W/p3.txt"
-grep -qF "ALREADY RECORDED (2)" "$W/p3.txt" && grep -qF -- "- revenue: 0 USD (as of 2024-09-30)" "$W/p3.txt" && grep -qF "PREVIOUSLY NOT FOUND (1)" "$W/p3.txt" && grep -qF -- "- system: Not disclosed in filings (fixture)." "$W/p3.txt" \
+grep -qF "ALREADY RECORDED (3)" "$W/p3.txt" && grep -qF -- "- revenue: 0 USD (as of 2024-09-30)" "$W/p3.txt" && grep -qF "PREVIOUSLY NOT FOUND (1)" "$W/p3.txt" && grep -qF -- "- system: Not disclosed in filings (fixture)." "$W/p3.txt" \
   && ok "  ...lists what is recorded (H4: still asks for every kind) and what was not found, with the reason" || bad "  ...$(grep -A3 'ALREADY' "$W/p3.txt" | head -4)"
 P3="$(rj b.prompt_id)"
 

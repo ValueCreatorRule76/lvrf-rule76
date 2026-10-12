@@ -41,6 +41,10 @@ export interface InstitutionFact {
   confidence: 'low' | 'medium' | 'high';
   source_verified: boolean;
   ai_sourced: boolean;
+  /** Q4i: a named person opened the citation (H1). Not source_verified. */
+  citation_resolved: boolean;
+  citation_resolved_by: string | null;
+  citation_resolved_at: string | null;
   captured_by: string;
   created_at: string;
   /** Earlier values this fact replaced, newest first (fact supersession, 0028). */

@@ -409,6 +409,13 @@ export function AccountFactsCard({
                     <span className="block text-[11.5px] text-ink-45">
                       As of {f.as_of} · {f.provenance}
                     </span>
+                    {/* Q4i: opening the citation (H1) is its own fact, shown apart from the
+                        Unverified badge, which is source_verified (the disclosure gate). */}
+                    {f.citation_resolved && (
+                      <span className="block text-[11.5px] text-healthy" data-testid="citation-opened">
+                        Citation opened by {f.citation_resolved_by ?? 'an unnamed reviewer'}, {f.citation_resolved_at}
+                      </span>
+                    )}
                     <span className="block font-mono text-[10.5px] text-ink-45">
                       {f.evidence_kind} · {f.confidence} confidence · {f.captured_by}
                     </span>

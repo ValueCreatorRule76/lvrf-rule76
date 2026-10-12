@@ -165,17 +165,27 @@ export function institutionViewRouter(pool: Pool): Router {
         confidence: string;
         source_verified: boolean;
         ai_sourced: boolean;
+        citation_resolved: boolean;
+        citation_resolved_by: string | null;
+        citation_resolved_at: string | null;
         captured_by: string;
         created_at: string;
       }>(
+        // Q4i: citation_resolved — whether a named person opened the
+        // citation (H1; AMENDMENT-005 Art. IV) — is selected as this comment
+        // always said, with who and when. It is not source_verified (the
+        // disclosure gate), and the page shows them apart.
         `SELECT f.id, f.kind, f.value_numeric, f.value_text, f.unit,
                 to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
                 e.id AS evidence_id, e.kind AS evidence_kind, e.provenance,
                 e.source_reference, e.confidence, e.source_verified, e.ai_sourced,
+                e.citation_resolved, rp.full_name AS citation_resolved_by,
+                to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS citation_resolved_at,
                 p.full_name AS captured_by, f.created_at
            FROM institution_facts f
            JOIN evidence e ON e.id = f.evidence_id
            JOIN persons p ON p.id = f.captured_by_person_id
+           LEFT JOIN persons rp ON rp.id = e.citation_resolved_by_person_id
           WHERE f.institution_id = $1
             AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
           ORDER BY f.kind, f.as_of DESC, f.created_at DESC`,
