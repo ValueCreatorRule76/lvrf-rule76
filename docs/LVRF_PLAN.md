@@ -1829,3 +1829,110 @@ releases, web pages, blog posts, job postings and marketing material.
   the choice is made at entry and not argued later.
 - **Recorded in §3** as R1's refinement. **No code depends on it** beyond that help
   text.
+
+### OWN-1, the build plan refreshed (13 Oct 2026; **plan only, not yet approved**)
+
+**What changed since the plan above was written** (O2, the W1 fix and Q4k deployed since):
+
+- **40 tables** on prod, 2 sequences, 27 enum types. The database `lvrf` is owned by
+  `lvrf_app` (O2's Gate C), so `ownership.sql` moves the database too, which also moves
+  `public` (owned by `pg_database_owner`).
+- **`lvrf_app`'s privileges, re-derived from the code today.** The server and the box
+  scripts were grepped for every statement they issue:
+  - **SELECT** on every table, and on `drizzle.__drizzle_migrations` (deploy step 5c,
+    `check_schema_drift.mjs` and Gate C read it as `lvrf_app`), with USAGE on schemas
+    `public` and `drizzle`.
+  - **INSERT on 31 tables:** access_grants, account_person_links, assessments,
+    business_metrics, capabilities, capability_industry_measures, engagements, evidence,
+    executive_summaries, heartbeat_events, industry_measure_exclusions,
+    industry_measures, institution_entities, institution_facts, institutions,
+    lever_offerings, offering_capabilities, person_credentials, persons, record_documents,
+    reference_example_markers, refusals, research_prompts, research_results, sessions,
+    value_hypotheses, value_levers, value_outcome_evidence, value_outcomes, value_runs,
+    and audit_log (by `lvrf_audit`, which is SECURITY DEFINER and runs as its owner, so
+    only as a backstop).
+  - **UPDATE on 20 tables:** access_grants, account_person_links, business_metrics,
+    engagements, **evidence** (new with Q4k: opening a citation), industry_measures,
+    institution_entities, institution_facts, institutions, lever_offerings,
+    person_credentials, persons, reference_example_markers, research_results, sessions,
+    tenants, value_hypotheses, value_levers, value_outcomes, value_runs.
+  - **No DELETE or TRUNCATE anywhere.** The code issues none; "TRUNCATE" appears only in
+    comments. `hardening_manifest` is truncated by `hardening.sql`, which runs as
+    `postgres`.
+  - **USAGE and SELECT** on the 2 sequences (`audit_log_id_seq`,
+    `heartbeat_events_id_seq`).
+  - **EXECUTE** on the `lvrf_*` functions the app calls (`lvrf_evidence_basis`,
+    `lvrf_hypothesis_verdict`). Both are owned by `postgres`; PUBLIC's default EXECUTE
+    already covers them, and that is left as is.
+  - **The grep is a starting list, not the proof.** Gate A runs all 29 verify scripts on
+    converted clones as `lvrf_app`; a missing grant fails a script with "permission
+    denied".
+- **Hardening:** the ownership assertion is **section 24** (section 23 is the W1 fix's
+  link guard). The GRANTs live in `ownership.sql`, and section 24 asserts them after every
+  hardening run.
+- **No trigger count change.** It stays 129.
+
+**The build, in order:**
+
+1. **`db/ownership.sql`** (idempotent, run as a superuser, per database). It holds:
+   - the roles, `lvrf_owner` (NOLOGIN) and `lvrf_migrate` (LOGIN, member of
+     `lvrf_owner`, `ALTER ROLE … SET role = 'lvrf_owner'`), with the password from a psql
+     variable and never in the file;
+   - `ALTER DATABASE … OWNER TO lvrf_owner`;
+   - the explicit ownership loop (not `REASSIGN OWNED`, which reaches other databases in
+     the cluster);
+   - the grants above, plus REVOKE CREATE on the database and on `public` from
+     `lvrf_app` and PUBLIC;
+   - `ALTER DEFAULT PRIVILEGES FOR ROLE lvrf_owner`: a new table gives `lvrf_app` SELECT
+     and INSERT, sequences USAGE and SELECT, and nothing else.
+2. **`hardening.sql` section 24:** the assertion. It fails the run if `lvrf_app` owns
+   anything or the database, holds DELETE, TRUNCATE or CREATE anywhere, or holds UPDATE
+   on `audit_log`, `heartbeat_events` or `refusals`; or if any trigger is disabled.
+3. **`scripts/check_migrate_role.ts`** (read-only): exits 1 unless the connection is
+   `lvrf_migrate` acting as `lvrf_owner`.
+4. **Deploy step 5d** in `scripts/lvrf-deploy.sh`: the same assertion, read-only as
+   `lvrf_app`. It refuses to restart on any failure. The script changes, so its re-exec
+   runs once.
+5. **The harness:** `scripts/lib/clone.sh` → `make_clone NAME` = `createdb -T lvrf`, then
+   `ownership.sql` on the clone, then migrate as `lvrf_migrate`, then `hardening.sql`.
+   - It replaces the four repeated lines in 26 verify scripts (mechanical).
+   - **Local:** the roles are created once on this Mac's cluster (OWN-1-D1), with
+     `lvrf_migrate`'s URL in a git-ignored `.env.migrate`. **Real local `lvrf` is not
+     converted**: clones are.
+   - `restore_prod_copy.sh` hands ownership to `lvrf_owner` and runs `ownership.sql`.
+6. **`verify_ownership.sh`** (Gate A):
+   - **nine attempts as `lvrf_app`, each refused:** DROP TRIGGER, DISABLE TRIGGER, GRANT
+     UPDATE on `audit_log`, ADD COLUMN, CREATE TABLE, DROP TABLE, TRUNCATE `refusals`,
+     `session_replication_role`, ALTER DATABASE OWNER;
+   - **as `lvrf_migrate`:** a test migration's table is owned by `lvrf_owner`, with the
+     default privileges;
+   - **breaks:**
+     - B1: a table back to `lvrf_app` → hardening fails, and 5d refuses;
+     - B2: UPDATE on `audit_log` → the same;
+     - B3: a migration as `lvrf_app` → its table is `lvrf_app`'s, and hardening fails;
+     - B4: a disabled trigger → hardening fails;
+   - **the proof Brad asked for:** the three attempts on a converted prod copy, each
+     refused.
+7. **Regression and prod-copy:** all verify scripts on converted clones, and every GET
+   identical (no API change).
+
+**Gate B (unchanged in shape, a STOP after each):**
+
+1. a read-only pre-check, including `pg_hba.conf`'s 127.0.0.1 rules (`sudo cat`; if sudo
+   prompts, Brad runs it);
+2. the backup;
+3. the roles and ownership as `postgres`: the password generated on the box straight into
+   `~/.lvrf_migrate.env` (`chmod 600`) and never echoed, then `ownership.sql`, then
+   `check_migrate_role.ts`;
+4. pull, migrate as `lvrf_migrate`, harden (section 24 passing; 129 triggers);
+5. deploy (with the re-exec line);
+6. Gate C.
+
+**Before Gate C can be mine again:** my read-only ssh needs a key in this Mac's ssh agent
+(see the Q4k Deployed note). Until then, Gate C goes to Brad as a paste.
+
+**Decisions still open (above):**
+
+- **OWN-1-D1:** may the local roles be created?
+- **OWN-1-D2:** no live DDL attempts on prod (recommended)?
+- **OWN-1-D3:** the `CLAUDE.md` Stack edit after OWN-1's Gate C.
