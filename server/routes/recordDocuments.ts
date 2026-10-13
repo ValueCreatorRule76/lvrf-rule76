@@ -5,6 +5,7 @@ import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * Two routers, not one: the POST is run-scoped
@@ -215,7 +216,7 @@ export function recordDocumentsWriteRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -290,7 +291,7 @@ export function recordDocumentsReadRouter(pool: Pool): Router {
       );
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

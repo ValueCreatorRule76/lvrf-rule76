@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 export function engagementsRouter(pool: Pool): Router {
   const router = Router();
@@ -32,7 +33,7 @@ export function engagementsRouter(pool: Pool): Router {
       `, [actorTenantId(req)]);
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -76,7 +77,7 @@ export function engagementsRouter(pool: Pool): Router {
       );
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

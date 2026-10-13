@@ -2,8 +2,9 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -234,6 +235,21 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         });
         return;
       }
+      // Q4k: evidence_ai_verify_requires_resolution refuses this at the
+      // schema; the route says it first, in the same plain words. AI-sourced
+      // evidence is recorded unverified; it is verified when a person opens
+      // its citation (POST /api/evidence/:id/open-citation). The attempt is
+      // RECORDED (source 'route', with its outcome and payload), as the
+      // database's refusal was: the gap register reads it as "refused".
+      if (aiSourced && sourceVerified) {
+        const message = "AI-sourced evidence is verified after its citation is opened, not when it's recorded. Record it unverified, then open its citation.";
+        await recordRouteRefusal(pool, req, {
+          endpoint: 'POST /api/value-outcomes/:outcomeId/evidence', subjectTable: 'evidence', subjectId: null,
+          tenantId: outcome.tenant_id, institutionId: outcome.institution_id, valueOutcomeId: outcome.id, attemptedPayload: req.body,
+        }, message);
+        res.status(422).json({ message });
+        return;
+      }
 
       // Read from the database rather than hardcoding the enum's members —
       // a future migration that adds or renames a kind should not require
@@ -359,7 +375,7 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

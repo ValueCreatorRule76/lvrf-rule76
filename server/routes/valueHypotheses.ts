@@ -5,6 +5,7 @@ import { handleGovernanceError } from '../lib/refusal.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * O2 (Outputs band, LVRF_PLAN §5; decisions O2-D1–D4) — value hypotheses,
@@ -84,7 +85,7 @@ async function answerError(pool: Pool, err: unknown, req: Request, res: Response
   if (await handleGovernanceError(pool, err, req, res, {
     endpoint, subjectTable, subjectId, tenantId, institutionId, attemptedPayload: req.body,
   })) return;
-  res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+  respondServerError(res, err);
 }
 
 async function currentInstitution(client: Pool | PoolClient, req: Request, institutionId: string) {
@@ -285,7 +286,7 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
       }
       res.json(pov);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

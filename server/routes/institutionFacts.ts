@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { type FactFields, insertFactWithEvidence, pointFactAtSuccessor } from '../lib/institutionFactWriter.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -244,7 +245,7 @@ export function institutionFactsRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -360,7 +361,7 @@ export function institutionFactsRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

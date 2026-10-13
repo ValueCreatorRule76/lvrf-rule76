@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant, personTenantId } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -371,7 +372,7 @@ export function validateMetricRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

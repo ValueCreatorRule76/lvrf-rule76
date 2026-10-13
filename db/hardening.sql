@@ -648,10 +648,21 @@ CREATE TRIGGER refusals_no_delete
 --
 -- CONSEQUENCE: trigger count goes 64 -> 65.
 
+-- Q4k (Brad, 12 Oct 2026): AI ORIGIN IS PERMANENT. ai_sourced, once true,
+-- stays true on the row for good — before or after the citation is opened.
+-- Opening a citation records that a named human checked the source; it
+-- does not launder where the text came from. Folded into this function (no
+-- new trigger): it is the same gate, keyed on the same row.
 CREATE OR REPLACE FUNCTION lvrf_resolution_is_final() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  -- Unresolved is the normal case and is not governed by this trigger.
+  IF OLD.ai_sourced AND NOT NEW.ai_sourced THEN
+    RAISE EXCEPTION
+      'LVRF: evidence % is AI-sourced, and stays so: opening its citation records that a person '
+      'checked the source; it does not change where the text came from.', OLD.id
+      USING ERRCODE = 'check_violation';
+  END IF;
+  -- Unresolved is the normal case and is not governed further.
   IF NOT OLD.citation_resolved THEN RETURN NEW; END IF;
 
   IF NEW.citation_resolved IS DISTINCT FROM OLD.citation_resolved

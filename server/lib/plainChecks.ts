@@ -1,0 +1,91 @@
+/**
+ * Q4k (L29 widened, 12 Oct 2026) — one plain sentence per CHECK constraint.
+ * Postgres's own CHECK text ("new row for relation … violates check
+ * constraint …") names a relation and a constraint and reads as a crash;
+ * the person sees the sentence for that constraint instead. The raw text
+ * and the constraint name still go into `refusals`, for the record.
+ *
+ * COVERAGE: every CHECK in the database must have a sentence here.
+ * scripts/check_plain_refusals.ts reads the live catalog (pg_constraint,
+ * so the CHECKs migrations write by hand count too) and fails on any CHECK
+ * without one, as MUTATING_ROUTE_CLASS does for routes.
+ */
+export const PLAIN_CHECK: Record<string, string> = {
+  access_grants_reason_stated: 'A grant needs a reason of at least 12 characters.',
+  access_grants_revocation_complete: 'A revocation records who revoked it, when and why, together.',
+  access_grants_revocation_reason_stated: 'A revocation needs a reason of at least 12 characters.',
+  access_grants_revoked_after_granted: 'A grant cannot be revoked before it was granted.',
+  account_person_links_retirement_is_complete: 'Withdrawing a link records who withdrew it, when and why (at least 12 characters), together.',
+  account_person_links_title_stated: 'The title on this account needs at least 3 characters.',
+  assessments_scale_sane: "An assessment's scale maximum must be above its minimum.",
+  assessments_score_in_range: "An assessment's score must lie within its scale.",
+  business_metrics_definition_confirmation_is_complete: "A metric's definition is confirmed by a named person, with a date, together.",
+  evidence_ai_requires_query: 'AI-sourced evidence names the research query and the tool that produced it.',
+  evidence_ai_verify_requires_resolution: "AI-sourced evidence is verified after its citation is opened, not when it's recorded.",
+  evidence_attestation_is_complete: 'An attestation names who attested and when, together.',
+  evidence_resolution_requires_human: 'Opening a citation records the person who opened it and when.',
+  executive_summaries_ai_disclosed: 'A summary drafted with AI names the tool; one that was not names none.',
+  executive_summaries_body_stated: 'A summary needs at least 40 characters.',
+  heartbeat_events_severity_range: 'A heartbeat severity runs from 0 to 5.',
+  heartbeats_failure_severity_range: 'A heartbeat failure severity runs from 0 to 5.',
+  heartbeats_health_weight_range: 'A heartbeat health weight runs from 0 to 10.',
+  heartbeats_id_format: 'A heartbeat id has the form HB-0000.',
+  industry_measure_exclusions_proposal_is_complete: 'A proposed exclusion names the research tool and its proposal text, together.',
+  industry_measures_retirement_is_complete: 'Retiring a pack entry records who retired it and why (at least 12 characters), together.',
+  institution_entities_identifier_shape: "An entity needs a legal name and an identifier in that identifier's form (a registry number names its jurisdiction; a CIK has ten digits).",
+  institution_entities_supersession_reason: 'Correcting an entity needs a reason of at least 12 characters.',
+  institution_facts_headcount_whole_people: 'A headcount is a whole number of people.',
+  institution_facts_numeric_shape: 'Revenue and headcount are recorded as numbers of zero or more.',
+  institution_facts_regime_shape: 'A disclosure regime is public filer, private, or subsidiary of a filer.',
+  institution_facts_revenue_currency: 'Revenue names its currency as a three-letter code, such as USD.',
+  institution_facts_supersession_reason: 'Correcting a fact needs a reason of at least 12 characters.',
+  institution_facts_text_shape: 'A stated priority or a system is recorded as text.',
+  institutions_website_is_url: 'A website starts with http:// or https://.',
+  lever_offerings_basis_stated: 'Linking a solution needs a basis of at least 12 characters.',
+  lever_offerings_retirement_is_complete: 'Withdrawing a solution records who withdrew it, when and why (at least 12 characters), together.',
+  offerings_artifacts_nonempty_when_evidential: 'An offering that evidences anything names at least one artifact.',
+  offerings_evidence_ratification_valid: "An offering's evidence ratification is unratified, ratified or revoked.",
+  offerings_evidence_requires_source: 'An offering that evidences more than consumption names its verification source.',
+  offerings_market_status_valid: "An offering's market status is proposed, approved, active, deprecated or retired.",
+  offerings_source_refs_is_array: "An offering's source references are a list.",
+  person_credentials_hash_is_argon2id: 'A password is stored only as an argon2id hash.',
+  persons_scoped_to_exactly_one: "A person belongs to the tenant's staff or to one account, not both.",
+  reference_example_markers_retirement_is_complete: 'Unmarking records who unmarked it and why (at least 12 characters), together.',
+  reference_example_markers_stated: 'A reference-example marker needs a source citation and a note of at least 12 characters each.',
+  reference_example_markers_supersession_reason: 'Correcting a marker needs a reason of at least 12 characters.',
+  reflections_human_review_before_ratification: 'A reflection is reviewed by a named person before it is ratified.',
+  refusals_source_shape: 'A refusal from the database names its error code.',
+  research_prompts_sha256_is_the_text: "A prompt's fingerprint must be that of its text.",
+  research_prompts_subject_shape: 'A research prompt names exactly one subject: an industry, or an account and its phase.',
+  research_prompts_versions_positive: "A prompt's contract and template versions start at 1.",
+  research_results_accepted_has_record: 'An accepted research result points at the record it became.',
+  research_results_found_shape: 'A research result either reports what it found, or says why it found nothing.',
+  research_results_kind_shape: 'A research result names the subject its kind requires.',
+  research_results_prompt_named: 'A research result names the prompt it answered.',
+  research_results_review_is_complete: 'A reviewed research result names its reviewer and the time.',
+  research_results_untracked_predates_prompts: 'Only results parsed before prompts were tracked may lack a prompt.',
+  sessions_expiry_is_bounded: "A session's expiry cannot pass its absolute limit.",
+  stewardship_returns_requires_source: 'A stewardship return names the reflection or outcome it returns from.',
+  value_hypotheses_conditions_no_digits: 'Numbers belong in recorded values, not falsifier conditions.',
+  value_hypotheses_retirement_is_complete: 'Withdrawing a hypothesis records who withdrew it and why (at least 12 characters), together.',
+  value_hypotheses_statement_stated: 'A hypothesis needs a statement of at least 24 characters.',
+  value_hypotheses_supersession_reason: 'Restating a hypothesis needs a reason of at least 12 characters.',
+  value_levers_retirement_is_complete: 'Withdrawing a lever records who withdrew it and why (at least 12 characters), together.',
+  value_levers_stated: 'A lever needs a name, a mechanism and a citation of at least 12 characters, and what moves first.',
+  value_outcome_evidence_supports_known: 'Evidence supports the baseline, the actual or the impact basis.',
+  value_outcomes_commit_is_complete: 'A commitment names a target and the person who committed to it.',
+  value_outcomes_impact_requires_basis: 'A currency impact states its basis.',
+  value_outcomes_measured_requires_actual: 'A measured outcome records its actual value and when it was measured.',
+  value_outcomes_realized_requires_measurement: 'An impact is realized only once the outcome is measured.',
+  value_outcomes_verified_requires_human: 'A verified outcome names its verifier, when, and its verified source.',
+  value_runs_confidence_range: "A run's confidence runs from 0 to 100.",
+  value_runs_lock_is_complete: 'Locking a run records who locked it and why, together.',
+};
+
+export const NEUTRAL_CHECK = "That can't be recorded as entered; nothing was written.";
+
+/** Postgres's own CHECK text, replaced by the constraint's sentence; a message the schema wrote for people passes unchanged. */
+export function plainCheckMessage(err: { message: string; constraint?: string }): string {
+  if (!/^new row for relation .* violates check constraint/.test(err.message)) return err.message;
+  return (err.constraint && PLAIN_CHECK[err.constraint]) || NEUTRAL_CHECK;
+}

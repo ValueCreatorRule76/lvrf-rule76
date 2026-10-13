@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { actorTenantId } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 // GET /api/institutions — the accounts index, the front door's own data.
 // Same shape as runsIndex.ts: a flat list of the actor's tenant's accounts
@@ -43,7 +44,7 @@ export function institutionsIndexRouter(pool: Pool): Router {
       `, [actorTenantId(req)]);
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

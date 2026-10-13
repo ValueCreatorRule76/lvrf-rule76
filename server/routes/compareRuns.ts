@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * GET, not a mutating method — actorContext's MUTATING_METHODS set does not
@@ -346,7 +347,7 @@ export function compareRunsRouter(pool: Pool): Router {
         },
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

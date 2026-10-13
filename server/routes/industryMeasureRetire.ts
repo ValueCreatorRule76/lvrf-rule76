@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * Q4c1b — POST /api/industry-measures/:id/retire. Retires one pack entry:
@@ -184,7 +185,7 @@ export function industryMeasureRetireRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

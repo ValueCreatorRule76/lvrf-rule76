@@ -8,6 +8,7 @@ import { requireSteward } from '../lib/stewardActs.js';
 import {
   INDUSTRY_MEASURE_CONTRACT, PROMPT_TEMPLATE_VERSION, buildIndustryMeasurePrompt, contractColumns, validateMeasure,
 } from '../research/contracts.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * 2.0 item 5, industry packs — pack parse-and-review.
@@ -209,7 +210,7 @@ export function industryResearchRouter(pool: Pool): Router {
       );
       res.json({ industry, contract_version_now: INDUSTRY_MEASURE_CONTRACT.version, prompts, pending });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -386,7 +387,7 @@ export function industryResearchRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -467,7 +468,7 @@ export function industryResearchRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -717,7 +718,7 @@ export function researchResultsReviewRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -801,7 +802,7 @@ export function researchResultsReviewRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * GET /api/institutions/:id/view — the account view. Everything the screen
@@ -303,7 +304,7 @@ export function institutionViewRouter(pool: Pool): Router {
         },
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

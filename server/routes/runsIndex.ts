@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { actorTenantId } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 // List across all of the ACTOR'S TENANT's engagements/institutions (sign-in
 // P3: filtered on actorTenantId; until P3 it was global). Kept separate from
@@ -48,7 +49,7 @@ export function runsIndexRouter(pool: Pool): Router {
       `, [actorTenantId(req)]);
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

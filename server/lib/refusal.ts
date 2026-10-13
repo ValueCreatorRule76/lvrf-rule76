@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Pool } from 'pg';
+import { plainCheckMessage } from './plainChecks.js';
 
 /**
  * 2.0 item 2, part B. isCheckViolation/isUniqueViolation were defined
@@ -184,7 +185,7 @@ export async function handleGovernanceError(
 
   await recordRefusal(pool, req, context, err.code, err.constraint ?? null, err.message);
 
-  res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : err.message });
+  res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : plainCheckMessage(err) });
   return true;
 }
 
@@ -199,7 +200,7 @@ export async function handleGovernanceError(
 export async function recordRouteRefusal(
   pool: Pool,
   req: Request,
-  context: Omit<RefusalContext, 'valueOutcomeId'> & { tenantId: string },
+  context: RefusalContext & { tenantId: string },
   message: string,
 ): Promise<void> {
   try {
@@ -207,10 +208,10 @@ export async function recordRouteRefusal(
     if (!actorPersonId) throw new Error('req.actor missing on a request past requireActor');
     await pool.query(
       `INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table, subject_id,
-                             source, sqlstate, constraint_name, message, attempted_payload)
-       VALUES ($1, $2, $3, $4, $5, $6, 'route', NULL, NULL, $7, $8)`,
+                             source, sqlstate, constraint_name, message, attempted_payload, value_outcome_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'route', NULL, NULL, $7, $8, $9)`,
       [context.tenantId, context.institutionId, actorPersonId, context.endpoint, context.subjectTable,
-       context.subjectId, message, context.attemptedPayload ?? {}],
+       context.subjectId, message, context.attemptedPayload ?? {}, context.valueOutcomeId ?? null],
     );
   } catch (writeErr) {
     console.error('LVRF: failed to record a route refusal. The 400 still stands.', writeErr);

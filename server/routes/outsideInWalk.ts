@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * Q4c2 — GET /api/institutions/:institutionId/walk: everything the account
@@ -90,7 +91,12 @@ export function outsideInWalkRouter(pool: Pool): Router {
                     'metric', json_build_object('id', bm.id, 'name', bm.name, 'unit', bm.unit, 'direction', bm.direction,
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
-                                                                            'summary', ev.summary, 'basis', lvrf_evidence_basis(ev)) ORDER BY ev.created_at)
+                                                                            'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),
+                                                                            -- Q4k: the citation state, for "Open the citation…"
+                                                                            'ai_sourced', ev.ai_sourced, 'source_verified', ev.source_verified,
+                                                                            'citation_resolved', ev.citation_resolved,
+                                                                            'citation_resolved_by', (SELECT full_name FROM persons WHERE id = ev.citation_resolved_by_person_id),
+                                                                            'citation_resolved_at', to_char(ev.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY ev.created_at)
                                             FROM value_outcome_evidence voe JOIN evidence ev ON ev.id = voe.evidence_id
                                            WHERE voe.value_outcome_id = vo.id), '[]'))
                     ORDER BY vo.created_at)
@@ -127,7 +133,7 @@ export function outsideInWalkRouter(pool: Pool): Router {
         persons, analysts, staff, offerings, pack, capabilities, engagements,
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

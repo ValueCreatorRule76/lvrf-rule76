@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { actorTenantId } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * LVRF 2.0 item 5, industry packs — the read side. Two GET routes: every
@@ -53,7 +54,7 @@ export function industryPackRouter(pool: Pool): Router {
       );
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -209,7 +210,7 @@ export function industryPackRouter(pool: Pool): Router {
 
       res.json({ industry, measures: measuresWithLevers, exclusions, retired, offerings });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

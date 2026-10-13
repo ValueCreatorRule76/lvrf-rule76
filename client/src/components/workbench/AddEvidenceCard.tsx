@@ -94,13 +94,15 @@ export function AddEvidenceCard({
   // the disabled '— choose —' option, and canSubmit stays false until each
   // one has been explicitly set — including the three yes/no fields, which
   // a checkbox would have silently resolved to false on page load.
+  // Q4k: AI-sourced evidence is always recorded unverified.
+  const effectiveVerified: YesNo = aiSourced === 'true' ? 'false' : sourceVerified;
   const canSubmit =
     provenanceValid &&
     kind !== '' &&
     summary.trim() !== '' &&
     supports !== '' &&
     confidence !== '' &&
-    sourceVerified !== '' &&
+    effectiveVerified !== '' &&
     aiSourced !== '' &&
     simulated !== '' &&
     aiFieldsValid;
@@ -118,7 +120,7 @@ export function AddEvidenceCard({
           supports,
           confidence,
           ...(sourceReference.trim() !== '' ? { source_reference: sourceReference } : {}),
-          source_verified: sourceVerified === 'true',
+          source_verified: effectiveVerified === 'true',
           ai_sourced: aiSourced === 'true',
           simulated: simulated === 'true',
           ...(aiSourced === 'true'
@@ -162,6 +164,12 @@ export function AddEvidenceCard({
                   </option>
                 ))}
               </select>
+              {/* R1, refined (Brad, 12 Oct 2026; LVRF_PLAN §3). */}
+              <span className="mt-1 block text-[11px] text-ink-45" data-testid="kind-help">
+                A company's formal annual disclosure report — a 10-K, annual report, or CR, sustainability or ESG
+                report — is <code>public_filing</code>. Looser company material — a press release, web page, blog
+                post, job posting or marketing — is <code>observation</code>.
+              </span>
             </label>
 
             <label className="block">
@@ -228,11 +236,16 @@ export function AddEvidenceCard({
 
             <label className="mb-3 block">
               <span className={LABEL_CLASS}>Source verified</span>
+              {/* Q4k: AI-sourced evidence is recorded unverified and verified when a
+                  person opens its citation (AMENDMENT-005 Article III); the route and
+                  the CHECK refuse the combination, so the form does not offer it. */}
               <select
                 required
-                value={sourceVerified}
+                value={aiSourced === 'true' ? 'false' : sourceVerified}
+                disabled={aiSourced === 'true'}
                 onChange={(e) => setSourceVerified(e.target.value as YesNo)}
-                className={INPUT_CLASS}
+                className={INPUT_CLASS + (aiSourced === 'true' ? ' cursor-not-allowed bg-offwhite text-ink-45' : '')}
+                data-testid="source-verified"
               >
                 <option value="" disabled>
                   — choose —
@@ -241,6 +254,12 @@ export function AddEvidenceCard({
                 <option value="false">No</option>
               </select>
             </label>
+            {aiSourced === 'true' && (
+              <p className="-mt-2 mb-3 text-[11px] text-ink-45" data-testid="source-verified-reason">
+                AI-sourced evidence is verified after its citation is opened, not when it's recorded (AMENDMENT-005,
+                Article III). Record it unverified; then open its citation.
+              </p>
+            )}
 
             <label className="mb-3 block">
               <span className={LABEL_CLASS}>AI-sourced</span>

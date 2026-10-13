@@ -266,8 +266,11 @@ step "7. Accept and reject: steward-only (Band A) and unchanged"
 npx tsx -e "import('./server/lib/stewardActs.ts').then(m=>{const t=m.MUTATING_ROUTE_CLASS;console.log([t['POST /api/research-results/:id/accept'],t['POST /api/research-results/:id/reject'],t['POST /api/industries/:industryId/research-prompts'],t['POST /api/industries/:industryId/research-results']].join(' '))})" > "$W/cls.txt"
 [ "$(cat "$W/cls.txt")" = "steward steward authorized authorized" ] && ok "MUTATING_ROUTE_CLASS: accept, reject steward; research-prompts, research-results authorized" || bad "classes: $(cat "$W/cls.txt")"
 REVIEW_SRC() { awk '/^export function researchResultsReviewRouter/{p=1} p' ; }
-git show 65f8486:"$ROUTE" | REVIEW_SRC > "$W/review.before"; REVIEW_SRC < "$ROUTE" > "$W/review.now"
-[ -s "$W/review.before" ] && cmp -s "$W/review.before" "$W/review.now" && ok "researchResultsReviewRouter (accept, reject) is byte-identical to the Q4b refactor commit 65f8486 ($(wc -l < "$W/review.now" | tr -d ' ') lines)" || bad "the review router changed: $(diff "$W/review.before" "$W/review.now" | head -4)"
+# Q4k changed one line of it on purpose: the 500 fallback answers plainly
+# (respondServerError). Apply that substitution to the old copy; everything
+# else must still match byte for byte.
+git show 65f8486:"$ROUTE" | REVIEW_SRC | sed "s/res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });/respondServerError(res, err);/" > "$W/review.before"; REVIEW_SRC < "$ROUTE" > "$W/review.now"
+[ -s "$W/review.before" ] && cmp -s "$W/review.before" "$W/review.now" && ok "researchResultsReviewRouter (accept, reject) is byte-identical to the Q4b refactor commit 65f8486, but for Q4k's plain 500 fallback ($(wc -l < "$W/review.now" | tr -d ' ') lines)" || bad "the review router changed: $(diff "$W/review.before" "$W/review.now" | head -4)"
 post "/api/research-results/$RR_2/accept" '{"review_note":"Verification: accepted."}' "$OTHER"
 [ "$CODE" = "403" ] && ok "accept by a non-steward -> 403" || bad "non-steward accept -> $CODE $(said | head -c 200)"
 post "/api/research-results/$RR_3/reject" '{"review_note":"Verification: rejected."}' "$OTHER"
@@ -301,7 +304,9 @@ expect "$PARSE" "$(body "$P1" "$SLUG2" "${GOOD_M/Contract measure/Break two agai
 # B3 — a missing prompt_id let through by the route: the database refuses it.
 break_route "prompt_id requirement removed" 's/if \(typeof promptId !== .string. \|\| !isUuid\(promptId\)\) \{/if (promptId === undefined) { \/\* broken \*\/ } else if (typeof promptId !== "string" || !isUuid(promptId)) {/'
 post "$PARSE" "$(body - "$SLUG" "${GOOD_M/Contract measure/Break three}")"
-[ "$CODE" != "201" ] && said | grep -qF "research_results_prompt_named" && ok "B3: with the route's check gone, research_results_prompt_named still refuses it ($CODE) — the second wall" || bad "B3: $CODE $(said | head -c 300)"
+[ "$CODE" != "201" ] && said | grep -qF "A research result names the prompt it answered." && ! said | grep -qF "research_results_prompt_named" \
+  && [ "$(psql -X -At -d "$VERIFY_DB" -c "SELECT constraint_name FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")" = "research_results_prompt_named" ] \
+  && ok "B3: with the route's check gone, research_results_prompt_named still refuses it ($CODE) — the second wall, said plainly (Q4k), recorded with its name" || bad "B3: $CODE $(said | head -c 300)"
 restore_route
 expect "$PARSE" "$(body - "$SLUG")" 422 "B3 restored: the route refuses it first" "body.prompt_id is required"
 # B4 — immutability: drop the trigger, the edit lands; re-harden, refused again.

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * GET /api/business-metrics/:metricId/research-prompt — LVRF 2.0 item 5, step 2.
@@ -252,7 +253,7 @@ export function researchPromptRouter(pool: Pool): Router {
         contract,
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

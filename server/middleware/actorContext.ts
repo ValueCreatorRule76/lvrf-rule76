@@ -94,7 +94,10 @@ export function actorContext(pool: Pool) {
                 res.status(500);
                 originalJson({
                   message:
-                    `The write was not committed: ${err instanceof Error ? err.message : String(err)}. ` +
+                    // Q4k: a rule the schema wrote for people ("LVRF: …", e.g. a
+                    // deferred one-current check) is said as written; Postgres's
+                    // own text is not (it names constraints) — logged above.
+                    `The write was not committed: ${err instanceof Error && err.message.startsWith('LVRF:') ? err.message : 'a database rule refused it when it was saved'}. ` +
                     'Nothing from this request was saved.',
                 });
               } catch (sendErr) {

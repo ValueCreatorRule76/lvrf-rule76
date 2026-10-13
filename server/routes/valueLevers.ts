@@ -5,6 +5,7 @@ import { handleGovernanceError } from '../lib/refusal.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * O1 (Outputs band, LVRF_PLAN §5) — value levers and the solutions that pull
@@ -65,7 +66,7 @@ async function answerError(pool: Pool, err: unknown, req: Request, res: Response
   if (await handleGovernanceError(pool, err, req, res, {
     endpoint, subjectTable, subjectId, tenantId, institutionId: null, attemptedPayload: req.body,
   })) return;
-  res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+  respondServerError(res, err);
 }
 
 const day = (t: string | Date) => new Date(t).toISOString().slice(0, 10);

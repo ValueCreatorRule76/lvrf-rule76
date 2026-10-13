@@ -8,6 +8,7 @@ import {
   type ConfidenceEvidenceInput,
   type RawEvidenceForConfidence,
 } from '../spine/confidenceModel.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * GET /api/value-outcomes/:outcomeId/gaps — LVRF 2.0 item 2, part C.
@@ -553,10 +554,10 @@ export function gapRegisterRouter(pool: Pool): Router {
       res.status(200).json(entries);
     } catch (err) {
       if (err instanceof GapRegisterError) {
-        res.status(500).json({ message: err.message });
+        respondServerError(res, err);
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

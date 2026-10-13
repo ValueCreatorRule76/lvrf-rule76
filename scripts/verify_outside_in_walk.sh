@@ -211,7 +211,7 @@ expect GET "/api/institutions/$INST_X/walk" "" 404 "B2 restored: 404 again"
 edit "$EVCARD" "  const outcomeId = outcomeIdProp ?? run?.payload.valueOutcomeId;" "  const outcomeId = run?.payload.valueOutcomeId ?? (outcomeIdProp && undefined);"
 sleep 5; walk break-evidence "$A_UI2"; restore "$EVCARD"
 # B4 — the plain-message mapping removed: Postgres's own text reaches the person.
-edit "$REFUSAL" "res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : err.message });" "res.status(status).json({ message: err.message });"
+edit "$REFUSAL" "res.status(status).json({ message: status === 409 ? plainUniqueMessage(err) : plainCheckMessage(err) });" "res.status(status).json({ message: err.message });"
 stop_server; start_server
 expect POST "/api/institutions/$A_W1/inputs" "{\"persons\":[{\"full_name\":\"The steward, again\",\"email\":\"$S_EMAIL\"}]}" 409 "B4: without the mapping, the raw Postgres text is shown — the mapping is what keeps it plain" "duplicate key value violates unique constraint \"persons_email_key\""
 restore "$REFUSAL"; stop_server; start_server

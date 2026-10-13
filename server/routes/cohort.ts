@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { actorTenantId } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * 2.0 item 3 — cohort roll-up, weakest link. GET /api/cohort.
@@ -322,7 +323,7 @@ export function cohortRouter(pool: Pool): Router {
         unclassified_account_count: unclassified.size,
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

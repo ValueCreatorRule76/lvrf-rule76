@@ -10,6 +10,7 @@ import {
   validateEntity, validateFact, validateNotFound, validateRegime,
   type GateMode, type ResearchedEntity, type ResearchedFact, type ResearchedRegime,
 } from '../research/contracts.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * Q4h — account research intake (3.0 item 6), with the minimum of items 3
@@ -198,7 +199,7 @@ export function accountResearchRouter(pool: Pool): Router {
         not_found: notFound,
       });
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -260,7 +261,7 @@ export function accountResearchRouter(pool: Pool): Router {
         endpoint: 'POST /api/institutions/:institutionId/research-prompts', subjectTable: 'research_prompts',
         subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
       })) return;
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -394,7 +395,7 @@ export function accountResearchRouter(pool: Pool): Router {
         endpoint: 'POST /api/institutions/:institutionId/research-results', subjectTable: 'research_results',
         subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
       })) return;
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -497,7 +498,7 @@ export function accountResearchRouter(pool: Pool): Router {
         endpoint: 'POST /api/institutions/:institutionId/entity/supersede', subjectTable: refusalTable,
         subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
       })) return;
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -682,7 +683,7 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         endpoint: 'POST /api/account-research-results/:id/accept', subjectTable: refusalTable,
         subjectId: resultId, tenantId: refusalTenantId, institutionId: null, attemptedPayload: req.body,
       })) return;
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
@@ -723,7 +724,7 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         endpoint: 'POST /api/account-research-results/:id/reject', subjectTable: 'research_results',
         subjectId: resultId, tenantId: refusalTenantId, institutionId: null, attemptedPayload: req.body,
       })) return;
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

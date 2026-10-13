@@ -42,7 +42,12 @@ interface WalkState {
       id: string; baseline_value: string; baseline_measured_at: string; target_value: string | null; realization: string; confidence: string;
       capability_name: string | null;
       metric: { id: string; name: string; unit: string; direction: string; source_system: string; industry_measure_id: string | null };
-      evidence: { id: string; kind: string; supports: string; summary: string; basis: string | null }[];
+      evidence: {
+        id: string; kind: string; supports: string; summary: string; basis: string | null;
+        /** Q4k: the citation state, for "Open the citation…". */
+        ai_sourced: boolean; source_verified: boolean; citation_resolved: boolean;
+        citation_resolved_by: string | null; citation_resolved_at: string | null;
+      }[];
     }[];
     runs: { id: string; run_number: number; locked_at: string | null; confidence_band: string }[];
   }[];
@@ -53,6 +58,56 @@ const INPUT_CLASS = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px
 const HELP_CLASS = 'm-0 mt-1 text-[11px] text-ink-45';
 
 type StepState = 'done' | 'next' | 'waiting';
+
+type WalkEvidence = WalkState['engagements'][number]['outcomes'][number]['evidence'][number];
+
+/**
+ * Q4k (Q4k-D1): "Open the citation…" on AI-sourced outcome evidence. A named
+ * person — the recorder may — opens the cited source and says whether it
+ * supports what the evidence states. Recorded with who and when, final;
+ * ai_sourced stays true. A run produced before this keeps the state it sealed.
+ */
+function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [supports, setSupports] = useState<'' | 'true' | 'false'>('');
+  if (!e.ai_sourced) return null;
+  if (e.citation_resolved) {
+    return (
+      <span className="ml-1 text-[11px] text-ink-45" data-testid="citation-opened">
+        · AI-sourced · citation opened by {e.citation_resolved_by}, {e.citation_resolved_at} · {e.source_verified ? 'source verified' : 'unverified'}
+      </span>
+    );
+  }
+  if (!open) {
+    return (
+      <span className="ml-1 inline-flex items-center gap-2 text-[11px] text-ink-45">
+        · AI-sourced · citation not yet opened
+        <button type="button" onClick={() => setOpen(true)}
+          className={'border border-silver px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ' + FOCUS_RING}>
+          Open the citation…
+        </button>
+      </span>
+    );
+  }
+  return (
+    <div className="mt-1.5 border-t border-rule-soft pt-2" data-testid="open-citation">
+      <GovernedForm<{ evidence_id: string }>
+        path={`/api/evidence/${e.id}/open-citation`} provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">That you opened the cited source of this AI-sourced evidence, with your name and the time. It is <strong>final</strong>, and the evidence stays marked AI-sourced. A run already produced keeps the state it sealed.</p>}
+        fields={<label className="block">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Does the source say what this evidence states?</span>
+          <select className={INPUT_CLASS} value={supports} onChange={(ev) => setSupports(ev.target.value as '' | 'true' | 'false')}>
+            <option value="" disabled>— choose —</option>
+            <option value="true">Yes — the source is verified</option>
+            <option value="false">No — opened, and it stays unverified</option>
+          </select>
+        </label>}
+        canSubmit={supports !== ''}
+        buildBody={() => ({ source_verified: supports === 'true' })}
+        submitLabel="Record the opened citation" onSuccess={onOpened} renderSuccess={() => <>Recorded.</>} />
+    </div>
+  );
+}
 
 function Step({ id, title, state, waitsFor, children, testId }: {
   id: string; title: string; state: StepState; waitsFor?: string; children: ReactNode; testId: string;
@@ -281,7 +336,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><OpenCitation e={e} onOpened={reload} /></li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>

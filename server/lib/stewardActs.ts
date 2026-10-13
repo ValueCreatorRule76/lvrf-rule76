@@ -51,6 +51,8 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   // W1 fix: naming the analyst of record is the account team's act.
   'POST /api/institutions/:institutionId/analyst-of-record': 'authorized',
   'POST /api/account-person-links/:id/retire': 'authorized',
+  // Q4k: opening an AI-sourced citation on outcome evidence (a named human, not the steward).
+  'POST /api/evidence/:id/open-citation': 'authorized',
   'POST /api/engagements/:id/retire': 'steward',
   // Authorized users (Q3 + D3: classify, offerings, validate, pack-basis and
   // claims are authorized-user acts)

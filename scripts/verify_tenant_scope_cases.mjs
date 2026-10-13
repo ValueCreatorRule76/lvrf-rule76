@@ -106,6 +106,10 @@ const CASES = [
   { route: 'POST /api/reference-examples/:id/supersede', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/supersede`,
     body: { kind: 'demonstration', source_citation: note('Verification citation.'), note: note('Verification marker.'), supersession_reason: note('Verification: P3 tenant scope checks.') },
     notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
+  // Q4k: opening an AI-sourced citation on outcome evidence.
+  { route: 'POST /api/evidence/:id/open-citation', kind: 'id', path: `/api/evidence/${E.EV_A}/open-citation`,
+    body: { source_verified: false },
+    notFound: [404, `evidence ${E.EV_A} not found`], target: ['evidence', E.EV_A] },
   // W1 fix: naming an analyst of record, and withdrawing the link.
   { route: 'POST /api/institutions/:institutionId/analyst-of-record', kind: 'id', path: `/api/institutions/${E.INST_A}/analyst-of-record`,
     body: { person_id: E.STAFF_A, title: 'Verification analyst' },

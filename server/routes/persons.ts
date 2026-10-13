@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
+import { respondServerError } from '../lib/serverError.js';
 
 // GET /api/persons — the people who may act or attest, for a browser to
 // select from. Sign-in P3: only the actor's tenant's people — its staff,
@@ -79,7 +80,7 @@ export function personsRouter(pool: Pool): Router {
       );
       res.json(rows);
     } catch (err) {
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 

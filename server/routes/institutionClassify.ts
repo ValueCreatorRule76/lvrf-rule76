@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { classifyInstitution } from '../lib/classifyInstitution.js';
+import { respondServerError } from '../lib/serverError.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -129,7 +130,7 @@ export function institutionClassifyRouter(pool: Pool): Router {
       })) {
         return;
       }
-      res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });
+      respondServerError(res, err);
     }
   });
 
