@@ -10109,3 +10109,89 @@ AI-origin rule in `lvrf_resolution_is_final`).
   - the ownership baseline.
 
   The results go here when they return.
+
+## Q4l: no silent outcomes; a second run after the walk's first — 13 October 2026 (UTC)
+
+From Brad's Scotts walk. (1) "State a hypothesis" on Scotts' TRIR outcome did not save and
+said nothing. (2) Run 1 was locked before the citations were opened, and there was no UI
+path to a run 2. **No migration;** client and one read change. Not deployed.
+
+### (1) Why it failed, and the fix
+
+- **Why (from the code, until prod's read-only check returns):** no request was sent.
+  - `GovernedForm` shows every response (success, refusal, conflict, error), but **a
+    submit button disabled by an unmet requirement said nothing.**
+  - The hypothesis form needs an outcome, **a lever on the outcome's pack entry**, a
+    statement of at least 24 characters, a due date, and digit-free conditions.
+  - **The likeliest gap on Scotts is the lever:** at the last Gate C prod had **0
+    levers**, and a lever is a steward act on the pack page. With none on TRIR, the
+    Lever list is empty and the button silently disabled.
+  - A statement under 24 characters would look the same. The read-only paste for prod
+    (refusals, audit and levers since 03:36 UTC) will say which.
+- **The fix, for every form:**
+  - **`GovernedForm` never shows a disabled button without a reason.** A new `unmet`
+    list ("To submit: …") is shown beside it; a form that passes none says "Fill in
+    every required field to submit."
+  - **The hypothesis form names each requirement,** including "the pack entry "TRIR"
+    has no current lever — the steward adds one on the pack page ("Add a lever…")", and
+    how many characters the statement still needs.
+  - **The restate, withdraw, summary, marker and lock forms** name theirs.
+- **Successes that close a form leave a plain sentence on the card**, for example:
+  - "Hypothesis stated. Its verdict is open until a verified actual exists on or after
+    2027-09-30.";
+  - "Restated as a new version…";
+  - "Summary recorded…";
+  - "Marked a reference example."
+- **The reference-example kind starts unchosen** ("— choose —"). It was preselected to
+  "published case study", which is how Scotts came to show that kind. A plausible
+  default is against `DESIGN_SPEC.md`'s form rules.
+
+### (2) Run 2
+
+- **W7 lists every run with what it SEALED,** read from the run's own payload, never the
+  live rows: per evidence row, the kind, the basis, AI-sourced with "citation opened" or
+  "not opened", and verified or unverified.
+- **"Produce a new run…"** appears once the latest run is locked, and not on a retired
+  engagement.
+- **W8 offers "Lock run N"** for any open run, not only the first. After producing, W7
+  says "Run N produced, not locked yet: lock it in W8."
+- **No route changed.** It is the same produce-run and lock; earlier locked runs keep
+  what they sealed.
+
+### Gate A
+
+- **`verify_walk_runs.sh`: 52 passed, 0 failed.**
+  - **The fixtures:** a Scotts-like walk through the routes, with run 1 locked before
+    its AI-sourced baseline citation is opened.
+  - **The API:** each run carries what it sealed; run 1 reads "AI-sourced, not opened,
+    unverified, assumed".
+  - **The browser walk** (screenshots looked at):
+    - **with no lever:** the hypothesis form names the missing lever, who adds it, and
+      the short statement;
+    - **elsewhere:** W9's form, which names nothing of its own, still explains itself;
+      the marker kind starts unchosen and the form says "choose the kind";
+    - **once the steward adds a lever:** the hypothesis is stated, and the card says so
+      in a sentence;
+    - **the runs:** W7 shows run 1's sealed state; W6 opens the citation, and run 1
+      still shows what it sealed; "Produce a new run…" gives run 2, which W7 says is
+      not locked yet; run 2 sealed "opened, verified, published"; "Lock run 2" locks it.
+  - **Deliberate breaks:**
+    - **B1:** without the unmet text, the disabled button is silent (Brad's failure);
+    - **B2:** with W8 back to first-run-only, an open run 3 cannot be locked from the
+      walk.
+- **Regression:** all **30** verify scripts pass.
+  - `verify_outside_in_walk`'s browser walk needed its exact-text click updated from
+    "Lock" to the new "Lock run 1"; a W8 screenshot on failure is kept as a diagnostic.
+  - Tenant scope: 203 cases.
+  - The bundle is **`index-25nGnP65.js`** / `index-As_MpISV.css`.
+- **Prod copy against the deployed code (`37e6358`):** **64 GETs:** 62 identical, and the 2
+  walk reads differ only by each run's added `confidence_score` and `sealed_evidence`.
+
+### Named, not resolved
+
+- **`DESIGN_SPEC.md` §9 says a refusal message is "never prefixed, wrapped, appended,
+  or mapped to a friendlier string".** Q4k (deployed, approved by Brad) maps Postgres's
+  own CHECK text to plain sentences. It passes the schema's "LVRF:" messages, the ones
+  that name amendments, unchanged.
+- **The conflict is between the written spec and an approved, deployed decision.** It
+  goes to UX-1 for Brad to resolve: amend the spec or narrow Q4k.
