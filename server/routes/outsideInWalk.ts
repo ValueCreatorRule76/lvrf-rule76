@@ -106,7 +106,15 @@ export function outsideInWalkRouter(pool: Pool): Router {
                   WHERE vo.engagement_id = e.id AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL), '[]') AS outcomes,
                 coalesce((SELECT json_agg(json_build_object('id', r.id, 'run_number', r.run_number,
                                                             'locked_at', to_char(r.locked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI"Z"'),
-                                                            'confidence_band', r.confidence_band) ORDER BY r.run_number)
+                                                            'confidence_band', r.confidence_band,
+                                                            -- Q4l: what each run SEALED, read from its own payload
+                                                            -- (never the live rows): per evidence row, as produced.
+                                                            'confidence_score', r.confidence_score,
+                                                            'sealed_evidence', coalesce((SELECT json_agg(json_build_object(
+                                                                'supports', ev->>'supports', 'kind', ev->>'kind', 'basis', ev->>'basis',
+                                                                'ai_sourced', (ev->>'ai_sourced')::boolean, 'citation_resolved', (ev->>'citation_resolved')::boolean,
+                                                                'source_verified', (ev->>'source_verified')::boolean, 'summary', left(ev->>'summary', 80)))
+                                                              FROM jsonb_array_elements(r.payload->'evidence') ev), '[]')) ORDER BY r.run_number)
                             FROM value_runs r WHERE r.engagement_id = e.id AND r.deleted_at IS NULL), '[]') AS runs
            FROM engagements e
           WHERE e.institution_id = $1 AND e.superseded_by_id IS NULL

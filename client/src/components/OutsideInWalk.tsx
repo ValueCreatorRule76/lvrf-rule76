@@ -49,7 +49,11 @@ interface WalkState {
         citation_resolved_by: string | null; citation_resolved_at: string | null;
       }[];
     }[];
-    runs: { id: string; run_number: number; locked_at: string | null; confidence_band: string }[];
+    runs: {
+      id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;
+      /** Q4l: what the run sealed, per evidence row, read from its payload. */
+      sealed_evidence: { supports: string; kind: string; basis: string | null; ai_sourced: boolean | null; citation_resolved: boolean | null; source_verified: boolean | null; summary: string }[];
+    }[];
   }[];
 }
 
@@ -105,6 +109,47 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
         canSubmit={supports !== ''}
         buildBody={() => ({ source_verified: supports === 'true' })}
         submitLabel="Record the opened citation" onSuccess={onOpened} renderSuccess={() => <>Recorded.</>} />
+    </div>
+  );
+}
+
+/**
+ * Q4l: a second (or later) run, once the latest is locked — e.g. after an
+ * AI-sourced citation is opened, so the new run seals the opened state.
+ * The same route as W7's first run; nothing earlier changes.
+ */
+function NewRun({ engId, next, banner, onDone }: { engId: string; next: number; banner: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState({ banner_title: banner, note: '', source_fixture: '' });
+  if (!open) {
+    return (
+      <div className="mt-1">
+        <button type="button" onClick={() => setOpen(true)}
+          className={'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ' + FOCUS_RING}>
+          Produce a new run…
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 border-t border-rule-soft pt-2" data-testid="new-run">
+      <GovernedForm<{ value_run_id: string }>
+        path={`/api/engagements/${engId}/produce-run`} provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">Run {next}: the outcome, its evidence and its confidence as they stand now, snapshotted. Earlier runs keep what they sealed. Not locked until you lock it.</p>}
+        fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Banner</span>
+            <input className={INPUT_CLASS} value={v.banner_title} onChange={(e) => setV({ ...v, banner_title: e.target.value })} /></label>
+          <label className="block"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Note (required)</span>
+            <input className={INPUT_CLASS} value={v.note} placeholder="What changed since the last run, e.g. the citation was opened" onChange={(e) => setV({ ...v, note: e.target.value })} /></label>
+          <label className="block sm:col-span-2"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Run source label (required)</span>
+            <input className={INPUT_CLASS} value={v.source_fixture} onChange={(e) => setV({ ...v, source_fixture: e.target.value })} /></label>
+        </div>}
+        canSubmit={v.banner_title.trim() !== '' && v.note.trim() !== '' && v.source_fixture.trim() !== ''}
+        unmet={[...(v.banner_title.trim() === '' ? ['a banner'] : []), ...(v.note.trim() === '' ? ['a note'] : []), ...(v.source_fixture.trim() === '' ? ['a run source label'] : [])]}
+        buildBody={() => v}
+        submitLabel={`Produce run ${next}`}
+        onSuccess={() => { setOpen(false); setV({ ...v, note: '' }); onDone(); }}
+        renderSuccess={() => <>Produced.</>} />
     </div>
   );
 }
@@ -165,7 +210,8 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
   // The engagement walked here: the latest one with an outcome.
   const eng = [...w.engagements].reverse().find((e) => e.outcomes.length > 0) ?? null;
   const outcome = eng?.outcomes[eng.outcomes.length - 1] ?? null;
-  const lockedRun = eng?.runs.find((r) => r.locked_at) ?? null;
+  // The LATEST locked run (a later lock is named, not the first one).
+  const lockedRun = eng ? [...eng.runs].reverse().find((r) => r.locked_at) ?? null : null;
   const openRun = eng ? [...eng.runs].reverse().find((r) => !r.locked_at) ?? null : null;
   const hasBaselineEvidence = Boolean(outcome?.evidence.some((e) => e.supports === 'baseline'));
   const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
@@ -353,7 +399,33 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
         </Step>
 
         <Step id="W7" title="Produce the run" state={s7} waitsFor="W6, the baseline's evidence" testId="w7">
-          {eng && eng.runs.length > 0 && <p className="m-0 mb-2 text-[12.5px] text-ink">{eng.runs.map((r) => <Link key={r.id} to={`/runs/${r.id}`} className={'mr-2 text-gold-ink ' + FOCUS_RING}>Run {r.run_number} ({r.confidence_band}{r.locked_at ? ', locked' : ''})</Link>)}</p>}
+          {eng && eng.runs.length > 0 && (
+            <ul className="m-0 mb-2 list-none p-0" data-testid="w7-runs">
+              {eng.runs.map((r) => (
+                <li key={r.id} className="py-1 text-[12.5px] text-ink" data-testid="w7-run" data-locked={r.locked_at ? 'true' : 'false'}>
+                  <Link to={`/runs/${r.id}`} className={'font-semibold text-gold-ink ' + FOCUS_RING}>Run {r.run_number}</Link>
+                  {' '}· {r.locked_at ? `locked ${r.locked_at.slice(0, 10)}` : 'not locked'} · confidence {r.confidence_band}{r.confidence_score !== null ? ` ${r.confidence_score}` : ''}
+                  <ul className="m-0 list-none pl-3 text-[11.5px] text-ink-45">
+                    {r.sealed_evidence.length === 0 && <li>sealed no evidence</li>}
+                    {r.sealed_evidence.map((e, i) => (
+                      <li key={i} data-testid="w7-sealed">
+                        sealed: {e.supports} · {e.kind} · basis {e.basis ?? '—'}
+                        {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
+                        {' · '}{e.source_verified ? 'source verified' : 'unverified'} — {e.summary}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
+          {eng && openRun && lockedRun && (
+            <p className="m-0 mb-1 border-l-2 border-healthy pl-2 text-[12.5px] text-ink" role="status" data-testid="new-run-notice">
+              Run {openRun.run_number} produced, not locked yet: lock it in W8.
+            </p>
+          )}
+          {eng && !eng.retired && eng.runs.length > 0 && !openRun && <NewRun engId={eng.id} next={eng.runs.length + 1} banner={p7.banner_title} onDone={reload} />}
+          {eng && eng.retired && eng.runs.length > 0 && <p className="m-0 text-[11.5px] text-ink-45">The engagement is retired: no new run.</p>}
           {s7 === 'next' && eng && (
             <GovernedForm<{ value_run_id: string }>
               path={`/api/engagements/${eng.id}/produce-run`} provenanceLabel="What this records"
@@ -371,14 +443,15 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
 
         <Step id="W8" title="Lock the run" state={s8} waitsFor="W7, a run" testId="w8">
           {lockedRun && <p className="m-0 mb-2 text-[12.5px] text-ink">Run {lockedRun.run_number} locked {lockedRun.locked_at!.slice(0, 10)}. A locked run cannot change.</p>}
-          {s8 === 'next' && openRun && (
+          {openRun && (s8 === 'next' || (lockedRun && !eng?.retired)) && (
             <GovernedForm<{ run_id: string }>
               path={`/api/value-runs/${openRun.id}/lock`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">Locking run {openRun.run_number} is final: the run cannot change.</p>}
+              provenance={<p className="m-0 text-[12.5px] text-ink">Locking run {openRun.run_number} is final: the run cannot change. Earlier locked runs stay as they were.</p>}
               fields={field('Lock reason', <textarea rows={2} className={INPUT_CLASS} value={p8.lock_reason} onChange={(e) => setP8({ lock_reason: e.target.value })} />)}
               canSubmit={p8.lock_reason.trim() !== ''}
+              unmet={['say why the run is locked']}
               buildBody={() => ({ lock_reason: p8.lock_reason })}
-              submitLabel="Lock" onSuccess={reload} renderSuccess={() => <>Locked.</>} />
+              submitLabel={`Lock run ${openRun.run_number}`} onSuccess={() => { setP8({ lock_reason: '' }); reload(); }} renderSuccess={() => <>Locked.</>} />
           )}
         </Step>
 

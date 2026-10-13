@@ -141,8 +141,10 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   await sleep(200); await click(step('w7'), 'Produce');
   check(await done('w7'), 'W7 done: the run produced');
   await setField(step('w8'), 'Lock reason', 'Verification: the outside-in hypothesis as first locked.');
-  await sleep(200); await click(step('w8'), 'Lock');
-  check(await done('w8'), 'W8 done: the run locked');
+  await sleep(200); await click(step('w8'), 'Lock run 1');
+  const w8done = await done('w8');
+  check(w8done, 'W8 done: the run locked');
+  if (!w8done) { await shot('w8_not_done', '[data-testid=w8]'); console.log('  info  W8 text: ' + String(await ev(`(${step('w8')}).textContent`)).slice(0, 400)); }
   check(await waitFor(`(${step('w6')}).textContent.includes('evidence added now would not be in it') && !(${step('w6')}).querySelector('textarea')`), '  ...and W6 no longer offers evidence: it would not be in the locked run');
   check(psql(`SELECT count(*) FROM value_runs r JOIN engagements e ON e.id = r.engagement_id WHERE e.institution_id = '${INST}' AND r.locked_at IS NOT NULL`) === '1', '  ...one locked run, with its evidence');
 } else if (MODE === 'nonsteward-retire' || MODE === 'break-retire-gate') {

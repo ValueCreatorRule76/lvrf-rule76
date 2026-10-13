@@ -93,7 +93,7 @@ function FalsifierFields({ outcome, v, set }: {
   );
 }
 
-function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: () => void }) {
+function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: string) => void }) {
   const [open, setOpen] = useState(false);
   const [outcomeId, setOutcomeId] = useState('');
   const [leverId, setLeverId] = useState('');
@@ -131,15 +131,23 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: () => void }
           <FalsifierFields outcome={outcome} v={f} set={(p) => setF({ ...f, ...p })} />
         </div>}
         canSubmit={!!outcomeId && !!leverId && statement.trim().length >= 24 && !!f.due && !/[0-9]/.test(f.conditions)}
+        unmet={[
+          ...(!outcomeId ? ['choose an outcome'] : []),
+          ...(outcome && levers.length === 0 ? [`the pack entry "${outcome.pack_entry?.name}" has no current lever — the steward adds one on the pack page ("Add a lever…")`] : []),
+          ...(outcome && levers.length > 0 && !leverId ? ['choose a lever'] : []),
+          ...(statement.trim().length < 24 ? [`the statement needs at least 24 characters (${24 - statement.trim().length} more)`] : []),
+          ...(!f.due ? ['choose a due date'] : []),
+          ...(/[0-9]/.test(f.conditions) ? ['take the digits out of the conditions (numbers belong in recorded values)'] : []),
+        ]}
         buildBody={() => ({ value_outcome_id: outcomeId, value_lever_id: leverId, statement, falsifier_reference: f.reference, falsifier_due: f.due, falsifier_conditions: f.conditions })}
         submitLabel="State the hypothesis"
-        onSuccess={() => { setOpen(false); setOutcomeId(''); setLeverId(''); setStatement(''); setF({ reference: 'baseline', due: '', conditions: '' }); onChanged(); }}
+        onSuccess={() => { const due = f.due; setOpen(false); setOutcomeId(''); setLeverId(''); setStatement(''); setF({ reference: 'baseline', due: '', conditions: '' }); onChanged(`Hypothesis stated. Its verdict is open until a verified actual exists on or after ${due}.`); }}
         renderSuccess={() => <>Stated.</>} />
     </div>
   );
 }
 
-function Restate({ h, outcome, onChanged }: { h: PovHypothesis; outcome: PovOutcome | undefined; onChanged: () => void }) {
+function Restate({ h, outcome, onChanged }: { h: PovHypothesis; outcome: PovOutcome | undefined; onChanged: (notice?: string) => void }) {
   const [open, setOpen] = useState(false);
   const [statement, setStatement] = useState(h.statement);
   const [f, setF] = useState({ reference: h.falsifier_reference as string, due: h.falsifier_due, conditions: h.falsifier_conditions });
@@ -158,13 +166,19 @@ function Restate({ h, outcome, onChanged }: { h: PovHypothesis; outcome: PovOutc
             <textarea rows={2} className={INPUT} value={why} onChange={(e) => setWhy(e.target.value)} /></label>
         </div>}
         canSubmit={statement.trim().length >= 24 && !!f.due && !/[0-9]/.test(f.conditions) && why.trim().length >= 12}
+        unmet={[
+          ...(statement.trim().length < 24 ? [`the statement needs at least 24 characters (${24 - statement.trim().length} more)`] : []),
+          ...(!f.due ? ['choose a due date'] : []),
+          ...(/[0-9]/.test(f.conditions) ? ['take the digits out of the conditions'] : []),
+          ...(why.trim().length < 12 ? [`say why it is restated, in at least 12 characters (${12 - why.trim().length} more)`] : []),
+        ]}
         buildBody={() => ({ statement, falsifier_reference: f.reference, falsifier_due: f.due, falsifier_conditions: f.conditions, supersession_reason: why })}
-        submitLabel="Restate it" onSuccess={() => { setOpen(false); onChanged(); }} renderSuccess={() => <>Restated.</>} />
+        submitLabel="Restate it" onSuccess={() => { setOpen(false); onChanged('Restated as a new version. The earlier version stays on the record, marked superseded.'); }} renderSuccess={() => <>Restated.</>} />
     </div>
   );
 }
 
-function Withdraw({ h, onChanged }: { h: PovHypothesis; onChanged: () => void }) {
+function Withdraw({ h, onChanged }: { h: PovHypothesis; onChanged: (notice?: string) => void }) {
   const [open, setOpen] = useState(false);
   const [why, setWhy] = useState('');
   if (!open) return <Opener label="Withdraw…" onOpen={() => setOpen(true)} />;
@@ -176,13 +190,14 @@ function Withdraw({ h, onChanged }: { h: PovHypothesis; onChanged: () => void })
         fields={<label className="block"><span className={LABEL}>Why it is withdrawn (required)</span>
           <textarea rows={2} className={INPUT} value={why} onChange={(e) => setWhy(e.target.value)} /></label>}
         canSubmit={why.trim().length >= 12}
+        unmet={[`say why it is withdrawn, in at least 12 characters (${12 - why.trim().length} more)`]}
         buildBody={() => ({ retirement_reason: why })}
-        submitLabel="Withdraw" onSuccess={() => { setOpen(false); onChanged(); }} renderSuccess={() => <>Withdrawn.</>} />
+        submitLabel="Withdraw" onSuccess={() => { setOpen(false); onChanged('Withdrawn. It stays on the record, marked withdrawn.'); }} renderSuccess={() => <>Withdrawn.</>} />
     </div>
   );
 }
 
-export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; outcome?: PovOutcome; onChanged?: () => void }) {
+export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; outcome?: PovOutcome; onChanged?: (notice?: string) => void }) {
   const current = h.verdict !== 'withdrawn' && h.verdict !== 'superseded';
   return (
     <li className="border-b border-rule-soft py-2.5 last:border-b-0" data-testid="hypothesis" data-verdict={h.verdict}>
@@ -209,7 +224,7 @@ export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; ou
   );
 }
 
-function SummaryForm({ pov, onChanged }: { pov: Pov; onChanged: () => void }) {
+function SummaryForm({ pov, onChanged }: { pov: Pov; onChanged: (notice?: string) => void }) {
   const [open, setOpen] = useState(false);
   const [lens, setLens] = useState<ExecutiveSummary['lens']>('general');
   const [body, setBody] = useState('');
@@ -236,9 +251,13 @@ function SummaryForm({ pov, onChanged }: { pov: Pov; onChanged: () => void }) {
             <input className={INPUT} value={tool} onChange={(e) => setTool(e.target.value)} /></label>}
         </div>}
         canSubmit={body.trim().length >= 40 && (!ai || tool.trim().length >= 2)}
+        unmet={[
+          ...(body.trim().length < 40 ? [`the summary needs at least 40 characters (${40 - body.trim().length} more)`] : []),
+          ...(ai && tool.trim().length < 2 ? ['name the AI tool that drafted it'] : []),
+        ]}
         buildBody={() => ({ lens, body, drafted_with_ai: ai, ...(ai ? { drafting_tool: tool } : {}), ...(current ? { supersedes_id: current.id } : {}) })}
         submitLabel="Record the summary"
-        onSuccess={() => { setOpen(false); setBody(''); setAi(false); setTool(''); onChanged(); }} renderSuccess={() => <>Recorded.</>} />
+        onSuccess={() => { setOpen(false); setBody(''); setAi(false); setTool(''); onChanged(current ? 'Summary recorded as a new version; the earlier one stays listed.' : 'Summary recorded.'); }} renderSuccess={() => <>Recorded.</>} />
     </div>
   );
 }
@@ -263,12 +282,12 @@ function stewardReason(act: string, actor: ReturnType<typeof useActor>['actor'])
   return actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
 }
 
-function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; current: ReferenceMarker | null; mode: 'mark' | 'correct' | 'unmark'; onChanged: () => void }) {
+function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; current: ReferenceMarker | null; mode: 'mark' | 'correct' | 'unmark'; onChanged: (notice?: string) => void }) {
   const { actor } = useActor();
   const act = mode === 'mark' ? 'Marking a reference example' : mode === 'correct' ? 'Correcting a reference-example marker' : 'Unmarking a reference example';
   const reason = stewardReason(act, actor);
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState({ kind: current?.kind ?? 'published_case_study', source_citation: current?.source_citation ?? '', note: current?.note ?? '', why: '' });
+  const [v, setV] = useState<{ kind: ReferenceMarker['kind'] | ''; source_citation: string; note: string; why: string }>({ kind: current?.kind ?? '', source_citation: current?.source_citation ?? '', note: current?.note ?? '', why: '' });
   const label = mode === 'mark' ? 'Mark as a reference example…' : mode === 'correct' ? 'Correct the marker…' : 'Unmark…';
   if (!open) return <div className="mt-1.5"><Opener label={label} reason={reason} onOpen={() => setOpen(true)} /></div>;
   const path = mode === 'mark' ? `/api/institutions/${pov.institution.id}/reference-example`
@@ -285,6 +304,7 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
           : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block"><span className={LABEL}>Kind</span>
                 <select className={INPUT} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value as ReferenceMarker['kind'] })}>
+                  <option value="" disabled>— choose —</option>
                   <option value="published_case_study">Published case study</option><option value="demonstration">Demonstration</option>
                 </select></label>
               <label className="block"><span className={LABEL}>Source citation</span><input className={INPUT} value={v.source_citation} onChange={(e) => setV({ ...v, source_citation: e.target.value })} /></label>
@@ -292,18 +312,30 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
               {mode === 'correct' && <label className="block sm:col-span-2"><span className={LABEL}>Why it is corrected (required)</span><textarea rows={2} className={INPUT} value={v.why} onChange={(e) => setV({ ...v, why: e.target.value })} /></label>}
             </div>}
         canSubmit={mode === 'unmark' ? v.why.trim().length >= 12
-          : v.source_citation.trim().length >= 12 && v.note.trim().length >= 12 && (mode === 'mark' || v.why.trim().length >= 12)}
+          : v.kind !== '' && v.source_citation.trim().length >= 12 && v.note.trim().length >= 12 && (mode === 'mark' || v.why.trim().length >= 12)}
+        unmet={mode === 'unmark' ? [`say why, in at least 12 characters (${12 - v.why.trim().length} more)`] : [
+          ...(v.kind === '' ? ['choose the kind'] : []),
+          ...(v.source_citation.trim().length < 12 ? ['name the source citation, in at least 12 characters'] : []),
+          ...(v.note.trim().length < 12 ? ['write the note, in at least 12 characters'] : []),
+          ...(mode === 'correct' && v.why.trim().length < 12 ? ['say why it is corrected, in at least 12 characters'] : []),
+        ]}
         buildBody={() => mode === 'unmark' ? { retirement_reason: v.why }
           : { kind: v.kind, source_citation: v.source_citation, note: v.note, ...(mode === 'correct' ? { supersession_reason: v.why } : {}) }}
         submitLabel={mode === 'unmark' ? 'Unmark' : mode === 'correct' ? 'Correct the marker' : 'Mark it'}
-        onSuccess={() => { setOpen(false); onChanged(); }} renderSuccess={() => <>Recorded.</>} />
+        onSuccess={() => { setOpen(false); onChanged(mode === 'unmark' ? 'Unmarked. The marker stays on the record.' : mode === 'correct' ? 'Marker corrected; the earlier one stays on the record.' : 'Marked a reference example.'); }} renderSuccess={() => <>Recorded.</>} />
     </div>
   );
 }
 
+function Notice({ text, testId }: { text: string | null; testId: string }) {
+  return text ? <p className="m-0 mb-2 border-l-2 border-healthy pl-2 text-[12.5px] text-ink" role="status" data-testid={testId}>{text}</p> : null;
+}
+
 export function PovAuthoring({ institutionId }: { institutionId: string }) {
+  const [notices, setNotices] = useState<{ hyp: string | null; sum: string | null; mark: string | null }>({ hyp: null, sum: null, mark: null });
   const [pov, setPov] = useState<Pov | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const said = (key: 'hyp' | 'sum' | 'mark') => (notice?: string) => { if (notice) setNotices((n) => ({ ...n, [key]: notice })); load(); };
   const load = useCallback(() => {
     fetchPov(institutionId).then((r) => {
       if (r.status === 'ok') { setPov(r.pov); setError(null); } else setError(r.message);
@@ -317,27 +349,30 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
     <>
       <Card n="06" title="Value hypotheses"
         badge={<Link to={`/accounts/${institutionId}/pov`} className={'text-[11px] font-semibold uppercase tracking-[.1em] text-gold-ink hover:text-ink ' + FOCUS_RING}>Open the POV →</Link>}>
+        <Notice text={notices.hyp} testId="notice-hyp" />
         {pov.hypotheses.length === 0
           ? <p className="m-0 text-[12.5px] text-ink-45">No hypothesis stated for this account yet.</p>
           : <ul className="m-0 list-none p-0" data-testid="hypotheses">
-              {pov.hypotheses.map((h) => <HypothesisItem key={h.id} h={h} outcome={pov.outcomes.find((o) => o.id === h.value_outcome_id)} onChanged={load} />)}
+              {pov.hypotheses.map((h) => <HypothesisItem key={h.id} h={h} outcome={pov.outcomes.find((o) => o.id === h.value_outcome_id)} onChanged={said('hyp')} />)}
             </ul>}
-        <StateHypothesis pov={pov} onChanged={load} />
+        <StateHypothesis pov={pov} onChanged={said('hyp')} />
       </Card>
       <Card n="07" title="Executive summary">
+        <Notice text={notices.sum} testId="notice-sum" />
         {pov.executive_summaries.length === 0
           ? <p className="m-0 text-[12.5px] text-ink-45">No summary written for this account yet.</p>
           : <ul className="m-0 list-none p-0">{pov.executive_summaries.map((s) => <SummaryItem key={s.id} s={s} />)}</ul>}
-        <SummaryForm pov={pov} onChanged={load} />
+        <SummaryForm pov={pov} onChanged={said('sum')} />
       </Card>
       <Card n="08" title="Reference example" badge={marker ? <Badge tone="solid">reference example</Badge> : undefined}>
+        <Notice text={notices.mark} testId="notice-mark" />
         <div data-testid="reference-example">
           {marker
             ? <p className="m-0 text-[12.5px] text-ink">Marked a reference example ({marker.kind.replace(/_/g, ' ')}) by {marker.marked_by}, {marker.marked_at.slice(0, 10)}: {marker.note} <span className="text-ink-45">Source: {marker.source_citation}</span></p>
             : <p className="m-0 text-[12.5px] text-ink-45">Not marked: this account renders as an engagement.</p>}
           {marker
-            ? <><ReferenceMarkerForm pov={pov} current={marker} mode="correct" onChanged={load} /><ReferenceMarkerForm pov={pov} current={marker} mode="unmark" onChanged={load} /></>
-            : <ReferenceMarkerForm pov={pov} current={null} mode="mark" onChanged={load} />}
+            ? <><ReferenceMarkerForm pov={pov} current={marker} mode="correct" onChanged={said('mark')} /><ReferenceMarkerForm pov={pov} current={marker} mode="unmark" onChanged={said('mark')} /></>
+            : <ReferenceMarkerForm pov={pov} current={null} mode="mark" onChanged={said('mark')} />}
           {pov.reference_markers.filter((m) => !m.current).length > 0 && (
             <ul className="m-0 mt-2 list-none p-0 text-[11px] text-ink-45">
               {pov.reference_markers.filter((m) => !m.current).map((m) => (

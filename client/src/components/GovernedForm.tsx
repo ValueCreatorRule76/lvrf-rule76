@@ -44,6 +44,14 @@ export interface GovernedFormProps<T> {
   disabledReason?: string;
   /** Called once with the response data after a write is recorded — for a caller that must refetch. */
   onSuccess?: (data: T) => void;
+  /**
+   * Q4l (Brad, 13 Oct 2026): A SILENT FAILURE IS A BUG. While canSubmit is
+   * false, what the form still waits for, in plain sentences, shown beside
+   * the disabled button. A form that passes none still says something
+   * ("Fill in every required field to submit."); no button is ever dead
+   * without a reason.
+   */
+  unmet?: string[];
 }
 
 export function GovernedForm<T>({
@@ -57,6 +65,7 @@ export function GovernedForm<T>({
   submitLabel = 'Submit',
   disabledReason,
   onSuccess,
+  unmet,
 }: GovernedFormProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
@@ -142,6 +151,13 @@ export function GovernedForm<T>({
       >
         {submitLabel}
       </button>
+      {actor && !blockedLocally && !canSubmit && !submitting && result?.status !== 'ok' && (
+        <div className="mt-1.5 text-[11.5px] text-ink-45" data-testid="form-unmet">
+          {unmet && unmet.length > 0
+            ? <>To submit: {unmet.map((u, i) => <span key={i}>{i > 0 ? '; ' : ''}{u}</span>)}.</>
+            : <>Fill in every required field to submit.</>}
+        </div>
+      )}
     </form>
   );
 }
