@@ -10075,3 +10075,37 @@ function extended; **129 triggers** (unchanged). Not deployed.
     fields (`ai_sourced`, `source_verified`, `citation_resolved`,
     `citation_resolved_by`, `citation_resolved_at`);
   - 129 triggers and manifest; D2 none; run hashes 23/23; plain-sentence coverage 69/69.
+
+### Deployed — 13 October 2026 (UTC): Q4k
+
+`901fc91..37e6358` went to production: `b860332`, `dd76e92` and `8954891` (docs, never
+pulled), `fa65ac3` (Q4k) and `37e6358` (docs). **No migration;** hardening re-applied (the
+AI-origin rule in `lvrf_resolution_is_final`).
+
+- **Run hashes before the deploy:** **24/24** at `901fc91`. The 24th is new since O2: Scotts'
+  W7 run, produced before its citation could be opened.
+- **Backup:** `~/lvrf_pre_q4k_20261013_033337.dump`: 837,396 bytes, `-rw-------`, 585 TOC
+  entries. The estimate of about 570 was wrong again, for the same reason as last time:
+  it compared against a dump from before 0037. From now on, estimates come from the
+  latest schema, not the last backup.
+- **Pull, migrate, harden:**
+  - nothing to migrate (38 migrations);
+  - hardening exit 0, 0 ERROR lines; **129 triggers, manifest 129**;
+  - the AI-origin rule is present;
+  - **plain-sentence coverage 69/69, 0 stale**;
+  - run hashes after: 24/24.
+- **Deploy:** drift none (38 migrations, 930 objects); D1/D3/D4 no findings; smoke checks
+  passed; deploy OK, exit 0, HEAD `37e6358`; bundle **`index-BG1zj4Gt.js`** /
+  `index-D_6XjEaI.css`.
+- **Gate C: PENDING.** My read-only ssh to the box was refused ("Permission denied
+  (publickey)"): after a session restart the ssh agent holds no key, and no key on this
+  Mac works without it. Brad has a self-contained read-only Gate C paste covering:
+  - the restart time;
+  - the drift checks, the legacy check, run hashes and coverage;
+  - counts, audit and refusals since the restart;
+  - **run 24: whether it is locked, and what it sealed for each evidence row beside the
+    row as it stands now**;
+  - the cross-tenant refusal check;
+  - the ownership baseline.
+
+  The results go here when they return.
