@@ -9958,3 +9958,120 @@ already holds that email. **Migration 0037; hardening section 23; 129 triggers**
     - `lvrf_app` owns all 40 tables, 2 sequences, 27 enum types and the drizzle schema;
     - on the append-only tables: SELECT and INSERT only;
     - 0 disabled triggers.
+
+## Q4k: refusals in plain words, and "Open the citation…" for outcome evidence — 13 October 2026 (UTC)
+
+From Brad's Scotts walk, W6: Source verified = Yes on AI-sourced evidence returned
+Postgres's own text, "new row for relation 'evidence' violates check constraint
+'evidence_ai_verify_requires_resolution'". L29 is widened; Q4k-D1 is decided by Brad: build
+"Open the citation…", and the recorder may open it. **No migration**; one hardening
+function extended; **129 triggers** (unchanged). Not deployed.
+
+### What was built
+
+- **Every CHECK in plain words.**
+  - `server/lib/plainChecks.ts` gives a sentence for **every one of the 69 CHECKs in the
+    database**. That is 61 declared in `db/schema.ts` plus 8 written by hand in migrations,
+    such as `refusals_source_shape`; Brad's figure of 61 counted only the first.
+  - `handleGovernanceError` answers a CHECK violation with the sentence for its
+    constraint, or a neutral one ("That can't be recorded as entered; nothing was
+    written."), never with the name.
+  - Messages the schema writes for people ("LVRF: …") pass unchanged.
+  - The raw text and the constraint still go into `refusals`.
+- **The coverage check** `scripts/check_plain_refusals.ts` (read-only) reads the live
+  catalog and fails on any CHECK without a sentence, and lists stale ones. A new CHECK
+  cannot ship silent.
+- **The rest of L29.** All 51 route fallbacks of the form `res.status(500).json({ message:
+  err.message })` now go through `respondServerError` (`server/lib/serverError.ts`):
+  - a foreign-key, not-null or type error gets a plain 422 ("That refers to something
+    that doesn't exist here; nothing was written." and similar);
+  - anything else gets a plain 500;
+  - the raw error goes to the server log only.
+  - The commit-failure answer in `actorContext` keeps "LVRF:" rule messages and hides
+    Postgres's own text.
+- **The evidence form** (`AddEvidenceCard`, used by W6 and the run page):
+  - with AI-sourced = Yes, Source verified is set to No and disabled, with the reason
+    beneath it ("AI-sourced evidence is verified after its citation is opened, not when
+    it's recorded (AMENDMENT-005, Article III)…");
+  - R1's help text sits under Kind.
+- **The evidence route** refuses AI-sourced plus verified first, in the same words, and
+  **records the attempt** (source `route`, with the outcome and payload), as the
+  database's refusal was recorded. The gap register's "refused" state reads that row.
+  The CHECK stays the backstop.
+- **"Open the citation…"** (`POST /api/evidence/:id/open-citation`, authorized), on
+  AI-sourced evidence attached to a value outcome:
+  - **who:** the recorder may open it (Q4k-D1; the separation is AI versus a named
+    human). Who and when are recorded, and the opening is final (hardening section 9);
+  - **what it records:** the person says whether the source supports the evidence. Yes
+    sets `source_verified` in the same act; No leaves it unverified;
+  - **what it refuses:** an account fact's evidence (opened in account research, D1),
+    evidence a person recorded, a second opening, another tenant's row (404), and
+    unknown fields (400, recorded);
+  - **W6** lists each AI-sourced row as "citation not yet opened" with the button, or
+    "citation opened by \<name\>, \<date\> · source verified / unverified".
+- **AI origin is permanent.** Brad asked that `ai_sourced` stay true for good, and
+  nothing enforced it. `lvrf_resolution_is_final()` (hardening section 9) now refuses
+  `ai_sourced` true → false, before or after opening. It is folded into the existing
+  trigger, so there is no new one.
+- **What a run seals (confirmed):** `produce-run` seals each evidence row's
+  `citation_resolved`, `source_verified` and derived basis into its hashed payload at
+  production time. A later opening changes the next run only; a locked run is immutable
+  besides. Opening an AI citation lifts the basis from assumed (D2 rule 2) to the kind's
+  basis, for later runs and the POV only.
+
+### Gate A
+
+- **`verify_plain_refusals.sh`: 85 passed, 0 failed.**
+  - **Coverage:** 69 of 69, with no stale sentence.
+  - **The sentences:** each one returned for its CHECK's raw text, never naming the
+    constraint; an "LVRF:" message passes unchanged.
+  - **AI-sourced plus verified:**
+    - a 422 in the plain words;
+    - no Postgres text, nothing written;
+    - **the attempt recorded, and the gap register showing "refused"**.
+  - **An unmapped CHECK** added on the clone:
+    - the neutral sentence, with the constraint recorded in refusals;
+    - **the coverage check fails, naming it**, and passes once it is dropped.
+  - **Probe errors** (a trigger added on the clone): foreign-key and not-null give a
+    plain 422, anything else a plain 500, and the raw text is in the server log.
+  - **Opening:**
+    - the recorder opens one: still `ai_sourced`, opened with the time, verified, basis
+      now published, audited;
+    - X opens another with "No": opened, unverified;
+    - every refusal listed above;
+    - un-opening and un-marking AI origin are refused by the database.
+  - **The run before the opening:** it sealed "not opened, unverified, assumed", and
+    stays so, locked, with its hash unchanged and recomputing. The run after seals
+    "opened, verified, published".
+  - **The browser walk,** screenshots looked at:
+    - R1's help text;
+    - the lock and its reason, released again when AI-sourced goes back to No;
+    - "Open the citation…" in W6 with its form, then "citation opened by Brad Piver ·
+      source verified".
+  - **Deliberate breaks,** each restored:
+    - **B1:** without the mapping, the raw CHECK text is shown;
+    - **B2:** without the route's refusal, the CHECK refuses in the same plain words;
+    - **B3:** an unmapped CHECK fails the coverage check;
+    - **B4:** without the form's lock, the route still refuses, plainly, and nothing is
+      written;
+    - **B5:** without `respondServerError`, the foreign-key text is shown;
+    - **B6:** without the trigger, AI origin can be cleared.
+- **Regression:** all **29** verify scripts pass, in one clean pass.
+  - **The first pass failed 3 scripts and crashed 1, each explained and fixed:**
+    - **`verify_frozen_outcomes` and `verify_refusal_attribution`:** the new early
+      refusal wrote no refusals row, so the gap register stopped seeing the attempt as
+      "refused". A real regression: it is now recorded (source `route`, with the
+      outcome), and both pass, as does a new check for it in the Q4k script.
+    - **`verify_research_contract`:** its byte-identical check on the review router
+      now allows exactly Q4k's one-line fallback change. B3 expects the plain sentence,
+      with the constraint recorded in refusals.
+    - **`verify_outside_in_walk`'s B4:** its edit target was the handler line Q4k
+      changed.
+  - `verify_tenant_scope`: **203 cases**, the open-citation route included.
+  - Client tsc, build and lint are clean apart from the pre-existing warning. The bundle
+    is **`index-BG1zj4Gt.js`**.
+- **Prod copy against the deployed code (`901fc91`):**
+  - **64 GETs:** 62 identical, and the 2 walk reads differ only by the evidence citation
+    fields (`ai_sourced`, `source_verified`, `citation_resolved`,
+    `citation_resolved_by`, `citation_resolved_at`);
+  - 129 triggers and manifest; D2 none; run hashes 23/23; plain-sentence coverage 69/69.
