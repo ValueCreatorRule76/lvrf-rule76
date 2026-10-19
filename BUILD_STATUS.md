@@ -10806,3 +10806,43 @@ left its live engagement (run 1, 10 / 100) setting the book.
 **After the deploy, on prod:** Brad marks Curia a published case study (the steward's
 act, with a real citation). Then the book reads "No live customer engagements": Scotts'
 engagement is retired, Skillsoft is the tenant's own, and Curia is a reference example.
+
+### Deployed — 19 October 2026 (UTC): Q4n (`c04dd21`)
+
+`c088430..c04dd21`: Q4n and docs. **No migration**, so neither `ownership.sql` nor
+`hardening.sql` was re-run (none needed: no table, no trigger, no migration).
+- **Backup:** `~/lvrf-pre-q4n-20261019T1525…dump`, 872,971 bytes, **630 TOC entries** (as
+  predicted).
+- **The deploy:** exit 0, drift none, 5d passed, HEAD **`c04dd21`**, bundle
+  **`index-BKlIw9_l.js`** / `index-6J3Ne-U_.css`. The API has been up since 15:26:23 UTC.
+
+**Brad's acts after the deploy:**
+- **Curia marked `published_case_study`** (15:28:40). The citation is the Skillsoft
+  customer case study "From the Ground Up: How Curia Built a Popular Learning and
+  Development Program From Scratch" (Skillsoft, 2023), with its URL. The note:
+  "Reference example built from Skillsoft's published Curia case study; Curia has not
+  engaged through LVRF…".
+- **Curia's executive summary recorded** (15:32:59): general reader, AI-drafted, tool
+  text "Claude, but based on governed inputs and Reviewed by Brad Piver 10/19/2026".
+- **Curia's hypothesis is deliberately held.** It waits for a lever on "Lot Acceptance
+  Rate (LAR)", and no citation is chosen yet. The opener says so (Q4l).
+
+**Gate C** (read-only, by me over ssh):
+- **The standard checks:** run hashes 25/25; ownership clean; plain sentences 69/69;
+  drift D1/D3/D4 no findings; **129 triggers by `pg_trigger`, 0 disabled**.
+- **The book is empty** (read by the cohort route's own `WHERE`, since I hold no
+  session):
+  - **Curia** is marked → left out;
+  - **Scotts** is marked, with no current engagement → left out;
+  - **Skillsoft** is the tenant's own → left out.
+
+  **`reference_example_count` is 2**, not the 1 I wrote in the pastes: Scotts is marked
+  too. The card reads "No live customer engagements." with "(2 accounts are marked
+  one)".
+- **Since the restart:** **0 refusals**; 2 audit rows, both Brad Piver's (the marker
+  insert, the summary insert).
+- **The journal:** 25 request lines, **none carrying a value**.
+  - `POST /api/institutions/:institutionId/reference-example 201 … session=y`;
+  - `POST /api/institutions/:institutionId/executive-summaries 201 … session=y`;
+  - two `GET /api/cohort 200 … session=y` (the Accounts page);
+  - the only 401s are the deploy's own smoke checks.
