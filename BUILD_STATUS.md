@@ -10710,3 +10710,54 @@ NOT AN ENGAGEMENT — <citation>", which read as "Reference example — Referenc
 - **The bundle:** **`index-DbA9-GTq.js`** / `index-6J3Ne-U_.css`.
 - **Prod copy:** the deployed code (`3a1165e`, at 0037) against D3 (39 migrations, three
   kinds): **67 GETs, 67 identical.**
+
+### Deployed — 19 October 2026 (UTC): UX-1-D3 (`c088430`, migration 0038)
+
+`3a1165e..c088430`: UX-1-D3 and docs. **Migration 0038, the first under OWN-1.**
+- **Backup:** `~/lvrf-pre-0038-20261019T145541Z.dump`, 872,309 bytes, **630 TOC entries**
+  (as predicted from the box's last dump).
+- **The migration:** `check_migrate_role` ok; migrate as `lvrf_migrate` ok; **39
+  migrations**; the enum is `published_case_study,demonstration,outside_in_test`, owned by
+  `lvrf_owner`; ownership clean.
+- **The deploy:** exit 0, drift none (39 migrations, 930 objects), 5d passed, bundle
+  **`index-DbA9-GTq.js`**. The API has been up since 14:56:32 UTC.
+- **The deploy printed "D1 warning: hardening_manifest was last written … before the
+  newest migration".** My paste had said hardening needn't be re-run after 0038; the
+  standing rule is that `hardening.sql` runs after every migration.
+  - **The fix:** Brad re-ran it (the manifest is now 15:09:50, after 0038's 14:14), and
+    D1 is clean.
+  - **The paste template, changed for good:** every migration paste re-runs
+    `ownership.sql` then `hardening.sql`, as postgres, with ON_ERROR_STOP, the exit code
+    and the ERROR count.
+
+**Gate C** (read-only, by me over ssh):
+- **The standard checks:** run hashes 25/25; ownership clean; plain sentences 69/69;
+  legacy research ok; **129 triggers by `pg_trigger`, 0 disabled**; drift D1/D3/D4 no
+  findings.
+- **Since the deploy:** **0 refusals**; 4 audit rows, all `reference_example_markers` by
+  Brad Piver (two supersessions, each an insert plus an update).
+- **The journal:** 42 request lines, **none carrying a value**. The two marker
+  corrections are `LVRF req POST /api/reference-examples/:id/supersede 201 … session=y`;
+  the only 401s are the deploy's own `GET /api/runs/:id` smoke checks.
+- **Scotts' markers, three rows, all kept:**
+  1. `published_case_study`, 13 Oct;
+  2. `published_case_study`, 19 Oct 14:58;
+  3. **`outside_in_test`, current, 19 Oct 15:12:56.**
+
+  The POV banner now names the kind.
+
+**Two findings, for Brad:**
+1. **The 14:58 correction changed nothing but recorded a reason that contradicts it.** It
+   re-recorded `published_case_study` with the reason "It was never a published case
+   study: it is an outside-in test…".
+   - **The cause:** the correct-the-marker form starts on the *current* kind, so a
+     correction can be submitted unchanged. That breaks DESIGN_SPEC §9's "no field
+     defaults to a plausible value", which Q4l applied only to the mark form.
+   - **Proposed small item:** the correction form starts the kind unchosen, and the route
+     refuses a correction that changes no field ("Nothing would change: change the kind,
+     the source or the note"), recorded as a route refusal.
+2. **Scotts' source citation is the words "Reference example".** It isn't a source, which
+   is why the banner once read "Reference example — Reference example", and now "…
+   · Source: Reference example". **The steward should correct it to the published
+   material it was built from** (for example, the FY25 disclosures), by one more
+   correction.
