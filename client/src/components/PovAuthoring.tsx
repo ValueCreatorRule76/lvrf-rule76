@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
-  fetchPov, recorded, NO_NUMBERS, VERDICT_LABEL, VERDICT_TONE,
+  fetchPov, recorded, NO_NUMBERS, VERDICT_LABEL, VERDICT_TONE, MARKER_KIND,
   type ExecutiveSummary, type Pov, type PovHypothesis, type PovOutcome, type ReferenceMarker,
 } from '../api/pov';
 import { Badge, Card } from './workbench/Card';
@@ -326,7 +326,7 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
               <label className="block"><span className={LABEL}>Kind</span>
                 <select className={INPUT} value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value as ReferenceMarker['kind'] })}>
                   <option value="" disabled>— choose —</option>
-                  <option value="published_case_study">Published case study</option><option value="demonstration">Demonstration</option>
+                  {(Object.keys(MARKER_KIND) as (keyof typeof MARKER_KIND)[]).map((k) => <option key={k} value={k}>{MARKER_KIND[k].label}</option>)}
                 </select></label>
               <label className="block"><span className={LABEL}>Source citation</span><input className={INPUT} value={v.source_citation} onChange={(e) => setV({ ...v, source_citation: e.target.value })} /></label>
               <label className="block sm:col-span-2"><span className={LABEL}>Note</span><textarea rows={2} className={INPUT} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} /></label>
@@ -389,7 +389,7 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
         <Notice text={notices.mark} testId="notice-mark" />
         <div data-testid="reference-example">
           {marker
-            ? <p className="m-0 text-[12.5px] text-ink">Marked a reference example ({marker.kind.replace(/_/g, ' ')}) by {marker.marked_by}, {marker.marked_at.slice(0, 10)}: {marker.note} <span className="text-ink-45">Source: {marker.source_citation}</span></p>
+            ? <p className="m-0 text-[12.5px] text-ink">Marked a reference example ({MARKER_KIND[marker.kind].label.toLowerCase()}) by {marker.marked_by}, {marker.marked_at.slice(0, 10)}: {marker.note} <span className="text-ink-45">Source: {marker.source_citation}</span></p>
             : <p className="m-0 text-[12.5px] text-ink-45">Not marked: this account renders as an engagement.</p>}
           {marker
             ? <><ReferenceMarkerForm pov={pov} current={marker} mode="correct" onChanged={said('mark')} /><ReferenceMarkerForm pov={pov} current={marker} mode="unmark" onChanged={said('mark')} /></>
@@ -397,7 +397,7 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
           {pov.reference_markers.filter((m) => !m.current).length > 0 && (
             <ul className="m-0 mt-2 list-none p-0 text-[11px] text-ink-45">
               {pov.reference_markers.filter((m) => !m.current).map((m) => (
-                <li key={m.id}>Earlier: {m.kind.replace(/_/g, ' ')}, by {m.marked_by}, {m.marked_at.slice(0, 10)} — {m.unmarked_at ? `unmarked by ${m.unmarked_by}: ${m.unmark_reason}` : `corrected: ${m.supersession_reason}`}</li>
+                <li key={m.id}>Earlier: {MARKER_KIND[m.kind].label.toLowerCase()}, by {m.marked_by}, {m.marked_at.slice(0, 10)} — {m.unmarked_at ? `unmarked by ${m.unmarked_by}: ${m.unmark_reason}` : `corrected: ${m.supersession_reason}`}</li>
               ))}
             </ul>
           )}

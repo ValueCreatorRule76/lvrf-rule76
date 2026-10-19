@@ -1,0 +1,1 @@
+ALTER TYPE "public"."reference_example_kind" ADD VALUE 'outside_in_test';

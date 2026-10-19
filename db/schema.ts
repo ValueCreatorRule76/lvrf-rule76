@@ -2164,7 +2164,14 @@ export const leverOfferings = pgTable('lever_offerings', {
 /* ================================================================== */
 
 /** O2-D2: what kind of reference example an account is. */
-export const referenceExampleKind = pgEnum('reference_example_kind', ['published_case_study', 'demonstration']);
+/**
+ * UX-1-D3 (0038, 19 Oct 2026): outside_in_test — an outside-in test of the
+ * method against a company's published record (Scotts). Neither a customer's
+ * published case study nor a demonstration built for show. Added, never
+ * renamed: existing markers keep their kind; a correction is the steward's
+ * supersession, on the record.
+ */
+export const referenceExampleKind = pgEnum('reference_example_kind', ['published_case_study', 'demonstration', 'outside_in_test']);
 /** O2-D4: the recorded value a falsifier is measured against. */
 export const falsifierReference = pgEnum('falsifier_reference', ['baseline', 'committed_target']);
 /** The reader an executive summary was written for (lens_policies are O3). */

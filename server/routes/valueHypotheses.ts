@@ -318,7 +318,9 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
 
 function markerFields(body: Record<string, unknown>) {
   const issues: string[] = [];
-  if (body.kind !== 'published_case_study' && body.kind !== 'demonstration') issues.push('body.kind must be published_case_study or demonstration');
+  if (!['published_case_study', 'demonstration', 'outside_in_test'].includes(body.kind as string)) {
+    issues.push('body.kind: choose what kind of example this is: a published case study, a demonstration, or an outside-in test');
+  }
   if (typeof body.source_citation !== 'string' || body.source_citation.trim().length < 12) issues.push('body.source_citation must name where the example comes from, in at least 12 characters');
   if (typeof body.note !== 'string' || body.note.trim().length < 12) issues.push('body.note must say what the example is for, in at least 12 characters');
   if (issues.length > 0) throw new ValidationError(issues);

@@ -2116,7 +2116,7 @@ Before the migration: it adds an enum value, and **orphans nothing**.
 **Brad decides:**
 - **UX-1-D1:** approve the IA in 7c as the basis for mock-ups.
 - **UX-1-D2:** the §9 refusal-wording conflict (7a).
-- **UX-1-D3:** add `outside_in_test` as a marker kind (7d).
+- **UX-1-D3:** add `outside_in_test` as a marker kind (7d). **Accepted 19 Oct 2026 (7e item 6); built, Gate A passed, migration 0038.**
 - **UX-1-D4:** the mock-up form. Static HTML in `design/` like `workbench.html`, one
   per screen (Accounts home, Account workspace in three states: new, mid-walk and
   locked; Run at 390), using only the canonical tokens. Recommended.

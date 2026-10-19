@@ -10666,3 +10666,47 @@ hardening change**, and the deploy script was unchanged, so there was no re-exec
     is `curl -s -u brad https://lvrf-rule76.com/design/mockups/pov.html | grep -c "UX-1
     mock-up"`, which should print 0.
   - Unauthenticated, it's 401, like every path; the API itself answers 404.
+
+## UX-1-D3: the `outside_in_test` marker kind (0038) — 19 October 2026 (UTC)
+
+**Why:** Scotts is an outside-in test of the method against a company's published
+record: neither a customer's published case study nor a demonstration. The old form
+defaulted it to "published case study", and the POV banner printed "REFERENCE EXAMPLE,
+NOT AN ENGAGEMENT — <citation>", which read as "Reference example — Reference example".
+
+**Migration 0038, `0038_marker_outside_in_test.sql`:** one statement, `ALTER TYPE
+"public"."reference_example_kind" ADD VALUE 'outside_in_test'`.
+- **What it changes:** one enum value is added. No row changes.
+- **What it could orphan:** nothing. No value is removed or renamed, and existing
+  markers keep their kind.
+- **Scotts' marker isn't rewritten.** Correcting it is the steward's supersession, on
+  the record.
+- **It is the first migration under OWN-1:** it runs as `lvrf_migrate`, acting as
+  `lvrf_owner`, which owns the type.
+
+**The code:**
+- **The route** accepts the three kinds and refuses any other in words: "choose what
+  kind of example this is: a published case study, a demonstration, or an outside-in
+  test".
+- **One label map** (`MARKER_KIND`, `client/src/api/pov.ts`) feeds both the POV banner and
+  the account page. The banner names the kind, then its source: "OUTSIDE-IN TEST — built
+  from published material, not a customer engagement · Source: …". The marker form
+  offers "Outside-in test".
+
+**Gate A:**
+- **`verify_walk_runs` step 7: 116 passed, 0 failed** (the script as a whole).
+  - **The Scotts path:** the account is marked `published_case_study`; an unknown kind
+    is refused (422, in words); the steward corrects it to `outside_in_test` by
+    supersession (201).
+  - **The POV read:** the current kind is `outside_in_test`, and the earlier marker is
+    kept, not current. **Both rows are in the table; nothing is rewritten.**
+  - **The browser:** the banner text exactly, with no "Reference example"; the account
+    card says "(outside-in test)" and "Earlier: published case study"; the form offers
+    "Outside-in test". The screenshot was looked at.
+  - **B6:** with the old banner text back, the kind doesn't reach the POV. Restored
+    byte-identical.
+- **Regression:** all **32** pass, with `verify_drift` 30/0 (0038 as the newest
+  migration, in its behind-clone check). Tenant scope 203.
+- **The bundle:** **`index-DbA9-GTq.js`** / `index-6J3Ne-U_.css`.
+- **Prod copy:** the deployed code (`3a1165e`, at 0037) against D3 (39 migrations, three
+  kinds): **67 GETs, 67 identical.**

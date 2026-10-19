@@ -34,7 +34,8 @@ WALKCARD=client/src/components/OutsideInWalk.tsx
 POVCARD=client/src/components/PovAuthoring.tsx
 POVPAGE=client/src/pages/PovPage.tsx
 POVROUTE=server/routes/valueHypotheses.ts
-for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do cp "$f" "$W/$(basename "$f").orig"; done
+POVAPI=client/src/api/pov.ts
+for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE" "$POVAPI"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
@@ -44,7 +45,7 @@ cleanup() {
   stop_server
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do
+  for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE" "$POVAPI"; do
     cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }
   done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
@@ -203,7 +204,21 @@ stop_server; start_server; walk break-frozen; restore "$POVROUTE"; stop_server; 
 # B5 — "Locked runs" back to one per engagement: runs 1 and 2 drop out of the document.
 edit "$POVPAGE" "e.locked_runs.map((r) => (" "e.locked_runs.slice(-1).map((r) => ("
 sleep 5; walk break-runs; restore "$POVPAGE"
-for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
+step "7. UX-1-D3: the outside_in_test marker kind (0038), and the Scotts correction"
+CIT="Published FY25 disclosures (verification fixture)"
+expect POST "/api/institutions/$INST/reference-example" "{\"kind\":\"published_case_study\",\"source_citation\":\"$CIT\",\"note\":\"Verification: marked the old way first, as Scotts was.\"}" 201 "the account marked a published case study (how Scotts was marked before 0038)"
+M1="$(rj b.reference_example_marker_id)"
+expect POST "/api/reference-examples/$M1/supersede" "{\"kind\":\"case_study\",\"source_citation\":\"$CIT\",\"note\":\"Verification: an unknown kind.\",\"supersession_reason\":\"Verification: trying a kind that does not exist.\"}" 422 "an unknown kind -> refused, in words" "choose what kind of example this is: a published case study, a demonstration, or an outside-in test"
+expect POST "/api/reference-examples/$M1/supersede" "{\"kind\":\"outside_in_test\",\"source_citation\":\"$CIT\",\"note\":\"Verification: an outside-in test of published material.\",\"supersession_reason\":\"Verification: it was never a published case study; it is an outside-in test.\"}" 201 "the steward corrects it to outside_in_test (a supersession, not an edit)"
+expect GET "/api/institutions/$INST/pov" "" 200 "the POV read"
+[ "$(rj "[b.reference_example.kind, b.reference_markers.length, b.reference_markers.find(m=>m.id==='$M1').kind, b.reference_markers.find(m=>m.id==='$M1').current].join('|')")" = "outside_in_test|2|published_case_study|false" ] \
+  && ok "  ...current kind outside_in_test; the earlier published_case_study marker kept, not current" || bad "  ...$(rj "JSON.stringify([b.reference_example, b.reference_markers])" | head -c 400)"
+[ "$(q "SELECT count(*) FROM reference_example_markers WHERE institution_id = '$INST'")|$(q "SELECT string_agg(kind::text, ',' ORDER BY created_at) FROM reference_example_markers WHERE institution_id = '$INST'")" = "2|published_case_study,outside_in_test" ] && ok "  ...both rows in the table; nothing rewritten" || bad "  ...rows"
+walk pov-marker
+# B6 — the old banner back: the kind no longer reaches it.
+edit "$POVAPI" "  outside_in_test: { label: 'Outside-in test', banner: 'OUTSIDE-IN TEST — built from published material, not a customer engagement' }," "  outside_in_test: { label: 'Outside-in test', banner: 'REFERENCE EXAMPLE, NOT AN ENGAGEMENT' },"
+sleep 5; walk break-marker; restore "$POVAPI"
+for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE" "$POVAPI"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 
 echo

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
-import { fetchPov, recorded, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
+import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { fetchGaps, type GapEntry } from '../api/gaps';
 import { Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
@@ -38,7 +38,7 @@ function Banners({ pov }: { pov: Pov }) {
     <div data-testid="banners">
       {pov.reference_example && (
         <div className="bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-gold" data-testid="banner-reference">
-          REFERENCE EXAMPLE, NOT AN ENGAGEMENT — {pov.reference_example.source_citation}
+          {MARKER_KIND[pov.reference_example.kind].banner} · Source: {pov.reference_example.source_citation}
         </div>
       )}
       {pov.banners.outside_in && (

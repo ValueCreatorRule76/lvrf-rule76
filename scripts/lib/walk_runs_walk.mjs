@@ -5,7 +5,7 @@
 //
 //   node scripts/lib/walk_runs_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB INST S_EMAIL X_EMAIL PW S_NAME PHASE
 //
-// MODE: main | break-unmet | break-lock | break-gate | pov-retired | break-frozen | break-runs.
+// MODE: main | break-unmet | break-lock | break-gate | pov-retired | break-frozen | break-runs | pov-marker | break-marker.
 // PHASE (main only): before-lever | after-lever.
 import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -98,6 +98,26 @@ const OUT = psql(`SELECT vo.id FROM value_outcomes vo WHERE vo.institution_id = 
 
 check(await signIn(S_EMAIL), 'signs in by session');
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+if (MODE === 'pov-marker' || MODE === 'break-marker') {
+  const CIT = 'Published FY25 disclosures (verification fixture)';
+  await send('Page.navigate', { url: `${APP}/accounts/${INST}/pov` });
+  check(await waitFor(`!!document.querySelector('[data-testid=banner-reference]')`), 'the POV shows the reference banner');
+  const banner = await ev(`document.querySelector('[data-testid=banner-reference]').textContent.trim()`);
+  if (MODE === 'pov-marker') {
+    check(banner === `OUTSIDE-IN TEST — built from published material, not a customer engagement · Source: ${CIT}`, 'the banner names the kind: "OUTSIDE-IN TEST — built from published material, not a customer engagement", then its source', banner);
+    check(!/REFERENCE EXAMPLE/.test(banner), '  ...and no longer says "Reference example" (the old double label)', banner);
+    await shot('ux1d3_pov_banner');
+    await send('Page.navigate', { url: `${APP}/accounts/${INST}` });
+    const ref = card('Reference example');
+    check(await waitFor(`(${ref})?.textContent.includes('Marked a reference example (outside-in test)')`), 'the account page names the kind: "(outside-in test)"', await ev(`(${ref})?.textContent.slice(0,200)`));
+    check(await ev(`(${ref}).textContent.includes('Earlier: published case study')`), '  ...and lists the earlier marker: "Earlier: published case study"');
+    await click(ref, 'Correct the marker…');
+    check(await waitFor(`[...(${ref}).querySelectorAll('[data-testid=marker-correct] option')].some(o=>o.value==='outside_in_test' && o.textContent==='Outside-in test')`), 'the marker form offers "Outside-in test"');
+  } else {
+    check(banner.startsWith('REFERENCE EXAMPLE, NOT AN ENGAGEMENT'), 'break-marker: with the old banner text, the kind does not reach the POV — the label map is what names it', banner);
+  }
+  ws.close(); process.exit(0);
+}
 if (MODE === 'pov-retired' || MODE === 'break-frozen' || MODE === 'break-runs') {
   await send('Page.navigate', { url: `${APP}/accounts/${INST}/pov` });
   check(await waitFor(`!!document.querySelector('[data-testid=what-it-takes]') && !document.body.textContent.includes('loading')`), 'the POV renders for the retired reference engagement');

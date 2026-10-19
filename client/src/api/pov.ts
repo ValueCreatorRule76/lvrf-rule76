@@ -9,9 +9,17 @@ import { apiFetch } from './http';
 export type Basis = 'system_of_record' | 'published' | 'client_stated' | 'inferred' | 'assumed';
 export type Verdict = 'open' | 'survived' | 'refuted' | 'survived_post_hoc' | 'refuted_post_hoc' | 'withdrawn' | 'superseded';
 
+/** UX-1-D3: the marker kinds (reference_example_kind), and how each reads. One place: the POV banner and the account page both read it. */
+export type MarkerKind = 'published_case_study' | 'demonstration' | 'outside_in_test';
+export const MARKER_KIND: Record<MarkerKind, { label: string; banner: string }> = {
+  outside_in_test: { label: 'Outside-in test', banner: 'OUTSIDE-IN TEST — built from published material, not a customer engagement' },
+  published_case_study: { label: 'Published case study', banner: 'REFERENCE EXAMPLE — a published case study, not an engagement' },
+  demonstration: { label: 'Demonstration', banner: 'DEMONSTRATION — built for show, not an engagement' },
+};
+
 export interface ReferenceMarker {
   id: string;
-  kind: 'published_case_study' | 'demonstration';
+  kind: MarkerKind;
   source_citation: string;
   note: string;
   marked_by: string;
