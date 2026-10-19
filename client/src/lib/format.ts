@@ -22,8 +22,8 @@ function currencySymbol(code: string): string | null {
 export function formatQuantity(raw: string | number | null, unit: string | null): string {
   if (raw === null || raw === '') return 'Not recorded.';
   const n = Number(raw);
-  if (!Number.isFinite(n)) return `${raw}${unit ? ` ${unit}` : ''}`;
-  const u = unit?.trim() ?? '';
+  if (!Number.isFinite(n)) return `${raw}${unit ? ` ${unit.trim().replace(/[\s.;,:]+$/, '')}` : ''}`;
+  const u = unit?.trim().replace(/[\s.;,:]+$/, '') ?? '';
   const grouped = (x: number, max = 2) => x.toLocaleString('en-US', { maximumFractionDigits: max });
   if (/^[A-Z]{3}$/.test(u)) {
     const sym = currencySymbol(u);

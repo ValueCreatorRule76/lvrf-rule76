@@ -143,7 +143,8 @@ const WALK_NEXT: Record<string, string> = {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // "5 Sep 2026", in UTC (the record's dates), the same on every browser.
 export const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
-export const unitText = (u: string) => u.replace(/[.\s]+$/, '');
+// A stored unit as shown: its trailing punctuation dropped ("hours worked." -> "hours worked").
+export const unitText = (u: string) => u.replace(/[\s.;,:]+$/, '');
 export const band = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
 
 export interface Derived { status: StepStatus; summary: string }

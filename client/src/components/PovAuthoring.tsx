@@ -9,6 +9,7 @@ import {
 import { Badge, Card } from './workbench/Card';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
 import { day, povStatus, type PovStatus } from '../lib/workspaceStatus';
+import { label, SUMMARY_LENS } from '../lib/labels';
 
 const trimEnd = (s: string) => s.trim().replace(/[\s.;,:]+$/, '');
 
@@ -241,7 +242,7 @@ export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; ou
       </p>
       {h.post_hoc && <p className="m-0 mt-0.5 text-[11.5px] text-gold-ink" data-testid="post-hoc">Written after the result: a description, not a test. It never counts as survived.</p>}
       {h.verdict === 'superseded' && h.supersession_reason && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45">Restated: {h.supersession_reason}</p>}
-      {h.verdict === 'withdrawn' && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45">Withdrawn by {h.withdrawn_by}, {h.withdrawn_at?.slice(0, 10)} — {h.withdrawal_reason}</p>}
+      {h.verdict === 'withdrawn' && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45">Withdrawn by {h.withdrawn_by}, {h.withdrawn_at ? day(h.withdrawn_at) : 'date not recorded'} — {h.withdrawal_reason}</p>}
       <p className="m-0 mt-0.5 text-[11px] text-ink-45">Stated by {h.author}, {day(h.created_at)}</p>
       {onChanged && h.verdict === 'open' && (
         <div className="mt-1.5 flex flex-wrap gap-2">
@@ -296,7 +297,7 @@ export function SummaryItem({ s }: { s: ExecutiveSummary }) {
   return (
     <li className="border-b border-rule-soft py-2 last:border-b-0" data-testid="summary" data-current={s.current ? 'true' : 'false'}>
       <div className="flex flex-wrap items-baseline gap-2">
-        <Badge tone={s.current ? 'solid' : 'neutral'}>{s.lens}</Badge>
+        <Badge tone={s.current ? 'solid' : 'neutral'}>{label(SUMMARY_LENS, s.lens)}</Badge>
         {!s.current && <span className="text-[11px] text-ink-45">earlier version</span>}
       </div>
       <p className={'m-0 mt-1 whitespace-pre-wrap text-[13px] ' + (s.current ? 'text-ink' : 'text-ink-45')}>{s.body}</p>

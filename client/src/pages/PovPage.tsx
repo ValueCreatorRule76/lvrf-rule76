@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { ConfidenceBadge } from '../components/workbench/Workspace';
-import { day } from '../lib/workspaceStatus';
+import { day, unitText } from '../lib/workspaceStatus';
+import { label, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
 import { formatQuantity } from '../lib/format';
 
 // UX-1 standard 4: the value spine in plain labels; the enum keeps its values.
@@ -116,8 +117,8 @@ function Confidence({ pov }: { pov: Pov }) {
           <p key={e.id} className="m-0 mt-1 text-[13px] text-ink">
             <ConfidenceBadge score={e.latest_locked_run!.confidence_score} band={e.latest_locked_run!.confidence_band} />
             <span className="mt-1 block text-[11px] text-ink-45">
-              run {e.latest_locked_run!.run_number}, locked {day(e.latest_locked_run!.locked_at)} ·{' '}
-              <Link to={`/runs/${e.latest_locked_run!.id}`} className={'text-gold-ink hover:text-ink ' + FOCUS_RING}>open the run</Link>
+              run {e.latest_locked_run!.run_number}, locked {day(e.latest_locked_run!.locked_at)}
+              <span className="print:hidden"> · <Link to={`/runs/${e.latest_locked_run!.id}`} className={'text-gold-ink hover:text-ink ' + FOCUS_RING}>open the run</Link></span>
             </span>
           </p>
         ))}
@@ -160,7 +161,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         <span className={KICKER}>{o.metric_name}</span>
         <table className="mt-1 w-full border-collapse text-[13px]">
           <tbody>
-            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${o.unit}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)}</td></tr>
+            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)}</td></tr>
             <tr><td className="py-1 text-ink-45">Target</td>{o.target_value !== null && o.committed_by
               ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}</td></>
               : <td className="py-1" colSpan={2} data-testid="no-target">No target: a hypothesis.</td>}</tr>
@@ -221,8 +222,8 @@ function WhatItTakes({ outcomes }: { outcomes: PovOutcome[] }) {
                   <tbody>{g.map((e) => (
                     <tr key={e.factor} className="border-t border-rule-soft align-top">
                       <td className="px-3 py-1.5 text-ink">{e.requirement}</td>
-                      <td className="px-3 py-1.5 text-ink-45">{e.ask_type}</td>
-                      <td className="px-3 py-1.5 text-ink-45">{e.state}, {e.path}</td>
+                      <td className="px-3 py-1.5 text-ink-45" data-testid="gap-kind">{label(ASK_TYPE, e.ask_type)}</td>
+                      <td className="px-3 py-1.5 text-ink-45" data-testid="gap-state">{label(GAP_STATE, e.state)}; {label(GAP_PATH, e.path)}</td>
                     </tr>))}</tbody>
                 </table>}
           </div>
@@ -268,7 +269,7 @@ export function PovPage() {
               <span className={KICKER}>Point of view{pov.institution.industry_name ? ` · ${pov.institution.industry_name} pack` : ''}</span>
               <h1 className="m-0 font-display text-[44px] leading-[1] tracking-[.012em] text-ink">{pov.institution.name}</h1>
               {pov.entity
-                ? <span className="font-mono text-[12.5px] text-ink-45">{pov.entity.legal_name} · {pov.entity.identifier_type.replace(/_/g, ' ')} {pov.entity.identifier} <BasisBadge basis={pov.entity.basis} /></span>
+                ? <span className="font-mono text-[12.5px] text-ink-45">{pov.entity.legal_name} · {label(IDENTIFIER_TYPE, pov.entity.identifier_type)} {pov.entity.identifier} <BasisBadge basis={pov.entity.basis} /></span>
                 : <span className="text-[12px] text-ink-45">No legal entity pinned.</span>}
             </div>
             <Confidence pov={pov} />
@@ -315,8 +316,8 @@ export function PovPage() {
               <table className="w-full border-collapse border border-rule bg-white text-[12.5px]" data-testid="facts">
                 <tbody>{pov.facts.map((f) => (
                   <tr key={f.id} className="border-b border-rule-soft align-top">
-                    <td className="px-3 py-1.5 text-ink-45">{f.kind.replace(/_/g, ' ')}</td>
-                    <td className="px-3 py-1.5 text-ink" data-testid="fact-value">{f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</td>
+                    <td className="px-3 py-1.5 text-ink-45" data-testid="fact-kind">{label(FACT_KIND, f.kind)}</td>
+                    <td className="px-3 py-1.5 text-ink" data-testid="fact-value">{f.value_text !== null && f.kind === 'disclosure_regime' ? label(DISCLOSURE_REGIME, f.value_text) : f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</td>
                     <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {day(f.as_of)}</span></td>
                   </tr>))}</tbody>
               </table>
@@ -324,14 +325,7 @@ export function PovPage() {
           </div>
           <div className="flex flex-col gap-2">
             <h2 className={H2}>Locked runs</h2>
-            {pov.engagements.every((e) => e.locked_runs.length === 0)
-              ? <p className="m-0 border border-dashed border-ink-45 bg-white px-4 py-3 text-[13px] text-ink-45">No locked run yet. A locked run is never rewritten.</p>
-              : <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="locked-runs">{pov.engagements.flatMap((e) => e.locked_runs.map((r) => (
-                  <li key={r.id} className="border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0" data-testid="locked-run">
-                    <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
-                    <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100</span>
-                    <span className="block text-[10.5px] text-ink-45">Record hash <span className="font-mono [overflow-wrap:anywhere]">{r.payload_hash}</span></span>
-                  </li>)))}</ul>}
+            <LockedRuns pov={pov} />
           </div>
         </section>
 
@@ -354,24 +348,53 @@ export function PovPage() {
 }
 
 /** Repeated at the foot of every printed page: what the page is sealed by, and when it was printed. */
-// Every printed page names each locked run's record hash. A footer taller than
-// the browser allows is not repeated at all, so past FULL_HASH_RUNS runs each
-// hash is shortened to its first 16 characters; the full hashes print once,
-// under Locked runs.
-const FULL_HASH_RUNS = 3;
+// On screen, each engagement's latest locked run, with "Show all N runs" to
+// expand; in print, always every run with its full hash (Brad, 19 Oct 2026).
+function LockedRuns({ pov }: { pov: Pov }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const sealed = pov.engagements.filter((e) => e.locked_runs.length > 0);
+  if (sealed.length === 0) return <p className="m-0 border border-dashed border-ink-45 bg-white px-4 py-3 text-[13px] text-ink-45">No locked run yet. A locked run is never rewritten.</p>;
+  return (
+    <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="locked-runs">{sealed.flatMap((e) => {
+      const latest = e.locked_runs.reduce((a, r) => (r.run_number > a.run_number ? r : a));
+      const all = open[e.id] === true;
+      const items = e.locked_runs.map((r) => (
+        <li key={r.id}
+          className={'border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0 ' + (all || r.id === latest.id ? '' : 'hidden print:block')} data-testid="locked-run">
+          <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
+          <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100{r.id === latest.id && e.locked_runs.length > 1 ? ' · the latest' : ''}</span>
+          <span className="block text-[10.5px] text-ink-45">Record hash <span className="font-mono [overflow-wrap:anywhere]">{r.payload_hash}</span></span>
+        </li>));
+      if (e.locked_runs.length < 2) return items;
+      return [...items, (
+        <li key={`${e.id}-toggle`} className="border-b border-rule-soft px-4 py-1.5 last:border-b-0 print:hidden">
+          <button type="button" aria-expanded={all} data-testid="show-all-runs"
+            onClick={() => setOpen((o) => ({ ...o, [e.id]: !all }))}
+            className={'text-[11.5px] font-semibold text-gold-ink underline hover:text-ink ' + FOCUS_RING}>
+            {all ? 'Show the latest run only' : `Show all ${e.locked_runs.length} runs`}
+          </button>
+        </li>)];
+    })}</ul>
+  );
+}
+
+// Every printed page carries the FULL record hash of each engagement's latest
+// locked run, never a shortened one, and says how many runs there are in all;
+// every run's full hash prints once, under Locked runs (Brad, 19 Oct 2026).
 function PrintFooter({ pov }: { pov: Pov }) {
   const sealed = pov.engagements.filter((e) => e.locked_runs.length > 0);
-  const full = sealed.reduce((n, e) => n + e.locked_runs.length, 0) <= FULL_HASH_RUNS;
+  const total = sealed.reduce((n, e) => n + e.locked_runs.length, 0);
+  const latest = (e: Pov['engagements'][number]) => e.locked_runs.reduce((a, r) => (r.run_number > a.run_number ? r : a));
   return (
     <div className="mt-3 border-t border-ink pt-1.5 text-[9px] leading-snug text-ink-70">
       {sealed.length === 0
         ? <p className="m-0" data-testid="print-unsealed">No locked run: nothing on this page is sealed.</p>
-        : sealed.map((e) => (
-          <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}: {e.locked_runs.map((r, i) => (
-            <span key={r.id}>{i > 0 ? '; ' : ''}run {r.run_number} · record hash <span className="font-mono">{full ? r.payload_hash : `${r.payload_hash.slice(0, 16)}…`}</span></span>
-          ))}</p>
-        ))}
-      {sealed.length > 0 && !full && <p className="m-0">Record hashes shortened to their first 16 characters; each run&apos;s full hash is under Locked runs.</p>}
+        : <>
+          {sealed.map((e) => { const r = latest(e); return (
+            <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}{e.retired ? ' (retired)' : ''}: latest locked run, run {r.run_number} · record hash <span className="font-mono">{r.payload_hash}</span></p>
+          ); })}
+          <p className="m-0">{total} locked {total === 1 ? 'run' : 'runs'} in all; every run&apos;s full hash is listed under Locked runs.</p>
+        </>}
       <p className="m-0">Printed {day(new Date().toISOString())} · rendered from the record as it stands · basis order: system of record › published › client-stated › inferred › assumed</p>
     </div>
   );

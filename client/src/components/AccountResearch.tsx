@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { researchStatus, type ResearchStatus } from '../lib/workspaceStatus';
+import { FACT_KIND as KIND, DISCLOSURE_REGIME as REGIME } from '../lib/labels';
 import {
   fetchAccountResearch,
   type AccountPendingResult,
@@ -41,13 +42,6 @@ const SMALL_BUTTON =
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const when = (ts: string) => ts.replace('T', ' ').slice(0, 16) + ' UTC';
-const KIND: Record<string, string> = {
-  revenue: 'Revenue', headcount: 'Headcount', stated_priority: 'Stated priority', system: 'System',
-  entity: 'Entity', disclosure_regime: 'Disclosure regime',
-};
-const REGIME: Record<string, string> = {
-  public_filer: 'Public filer', private: 'Private', subsidiary_of_filer: 'Subsidiary of a filer', public_sector: 'Public sector',
-};
 const describeEntity = (e: Record<string, unknown>) =>
   `${String(e['legal_name'])} — ${String(e['identifier_type'])} ${String(e['identifier'])}${e['registry_jurisdiction'] ? ` (${String(e['registry_jurisdiction'])})` : ''}`;
 

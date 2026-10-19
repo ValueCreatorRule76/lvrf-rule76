@@ -11095,46 +11095,88 @@ changes no hash.
 - **The app header and the back link** don't print.
 - **Page breaks:** two-column sections stack in print, headings stay with their content,
   and small units (the chain, fact rows, outcome cards) are kept whole.
-- **Departure from the approved spec, for Brad to decide.** Up to 3 locked runs, the footer
-  carries each full hash, as approved. Beyond 3, each hash is cut to its first 16
-  characters plus "…", and the footer says the full hashes print under Locked runs.
-  - **Why:** Curia has 22 locked runs. With 22 full hashes the footer is too tall, and
-    Chrome then repeats it on no page at all. B4 below shows this.
+- **The hash rule** (Brad, 19 Oct 2026). This replaces my first version, which shortened
+  hashes past 3 runs.
+  - **Every printed page** carries the **full** hash of the latest locked run of each
+    engagement shown: Scotts, run 2; Curia, run 21 and run 1. It also carries one line:
+    "N locked runs in all; every run's full hash is listed under Locked runs."
+  - **The footer never shows a shortened hash,** whatever the run count.
+  - **Locked runs** prints every run's full hash once.
+
+**Changes after Brad's page review** (19 Oct 2026):
+- **Screen-only links and controls are hidden in print.** "open the run", printed twice in
+  Curia's confidence box, was the only one printing; the new "Show all" buttons are hidden
+  too. No authoring control renders on the POV.
+- **Stored values in words** (`client/src/lib/labels.ts`). That module is the one source of
+  labels; AccountResearch now imports it rather than keeping its own copy. It covers:
+  - fact kinds;
+  - the disclosure regime;
+  - the identifier type ("SEC CIK");
+  - the gap table's kind and state ("Open; can still be closed");
+  - the summary's reader;
+  - and the withdrawn date.
+
+  **`public_filer` reads "Public filer"**, not "Public filer (SEC)". The research contract
+  defines it as "files with a securities regulator", so naming the SEC would add a fact
+  the record doesn't hold. The SEC CIK is shown on its own in the header.
+- **A stored unit's trailing punctuation is dropped wherever the unit is shown**
+  (`unitText`, `formatQuantity`), not only in the falsifier. The baseline now reads
+  "…hours worked".
+- **On screen, Locked runs shows each engagement's latest run.** Where there is more than
+  one, a "Show all N runs" button (`aria-expanded`) expands the list. Print always lists
+  every run.
+- **Recorded text is kept exactly as recorded,** for example conditions starting "Same TRIR
+  definition…".
 
 **Gate A:**
-- **`verify_pov_print.sh`: 62 passed, 0 failed.** It runs on a clone of the restored,
+- **`verify_pov_print.sh`: 115 passed, 0 failed.** It runs on a clone of the restored,
   neutralised prod copy, signed in by session. It covers Scotts, Curia and a new account
   with no locked run.
-  - **On screen, at 1280 and 390:** the plain labels and legend; confidence; the falsifier
-    pattern; the lever; Scotts' facts ("$3,413.1 million", "5,200 people", and no raw long
-    number); no sideways scroll.
-  - **In print:** Chrome's `Page.printToPDF`, then `pdftotext` read one page at a time.
-    **Every page** carries:
+  - **On screen, at 1280 and 390:**
+    - the plain labels and legend; confidence; the falsifier pattern; the lever;
+    - Scotts' facts: "$3,413.1 million" and "5,200 people", with no raw long number;
+    - no raw stored value; Scotts reads "Public filer" and "SEC CIK", Curia's gap table
+      reads in words;
+    - the baseline's unit without trailing punctuation;
+    - Scotts' conditions kept exactly;
+    - Locked runs: the latest run per engagement; "Show all N runs" expands and folds, with
+      `aria-expanded`;
+    - no sideways scroll.
+  - **In print:** Chrome's `Page.printToPDF`, then `pdftotext` read one page at a time and
+    checked against `GET /pov`'s hashes. **Every page** carries:
     - the banners;
-    - every run named with its hash (full, or 16 characters past 3), or the "No locked
-      run" line;
+    - each engagement's latest run with its full hash, and "N locked runs in all; …" (or
+      the "No locked run" line);
     - the print date and "rendered from the record as it stands";
     - "Page n of N";
-    - and never the app header.
+    - and never the app header, a screen-only link or button, a shortened hash or a raw
+      stored value.
+
+    Every run's full hash appears exactly once besides the footers.
   - **Results:** Scotts, 3 pages and 2 runs; Curia, 4 pages and 22 runs; the new account,
     1 page.
   - **Breaks:**
-    - **B1:** banners without the repeating header; page 2 loses them.
+    - **B1:** banners without the repeating header.
     - **B2:** the old falsifier template.
     - **B3:** amounts shown raw.
-    - **B4:** every full hash in the footer; Curia's footer is then not repeated.
+    - **B4:** a shortened hash in the footer.
+    - **B5:** the first run's hash in the footer instead of the latest.
+    - **B6:** "open the run" not hidden in print.
+    - **B7:** the disclosure regime shown as stored.
 
-    All caught, and every file restored byte-identical.
+    All caught, and every file restored byte-identical. If the script stops early, it now
+    exits non-zero.
 - **`verify_value_hypotheses` 137/0** checks the new sentence, including that the preview
   matches the POV. `verify_accounts_home`'s B4 edit string was updated for the header's
   `print:hidden`; it is 61/0.
-- **The regression:** all **35** scripts pass (tenant scope 203). The build, tsc and oxlint
-  are clean, with the 1 pre-existing warning. The bundle is **`index-C-mNSSVh.js`** /
-  `index--mKXtxKN.css`.
+- **The regression,** re-run after the review changes: all **35** scripts pass (tenant
+  scope 203). The build, tsc and oxlint are clean, with the 1 pre-existing warning. The
+  bundle is **`index-BEtOnLYY.js`** / `index--mKXtxKN.css`.
 - **The prod copy:** restored from `lvrf-pre-ux1s2-20261019T171542Z` under the same
   conditions as before. Against the deployed `feb539f`: **76 GETs, 75 identical.** The
   only difference is Scotts' `/pov`, which is the one account with a lever and a hypothesis.
   With `proposed_by`, `proposed_at` and `falsifier_text` allowed, all 76 are identical.
+  The review changes are client-only, so this result still holds.
 - **For Brad's review:** screenshots and the PDFs' page images are on the Mac only, in
   `~/lvrf-backups/slice3-screens/` (600). They cover Scotts, Curia and the new account at
   1280 and 390, with every printed page as an image and the PDFs themselves.
