@@ -1,0 +1,28 @@
+/* UX-1 mock-ups: the ONE copy of the Rule76 tokens in design/mockups.
+   AUTHORITY: CLAUDE.md, "Rule76 design tokens". This file restates them only
+   because static HTML cannot read Markdown; scripts/check_design_tokens.mjs
+   fails if any value here differs from CLAUDE.md's table. Derived neutrals
+   (ink-70, rule, rule-soft, paper) are DESIGN_SPEC §10's, marked derived.
+   No mock-up file may contain a hex value: cite a token. */
+:root {
+  --ink: #09090A;
+  --gold: #C9A24A;
+  --gold-ink: #8A6A22;
+  --silver: #C0C0C0;
+  --offwhite: #FAFAFA;
+  --ink-45: #6E6E72;
+  --ink-25: #A0A0A4;
+  --healthy: #2F6B4F;
+  --warning: #A8631F;
+  --critical: #8F2A2A;
+  --failure: #5C1212;
+  /* derived (DESIGN_SPEC §10; practical, not ratified) */
+  --ink-70: #3A3A3C;
+  --rule: #E4E4E6;
+  --rule-soft: #EFEFF1;
+  --paper: #FFFFFF;
+  /* type (CLAUDE.md) */
+  --display: 'Bebas Neue', sans-serif;
+  --body: 'Barlow', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}

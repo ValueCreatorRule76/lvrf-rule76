@@ -10560,3 +10560,67 @@ edit (OWN-1-D3) is made: rule 3's "Pending OWN-1" caveat is replaced by what bin
 role now, and the Stack names the three roles. **Next:** Brad retires Scotts' reference
 engagement (W9), which Q4m was held for. Then UX-1's mock-ups, with L31 (the request
 log) recommended ahead of them.
+
+### The W9 retirement on prod (read-only, by me over ssh, 19 Oct 2026)
+
+- **The engagement:** "Scotts Miracle-Gro — reference example, not an engagement" was
+  retired at 11:21:14 UTC by Brad Piver. The route recorded its evidence row ("Outside-in
+  reference test complete…"), and the audit log has the matching insert and
+  soft-delete.
+- **Kept, unchanged:** both runs, locked (run 1: 10.0, `1c9b4f02…`; run 2: 35.0,
+  `667fe1ae…`); the hypothesis, still open; the TRIR outcome with its 1.4 baseline.
+- **The cohort no longer counts it:** 0 current Scotts engagements.
+- **No problems:** 0 refusals, 0 ownership violations, run hashes 25/25.
+- **Still to fix:** the marker is still `published_case_study`, which waits on
+  UX-1-D3's `outside_in_test`.
+
+## L31: the request log — 19 October 2026 (UTC)
+
+**Why:** twice on 13 and 19 Oct a silent outcome couldn't be traced from the box. The
+API logged only its start line and the raw text of 5xx errors. On 19 Oct a save that
+hadn't arrived couldn't be told apart from a 401.
+
+**What it builds** (no migration, no hardening change, no client change):
+- **`server/lib/requestLog.ts`,** installed first in `server/index.ts`, writes one line
+  per `/api` request to stdout, which goes to the journal:
+  `LVRF req <METHOD> <route pattern> <status> <ms>ms session=<y|n>`.
+  - "aborted" replaces the status if the client goes away first.
+  - `session` says whether a session cookie was presented. Its value is never logged.
+- **Never logged:** the concrete path (ids), the query string, the body, any cookie or
+  header value, the IP address.
+- **How the pattern is found:**
+  - it comes from the app's own routers, matched in mount order with each layer's
+    compiled path matcher, a pure function. `Layer#match` would write shared router
+    state, so it isn't used;
+  - **so a request refused before routing (a 401, an origin 403, a bad body) still
+    names its route;**
+  - an unmatched path logs "(no route)"; a mount with a parameter would log
+    "(param mount)".
+- **`list_api_routes.mjs`** recognises the new `app.use(requestLog(app))` line.
+
+**What a 401 looks like in the journal** (the 19 Oct blind spot):
+```
+LVRF req GET /api/institutions/:institutionId/pov 401 0ms session=n          (no cookie)
+LVRF req POST /api/institutions/:institutionId/hypotheses 401 21ms session=y  (a cookie, expired or unknown)
+```
+
+**Gate A:**
+- **`verify_request_log.sh`: 38 passed, 0 failed.** The API ran with the actor header
+  off, as in production.
+  - **The lines:** a 401 without a cookie, a 401 with a bad cookie, the sign-in, a
+    signed-in read, a signed-in 422, a foreign-origin 403, a body that isn't JSON (400),
+    and a path with no route ("(no route)", 404).
+  - **Planted markers, none of them logged:** in the query string, the body, two
+    cookies, a header, the password, the session token, the ids, the email,
+    `127.0.0.1`, the foreign origin. The password and token appear in no line of the
+    whole log.
+  - **All 66 routes** (`list_api_routes --all`) logged as their own pattern while
+    unauthenticated, and the id put into every concrete path appears in no line.
+  - **Breaks:** B1, logging the concrete path, puts the id in the log; B2, using
+    `req.route` alone, logs a 401 as "(no route)". Both caught and restored
+    byte-identical.
+- **Regression:** all **32** pass (with `verify_ownership` 75/0 and
+  `verify_request_log`); tenant scope 203; the client bundle is unchanged
+  (`index-KWocnhhB.js`).
+- **Prod copy against the deployed code (`a88c071`):** 67 GETs, **67 identical**. The new
+  server logged 68 request lines, and none carries an id.

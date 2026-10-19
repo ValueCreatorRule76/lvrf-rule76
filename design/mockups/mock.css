@@ -1,0 +1,144 @@
+/* UX-1 mock-up components. Tokens only (tokens.css); no hex here. */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--offwhite); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.5; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.muted { color: var(--ink-45); }
+.small { font-size: 12.5px; }
+
+/* the mock-up flag: says what this page is, on every page */
+.mockflag { background: var(--rule-soft); color: var(--ink-70); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; padding: 6px 16px; border-bottom: 1px solid var(--rule); }
+
+/* chrome: RULE | 76 above LVRF (chapel subordination, DESIGN_SPEC §10) */
+.hdr { background: var(--ink); color: var(--offwhite); display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 56px; }
+.lockup { display: flex; flex-direction: column; line-height: 1; }
+.lockup .r76 { font-family: var(--display); font-size: 13px; letter-spacing: .18em; color: var(--offwhite); }
+.lockup .r76 .bar { display: inline-block; width: 1px; height: 10px; background: var(--gold); margin: 0 6px; vertical-align: -1px; }
+.lockup .r76 .num { color: var(--gold); }
+.lockup .chapel { font-family: var(--display); font-size: 20px; letter-spacing: .08em; color: var(--offwhite); margin-top: 3px; }
+.nav { display: flex; gap: 22px; }
+.nav a { text-decoration: none; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--silver); padding: 18px 0 16px; border-bottom: 2px solid transparent; }
+.nav a[aria-current] { color: var(--offwhite); border-bottom-color: var(--gold); }
+.who { margin-left: auto; font-size: 12.5px; color: var(--silver); display: flex; gap: 14px; align-items: center; }
+.who strong { color: var(--offwhite); font-weight: 600; }
+.menu { display: none; margin-left: auto; color: var(--offwhite); border: 1px solid var(--ink-70); background: none; font: inherit; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; padding: 6px 10px; }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 28px 24px 64px; }
+.crumbs { font-size: 12.5px; color: var(--ink-45); margin-bottom: 6px; }
+.crumbs a { color: var(--ink-45); text-decoration: none; } .crumbs a:hover { color: var(--ink); }
+h1 { font-family: var(--display); font-weight: 400; font-size: 44px; line-height: 1; letter-spacing: .02em; margin: 0; }
+h2 { font-family: var(--display); font-weight: 400; font-size: 24px; letter-spacing: .03em; margin: 0 0 10px; }
+.kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-45); font-weight: 600; }
+
+/* buttons: ONE filled primary per step; the rest outlined. Disabled is not
+   colour alone: it carries its reason beside it (.why). */
+.btn { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .04em; padding: 10px 18px; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); text-decoration: none; cursor: pointer; }
+.btn.primary { background: var(--ink); color: var(--offwhite); }
+.btn.primary .arrow { color: var(--gold); }
+.btn[disabled] { background: var(--rule-soft); color: var(--ink-45); border-color: var(--rule); cursor: not-allowed; }
+.why { font-size: 12.5px; color: var(--ink-45); margin-top: 6px; }
+.linkish { font-size: 13px; color: var(--gold-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+.card { background: var(--paper); border: 1px solid var(--rule); }
+.card .pad { padding: 18px 20px; }
+.row { display: flex; gap: 16px; align-items: center; }
+.spacer { flex: 1; }
+
+/* badges: text always says the state; colour only reinforces it */
+.badge { display: inline-block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; padding: 2px 8px; border: 1px solid currentColor; white-space: nowrap; }
+.badge.low { color: var(--critical); } .badge.medium { color: var(--gold-ink); } .badge.high { color: var(--healthy); }
+.badge.done { color: var(--healthy); } .badge.now { background: var(--ink); color: var(--offwhite); border-color: var(--ink); } .badge.wait { color: var(--ink-45); }
+.score { font-family: var(--display); font-size: 30px; line-height: 1; }
+.score small { font-family: var(--body); font-size: 13px; color: var(--ink-45); margin-left: 2px; }
+
+/* preconditions: the gold left-border callout (DESIGN_SPEC §9). Ink is for refusals only. */
+.callout { border-left: 3px solid var(--gold); background: var(--paper); padding: 10px 14px; font-size: 13px; }
+.refusal { background: var(--ink); color: var(--offwhite); padding: 12px 16px; font-size: 13px; }
+.refusal .kicker { color: var(--gold); }
+.notice { border-left: 3px solid var(--healthy); padding: 6px 12px; font-size: 13px; background: var(--paper); }
+
+/* disclosure banners (CLAUDE.md rule 6: never suppressed) */
+.banner { font-family: var(--mono); font-size: 12.5px; padding: 10px 24px; letter-spacing: .02em; }
+.banner.outside { background: var(--ink); color: var(--offwhite); border-top: 2px solid var(--gold); }
+.banner.outside b { color: var(--gold); font-weight: 600; }
+.banner.unverified { background: var(--paper); color: var(--warning); border-bottom: 1px solid var(--warning); }
+
+/* the guided path */
+.ws { display: grid; grid-template-columns: 220px 1fr; gap: 32px; margin-top: 24px; }
+.rail { list-style: none; margin: 0; padding: 0; position: sticky; top: 16px; align-self: start; }
+.rail li { display: flex; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--rule-soft); font-size: 13.5px; color: var(--ink-45); }
+.rail li .n { font-family: var(--display); font-size: 18px; width: 18px; color: var(--ink-25); }
+.rail li.done { color: var(--ink-70); } .rail li.done .n { color: var(--healthy); }
+.rail li.now { color: var(--ink); font-weight: 600; } .rail li.now .n { color: var(--gold); }
+.rail li .st { margin-left: auto; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+.rail li.done .st { color: var(--healthy); } .rail li.now .st { color: var(--ink); }
+
+.step { background: var(--paper); border: 1px solid var(--rule); margin-bottom: 10px; }
+.step > .head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
+.step > .head .n { font-family: var(--display); font-size: 22px; color: var(--ink-25); width: 22px; }
+.step > .head .t { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.step > .head .sum { color: var(--ink-45); font-size: 13px; }
+.step > .head .show { margin-left: auto; font-size: 12.5px; color: var(--ink-45); text-decoration: none; white-space: nowrap; }
+.step.done > .head .n { color: var(--healthy); }
+.step.now { border: 1px solid var(--ink); box-shadow: inset 4px 0 0 var(--gold); }
+.step.now > .head .n { color: var(--gold); }
+.step.now > .body { padding: 4px 18px 20px 52px; }
+.step.wait > .head .t { color: var(--ink-45); font-weight: 500; }
+.step.wait > .head .sum { font-size: 12.5px; }
+.detail { margin-top: 26px; }
+.detail summary { cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .04em; padding: 12px 18px; background: var(--paper); border: 1px solid var(--rule); list-style: none; }
+
+/* forms (DESIGN_SPEC §9: provenance first, labels teach the constraint) */
+.prov { background: var(--rule-soft); padding: 12px 14px; margin: 8px 0 14px; font-size: 13px; }
+.prov .kicker { color: var(--gold-ink); margin-bottom: 4px; }
+label.f { display: block; margin-bottom: 12px; }
+label.f > span { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600; color: var(--ink-45); margin-bottom: 4px; }
+.input { width: 100%; border: 1px solid var(--rule); background: var(--paper); padding: 8px 10px; font: inherit; font-size: 13.5px; color: var(--ink); }
+.input.placeholder { color: var(--ink-45); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.preview { border: 1px solid var(--rule); padding: 10px 12px; font-size: 13.5px; margin-bottom: 14px; }
+.preview .kicker { color: var(--gold-ink); margin-bottom: 4px; }
+
+/* lists and tables */
+.list { list-style: none; margin: 0; padding: 0; }
+.acct { display: grid; grid-template-columns: 1.6fr 1.2fr 1.3fr .8fr 1.3fr 16px; gap: 16px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--rule-soft); text-decoration: none; color: var(--ink); }
+.acct:hover { background: var(--offwhite); }
+.acct .name { font-weight: 600; font-size: 15px; }
+.acct .go { color: var(--gold-ink); font-weight: 600; }
+.acct-head { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-45); font-weight: 600; padding: 10px 20px; border-bottom: 1px solid var(--rule); }
+.kv { display: grid; grid-template-columns: 160px 1fr; gap: 6px 16px; font-size: 13.5px; }
+.kv dt { color: var(--ink-45); } .kv dd { margin: 0; }
+
+/* spine strip (plain stage labels, UX-1 §7e item 3) */
+.spine { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 10px 0 4px; }
+.spine div { border-top: 4px solid var(--rule); padding-top: 6px; font-size: 12px; color: var(--ink-45); }
+.spine div.reached { border-top-color: var(--gold); color: var(--ink); font-weight: 600; }
+.spine div.past { border-top-color: var(--ink-70); color: var(--ink-70); }
+
+@media (max-width: 720px) {
+  .hdr { gap: 12px; padding: 0 16px; }
+  .nav, .who { display: none; }
+  .menu { display: inline-block; }
+  .wrap { padding: 20px 16px 48px; }
+  h1 { font-size: 34px; }
+  .ws { grid-template-columns: 1fr; gap: 12px; }
+  .rail { position: static; display: flex; overflow-x: auto; gap: 6px; }
+  .rail li { flex: 0 0 auto; border: 1px solid var(--rule); padding: 6px 10px; background: var(--paper); }
+  .rail li .st { display: none; }
+  .step.now > .body { padding: 4px 16px 18px; }
+  .step > .head { flex-wrap: wrap; padding: 12px 16px; }
+  .step > .head .sum { flex-basis: 100%; padding-left: 34px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .acct { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .acct .ind, .acct .step-col, .acct .last { grid-column: 1; font-size: 12.5px; color: var(--ink-45); }
+  .acct .conf { grid-column: 2; grid-row: 1; }
+  .acct .go { display: none; }
+  .acct-head { display: none; }
+  .kv { grid-template-columns: 1fr; gap: 0 0; } .kv dd { margin-bottom: 8px; }
+  .spine { grid-template-columns: repeat(4, 1fr); }
+  .banner { padding: 10px 16px; }
+  .hide-sm { display: none; }
+}
+@media print { .mockflag, .hdr { display: none; } }

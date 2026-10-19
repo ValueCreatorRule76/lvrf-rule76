@@ -114,7 +114,7 @@ on institution routes (P3).
 | L28 | **`engagements.value_stage` is stale**: no route advances it (the outcome routes advance `value_outcomes.value_stage`), so the stored column says `baseline` on engagements whose outcomes are verified. O2's POV already derives the stage reached (the furthest of the engagement and its current outcomes) and does not read the column alone | found in O2's Gate A, 12 Oct 2026 | **Proposal, to decide later (not in O2):** compute it, not store it. A function `lvrf_engagement_stage(engagements)` (the POV's derivation, in one place), every reader calling it, and the column dropped, or kept only as a frozen historical value, once nothing reads it. Before deciding: list every reader of the column (the runs list, the cohort, `walkSpine`'s `terminal_value_stage`) |
 | L29 | **Raw Postgres text reaches people** (widened 12 Oct 2026, Brad's W6: "new row for relation 'evidence' violates check constraint 'evidence_ai_verify_requires_resolution'" when Source verified = Yes on AI-sourced evidence). **Planned as Q4k below.** Originally: raw Postgres text in 500 answers: the W1 fix maps unique violations to plain words in the shared refusal handler, but each route's 500 fallback (`err instanceof Error ? err.message`) can still echo Postgres's own text, constraint names included, for other errors (a foreign-key or not-null violation) | found in the W1 fix, 12 Oct 2026 | One central mapping in the same place (`server/lib/refusal.ts`): Postgres errors other than check and unique violations become "That could not be written; nothing was saved." with the raw text in the server log only. Its own Gate A: grep for every 500 fallback, and a deliberate foreign-key violation per route class |
 | L30 | **The plain duplicate-person message can confirm that an email exists in another tenant.** "\<email\> is already in LVRF; select them instead" is right when the person is in the caller's tenant, but `persons_email_key` is unique across ALL persons, so it also answers for another tenant's person (or customer contact) | Brad, 12 Oct 2026 | **Must be fixed before anyone outside Brad's tenant gets access.** Say "select them" only when the existing person is in the caller's tenant (their staff, or a person of one of their accounts); otherwise a neutral refusal ("That email cannot be used here; nothing was written."). **Note:** any refusal, however worded, still tells the caller *something* holds that email while email is globally unique. Closing that fully needs email unique per tenant, not globally (a migration that changes `persons_email_key`), which is a decision for then |
-| L31 | **The API keeps no request log.** `server/index.ts` logs only its start line, and `respondServerError` logs a 5xx's raw text; a 2xx, 4xx or a request that never arrives leaves nothing in `journalctl -u lvrf-api`. The Scotts hypothesis attempt (13 Oct 2026) could not be traced from the box: no request was ever sent, and the journal could not say so | Brad, 18 Oct 2026 (journalctl since 03:36 UTC returned nothing for hypothes\|POST\|refus\|error) | A minimal request log, one line per `/api/*` request: method, the route **pattern** (not the raw path, which can carry ids), status and duration in ms. **No bodies, no query strings, no cookies, no headers, no actor email.** Written to stdout for journald, after `res` finishes. Its own small item with a Gate A (a verify that the line appears for a 201, 409, 422 and 500, and that a password POST to `/api/auth/login` logs no body). Not mixed into UX-1 |
+| L31 | **Built 19 Oct 2026, Gate A passed (see BUILD_STATUS).** **The API keeps no request log.** `server/index.ts` logs only its start line, and `respondServerError` logs a 5xx's raw text; a 2xx, 4xx or a request that never arrives leaves nothing in `journalctl -u lvrf-api`. The Scotts hypothesis attempt (13 Oct 2026) could not be traced from the box: no request was ever sent, and the journal could not say so | Brad, 18 Oct 2026 (journalctl since 03:36 UTC returned nothing for hypothes\|POST\|refus\|error) | A minimal request log, one line per `/api/*` request: method, the route **pattern** (not the raw path, which can carry ids), status and duration in ms. **No bodies, no query strings, no cookies, no headers, no actor email.** Written to stdout for journald, after `res` finishes. Its own small item with a Gate A (a verify that the line appears for a 201, 409, 422 and 500, and that a password POST to `/api/auth/login` logs no body). Not mixed into UX-1 |
 | L32 | **A lever's stored status says `proposed` while it displays "ratified"** (O-D2a). Under O-D2 the steward's proposal is the ratification, so the stored value should say so | Brad's reviewer, 19 Oct 2026 | Queued: rename the stored status so storage and display agree. It is its own item, after UX-1. **Before the migration:** it changes `value_levers.status` for every current lever (`lifecycle_status` is shared with other tables, so the likely change is a lever-specific value or column, not an enum rename), and it can orphan any code or CHECK reading `status = 'proposed'` on levers (`value_levers_retirement_is_complete`, the pack page, the POV). Grep both first |
 
 ---
@@ -2148,3 +2148,50 @@ UX-1's build, after its mock-ups are approved:
    `outside_in_test` marker kind (UX-1-D3, accepted here). It needs an enum migration
    that orphans nothing, and the banner says "Outside-in test: built from published
    material, not a customer engagement".
+
+### 7f. The mock-ups (19 Oct 2026; UX-1-D1–D4 approved; **for Brad's review, not UI code**)
+
+**Where they are:** `design/mockups/`, static HTML in the form of `design/workbench.html`.
+- **Each page is self-contained** and opens in a browser.
+- **Screenshots** of every page at 1280 and 390 are in `design/mockups/screens/`. None
+  scrolls sideways.
+- **Tokens:**
+  - **`tokens.css` is the one copy of the `CLAUDE.md` tokens** here, because static HTML
+    cannot read Markdown;
+  - **`scripts/check_design_tokens.mjs`** fails if any value differs from `CLAUDE.md`'s
+    table, or if any other mock-up file contains a hex colour.
+- **Every page carries a "UX-1 mock-up · not the app" strip.**
+- **The content is Scotts' record** as of 19 Oct 2026, at three real moments. Where a
+  record value wasn't to hand (the pinned entity, the summary's full text, other facts),
+  the page says so in brackets rather than inventing one.
+
+| Page | Shows |
+|---|---|
+| `accounts.html` | **Accounts home.** One list; each row is a link: industry, where it stands ("3 of 6 · State a hypothesis"), confidence as n / 100 with band, last recorded act. "New account…" behind a button. Book confidence below, with what it counts |
+| `workspace-new.html` | **Scotts, 12 Oct, before research.** Step 1 open with its one filled action, "Generate the research prompt"; steps 2–6 each one line saying what it waits for |
+| `workspace-mid.html` | **Scotts, 19 Oct morning, at the hypothesis.** Steps 1–2 folded to one line each (what was recorded, by whom, when, "Show ▸"). Step 3 open: provenance first, labels that teach the constraint, the falsifier previewed as the one sentence the POV will print, one filled submit. Steps 4–6 one line each, with secondary links ("Write it now ▸", "Produce a run now ▸", "Open ›") |
+| `workspace-locked.html` | **Scotts after W9.** The retirement notice; steps 1–5 folded; step 6 open, "Open the point of view", with the unverified callout. No new run offered (frozen) |
+| `run.html` | **Run 2.** Both banners; breadcrumb back to its step; the spine as a strip with plain labels; the figures; what this run sealed (and that run 1 sealed them unopened); "Add evidence…" disabled with its reason; the gap register and the ledgers folded. Built for 390 first |
+| `pov.html` | **The POV with §7e's polish:** one-sentence falsifier, money formatted ($3,413.1 million), plain stage labels, the lever "ratified by Brad Piver (steward), 19 Oct 2026", every locked run with its hash, the outside-in-test banner (needs UX-1-D3's enum), the frozen sentence |
+
+**Standards the mock-ups propose** (not written anywhere today, 7a; **Brad ratifies or
+changes**):
+1. **One filled button per screen,** ink with offwhite text and a gold arrow: the next
+   step's action. Every other action is outlined. A disabled action is grey and always
+   has its reason directly under it.
+2. **The six-step path:**
+   - one step open at a time (the first not done);
+   - a done step is one line plus "Show ▸";
+   - a waiting step is one line saying what it waits for.
+   The rail on the left (a strip at 390) shows where you are.
+3. **Path order is guidance, not a new gate.** Steps the server allows out of order
+   (summary, run) keep a secondary link. No governance rule is added or removed.
+4. **Plain labels for the spine:** Baseline set · Capability attached · Value modelled ·
+   Target committed · Actual measured · Verified · Returned to the record. The enum
+   keeps its values.
+5. **Confidence is always "n / 100" with its band,** in one form on every page.
+6. **At 390:** a "Menu" button replaces the nav and actor line, and tables become stacked
+   rows.
+
+**Not mocked:** the Packs and Runs index pages (reference views, unchanged in role);
+sign-in.

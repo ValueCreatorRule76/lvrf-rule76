@@ -6,6 +6,7 @@ import { actorContext } from './middleware/actorContext.js';
 import { requireActor } from './middleware/requireActor.js';
 import { actorHeaderMode } from './lib/actorHeader.js';
 import { originCheck, originGuard } from './lib/origin.js';
+import { requestLog } from './lib/requestLog.js';
 import { authRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { personsRouter } from './routes/persons.js';
@@ -71,6 +72,10 @@ if (actorHeader === 'on') {
   );
 }
 
+// L31: one line per /api request (method, route pattern, status, ms,
+// session y/n; never a value). First, so a refusal before routing — a 401,
+// a bad body, a foreign origin — is logged too (lib/requestLog.ts).
+app.use(requestLog(app));
 app.use(express.json());
 // Every mutating /api request, sign-in included: JSON only, and no
 // cross-site or foreign-origin write (lib/origin.ts).
