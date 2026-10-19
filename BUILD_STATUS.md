@@ -10097,18 +10097,24 @@ AI-origin rule in `lvrf_resolution_is_final`).
 - **Deploy:** drift none (38 migrations, 930 objects); D1/D3/D4 no findings; smoke checks
   passed; deploy OK, exit 0, HEAD `37e6358`; bundle **`index-BG1zj4Gt.js`** /
   `index-D_6XjEaI.css`.
-- **Gate C: PENDING.** My read-only ssh to the box was refused ("Permission denied
-  (publickey)"): after a session restart the ssh agent holds no key, and no key on this
-  Mac works without it. Brad has a self-contained read-only Gate C paste covering:
-  - the restart time;
-  - the drift checks, the legacy check, run hashes and coverage;
-  - counts, audit and refusals since the restart;
-  - **run 24: whether it is locked, and what it sealed for each evidence row beside the
-    row as it stands now**;
-  - the cross-tenant refusal check;
-  - the ownership baseline.
-
-  The results go here when they return.
+- **Gate C (19 Oct 2026, run by Brad from a read-only paste):** my ssh to the box was
+  refused, because the agent held no key. The checks ran after the Q4l restart, and the
+  activity since Q4k is listed by time:
+  - **Checks:** drift, legacy research, run hashes and plain-sentence coverage all exit 0.
+  - **Counts:** 24 runs, 33 evidence, 6 refusals, 302 audit rows.
+  - **Activity since the Q4k deploy:** 2 evidence updates (the two citation openings),
+    1 `executive_summaries` insert and 1 `reference_example_markers` insert;
+    **0 refusals**.
+  - **Run 24 (Scotts run 1):**
+    - **locked** 2026-10-12 20:49:43 UTC, confidence 10.0, "Outside In completed";
+    - it **sealed both evidence rows as citation not opened, not verified, basis
+      assumed**;
+    - both rows are now opened and verified. The locked run keeps what it sealed, and
+      run 2 is the record of the opening.
+  - **Integrity:** 0 cross-tenant refusals; 129 triggers, 0 disabled.
+  - **Ownership baseline:** `lvrf_app` owns 40 tables, 2 sequences and 27 enums. It has
+    no UPDATE, DELETE or TRUNCATE on `audit_log` or `heartbeat_events`. OWN-1 changes
+    the owner.
 
 ## Q4l: no silent outcomes; a second run after the walk's first — 13 October 2026 (UTC)
 
@@ -10229,3 +10235,30 @@ path to a run 2. **No migration;** client and one read change. Not deployed.
 - **Regression:** all **30** pass. Tenant scope: 203 cases. `verify_value_hypotheses`: 137/0. oxlint: the 1 pre-existing warning.
 - **The bundle:** `index-CQMYamjM.js` / `index-6J3Ne-U_.css`.
 - **Prod copy against the deployed code (`37e6358`):** 67 GETs: 65 identical. The 2 walk reads differ only by Q4l's `confidence_score` and `sealed_evidence`; with those excluded, all 67 are identical.
+
+### Deployed — 19 October 2026 (UTC): Q4l
+
+`37e6358..930a440` went to production: Q4l (`d4fbdfa`, `930a440`) and docs (`1ff5887`,
+`d335d78`, `46f5be3`). **No migration, no hardening change.**
+
+- **Before:** run hashes **24/24** at `37e6358`; origin `930a440`; the tree clean.
+- **Backup:** `~/lvrf-pre-q4l-20261019T043542Z.dump`, **839,691 bytes**, `-rw-------`, **585
+  TOC entries**. That matches the estimate of 585 from the schema after 0037, and a
+  little over 837,396 bytes.
+- **Deploy:**
+  - exit 0, HEAD **`930a440`**;
+  - drift none (38 migrations, 930 objects); D1/D3/D4 no findings; smoke checks as
+    expected;
+  - bundle **`index-CQMYamjM.js`** / `index-6J3Ne-U_.css`.
+- **After:** **129 triggers, manifest 129**; plain sentences **69/69**; run hashes
+  **24/24**; API up since 2026-10-19 04:36:30 UTC.
+- **Gate C (read-only, Brad):** levers 0, hypotheses 0, refusals since 13 Oct 03:36 UTC
+  0. The full read is in the Q4k note above; it ran after this restart.
+- **Next on the box (Brad, through the UI):** add the TRIR lever and link Compliance
+  Suite; then state the hypothesis; then open, produce and lock run 2. Then OWN-1 Gate A.
+
+**Paste-template corrections (Brad's reviewer, 19 Oct 2026; kept from now on):**
+- `pg_restore -l` runs as brad, not `sudo -u postgres`: the dump is chmod 600 to brad.
+- The trigger count is `count(DISTINCT trigger_name) FROM information_schema.triggers
+  WHERE trigger_schema = 'public'` (129). `count(*) FROM pg_trigger WHERE NOT
+  tgisinternal` counts per-table rows (about 197).
