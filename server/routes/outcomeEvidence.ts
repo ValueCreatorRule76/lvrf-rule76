@@ -231,7 +231,7 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       // 409 naming why, not the 404 above.
       if (outcome.engagement_retired) {
         res.status(409).json({
-          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen`,
+          message: 'This outcome belongs to a retired engagement: its outcomes are frozen.',
         });
         return;
       }

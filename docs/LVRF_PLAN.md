@@ -200,6 +200,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q4j~~ | **W1 fix, DONE 12 Oct 2026, deployed `901fc91`** (Gate C clean) (migration 0037, 129 triggers; BUILD_STATUS "W1 fix"): an existing person (the tenant's own staff) named analyst of record on an account through `account_person_links`, with a per-account title; raw unique violations become plain words ("already in LVRF; select them instead") | Brad's Scotts walk, 12 Oct 2026 | W1 was blocked: a duplicate person, or a placeholder, was the only path |
 | Q4k | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4k"; approved by Brad 12 Oct with Q4k-D1: build "Open the citation…", the recorder may open). **Plain refusals everywhere, and the AI-verified evidence form** (L29 widened; plan in §4k) | the Scotts walk | W6 surfaced a raw CHECK message; the form offers a combination the database must refuse |
 | Q4l | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4l"): no silent outcomes (every disabled submit says what it waits for; every success that closes a form leaves a sentence); a run 2 after the walk's first, with W7 listing what each run sealed | the Scotts walk | the hypothesis form failed silently; run 1 was locked before its citations were opened |
+| Q4m | **Built 19 Oct 2026; Gate A passed.** A retired reference engagement renders cleanly on the POV: a plain frozen sentence (no raw 409, no id, no critical red), and every locked run listed. Scotts' W9 is held until it is deployed | Q4l | Brad's reviewer, 19 Oct 2026 (the UX-1 audit's finding 6) |
 | UX-1 | **NEXT after OWN-1; all further O-band work pauses for it** (Brad, 13 Oct 2026): the workflow and UI do not meet Rule76 design standards. Plan in §7 (written 18 Oct 2026, not yet approved; no UI code until Brad approves mock-ups; decisions UX-1-D1–D4) | OWN-1 | the app is hard to navigate and hard to use |
 | OWN-1 | **NEXT, before any further O-band work** (Brad, 12 Oct 2026). **The database owner role** (plan §6): `lvrf_app` stops owning the schema, so the trigger guards and rule 3 bind the role itself, not only the app's code paths | O2 deployed | shown on the prod copy, 12 Oct 2026: `lvrf_app` can DROP TRIGGER and GRANT itself UPDATE on `audit_log` |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
@@ -2114,3 +2115,31 @@ Before the migration: it adds an enum value, and **orphans nothing**.
 - **UX-1-D4:** the mock-up form. Static HTML in `design/` like `workbench.html`, one
   per screen (Accounts home, Account workspace in three states: new, mid-walk and
   locked; Run at 390), using only the canonical tokens. Recommended.
+
+### 7e. Polish from the Scotts POV (Brad's reviewer, 19 Oct 2026), for UX-1's build
+
+The Scotts POV renders from the record: Low 35 from locked run 2, the six-step chain
+complete, the hypothesis open, and the vendor claim kept separate. These items go into
+UX-1's build, after its mock-ups are approved:
+
+1. **The falsifier as one sentence.** Today it reads "…at or above its baseline of 1.4 …
+   (recorded 2025-09-30) on 2027-09-30, Same TRIR … record..": two clauses glued
+   together, ending in a double period. It should read "…by 30 Sep 2027, provided that:
+   <conditions>." with exactly one final period, whether or not the conditions end in
+   one. The template lives in two places, the server's `falsifierSentence` and the
+   client's `previewFalsifier`. `verify_value_hypotheses` checks that the two are
+   identical, so both change together.
+2. **Money formatted:** "$3,413.1 million", not "3413100000 USD". The value stays
+   recorded exactly; only how it is shown changes.
+3. **The stage bar in plain words:** labels for `attach`, `model` and `return`. The enum
+   keeps its values; the labels map to them in one place.
+4. **The lever's status reads "ratified by <steward>, <date>".** Under O-D2 the
+   steward's proposal *is* the ratification. The label comes from `proposed_by` and the
+   date it was proposed (only the steward can propose). The row's `status` stays
+   `proposed`, so the display maps it rather than changing the data.
+5. **"Locked runs" lists every locked run.** Moved forward into **Q4m** (below), because
+   retiring an engagement would otherwise drop runs from the POV.
+6. **The banner's "Reference example — Reference example"** is fixed by the
+   `outside_in_test` marker kind (UX-1-D3, accepted here). It needs an enum migration
+   that orphans nothing, and the banner says "Outside-in test: built from published
+   material, not a customer engagement".

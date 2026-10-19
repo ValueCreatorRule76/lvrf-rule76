@@ -5,7 +5,8 @@
 //
 //   node scripts/lib/walk_runs_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB INST S_EMAIL X_EMAIL PW S_NAME PHASE
 //
-// MODE: main | break-unmet | break-lock | break-gate. PHASE (main only): before-lever | after-lever.
+// MODE: main | break-unmet | break-lock | break-gate | pov-retired | break-frozen | break-runs.
+// PHASE (main only): before-lever | after-lever.
 import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -96,6 +97,29 @@ const hyp = card('Value hypotheses');
 const OUT = psql(`SELECT vo.id FROM value_outcomes vo WHERE vo.institution_id = '${INST}' ORDER BY vo.created_at LIMIT 1`);
 
 check(await signIn(S_EMAIL), 'signs in by session');
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
+if (MODE === 'pov-retired' || MODE === 'break-frozen' || MODE === 'break-runs') {
+  await send('Page.navigate', { url: `${APP}/accounts/${INST}/pov` });
+  check(await waitFor(`!!document.querySelector('[data-testid=what-it-takes]') && !document.body.textContent.includes('loading')`), 'the POV renders for the retired reference engagement');
+  await sleep(800);
+  const wit = `document.querySelector('[data-testid=what-it-takes]')`;
+  const runs = await ev(`[...document.querySelectorAll('[data-testid=locked-run]')].map(l=>l.textContent)`);
+  if (MODE === 'pov-retired') {
+    check(await ev(`(${wit}).querySelector('[data-testid=frozen]')?.textContent === 'Frozen: this engagement is retired, so its outcome has no open asks. Its locked runs and hypotheses stay on the record.'`),
+      '"What it takes": the frozen outcome says so in a plain sentence');
+    check(await ev(`!(${wit}).querySelector('.text-critical')`), '  ...not in critical red: a frozen outcome is not a failure');
+    check(!UUID.test(await ev('document.body.textContent')), 'no id anywhere in the page text (payload hashes are not ids)', (await ev('document.body.textContent')).match(UUID)?.[0]);
+    check(runs.length === 3 && [1, 2, 3].every((n) => runs.some((t) => t.includes(`(retired), run ${n}`))), '"Locked runs" lists all three locked runs, each marked retired', JSON.stringify(runs));
+    check(await ev(`document.body.textContent.includes('Q4m: hazard recognition reduces recordable injuries at this account.')`), 'the open hypothesis is still on the POV');
+    await shot('q4m_1_pov_retired');
+  } else if (MODE === 'break-frozen') {
+    check(await ev(`!(${wit}).querySelector('[data-testid=frozen]') && (${wit}).textContent.includes('belongs to a retired engagement')`),
+      'break-frozen: without the flag, the POV asks the gap register and shows its refusal instead — the flag is what renders it cleanly');
+  } else {
+    check(runs.length === 1, 'break-runs: with one run per engagement, runs 1 and 2 drop out of "Locked runs" — the full list is what keeps them', JSON.stringify(runs));
+  }
+  ws.close(); process.exit(0);
+}
 await send('Page.navigate', { url: `${APP}/accounts/${INST}` });
 check(await waitFor(`!!${hyp} && !!${step('w7')}`), 'the account page shows the hypotheses card and the walk');
 

@@ -49,14 +49,18 @@ export interface PovEngagement {
   /** Whether a current outcome of the engagement has a named committer. */
   committed: boolean;
   retired: boolean;
-  latest_locked_run: {
-    id: string;
-    run_number: number;
-    confidence_score: string | null;
-    confidence_band: string | null;
-    locked_at: string;
-    payload_hash: string;
-  } | null;
+  latest_locked_run: PovLockedRun | null;
+  /** Q4m: every locked run of the engagement, oldest first. */
+  locked_runs: PovLockedRun[];
+}
+
+export interface PovLockedRun {
+  id: string;
+  run_number: number;
+  confidence_score: string | null;
+  confidence_band: string | null;
+  locked_at: string;
+  payload_hash: string;
 }
 
 export interface PovEvidence {
@@ -78,6 +82,8 @@ export interface PackEntryRef {
 export interface PovOutcome {
   id: string;
   engagement_id: string;
+  /** Q4m: the outcome's engagement is retired, so the outcome is frozen. */
+  engagement_retired: boolean;
   metric_name: string;
   unit: string | null;
   capability_name: string;

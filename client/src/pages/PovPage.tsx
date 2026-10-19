@@ -181,6 +181,7 @@ function WhatItTakes({ outcomes }: { outcomes: PovOutcome[] }) {
   const [gaps, setGaps] = useState<Record<string, GapEntry[] | string>>({});
   useEffect(() => {
     for (const o of outcomes) {
+      if (o.engagement_retired) continue;
       fetchGaps(o.id).then((r) => setGaps((g) => ({ ...g, [o.id]: r.status === 'ok' ? r.gaps : r.message })));
     }
   }, [outcomes]);
@@ -193,8 +194,10 @@ function WhatItTakes({ outcomes }: { outcomes: PovOutcome[] }) {
         return (
           <div key={o.id} className="border border-rule bg-white">
             <span className={'block border-b border-rule px-3 py-2 ' + KICKER}>{o.metric_name}</span>
-            {g === undefined ? <p className="m-0 px-3 py-2 text-[12px] text-ink-45">loading</p>
-              : typeof g === 'string' ? <p className="m-0 px-3 py-2 text-[12px] text-critical">{g}</p>
+            {o.engagement_retired
+              ? <p className="m-0 px-3 py-2 text-[12px] text-ink-45" data-testid="frozen">Frozen: this engagement is retired, so its outcome has no open asks. Its locked runs and hypotheses stay on the record.</p>
+              : g === undefined ? <p className="m-0 px-3 py-2 text-[12px] text-ink-45">loading</p>
+              : typeof g === 'string' ? <p className="m-0 px-3 py-2 text-[12px] text-ink-45">{g}</p>
               : g.length === 0 ? <p className="m-0 px-3 py-2 text-[12px] text-ink-45">Nothing outstanding.</p>
               : <table className="w-full border-collapse text-[12.5px]">
                   <thead><tr className="text-left text-ink-45"><th className="px-3 py-1.5 font-semibold">Ask</th><th className="px-3 py-1.5 font-semibold">Kind</th><th className="px-3 py-1.5 font-semibold">State</th></tr></thead>
@@ -294,13 +297,14 @@ export function PovPage() {
           </div>
           <div className="flex flex-col gap-2">
             <h2 className={H2}>Locked runs</h2>
-            {pov.engagements.every((e) => !e.latest_locked_run)
+            {pov.engagements.every((e) => e.locked_runs.length === 0)
               ? <p className="m-0 border border-dashed border-ink-45 bg-white px-4 py-3 text-[13px] text-ink-45">No locked run yet. A locked run is never rewritten.</p>
-              : <ul className="m-0 list-none border border-rule bg-white p-0">{pov.engagements.filter((e) => e.latest_locked_run).map((e) => (
-                  <li key={e.id} className="border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0">
-                    <Link to={`/runs/${e.latest_locked_run!.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}, run {e.latest_locked_run!.run_number}</Link>
-                    <span className="block font-mono text-[10.5px] text-ink-45">{e.latest_locked_run!.payload_hash}</span>
-                  </li>))}</ul>}
+              : <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="locked-runs">{pov.engagements.flatMap((e) => e.locked_runs.map((r) => (
+                  <li key={r.id} className="border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0" data-testid="locked-run">
+                    <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
+                    <span className="text-ink-45"> · locked {r.locked_at.slice(0, 10)}</span>
+                    <span className="block font-mono text-[10.5px] text-ink-45">{r.payload_hash}</span>
+                  </li>)))}</ul>}
           </div>
         </section>
 

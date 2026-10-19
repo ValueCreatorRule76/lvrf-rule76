@@ -31,7 +31,9 @@ SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 FORM=client/src/components/GovernedForm.tsx
 WALKCARD=client/src/components/OutsideInWalk.tsx
 POVCARD=client/src/components/PovAuthoring.tsx
-for f in "$FORM" "$WALKCARD" "$POVCARD"; do cp "$f" "$W/$(basename "$f").orig"; done
+POVPAGE=client/src/pages/PovPage.tsx
+POVROUTE=server/routes/valueHypotheses.ts
+for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
@@ -41,7 +43,7 @@ cleanup() {
   stop_server
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for f in "$FORM" "$WALKCARD" "$POVCARD"; do
+  for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do
     cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }
   done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
@@ -182,7 +184,25 @@ expect POST "/api/institutions/$INST2/value-outcomes" "{\"engagement_name\":\"Q4
 expect POST "/api/business-metrics/$(rj b.business_metric_id)/pack-basis" "{\"industry_measure_id\":\"$E2\",\"basis_note\":\"Verification: B3 basis.\"}" 201 "(on the leverless entry)"
 edit "$POVCARD" "    if (based.length > 0 && based.every((o) => !hasLever(o))) {" "    if (false) {"
 sleep 5; INST_SAVE="$INST"; INST="$INST2"; walk break-gate; INST="$INST_SAVE"; restore "$POVCARD"
-for f in "$FORM" "$WALKCARD" "$POVCARD"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
+step "6. Q4m: a retired reference engagement on the POV (Scotts' W9 is held for this)"
+LEV="$(q "SELECT id FROM value_levers WHERE name = 'Q4l lever' AND deleted_at IS NULL")"
+expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\",\"value_lever_id\":\"$LEV\",\"statement\":\"Q4m: hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"on the same denominator\"}" 201 "(an open hypothesis)"
+R3="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND locked_at IS NULL")"
+expect POST "/api/value-runs/$R3/lock" '{"lock_reason":"Verification: run three locked before the retirement."}' 200 "(run 3 locked: three locked runs)"
+expect POST "/api/engagements/$ENG/retire" '{"retirement_reason":"Verification: a reference example, retired so the cohort does not count it."}' 200 "W9: the reference engagement retired"
+expect GET "/api/institutions/$INST/pov" "" 200 "the POV read, after the retirement"
+[ "$(rj "[b.engagements[0].retired, b.engagements[0].locked_runs.map(r=>r.run_number).join(','), b.outcomes[0].engagement_retired, b.hypotheses.filter(h=>!h.withdrawn_at&&!h.superseded_by_id).length].join('|')")" = "true|1,2,3|true|1" ] \
+  && ok "  ...retired; all three locked runs; the outcome marked frozen; the open hypothesis kept" || bad "  ...$(rj "JSON.stringify([b.engagements.map(e=>[e.retired,e.locked_runs]),b.outcomes.map(o=>o.engagement_retired)])" | head -c 500)"
+expect GET "/api/value-outcomes/$OUT/gaps" "" 409 "the gap register still refuses a frozen outcome" "This outcome belongs to a retired engagement: its outcomes are frozen"
+grep -qE '[0-9a-f]{8}-[0-9a-f]{4}' "$W/r.json" && bad "  ...with an id in the answer: $(head -c 300 "$W/r.json")" || ok "  ...in words, with no id"
+walk pov-retired
+# B4 — the frozen flag off: the POV asks the gap register again, and shows its refusal.
+edit "$POVROUTE" "AND (eg.deleted_at IS NOT NULL OR eg.superseded_by_id IS NOT NULL)) AS engagement_retired" "AND false) AS engagement_retired"
+stop_server; start_server; walk break-frozen; restore "$POVROUTE"; stop_server; start_server
+# B5 — "Locked runs" back to one per engagement: runs 1 and 2 drop out of the document.
+edit "$POVPAGE" "e.locked_runs.map((r) => (" "e.locked_runs.slice(-1).map((r) => ("
+sleep 5; walk break-runs; restore "$POVPAGE"
+for f in "$FORM" "$WALKCARD" "$POVCARD" "$POVPAGE" "$POVROUTE"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 
 echo

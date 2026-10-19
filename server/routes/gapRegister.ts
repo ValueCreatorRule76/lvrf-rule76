@@ -362,7 +362,7 @@ export function gapRegisterRouter(pool: Pool): Router {
       // list could be acted on, so there is no list to give.
       if (vo.engagement_retired) {
         res.status(409).json({
-          message: `value outcome ${outcomeId} belongs to a retired engagement; its outcomes are frozen, so there are no gaps to close`,
+          message: 'This outcome belongs to a retired engagement: its outcomes are frozen, so there are no gaps to close.',
         });
         return;
       }

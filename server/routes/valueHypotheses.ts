@@ -608,7 +608,13 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              (SELECT json_build_object('id', r.id, 'run_number', r.run_number, 'confidence_score', r.confidence_score,
                                        'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash)
                 FROM value_runs r WHERE r.engagement_id = e.id AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL
-               ORDER BY r.run_number DESC LIMIT 1) AS latest_locked_run
+               ORDER BY r.run_number DESC LIMIT 1) AS latest_locked_run,
+             -- Q4m: EVERY locked run, oldest first. The POV lists them all: a locked
+             -- run is part of the record, and retiring an engagement keeps its runs.
+             (SELECT coalesce(json_agg(json_build_object('id', r.id, 'run_number', r.run_number, 'confidence_score', r.confidence_score,
+                                       'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash)
+                                       ORDER BY r.run_number), '[]')
+                FROM value_runs r WHERE r.engagement_id = e.id AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL) AS locked_runs
         FROM engagements e WHERE e.institution_id = $1 AND e.superseded_by_id IS NULL
        ORDER BY e.deleted_at IS NOT NULL, e.created_at`),
     q<{ id: string; source_verified: boolean } & Record<string, unknown>>(`
@@ -619,6 +625,10 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              vo.target_value::text, cp.full_name AS committed_by, to_char(vo.committed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS committed_on,
              vo.actual_value::text, to_char(vo.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS actual_measured_on,
              vp.full_name AS verified_by, vo.source_verified, vo.realization::text, bm.industry_measure_id,
+             -- Q4m: an outcome of a retired engagement is frozen; the POV says so
+             -- rather than ask the gap register, which refuses it.
+             EXISTS (SELECT 1 FROM engagements eg WHERE eg.id = vo.engagement_id
+                        AND (eg.deleted_at IS NOT NULL OR eg.superseded_by_id IS NOT NULL)) AS engagement_retired,
              CASE WHEN m.id IS NULL THEN NULL ELSE json_build_object('id', m.id, 'name', m.name, 'direction', m.direction,
                   'unit', m.unit, 'confounders', m.confounders) END AS pack_entry
         FROM value_outcomes vo

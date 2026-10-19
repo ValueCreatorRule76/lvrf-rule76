@@ -10262,3 +10262,48 @@ path to a run 2. **No migration;** client and one read change. Not deployed.
 - The trigger count is `count(DISTINCT trigger_name) FROM information_schema.triggers
   WHERE trigger_schema = 'public'` (129). `count(*) FROM pg_trigger WHERE NOT
   tgisinternal` counts per-table rows (about 197).
+
+## Q4m: a retired reference engagement on the POV — 19 October 2026 (UTC)
+
+**Why:** the UX-1 audit found the POV showing raw server text in critical red, with an
+outcome id: "value outcome e3fb… belongs to a retired engagement…". The POV asked the
+gap register about every outcome, and the register refuses a frozen one. "Locked runs"
+also showed only each engagement's **latest** locked run, so retiring Scotts would have
+dropped run 1 from the document. **Scotts' W9 (retire) is held until this is
+deployed** (Brad's reviewer, 19 Oct 2026).
+
+**The fix (no migration, no hardening change):**
+- **The POV read (`valueHypotheses.ts`):**
+  - each engagement gains `locked_runs`, every locked run, oldest first;
+  - each outcome gains `engagement_retired`.
+- **The POV page:**
+  - **a frozen outcome isn't sent to the gap register.** It says *Frozen: this
+    engagement is retired, so its outcome has no open asks. Its locked runs and
+    hypotheses stay on the record.*, in ink-45, not critical red;
+  - **"Locked runs" lists every locked run,** marked "(retired)" with its lock date;
+  - **any other message from the gap register** renders muted, as DESIGN_SPEC §9
+    treats an error;
+  - hypotheses were already listed regardless of retirement, and still are.
+- **The frozen 409 in words, with no id,** in all five places (`gapRegister`,
+  `outcomeEvidence`, three in `outcomeWalk`). The substring `verify_frozen_outcomes`
+  checks for is kept.
+
+**Gate A:**
+- **`verify_walk_runs` step 6: 98 passed, 0 failed** (the script as a whole).
+  - **The setup:** an open hypothesis; run 3 locked (three locked runs); W9 retires the
+    engagement.
+  - **The POV read:** retired; locked runs 1,2,3; the outcome frozen; the open
+    hypothesis kept. The gap register's 409 is in words, with no id.
+  - **The browser:** the frozen sentence; no critical red; no id anywhere in the page
+    text; all three runs listed as retired; the hypothesis still shown. The screenshot
+    was looked at.
+  - **B4:** with the frozen flag off, the POV asks the register and shows its refusal.
+  - **B5:** with one run per engagement, runs 1 and 2 drop out.
+  - Both restored byte-identical, and every edited file is byte-identical at the end.
+- **Regression:** all **30** pass; tenant scope 203; `verify_frozen_outcomes` 21/0;
+  oxlint has the 1 pre-existing warning.
+- **The bundle:** **`index-KWocnhhB.js`** (the CSS is unchanged: `index-6J3Ne-U_.css`).
+- **Prod copy against the deployed code (`930a440`):** 67 GETs: 64 identical. Two POV
+  reads differ only by `locked_runs` and `engagement_retired` (with those excluded, 66
+  are identical). One gap read for Curia's retired outcome is still a 409, now the plain
+  sentence instead of the raw one with the id.
