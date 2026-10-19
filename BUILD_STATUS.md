@@ -10473,3 +10473,65 @@ Asked before paste 2 (Brad's reviewer):
   - **identical to before the rollback** on all 108 owner and privilege lines;
   - 129 triggers by `pg_trigger` as `lvrf_app`.
 - **`verify_ownership`: 75 passed, 0 failed.**
+
+### Deployed — 19 October 2026 (UTC): Q4m and OWN-1 (`a88c071`)
+
+`930a440..a88c071` went to production in one deploy: Q4m (`6a6eaf1`), OWN-1 (`9886a22`,
+`a88c071`) and docs. **No migration.** Q4m's Gate B was not run separately: this deploy
+carried it.
+
+- **Gate B:** the backup, paste 3 (ownership exit 0, `check_migrate_role` ok) and paste
+  4 (migrate ok, ownership exit 0, hardening exit 0 with 0 ERROR, `check_ownership` no
+  violations, 25/25 run hashes).
+- **The deploy:** exit 0, **step 5d passed**, HEAD `a88c071`, bundle
+  **`index-KWocnhhB.js`** / `index-6J3Ne-U_.css`. The API has been up since **11:01:18
+  UTC**.
+- **Then the rollback by mistake, and the reapply** (see the incident note above). The
+  reapply gave: login exit 0, ownership exit 0, hardening exit 0 with 0 ERROR,
+  `check_ownership` clean, `check_migrate_role` ok, 25/25 run hashes, 129 triggers by
+  `pg_trigger`.
+
+**Gate C** (read-only, by me over ssh with the LVRF key, after the reapply):
+- **Scripts:** drift D1/D3/D4 no findings; legacy research ok (26 results, v3); run
+  hashes 25/25; plain sentences 69/69; `check_ownership` clean as `lvrf_app`;
+  `check_migrate_role` "connected as lvrf_migrate, acting as lvrf_owner"
+  (`~/.lvrf_migrate.env` is `-rw-------`); health 200.
+- **OWN-1 state:**
+  - the database is `lvrf_owner`'s, as are 44 relations, 27 enums and `drizzle`;
+    `public` is `pg_database_owner`;
+  - `lvrf_migrate` LOGIN, `lvrf_owner` NOLOGIN;
+  - **129 triggers by `pg_trigger`, 0 disabled; `lvrf_ownership_violations()` 0**;
+  - **`lvrf_app`:** no UPDATE on `audit_log` or `refusals`; no DELETE or TRUNCATE on
+    `refusals`; no CREATE on `public` or the database. UPDATE on `evidence`, INSERT on
+    `executive_summaries`, and no UPDATE on `executive_summaries` (the advisory-lock
+    change).
+- **Q4m:** Scotts' engagement isn't retired, and its runs 1 (10.0, locked 12 Oct) and 2
+  (35.0, locked 19 Oct 04:57) are both locked. The POV lists both.
+- **Since the deploy:** 0 audit rows, **0 refusals**, 0 cross-tenant refusals.
+- **What Brad wrote before the deploy** (`check_scotts.sql`):
+  - **the lever** "Safe-work behaviour through EHS procedural training" on TRIR, by Brad
+    Piver at 04:51:57. Its citation is Robson et al. 2012, *Scand J Work Environ Health*
+    38(3):193–208, and it states the review's own limit: "insufficient evidence for
+    effects on injuries";
+  - **the link:** Compliance Suite, basis citing Burke et al. 2006;
+  - **the hypothesis:** open, on the baseline of 1.4 (recorded 2025-09-30), due
+    2027-09-30, not post hoc;
+  - **run 2:** sealed both evidence rows as citation opened, verified, basis inferred.
+    Run 1 still shows what it sealed (not opened, not verified, assumed).
+
+**The write smoke test FAILED: summary v2 is not in the database.**
+- Scotts has one summary, v1 (general, 13 Oct, not AI-drafted). The table holds only
+  that one row.
+- **Since the deploy:** no audit row of any kind, no refusal, and no 500 in the API
+  journal (only the startup line).
+- **`sessions.last_seen_at` was last stamped at 11:02:40 UTC.** Every authenticated API
+  request stamps it at most once a minute, so no signed-in request has reached the API
+  since about 11:03:40.
+- **So the save did not reach the API as a signed-in request.** Either the browser sent
+  nothing, or the API answered 401 before any stamp (that path isn't logged).
+- **Whether it is an ownership failure:** there is no evidence of one. A permission
+  error is a 500, and `respondServerError` logs every 500. The 11:02:40 stamp was itself
+  an UPDATE by `lvrf_app` under OWN-1's grants.
+- **What can't be told:** without a request log (**L31**) or a Caddy access log, the
+  box can't say which of the two it was.
+- **The `CLAUDE.md` Stack edit (OWN-1-D3) is held** until a write lands under OWN-1.
