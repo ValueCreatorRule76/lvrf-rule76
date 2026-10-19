@@ -11040,3 +11040,22 @@ new read**):
   - the 390 header with the menu closed and open;
   - the Curia workspace at 1280 with its full citation wrapped in the banner;
   - a row whose read failed (from the verify run).
+
+### Deployed — 19 October 2026 (UTC): UX-1 slice 2 (`feb539f`)
+
+`c098b20..feb539f`: UX-1 slice 2. **No migration, no hardening change, no re-exec.**
+Brad compared the screenshots with the mock-ups and approved them for deploy.
+- **The backup:** `~/lvrf-pre-ux1s2-20261019T171542Z.dump`, 874,662 bytes, `-rw-------`,
+  **630 TOC entries** (as predicted).
+- **The deploy:** HEAD **`feb539f`**, bundle **`index-BB_AxQvL.js`** / `index-CoYj-ESF.css`.
+  The API has been up since 17:16:20 UTC.
+- **Gate C** (read-only, by me over ssh):
+  - **the standard checks:** run hashes 25/25; ownership clean; plain sentences 69/69;
+    drift D1/D3/D4 no findings; **129 triggers by `pg_trigger`, 0 disabled**;
+  - **since the restart:** **0 refusals**, 0 audit rows;
+  - **the journal:** 20 request lines, **none carrying a value**. The home's per-account
+    reads log by pattern (`GET /api/institutions`, `/api/institutions/:id/view`,
+    `/api/institutions/:institutionId/walk|pov|research`, 200 or 304, `session=y`);
+    the only 401s are the deploy's own `GET /api/runs/:id` smoke checks.
+- **Queued for the slice 5 copy pass** (Brad, 19 Oct 2026): the Book confidence card's
+  non-empty state wording.
