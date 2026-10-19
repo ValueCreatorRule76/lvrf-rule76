@@ -30,6 +30,12 @@ export function ConfidenceBadge({ score, band }: { score: string | number | null
   );
 }
 
+/** The band alone, in the same tones (the Book confidence card's big numeral carries the score). */
+export function BandBadge({ band }: { band: string }) {
+  const tone = band === 'high' ? 'border-healthy text-healthy' : band === 'medium' ? 'border-gold-ink text-gold-ink' : 'border-ink-70 text-ink-70';
+  return <span className={'inline-block whitespace-nowrap border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[.1em] ' + tone}>{band.charAt(0).toUpperCase() + band.slice(1)}</span>;
+}
+
 export function WorkspaceStep({ n, title, status, summary, children, testId }: {
   n: number; title: string; status: StepStatus; summary?: ReactNode; children?: ReactNode; testId: string;
 }) {

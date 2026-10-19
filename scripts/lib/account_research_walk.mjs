@@ -88,6 +88,9 @@ check(await signIn(), 'signs in by session (an authorized user, not the steward)
 if (MODE === 'create-link') {
   // After Create account succeeds, "Open account →" leads to the new account.
   const NAME = `Walk Link Account ${Date.now()}`;
+  // UX-1 slice 2: the create form opens on demand, from "New account…".
+  await waitFor(`[...document.querySelectorAll('button')].some(b=>b.textContent.trim()==='New account…')`);
+  await click('document', 'New account…');
   await waitFor(`document.body.textContent.includes('Create account')`);
   await setField(card('Create account'), 'Account name', NAME);
   await sleep(200);

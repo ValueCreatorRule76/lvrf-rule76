@@ -37,7 +37,7 @@ function Banners({ pov }: { pov: Pov }) {
   return (
     <div data-testid="banners">
       {pov.reference_example && (
-        <div className="bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-gold" data-testid="banner-reference">
+        <div className="bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere]" data-testid="banner-reference">
           {MARKER_KIND[pov.reference_example.kind].banner} · Source: {pov.reference_example.source_citation}
         </div>
       )}

@@ -4,14 +4,12 @@ import { Card, Badge } from './workbench/Card';
 import { FOCUS_RING } from './GovernedForm';
 import { useActor } from '../actor/ActorContext';
 import { fetchCohort, type Cohort, type CohortMember, type FetchCohortResult } from '../api/cohort';
+import { BandBadge, ConfidenceBadge } from './workbench/Workspace';
 
 // Same mapping as InstitutionPage.tsx's CONFIDENCE_TONE — not imported, for
 // that file's own stated reason (a local table, not yet a convention).
-const BAND_TONE: Record<string, 'healthy' | 'watch' | 'critical'> = {
-  high: 'healthy',
-  medium: 'watch',
-  low: 'critical',
-};
+// UX-1 slice 2 (DESIGN_SPEC §9, standard 5): a score is "n / 100 · Band", Low
+// neutral, never critical red; the components below are the workspace's own.
 
 const STATUS_LABEL: Record<CohortMember['status'], string> = {
   run_of_record: 'Run of record',
@@ -20,8 +18,11 @@ const STATUS_LABEL: Record<CohortMember['status'], string> = {
   no_engagement: 'No engagement',
 };
 
+// The record's own names, once: an engagement named "<Account> — …" is not
+// prefixed with the account again ("Curia · Curia — …").
 function memberLabel(m: CohortMember) {
-  return m.engagement_name ? `${m.institution_name} · ${m.engagement_name}` : m.institution_name;
+  if (!m.engagement_name) return m.institution_name;
+  return m.engagement_name.startsWith(m.institution_name) ? m.engagement_name : `${m.institution_name} · ${m.engagement_name}`;
 }
 
 function scoreBadge(m: CohortMember) {
@@ -31,11 +32,7 @@ function scoreBadge(m: CohortMember) {
     // model's thresholds are not restated here.
     return <Badge tone="watch">Unmeasured</Badge>;
   }
-  return (
-    <Badge tone={BAND_TONE[m.confidence_band ?? ''] ?? 'neutral'}>
-      {m.confidence_score} · {m.confidence_band}
-    </Badge>
-  );
+  return <ConfidenceBadge score={m.confidence_score} band={m.confidence_band} />;
 }
 
 function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean }) {
@@ -44,7 +41,7 @@ function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean })
     // Q4n: an empty BOOK is a state, said in words, never a number.
     return book
       ? <p className="m-0 text-[13px] text-ink" data-testid="book-empty"><strong>No live customer engagements.</strong></p>
-      : <p className="m-0 text-[12.5px] text-ink-45">No customer accounts in this cohort.</p>;
+      : <p className="m-0 text-[12.5px] text-ink-45">No customer accounts in this industry.</p>;
   }
   const d = composite.determined_by;
   const lowest = composite.lowest_recorded;
@@ -55,10 +52,10 @@ function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean })
         {/* The stored string when the floor is a run; words, never a number,
             when it is not — an unmeasured floor has no score to show. */}
         <span className="font-display text-[34px] leading-none tracking-[.012em] text-ink">
-          {composite.floor === 'run' ? composite.score : 'No score'}
+          {composite.floor === 'run' ? <>{Number(composite.score)}<span className="ml-1 font-body text-[13px] text-ink-45">/ 100</span></> : 'No score'}
         </span>
         {composite.floor === 'run' ? (
-          <Badge tone={BAND_TONE[composite.band ?? ''] ?? 'neutral'}>{composite.band}</Badge>
+          <BandBadge band={composite.band ?? 'low'} />
         ) : (
           <Badge tone="watch">Unmeasured floor</Badge>
         )}
@@ -77,7 +74,7 @@ function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean })
         <p className="m-0 mt-1 text-[11px] text-ink-45">
           {lowest ? (
             <>
-              Lowest run of record: {lowest.confidence_score} · {lowest.confidence_band} (
+              Lowest run of record: {Number(lowest.confidence_score)} / 100 · {lowest.confidence_band ? lowest.confidence_band.charAt(0).toUpperCase() + lowest.confidence_band.slice(1) : ''} (
               {memberLabel(lowest.member)}), excluding {unmeasuredCount} unmeasured.
             </>
           ) : (
@@ -206,7 +203,7 @@ export function CohortCard({ n }: { n: string }) {
             >
               {result.view.unclassified_account_count} unclassified{' '}
               {result.view.unclassified_account_count === 1 ? 'account is' : 'accounts are'} in the
-              book but in no industry cohort.
+              book but under no industry.
             </p>
           )}
         </>

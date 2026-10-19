@@ -32,7 +32,8 @@ interface CreateAccountResponse {
 // evidence. Neither is derived from the other (see db/schema.ts's
 // industry/industryId comment). Classifying is optional: an account can be
 // created unclassified and classified later.
-export function CreateAccountCard() {
+/** UX-1 slice 2: opened from "New account…"; its submit is then the screen's one filled button. */
+export function CreateAccountCard({ primary = false }: { primary?: boolean } = {}) {
   const { actor } = useActor();
   const [name, setName] = useState('');
   const [website, setWebsite] = useState('');
@@ -66,6 +67,7 @@ export function CreateAccountCard() {
   return (
     <Card n="01" title="Create account">
       <GovernedForm<CreateAccountResponse>
+        primary={primary}
         path="/api/account-inputs"
         provenanceLabel="Provenance — how this account's industry was determined"
         canSubmit={canSubmit}

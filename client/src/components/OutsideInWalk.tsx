@@ -6,6 +6,7 @@ import { useActor } from '../actor/ActorContext';
 import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
+import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
 /**
  * Q4c2 — the outside-in walk on the account page (LVRF_PLAN §4c, approved
@@ -27,88 +28,11 @@ import { AddEvidenceCard } from './workbench/AddEvidenceCard';
  * Read: GET /api/institutions/:id/walk.
  */
 
-interface WalkState {
-  institution: { id: string; name: string; industry_slug: string | null; industry_name: string | null };
-  persons: { id: string; full_name: string; email: string; title: string | null }[];
-  /** W1 fix: existing staff named analyst of record on this account, with the title for it. */
-  analysts: { link_id: string; id: string; full_name: string; email: string; title: string; linked_by: string; linked_at: string }[];
-  /** The tenant's current staff, to choose the analyst of record from. */
-  staff: { id: string; full_name: string; email: string }[];
-  offerings: { offering_key: string; name: string; family: string }[];
-  pack: { id: string; name: string; unit: string; direction: string; definition: string; confounders: string; addressable: boolean }[];
-  capabilities: { id: string; name: string; claims: { industry_measure_id: string; measure_name: string; claim: string; claimed_by: string | null }[] }[];
-  engagements: {
-    id: string; name: string; status: string; retired: boolean;
-    outcomes: {
-      id: string; baseline_value: string; baseline_measured_at: string; target_value: string | null; realization: string; confidence: string;
-      capability_name: string | null;
-      metric: { id: string; name: string; unit: string; direction: string; source_system: string; industry_measure_id: string | null };
-      evidence: {
-        id: string; kind: string; supports: string; summary: string; basis: string | null;
-        /** Q4k: the citation state, for "Open the citation…". */
-        ai_sourced: boolean; source_verified: boolean; citation_resolved: boolean;
-        citation_resolved_by: string | null; citation_resolved_at: string | null;
-      }[];
-    }[];
-    runs: {
-      id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;
-      /** Q4l: what the run sealed, per evidence row, read from its payload. */
-      sealed_evidence: { supports: string; kind: string; basis: string | null; ai_sourced: boolean | null; citation_resolved: boolean | null; source_verified: boolean | null; summary: string }[];
-    }[];
-  }[];
-}
 
 const LABEL_CLASS = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const INPUT_CLASS = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 const HELP_CLASS = 'm-0 mt-1 text-[11px] text-ink-45';
 
-type StepState = 'done' | 'next' | 'waiting';
-
-/**
- * UX-1 slice 1: what the walk knows, reported up to the account workspace so
- * it can say which of its six steps is done, open or waiting, from this one
- * read, never a second fetch. Derived by deriveWalk, the same function the
- * W-steps render from (one implementation of the rule).
- */
-export interface WalkStatus {
-  steps: Record<'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7' | 'w8' | 'w9', StepState>;
-  engagement: { id: string; name: string; retired: boolean } | null;
-  runs: { run_number: number; locked_at: string | null; confidence_score: string | null; confidence_band: string }[];
-  baseline: { value: string; unit: string; measured_at: string; metric: string } | null;
-  evidence: { opened_verified: number; total: number };
-}
-
-function deriveWalk(w: WalkState) {
-  const claims = w.capabilities.flatMap((c) => c.claims.map((cl) => ({ ...cl, capability_id: c.id, capability_name: c.name })));
-  // The engagement walked here: the latest one with an outcome.
-  const eng = [...w.engagements].reverse().find((e) => e.outcomes.length > 0) ?? null;
-  const outcome = eng?.outcomes[eng.outcomes.length - 1] ?? null;
-  // The LATEST locked run (a later lock is named, not the first one).
-  const lockedRun = eng ? [...eng.runs].reverse().find((r) => r.locked_at) ?? null : null;
-  const openRun = eng ? [...eng.runs].reverse().find((r) => !r.locked_at) ?? null : null;
-  const hasBaselineEvidence = Boolean(outcome?.evidence.some((e) => e.supports === 'baseline'));
-  const s1: StepState = w.persons.length > 0 || w.analysts.length > 0 ? 'done' : 'next';
-  const s2: StepState = w.capabilities.length > 0 ? 'done' : s1 === 'done' ? 'next' : 'waiting';
-  const s3: StepState = claims.length > 0 ? 'done' : s2 === 'done' ? (w.pack.length ? 'next' : 'waiting') : 'waiting';
-  const s4: StepState = outcome ? 'done' : s3 === 'done' ? 'next' : 'waiting';
-  const s5: StepState = outcome?.metric.industry_measure_id ? 'done' : s4 === 'done' ? 'next' : 'waiting';
-  const s6: StepState = hasBaselineEvidence ? 'done' : s5 === 'done' ? 'next' : 'waiting';
-  const s7: StepState = eng && eng.runs.length > 0 ? 'done' : s6 === 'done' ? 'next' : 'waiting';
-  const s8: StepState = lockedRun ? 'done' : s7 === 'done' ? 'next' : 'waiting';
-  const s9: StepState = eng?.retired ? 'done' : s8 === 'done' ? 'next' : 'waiting';
-  return { claims, eng, outcome, lockedRun, openRun, hasBaselineEvidence, s1, s2, s3, s4, s5, s6, s7, s8, s9 };
-}
-
-function walkStatus(w: WalkState): WalkStatus {
-  const d = deriveWalk(w);
-  return {
-    steps: { w1: d.s1, w2: d.s2, w3: d.s3, w4: d.s4, w5: d.s5, w6: d.s6, w7: d.s7, w8: d.s8, w9: d.s9 },
-    engagement: d.eng ? { id: d.eng.id, name: d.eng.name, retired: d.eng.retired } : null,
-    runs: (d.eng?.runs ?? []).map((r) => ({ run_number: r.run_number, locked_at: r.locked_at, confidence_score: r.confidence_score, confidence_band: r.confidence_band })),
-    baseline: d.outcome ? { value: d.outcome.baseline_value, unit: d.outcome.metric.unit, measured_at: d.outcome.baseline_measured_at, metric: d.outcome.metric.name } : null,
-    evidence: { opened_verified: d.outcome?.evidence.filter((e) => e.citation_resolved && e.source_verified).length ?? 0, total: d.outcome?.evidence.length ?? 0 },
-  };
-}
 
 /** Render here, or into the workspace step that owns this part (one instance, one state). */
 const place = (target: Element | null | undefined, node: ReactNode) => (target ? createPortal(node, target) : node);
@@ -227,6 +151,8 @@ const field = (label: string, el: ReactNode, help?: string, wide = false) => (
     {help && <p className={HELP_CLASS}>{help}</p>}
   </label>
 );
+
+export type { WalkStatus };
 
 export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, primaryFor }: {
   institutionId: string; onChanged: () => void;

@@ -8,6 +8,7 @@ import {
 } from '../api/pov';
 import { Badge, Card } from './workbench/Card';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
+import { povStatus, type PovStatus } from '../lib/workspaceStatus';
 
 /**
  * O2 (LVRF_PLAN §5; O2-D1–D4) — authoring on the account page: hypotheses,
@@ -357,36 +358,9 @@ function Notice({ text, testId }: { text: string | null; testId: string }) {
   return text ? <p className="m-0 mb-2 border-l-2 border-healthy pl-2 text-[12.5px] text-ink" role="status" data-testid={testId}>{text}</p> : null;
 }
 
-/**
- * UX-1 slice 1: what the authoring cards know, reported up to the account
- * workspace (steps 3 and 4, and the marker in "Account detail"), from this
- * one read of the POV, never a second fetch.
- */
-export interface PovStatus {
-  hypotheses: { statement: string; due: string; lever: string; created_at: string; verdict: string }[];
-  /** Pack entries this account's outcomes rest on that have no lever yet (Q4l). */
-  leverless: string[];
-  basedOutcomes: number;
-  summaries: { lens: string; versions: number; drafted_with_ai: boolean; drafting_tool: string | null; author: string; created_at: string }[];
-  marker: { kind: ReferenceMarker['kind']; source_citation: string } | null;
-}
 const place = (target: Element | null | undefined, node: ReactNode) => (target ? createPortal(node, target) : node);
 
-function povStatus(pov: Pov): PovStatus {
-  const based = pov.outcomes.filter((o) => o.pack_entry);
-  const hasLever = (o: PovOutcome) => pov.levers.some((l) => l.industry_measure_id === o.industry_measure_id);
-  return {
-    hypotheses: pov.hypotheses.filter((h) => !h.withdrawn_at && !h.superseded_by_id)
-      .map((h) => ({ statement: h.statement, due: h.falsifier_due, lever: h.lever.name, created_at: h.created_at, verdict: h.verdict })),
-    leverless: [...new Set(based.filter((o) => !hasLever(o)).map((o) => o.pack_entry!.name))],
-    basedOutcomes: based.length,
-    summaries: pov.executive_summaries.filter((x) => x.current).map((x) => ({
-      lens: x.lens, versions: pov.executive_summaries.filter((y) => y.lens === x.lens).length,
-      drafted_with_ai: x.drafted_with_ai, drafting_tool: x.drafting_tool, author: x.author, created_at: x.created_at,
-    })),
-    marker: pov.reference_example ? { kind: pov.reference_example.kind, source_citation: pov.reference_example.source_citation } : null,
-  };
-}
+export type { PovStatus };
 
 export function PovAuthoring({ institutionId, onStatus, targets, primary = null }: {
   institutionId: string;

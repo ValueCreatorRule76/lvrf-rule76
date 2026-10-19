@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { researchStatus, type ResearchStatus } from '../lib/workspaceStatus';
 import {
   fetchAccountResearch,
   type AccountPendingResult,
@@ -420,10 +421,7 @@ function PendingCard({ pending, lastDecision, onDecided }: { pending: AccountPen
 
 // ------------------------------------------------------------------ section
 
-/** UX-1 slice 1: what research knows, reported up to the account workspace (step 1). */
-export interface ResearchStatus {
-  entity: { legal_name: string; identifier_type: string } | null;
-}
+export type { ResearchStatus };
 
 export function AccountResearch({ institutionId, onFactsChanged, onStatus, primary = false }: {
   institutionId: string; onFactsChanged: () => void;
@@ -442,8 +440,7 @@ export function AccountResearch({ institutionId, onFactsChanged, onStatus, prima
   const reload = () => { setTick((t) => t + 1); onFactsChanged(); };
   useEffect(() => {
     if (state && state.status === 'ok') {
-      const e = state.research.entity as Record<string, unknown> | null;
-      onStatus?.({ entity: e ? { legal_name: String(e['legal_name']), identifier_type: String(e['identifier_type']) } : null });
+      onStatus?.(researchStatus(state.research));
     }
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
   return (

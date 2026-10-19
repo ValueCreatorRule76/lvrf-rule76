@@ -10936,3 +10936,107 @@ retired (Brad, 19 Oct 2026).
   summary (15:28, 15:32), so Curia shows unmarked there.
 - **The 10 Oct snapshot was deleted** after the restore, as agreed; the six local
   pre-migration backups are kept.
+
+### Deployed — 19 October 2026 (UTC): UX-1 slice 1 (`c098b20`)
+
+`c04dd21..c098b20`: UX-1 slice 1 and docs. **No migration, no hardening change, no
+re-exec.**
+- **The backup:** `~/lvrf-pre-ux1s1-20261019T162315Z.dump`, 874,660 bytes, **630 TOC
+  entries** (as predicted).
+- **The deploy:** bundle **`index-COXAy6jV.js`** / `index-CDV-cc73.css`. The API has been
+  up since 16:23:47 UTC.
+- **Gate C** (read-only, by me over ssh):
+  - **the standard checks:** run hashes 25/25; ownership clean; plain sentences 69/69;
+    drift D1/D3/D4 no findings; **129 triggers by `pg_trigger`, 0 disabled**;
+  - **since the restart:** **0 refusals**, 0 audit rows;
+  - **the journal:** 33 request lines, **none carrying a value**. The workspace's reads
+    are logged by pattern (`GET /api/institutions/:institutionId/pov|research|walk
+    304 … session=y`); the only 401s are the deploy's own `GET /api/runs/:id` smoke
+    checks.
+- **Brad compared the screenshots of Scotts (locked) and Curia, at 1280 and 390, against
+  the approved mock-ups,** and approved them for deploy.
+
+## UX-1 slice 2: the Accounts home and the phone-width header — 19 October 2026 (UTC)
+
+**What it builds** (presentation only: no route, table, trigger or rule changed; **no
+new read**):
+- **The Accounts home** (`AccountsIndexPage`):
+  - **one row per account,** each a real `Link`, keyboard-reachable;
+  - **each row shows:**
+    - the status in plain words (a reference example with its kind; retired; your own
+      company's account);
+    - the industry;
+    - where it stands, "n of 6 · next step";
+    - each engagement's latest locked run, "run N · n / 100 · Band" (Low neutral);
+    - the last thing recorded, with its date;
+  - **"New account…"** is the one filled button. The create form opens on demand, with
+    "Close the form".
+  - **The Book confidence card** stays at the bottom with its wording. Its numbers and
+    names now meet the standards: "n / 100 · Band" with Low neutral; an engagement named
+    "<Account> — …" is not prefixed with the account again; "cohort" is gone from its
+    two sentences.
+- **Where the figures come from:** the reads the app already makes, per account
+  (`/view`, `/walk`, `/pov`, `/research`; the tenant's own skips the last two), through
+  **the same derivations as the workspace**. These moved, unchanged, into one module,
+  `client/src/lib/workspaceStatus.ts`, which the workspace now imports too.
+- **A row's status is all-or-nothing.** While its reads load, it says "loading…". If
+  any read fails, it says "Couldn't load this account's status.", in words, with no id
+  and nothing computed from the rest. Either way the row stays a working link.
+- **The header (`AppHeader`):** from 640 px up, exactly today's row. Below that, one row
+  with a real "Menu" button (`aria-expanded`, `aria-controls`). It holds the same
+  `NavBar` and `ActorBar`, and closes on Escape and on navigation.
+- **Marker banners** in the workspace and on the POV wrap long words and URLs
+  (`overflow-wrap: anywhere`).
+- **`account_research_walk`** opens the form from "New account…" as a person would. All
+  of its hooks are kept.
+
+**Gate A:**
+- **`verify_accounts_home.sh`: 61 passed, 0 failed.** It clones the restored, neutralised
+  prod copy and signs in by session.
+  - **The rows:** one per account, each a link to its account; status words; "n of 6 ·
+    …"; "run N · n / 100 · Band" or "No locked run yet."; Low never critical red; the
+    new account reads "1 of 6 · Research the entity".
+  - **The button and form:** one filled button ("New account…"); the form closed until
+    asked for, then opened and closed; its disabled submit says what it waits for.
+  - **Tab order:** "New account…" first, then every row in order.
+  - **The header:** the right one at each width, and no sideways scroll. At 390, "Menu"
+    is a button with `aria-expanded`; Tab reaches it first, Enter opens it (links and
+    the signed-in block), Tab goes into the panel, Escape closes it.
+  - **No internal terms** in the app's own words (record names are excluded, being
+    shown verbatim).
+  - **Loading** (one account's `/walk` held by the browser's request interception):
+    "loading…", no status, still a link; every other row and the Book confidence card
+    render; the row resolves when the read arrives.
+  - **Failed** (that `/walk` answered 500): "Couldn't load this account's status.", no
+    status, no runs, no id, not the server's message; still a link; every other row and
+    the card render.
+  - **Breaks:**
+    - **B1:** rows out of the Tab order;
+    - **B2:** the form open on load;
+    - **B3:** "Menu" without `aria-expanded`;
+    - **B4:** the desktop row at 390;
+    - **B5:** a failed `/walk` read as empty.
+
+    All caught and restored byte-identical.
+- **`verify_workspace_path`: 107 passed, 0 failed.** It now includes a long-citation
+  marker (an unbroken URL) that wraps inside the banner at 1280 and 390.
+- **Regression before the loading/failure fix:** all **34** pass (with
+  `verify_accounts_home` 48/0 and `verify_workspace_path` 107/0); tenant scope 203.
+- **Scripts re-run after the fix**, which touches `lib/workspaceStatus.ts`, imported by
+  the workspace:
+  - **`verify_accounts_home` 61/0** (with the new cases);
+  - **`verify_workspace_path` 107/0**;
+  - **`verify_account_research` 160/0**.
+  The fix is client-only; tsc and oxlint are clean (the 1 pre-existing warning).
+- **The bundle:** **`index-BB_AxQvL.js`** / `index-CoYj-ESF.css`.
+- **The prod copy:** restored from today's backup (`lvrf-pre-ux1s1-20261019T162315Z`,
+  copied with the LVRF key, SHA-256 matched, mode 600, sign-in data neutralised: 11
+  sessions dead, 1 credential replaced). Against the deployed code (`c098b20`): **76
+  GETs, 76 identical** (no server change). The previous prod dump was deleted; the six
+  local pre-migration backups are kept.
+- **Screenshots for Brad's review** are on the Mac only, in `~/lvrf-backups/slice2-screens/`
+  (600). They were taken on an untouched clone of today's copy:
+  - Accounts at 1280 and 390;
+  - the 390 header with the menu closed and open;
+  - the Curia workspace at 1280 with its full citation wrapped in the banner;
+  - a row whose read failed (from the verify run).

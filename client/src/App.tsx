@@ -7,10 +7,9 @@ import { IndustryPackPage } from './pages/IndustryPackPage';
 import { InstitutionPage } from './pages/InstitutionPage';
 import { PovPage } from './pages/PovPage';
 import { ActorProvider, useActor } from './actor/ActorContext';
-import { ActorBar } from './actor/ActorBar';
 import { SignInOverlay, SignInPage } from './actor/SignIn';
 import { ChangePasswordPage } from './actor/ChangePassword';
-import { NavBar } from './components/NavBar';
+import { AppHeader } from './components/AppHeader';
 
 // Sign-in P2a. Nobody signed in: the sign-in page, in place of the routes —
 // the URL is kept, so the page asked for opens once signed in. A session
@@ -42,18 +41,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <ActorProvider>
-        {/* One row, two components that don't know about each other.
-            NavBar is fixed-width content; ActorBar fills the rest, exactly
-            as wide as it always was — neither file is touched to compose
-            them. The row wraps (O2, phone width): below about 560px the
-            ActorBar drops under the NavBar instead of pushing the page
-            wider than the screen. */}
-        <div className="flex flex-wrap items-stretch">
-          <NavBar />
-          <div className="min-w-[260px] flex-1">
-            <ActorBar />
-          </div>
-        </div>
+        {/* UX-1 slice 2: today's row from 640 px up; one "Menu" row below (AppHeader). */}
+        <AppHeader />
         <SignedInRoutes />
       </ActorProvider>
     </BrowserRouter>
