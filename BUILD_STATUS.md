@@ -10426,3 +10426,50 @@ Asked before paste 2 (Brad's reviewer):
   - **the rotation command:** a new password into a 600 file, ALTER ROLE through stdin,
     nothing printed; the new login works.
 - **`verify_ownership`: 65 passed, 0 failed.**
+
+### OWN-1 on prod, 19 Oct 2026: deployed, then rolled back by mistake; the reapply
+
+**What happened** (Brad's reviewer):
+- **Gate B ran clean up to the deploy:**
+  - paste 3: ownership exit 0, `check_migrate_role` ok;
+  - paste 4: migrate ok, ownership exit 0, hardening exit 0 with 0 ERROR,
+    `check_ownership` no violations, 25/25 run hashes;
+  - the deploy: exit 0, **5d passed**, HEAD `a88c071`, bundle `index-KWocnhhB.js`
+    (**Q4m live**).
+- **Then `db/ownership_rollback.sql` was run by mistake.** It was in the same message as
+  a contingency, and it exited 0.
+
+**The state now** (read-only over ssh, 19 Oct 2026):
+- **Owners:** `lvrf_app` owns the database, 44 relations, 27 enums and `drizzle`.
+- **Roles:** `lvrf_migrate` and `lvrf_owner` NOLOGIN.
+- **Triggers:** 129 by `pg_trigger`, 0 disabled.
+- **The ownership check:** 468 violations, which is a rolled-back database.
+- **Writes:** none since; the last audit row is at 04:57:36 UTC, before the 11:01 deploy.
+- **The app is serving.**
+
+**Paste 4's "107 triggers" was a counting artefact, not a loss:**
+- `information_schema.triggers` shows a trigger only to a role with more than SELECT on
+  its table. After OWN-1, `lvrf_app` has SELECT only on seven tables (heartbeats,
+  industries, offerings, person_roles, reflection_evidence, reflections,
+  stewardship_returns), so it saw 107. Reproduced on a converted clone: 107 that way,
+  129 by `pg_trigger`.
+- **Paste and Gate C counts now use `pg_trigger`** (distinct `tgname`, non-internal,
+  schema `public`), which doesn't depend on the caller's privileges.
+- The drift checks (`driftChecks.ts`, deploy 5c) already read `pg_trigger`, and
+  hardening's manifest is written by the superuser. Neither was affected.
+
+**The reapply** (rollback → OWN-1):
+- **`ownership.sql` at `a88c071` did not give `lvrf_migrate` LOGIN back,** because it
+  only created the role when it was absent. It now runs `ALTER ROLE lvrf_migrate LOGIN`
+  itself.
+- **The box paste runs that ALTER explicitly,** so it works with the `a88c071` file
+  already there: no pull, no redeploy.
+- **The password is kept** (NOLOGIN doesn't clear it).
+- **`verify_ownership.sh` step 10 tests that exact paste** on a converted prod copy
+  rolled back:
+  - LOGIN back, then `a88c071`'s `ownership.sql` without the password, then hardening;
+  - `check_ownership` reports no violations; `check_migrate_role` works with the
+    original password; the hash is unchanged;
+  - **identical to before the rollback** on all 108 owner and privilege lines;
+  - 129 triggers by `pg_trigger` as `lvrf_app`.
+- **`verify_ownership`: 75 passed, 0 failed.**

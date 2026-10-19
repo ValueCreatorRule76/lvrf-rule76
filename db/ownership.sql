@@ -62,6 +62,10 @@ BEGIN
   END IF;
 END $$;
 ALTER ROLE lvrf_owner NOLOGIN;
+-- LOGIN explicitly: db/ownership_rollback.sql sets lvrf_migrate NOLOGIN, and
+-- re-running this file after a rollback must give it back. Its password is
+-- kept (NOLOGIN does not clear it).
+ALTER ROLE lvrf_migrate LOGIN;
 GRANT lvrf_owner TO lvrf_migrate;
 ALTER ROLE lvrf_migrate SET role = 'lvrf_owner';
 

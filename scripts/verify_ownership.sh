@@ -221,6 +221,33 @@ DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' "$ROT" | cut -d= -f2- | sed "s#/[^
 OPW="$(pw_of "$MURL")"; printf "ALTER ROLE lvrf_migrate PASSWORD '%s';\n" "$OPW" | psql -X -q -v ON_ERROR_STOP=1 -d postgres > /dev/null 2>&1; unset OPW
 DATABASE_URL="${MURL%/*}/$COPY_DB" npx tsx scripts/check_migrate_role.ts > /dev/null 2>&1 && ok "  (local password rotated back to .env.migrate's)" || bad "local password not restored"
 
+step "10. Reapply after a rollback (rollback -> OWN-1), as pasted to the box at a88c071: no pull, no redeploy"
+REAPPLY_COMMIT=a88c071   # the ownership.sql on the box when the rollback was run (19 Oct 2026)
+git show "$REAPPLY_COMMIT:db/ownership.sql" > "$W/ownership_box.sql"
+D10=lvrf_verifyown1re
+dropdb --if-exists "$D10"; make_clone "$D10" lvrf_prodcopy && migrate_clone "$D10" > /dev/null 2>&1 && harden "$D10" && ok "a converted, hardened prod copy (prod after OWN-1's deploy)" || bad "D10 build"
+snapshot "$D10" | sed "s/$D10/DB/g" > "$W/snap_converted.txt"
+HB="$(hash_now)"
+psql -X -q -v ON_ERROR_STOP=1 -d "$D10" -f db/ownership_rollback.sql > /dev/null 2>&1 && [ "$(q postgres "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'lvrf_migrate'")" = "f" ] && ok "rolled back (prod's state now): lvrf_migrate NOLOGIN" || bad "rollback"
+# The reapply paste, as given: LOGIN back, the box's ownership.sql (no \set), harden, the checks.
+psql -X -q -v ON_ERROR_STOP=1 -d postgres -c "ALTER ROLE lvrf_migrate LOGIN" > /dev/null 2>&1 \
+  && env -u LVRF_MIGRATE_PASSWORD psql -X -q -v ON_ERROR_STOP=1 -d "$D10" -f "$W/ownership_box.sql" > /dev/null 2>&1 \
+  && ok "reapply: ALTER ROLE lvrf_migrate LOGIN, then $REAPPLY_COMMIT's ownership.sql without the password: exit 0" || bad "reapply"
+harden "$D10" && ok "  ...hardening: section 24 passes" || bad "  ...hardening: $(grep -m1 ERROR "$W/harden.log")"
+owncheck "${LOCAL_URL%/*}/$D10" && ok "  ...check_ownership (step 5d), as lvrf_app: no violations" || bad "  ...$(cat "$W/own.log")"
+DATABASE_URL="${MURL%/*}/$D10" npx tsx scripts/check_migrate_role.ts > "$W/role.log" 2>&1 && ok "  ...check_migrate_role with the ORIGINAL password: $(cat "$W/role.log")" || bad "  ...login: $(cat "$W/role.log")"
+[ "$(hash_now)" = "$HB" ] && ok "  ...the password hash is unchanged through rollback and reapply (no reset needed)" || bad "  ...the password hash changed"
+snapshot "$D10" | sed "s/$D10/DB/g" > "$W/snap_reapplied.txt"
+cmp -s "$W/snap_converted.txt" "$W/snap_reapplied.txt" && ok "  ...identical to before the rollback: $(wc -l < "$W/snap_reapplied.txt" | tr -d ' ') owner and privilege lines" || bad "  ...differs: $(diff "$W/snap_converted.txt" "$W/snap_reapplied.txt" | head -6 | tr '\n' ' ')"
+PGT="SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+[ "$(psql -X -At "${LOCAL_URL%/*}/$D10" -c "$PGT")" = "$EXPECT_TRIGGERS" ] && ok "  ...$EXPECT_TRIGGERS triggers counted from pg_trigger AS lvrf_app (information_schema shows lvrf_app $(psql -X -At "${LOCAL_URL%/*}/$D10" -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'"): it hides triggers on SELECT-only tables)" || bad "  ...pg_trigger count as lvrf_app"
+# The file as fixed now: a second rollback, then ownership.sql alone gives LOGIN back.
+psql -X -q -v ON_ERROR_STOP=1 -d "$D10" -f db/ownership_rollback.sql > /dev/null 2>&1
+env -u LVRF_MIGRATE_PASSWORD psql -X -q -v ON_ERROR_STOP=1 -d "$D10" -f db/ownership.sql > /dev/null 2>&1 && [ "$(q postgres "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'lvrf_migrate'")" = "t" ] \
+  && ok "the fixed ownership.sql gives LOGIN back on its own after a rollback" || bad "fixed ownership.sql: lvrf_migrate still NOLOGIN"
+q postgres "ALTER ROLE lvrf_migrate LOGIN" > /dev/null
+dropdb --if-exists "$D10"
+
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" = "0" ]
