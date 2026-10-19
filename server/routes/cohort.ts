@@ -294,7 +294,21 @@ export function cohortRouter(pool: Pool): Router {
           WHERE i.tenant_id = $1
             AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL
             AND i.is_tenant_self = false
+            -- Q4n (O-D3): a reference example is not a customer engagement. An
+            -- account with a CURRENT marker is left out of the book and every
+            -- industry cohort; unmarking it (the steward's act) counts it again.
+            AND NOT EXISTS (SELECT 1 FROM reference_example_markers m
+                             WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)
           ORDER BY i.name, e.name`,
+        [tenantId],
+      );
+      // How many accounts the book leaves out as reference examples, so an
+      // empty book can say why ("No live customer engagements").
+      const { rows: [{ n: referenceExampleCount }] } = await pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM institutions i
+          WHERE i.tenant_id = $1 AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL AND i.is_tenant_self = false
+            AND EXISTS (SELECT 1 FROM reference_example_markers m
+                         WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)`,
         [tenantId],
       );
 
@@ -321,6 +335,7 @@ export function cohortRouter(pool: Pool): Router {
         // Unclassified accounts are in the book but in no industry cohort —
         // counted here so their absence from by_industry is visible.
         unclassified_account_count: unclassified.size,
+        reference_example_count: referenceExampleCount,
       });
     } catch (err) {
       respondServerError(res, err);

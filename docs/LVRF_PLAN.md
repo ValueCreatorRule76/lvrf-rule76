@@ -2227,7 +2227,7 @@ Brad's 6 (no internal terms) and 7 (stage-bar legends), plus record-values-only 
 390 rules. **UX-1-D2 is applied:** §9's refusal rule now covers `LVRF:` sentences
 verbatim and raw database text as plain sentences.
 
-**Q4n, before the UX-1 build: book confidence leaves out reference examples (O-D3).**
+**Q4n, before the UX-1 build: book confidence leaves out reference examples (O-D3).** *(Approved 19 Oct 2026; built, Gate A passed.)*
 - **The gap:** `server/routes/cohort.ts` leaves out the tenant's own account and retired
   engagements, but **not** accounts with a current reference-example marker. So marking
   Curia alone wouldn't change book confidence: its live engagement (run 1, 10 / 100)

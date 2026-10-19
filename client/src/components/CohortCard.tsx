@@ -38,10 +38,13 @@ function scoreBadge(m: CohortMember) {
   );
 }
 
-function Composite({ cohort }: { cohort: Cohort }) {
+function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean }) {
   const { composite } = cohort;
   if (composite.floor === 'empty' || !composite.determined_by) {
-    return <p className="m-0 text-[12.5px] text-ink-45">No customer accounts in this cohort.</p>;
+    // Q4n: an empty BOOK is a state, said in words, never a number.
+    return book
+      ? <p className="m-0 text-[13px] text-ink" data-testid="book-empty"><strong>No live customer engagements.</strong></p>
+      : <p className="m-0 text-[12.5px] text-ink-45">No customer accounts in this cohort.</p>;
   }
   const d = composite.determined_by;
   const lowest = composite.lowest_recorded;
@@ -124,11 +127,14 @@ export function CohortCard({ n }: { n: string }) {
         <p className="m-0 text-[12.5px] text-ink-45">{result.message}</p>
       ) : (
         <>
-          <Composite cohort={result.view.book} />
-          <p className="m-0 mt-3 text-[11px] text-ink-45">
+          <Composite cohort={result.view.book} book />
+          <p className="m-0 mt-3 text-[11px] text-ink-45" data-testid="book-scope">
             The minimum across every customer engagement's latest locked run. Never averaged: an
-            average of one weak account and several strong ones describes none of them. The
-            tenant's own account is not included.
+            average of one weak account and several strong ones describes none of them. Your own
+            company's account is not included, and neither is a reference example
+            {result.view.reference_example_count > 0
+              ? ` (${result.view.reference_example_count} ${result.view.reference_example_count === 1 ? 'account is' : 'accounts are'} marked one)`
+              : ''}.
           </p>
           <p className="m-0 mt-1 text-[11px] text-ink-45">
             Only locked runs count here; an account page shows its latest run, locked or not.

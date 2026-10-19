@@ -10761,3 +10761,48 @@ NOT AN ENGAGEMENT — <citation>", which read as "Reference example — Referenc
    · Source: Reference example". **The steward should correct it to the published
    material it was built from** (for example, the FY25 disclosures), by one more
    correction.
+
+## Q4n: book confidence leaves out reference examples (O-D3) — 19 October 2026 (UTC)
+
+**Why:** the mock-up review found that Curia, a reference example, set book confidence.
+`server/routes/cohort.ts` left out the tenant's own account and retired engagements, but
+not accounts with a current reference-example marker. So marking Curia alone would have
+left its live engagement (run 1, 10 / 100) setting the book.
+
+**The change** (no migration, no trigger, read-only):
+- **The cohort query skips any institution with a current marker** (not withdrawn, not
+  superseded), in the book and every industry cohort. Unmarking it, the steward's act,
+  counts it again.
+- **The read gains `reference_example_count`.**
+- **The accounts page's book card** shows an empty book as a state in words, "**No live
+  customer engagements.**", never a number. Its scope line says what isn't counted:
+  "Your own company's account is not included, and neither is a reference example (N
+  accounts are marked one)."
+
+**Gate A:**
+- **`verify_cohort.sh`: 79 passed, 0 failed.** It now migrates and hardens its clone.
+  - **Marking** an account (the steward's route, 201) takes it out of the book and every
+    industry cohort, and the count goes 0 → 1.
+  - **Unmarking** it counts it again, and the count goes back to 0.
+  - **With every customer account marked,** the book is empty: floor `empty`, score
+    null, 0 members, the count equal to the number of accounts.
+  - **In the browser, signed in by session,** the card reads "No live customer
+    engagements." and the scope line gives the count. The screenshot was looked at.
+  - **B1:** with the filter removed, the marked accounts set the book again. Restored
+    byte-identical.
+- **Regression:** all **32** pass. Two scripts needed their expectations updated for
+  Q4n, both re-run and passing:
+  - **`verify_tenant_scope`'s cohort case** expected `INST_A` in A's book, but its own
+    fixture marks `INST_A` a reference example (`MARKER_A`). The case now checks the
+    unmarked `INST_A_UNCLASSIFIED`. 203 cases.
+  - **`verify_engagement_retire`** cloned without migrating, so the cohort read failed
+    on the absent markers table. It now migrates and hardens, like every other clone.
+    17/0.
+- **The bundle:** **`index-BKlIw9_l.js`** / `index-6J3Ne-U_.css`.
+- **Prod copy against the deployed code (`c088430`):** 67 GETs, 66 identical. `/api/cohort`
+  differs only by the new `reference_example_count` (0: the copy has no markers); with
+  it excluded, all 67 are identical.
+
+**After the deploy, on prod:** Brad marks Curia a published case study (the steward's
+act, with a real citation). Then the book reads "No live customer engagements": Scotts'
+engagement is retired, Skillsoft is the tenant's own, and Curia is a reference example.

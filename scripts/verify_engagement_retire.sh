@@ -34,6 +34,10 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" && ok "cloned"
+# Q4n: the cohort reads reference_example_markers (0036), so the clone is
+# migrated to the newest migration and hardened, as every other verify clone is.
+migrate_clone "$VERIFY_DB" > /tmp/lvrf_retire_migrate.log 2>&1 || { echo "migrate failed: $(tail -3 /tmp/lvrf_retire_migrate.log)"; exit 1; }
+psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 || { echo "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"
 LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_retire_server.log 2>&1 &

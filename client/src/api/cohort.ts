@@ -53,6 +53,8 @@ export interface CohortView {
   book: Cohort;
   by_industry: { industry: { slug: string; name: string }; cohort: Cohort }[];
   unclassified_account_count: number;
+  /** Q4n: accounts left out of every cohort because they are current reference examples (O-D3). */
+  reference_example_count: number;
 }
 
 export type FetchCohortResult =
