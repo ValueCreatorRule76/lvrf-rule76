@@ -152,6 +152,75 @@ REAL_AFTER="$(q lvrf "SELECT datdba::regrole FROM pg_database WHERE datname = 'l
 [ "$REAL_AFTER" = "$REAL_BEFORE" ] && ok "real local lvrf unchanged: owner and lvrf_app-owned relations $REAL_AFTER" || bad "real local lvrf changed: $REAL_BEFORE -> $REAL_AFTER"
 (make_clone lvrf > /dev/null 2>&1) && bad "make_clone accepted lvrf" || ok "make_clone refuses to convert real local lvrf"
 
+# Owner and privilege state, as text, for comparing two databases: the
+# database, schemas, every relation (lvrf_app's privileges on each), types,
+# functions (lvrf_ownership_violations excluded: OWN-1's, the superuser's,
+# harmless after a rollback), and what PUBLIC may create.
+snapshot() {  # DB
+  psql -X -At -d "$1" <<'SQL'
+SELECT 'db|' || d.datdba::regrole || '|' || has_database_privilege('lvrf_app', d.datname, 'CREATE') || has_database_privilege('lvrf_app', d.datname, 'CONNECT') || has_database_privilege('lvrf_app', d.datname, 'TEMP') || '|public:' || has_database_privilege('public', d.datname, 'CREATE')
+  FROM pg_database d WHERE d.datname = current_database();
+SELECT 'schema|' || n.nspname || '|' || n.nspowner::regrole || '|' || has_schema_privilege('lvrf_app', n.oid, 'CREATE') || has_schema_privilege('lvrf_app', n.oid, 'USAGE') || '|public:' || has_schema_privilege('public', n.oid, 'CREATE')
+  FROM pg_namespace n WHERE n.nspname IN ('public', 'drizzle') ORDER BY 1;
+SELECT 'rel|' || n.nspname || '.' || c.relname || '|' || c.relowner::regrole || '|' ||
+       CASE WHEN c.relkind = 'S' THEN has_sequence_privilege('lvrf_app', c.oid, 'USAGE')::text || has_sequence_privilege('lvrf_app', c.oid, 'SELECT') || has_sequence_privilege('lvrf_app', c.oid, 'UPDATE')
+            ELSE (SELECT string_agg(has_table_privilege('lvrf_app', c.oid, p)::text, '' ORDER BY p) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p) END
+  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname IN ('public', 'drizzle') AND c.relkind IN ('r', 'p', 'S', 'v', 'm') ORDER BY 1;
+SELECT 'type|' || n.nspname || '.' || t.typname || '|' || t.typowner::regrole
+  FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname IN ('public', 'drizzle') AND t.typtype IN ('e', 'd') ORDER BY 1;
+SELECT 'func|' || p.oid::regprocedure || '|' || pg_get_userbyid(p.proowner)
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname IN ('public', 'drizzle') AND p.proname <> 'lvrf_ownership_violations' ORDER BY 1;
+SQL
+}
+
+step "8. The rollback (db/ownership_rollback.sql) returns a converted database to today's pre-OWN-1 state"
+PRE_OWN1_COMMIT=6a6eaf1   # the last commit before OWN-1: its hardening.sql is what prod runs today
+PRE_DB=lvrf_verifyown1pre
+dropdb --if-exists "$PRE_DB"
+git show "$PRE_OWN1_COMMIT:db/hardening.sql" > "$W/hardening_pre.sql"
+createdb -T lvrf -O lvrf_app "$PRE_DB" \
+  && DATABASE_URL="${LOCAL_URL%/*}/$PRE_DB" npx drizzle-kit migrate > "$W/premig.log" 2>&1 \
+  && psql -X -q -v ON_ERROR_STOP=1 -d "$PRE_DB" -f "$W/hardening_pre.sql" > /dev/null 2>&1 \
+  && ok "a pre-OWN-1 database, built as prod is today: cloned by lvrf_app, migrated as lvrf_app, hardened with $PRE_OWN1_COMMIT's hardening.sql" \
+  || { bad "pre-OWN-1 build: $(tail -3 "$W/premig.log")"; }
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership_rollback.sql > "$W/rollback.log" 2>&1 && ok "db/ownership_rollback.sql applied to the converted clone" || bad "rollback: $(grep -m1 ERROR "$W/rollback.log")"
+snapshot "$PRE_DB" | sed "s/$PRE_DB/DB/g" > "$W/snap_pre.txt"; snapshot "$VERIFY_DB" | sed "s/$VERIFY_DB/DB/g" > "$W/snap_rolled.txt"
+if cmp -s "$W/snap_pre.txt" "$W/snap_rolled.txt"; then
+  ok "  ...identical to the pre-OWN-1 database: owners, and lvrf_app's privileges on every one of $(grep -c '^rel|' "$W/snap_pre.txt") relations, the schemas and the database ($(wc -l < "$W/snap_pre.txt" | tr -d ' ') lines compared)"
+else
+  bad "  ...differs from pre-OWN-1: $(diff "$W/snap_pre.txt" "$W/snap_rolled.txt" | head -8 | tr '\n' ' ')"
+fi
+owncheck "$APP_URL" && bad "  ...check_ownership passed after a rollback" || ok "  ...and deploy step 5d now refuses (by design: a rollback blocks the next deploy until OWN-1 is fixed)"
+[ "$(q postgres "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'lvrf_migrate'")" = "f" ] && ok "  ...lvrf_migrate set NOLOGIN" || bad "  ...lvrf_migrate can still log in"
+q postgres "ALTER ROLE lvrf_migrate LOGIN" > /dev/null && ok "  (local: lvrf_migrate's LOGIN given back for the other verify scripts)"
+dropdb --if-exists "$PRE_DB"
+
+step "9. Gate B's password handling: paste 3 (with \\set), then paste 4 (without), then a rotation"
+MURL="$(grep '^MIGRATE_DATABASE_URL=' .env.migrate | cut -d= -f2-)"
+pw_of() { local u="${1#postgres://lvrf_migrate:}"; echo "${u%%@*}"; }
+hash_now() { q postgres "SELECT rolpassword FROM pg_authid WHERE rolname = 'lvrf_migrate'"; }
+dropdb --if-exists "$COPY_DB"; createdb -T lvrf_prodcopy "$COPY_DB"
+H0="$(hash_now)"
+MPW="$(pw_of "$MURL")"; { printf "\\\\set migrate_password '%s'\n" "$MPW"; cat db/ownership.sql; } | psql -X -q -v ON_ERROR_STOP=1 -d "$COPY_DB" > "$W/p3.out" 2>&1; P3=$?; unset MPW
+H1="$(hash_now)"
+[ "$P3" = "0" ] && [ "$H1" != "$H0" ] && ok "paste 3's method: ownership.sql with \\set migrate_password sets the password (a new SCRAM hash)" || bad "paste 3: exit $P3, hash changed: $([ "$H1" != "$H0" ] && echo yes || echo no)"
+grep -q "$(pw_of "$MURL")" "$W/p3.out" && bad "  ...the password appears in psql's output" || ok "  ...and the password is not in psql's output ($(wc -c < "$W/p3.out" | tr -d ' ') bytes, notices only)"
+DATABASE_URL="${MURL%/*}/$COPY_DB" npx tsx scripts/check_migrate_role.ts > "$W/role.log" 2>&1 && ok "  ...lvrf_migrate logs in with it: $(cat "$W/role.log")" || bad "  ...login: $(cat "$W/role.log")"
+env -u LVRF_MIGRATE_PASSWORD psql -X -q -v ON_ERROR_STOP=1 -d "$COPY_DB" -f db/ownership.sql > /dev/null 2>&1 && P4=0 || P4=$?
+[ "$P4" = "0" ] && [ "$(hash_now)" = "$H1" ] && ok "paste 4's second run, without the password: exit 0, the password hash UNCHANGED (\\getenv leaves an unset variable unset; \\if skips ALTER ROLE)" || bad "paste 4: exit $P4, hash changed: $([ "$(hash_now)" != "$H1" ] && echo yes || echo no)"
+DATABASE_URL="${MURL%/*}/$COPY_DB" npx tsx scripts/check_migrate_role.ts > /dev/null 2>&1 && ok "  ...and lvrf_migrate still logs in" || bad "  ...login failed after the second run"
+migrate_clone "$COPY_DB" > /dev/null 2>&1 && harden "$COPY_DB" && owncheck "${LOCAL_URL%/*}/$COPY_DB" && ok "  ...then migrate as lvrf_migrate, harden, the ownership check: all pass (paste 4's sequence)" || bad "  ...paste 4 sequence: $(grep -m1 ERROR "$W/harden.log") $(cat "$W/own.log")"
+# The rotation command, as given to Brad (into a temporary file here; rotated back after).
+ROT="$W/rot.env"
+install -m 600 /dev/null "$ROT" && printf 'MIGRATE_DATABASE_URL=postgres://lvrf_migrate:%s@%s\n' "$(openssl rand -hex 24)" "${MURL#*@}" > "$ROT"
+NPW="$(pw_of "$(grep '^MIGRATE_DATABASE_URL=' "$ROT" | cut -d= -f2-)")"; printf "ALTER ROLE lvrf_migrate PASSWORD '%s';\n" "$NPW" | psql -X -q -v ON_ERROR_STOP=1 -d postgres > "$W/rot.out" 2>&1; RC=$?; unset NPW
+[ "$RC" = "0" ] && [ ! -s "$W/rot.out" ] && [ "$(stat -f %Lp "$ROT")" = "600" ] && ok "rotation: a new password into a 600 file, ALTER ROLE through stdin, nothing printed" || bad "rotation: exit $RC, output $(wc -c < "$W/rot.out") bytes, mode $(stat -f %Lp "$ROT")"
+DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' "$ROT" | cut -d= -f2- | sed "s#/[^/]*\$#/$COPY_DB#")" npx tsx scripts/check_migrate_role.ts > /dev/null 2>&1 && ok "  ...lvrf_migrate logs in with the rotated password" || bad "  ...rotated login failed"
+OPW="$(pw_of "$MURL")"; printf "ALTER ROLE lvrf_migrate PASSWORD '%s';\n" "$OPW" | psql -X -q -v ON_ERROR_STOP=1 -d postgres > /dev/null 2>&1; unset OPW
+DATABASE_URL="${MURL%/*}/$COPY_DB" npx tsx scripts/check_migrate_role.ts > /dev/null 2>&1 && ok "  (local password rotated back to .env.migrate's)" || bad "local password not restored"
+
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" = "0" ]

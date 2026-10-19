@@ -10393,3 +10393,36 @@ rule 3 says "Pending OWN-1".
 
 **Not yet:** Gate B on prod (pastes; `pg_hba.conf` checked first); Gate C; then the
 `CLAUDE.md` Stack edit (OWN-1-D3).
+
+### OWN-1, the Gate B review (19 Oct 2026): the rollback and the password handling, tested
+
+Asked before paste 2 (Brad's reviewer):
+- **The rollback, `db/ownership_rollback.sql`** (superuser; SQL only):
+  - **what it does:** everything goes back to `lvrf_app`, `GRANT ALL` as an owner holds
+    it, then section 7's revokes on the two logs again. The default privileges are
+    reverted and `lvrf_migrate` is set NOLOGIN;
+  - **no restart or redeploy:** privileges are checked per statement;
+  - **what it leaves on purpose:** section 24 and step 5d refuse afterwards, so the next
+    deploy is blocked until OWN-1 is fixed;
+  - **it writes no rows.** Restoring the backup instead would discard every write since
+    it was taken.
+- **`verify_ownership.sh` step 8:**
+  - **the comparison:** a database built as prod is today (cloned by `lvrf_app`,
+    migrated as `lvrf_app`, hardened with `6a6eaf1`'s `hardening.sql`) against a
+    converted clone after the rollback;
+  - **identical on all 98 lines:** owners, `lvrf_app`'s seven table privileges on each
+    of 44 relations, the sequences, the schemas and the database, including PUBLIC's
+    CREATE;
+  - 5d refuses afterwards, by design.
+- **Step 9: Gate B's password handling, as pasted:**
+  - **the guard** (`ownership.sql`): `\getenv migrate_password LVRF_MIGRATE_PASSWORD`,
+    then `\if :{?migrate_password}` around `ALTER ROLE … PASSWORD`. With the variable
+    pre-`\set` and the environment variable absent, `\getenv` leaves it set (tested on
+    psql 16.14); with neither, it stays unset and the ALTER is skipped;
+  - **paste 3's method** sets a new SCRAM hash, and the password is not in psql's
+    output;
+  - **paste 4's second run without it:** exit 0, the hash unchanged, login still works;
+    then migrate, harden and the ownership check all pass;
+  - **the rotation command:** a new password into a 600 file, ALTER ROLE through stdin,
+    nothing printed; the new login works.
+- **`verify_ownership`: 65 passed, 0 failed.**
