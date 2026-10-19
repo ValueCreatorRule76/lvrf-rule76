@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
+import { ConfidenceBadge } from '../components/workbench/Workspace';
+import { day } from '../lib/workspaceStatus';
+import { formatQuantity } from '../lib/format';
+
+// UX-1 standard 4: the value spine in plain labels; the enum keeps its values.
+const STAGE_LABEL: Record<string, string> = {
+  baseline: 'Baseline set', attach: 'Capability attached', model: 'Value modelled', commit: 'Target committed',
+  measure: 'Actual measured', verify: 'Verified', return: 'Returned to the record',
+};
 import { fetchGaps, type GapEntry } from '../api/gaps';
 import { Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
@@ -76,7 +85,7 @@ function StageBars({ pov }: { pov: Pov }) {
                   <li key={stage} className="flex flex-col gap-1" data-stage={stage} data-state={state}>
                     <span className={'h-1.5 ' + (state === 'passed' ? 'bg-ink-45' : state === 'current' ? 'bg-gold' : state === 'gap' ? 'bg-warning' : 'bg-rule')} aria-hidden="true" />
                     <span className={'text-[11.5px] ' + (state === 'not reached' ? 'text-ink-45' : state === 'gap' ? 'text-warning' : 'text-ink')}>
-                      {stage}{state === 'current' ? ' · reached' : state === 'gap' ? ' · no committed target' : ''}
+                      {STAGE_LABEL[stage] ?? stage}{state === 'gap' ? ' · no committed target' : ''}
                     </span>
                   </li>
                 );
@@ -85,6 +94,13 @@ function StageBars({ pov }: { pov: Pov }) {
           </nav>
         );
       })}
+      {/* UX-1 standard 7: every stage bar has a legend. */}
+      <p className="m-0 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-ink-45" data-testid="stage-legend">
+        <span><span className="mr-1.5 inline-block h-1.5 w-4 bg-ink-45 align-middle" aria-hidden="true" />Done</span>
+        <span><span className="mr-1.5 inline-block h-1.5 w-4 bg-gold align-middle" aria-hidden="true" />Furthest reached</span>
+        <span><span className="mr-1.5 inline-block h-1.5 w-4 bg-warning align-middle" aria-hidden="true" />Not confirmed (no committed target)</span>
+        <span><span className="mr-1.5 inline-block h-1.5 w-4 bg-rule align-middle" aria-hidden="true" />Not reached</span>
+      </p>
     </div>
   );
 }
@@ -98,9 +114,9 @@ function Confidence({ pov }: { pov: Pov }) {
         ? <p className="m-0 mt-1 text-[13px] text-ink">No computed confidence: no locked run.</p>
         : runs.map((e) => (
           <p key={e.id} className="m-0 mt-1 text-[13px] text-ink">
-            <span className="font-display text-[22px]">{e.latest_locked_run!.confidence_band ?? '—'} {e.latest_locked_run!.confidence_score ?? ''}</span>
-            <span className="block text-[11px] text-ink-45">
-              run {e.latest_locked_run!.run_number}, locked {e.latest_locked_run!.locked_at.slice(0, 10)} ·{' '}
+            <ConfidenceBadge score={e.latest_locked_run!.confidence_score} band={e.latest_locked_run!.confidence_band} />
+            <span className="mt-1 block text-[11px] text-ink-45">
+              run {e.latest_locked_run!.run_number}, locked {day(e.latest_locked_run!.locked_at)} ·{' '}
               <Link to={`/runs/${e.latest_locked_run!.id}`} className={'text-gold-ink hover:text-ink ' + FOCUS_RING}>open the run</Link>
             </span>
           </p>
@@ -114,7 +130,8 @@ function Chain({ h, o }: { h: PovHypothesis; o: PovOutcome | undefined }) {
   const cells: { label: string; value: string | null; detail?: string }[] = [
     { label: 'Offering', value: o && o.offerings.length > 0 ? o.offerings.map((x) => x.name).join(', ') : null, detail: o?.offerings.length ? undefined : 'no offering attached' },
     { label: 'Capability', value: o?.capability_name ?? null },
-    { label: 'Lever', value: h.lever.name, detail: h.lever.withdrawn ? 'withdrawn since' : h.lever.status },
+    { label: 'Lever', value: h.lever.name, detail: h.lever.withdrawn ? 'withdrawn since'
+      : `ratified by ${h.lever.proposed_by ?? 'the steward'}, ${day(h.lever.proposed_at)}` },
     { label: 'Pack entry', value: h.pack_entry.name, detail: h.direction_label },
     { label: 'Account metric', value: o?.metric_name ?? null },
     { label: 'Outcome', value: o ? (o.actual_value !== null ? `actual ${recorded(o.actual_value)}` : `baseline ${recorded(o.baseline_value)}`) : null,
@@ -143,12 +160,12 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         <span className={KICKER}>{o.metric_name}</span>
         <table className="mt-1 w-full border-collapse text-[13px]">
           <tbody>
-            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${o.unit}` : ''}</td><td className="py-1 text-ink-45">recorded {o.baseline_measured_on}</td></tr>
+            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${o.unit}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)}</td></tr>
             <tr><td className="py-1 text-ink-45">Target</td>{o.target_value !== null && o.committed_by
-              ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on}</td></>
+              ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}</td></>
               : <td className="py-1" colSpan={2} data-testid="no-target">No target: a hypothesis.</td>}</tr>
             <tr><td className="py-1 text-ink-45">Actual</td>{o.actual_value !== null
-              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'}</td></>
+              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'}</td></>
               : <td className="py-1 text-ink-45" colSpan={2}>Not measured yet.</td>}</tr>
           </tbody>
         </table>
@@ -188,7 +205,7 @@ function WhatItTakes({ outcomes }: { outcomes: PovOutcome[] }) {
   if (outcomes.length === 0) return <p className="m-0 text-[12.5px] text-ink-45">No outcome recorded: the first ask is a baseline from a named source.</p>;
   return (
     <div className="flex flex-col gap-3" data-testid="what-it-takes">
-      <p className="m-0 text-[11.5px] text-ink-45">The current view, from the gap register — not part of any locked record, and it never changes a score.</p>
+      <p className="m-0 text-[11.5px] text-ink-45 print:break-after-avoid">The current view, from the gap register — not part of any locked record, and it never changes a score.</p>
       {outcomes.map((o) => {
         const g = gaps[o.id];
         return (
@@ -232,9 +249,19 @@ export function PovPage() {
   const summaries = pov.executive_summaries.filter((s) => s.current);
   const outcomeOf = (h: PovHypothesis) => pov.outcomes.find((o) => o.id === h.value_outcome_id);
   return (
-    <div className="min-h-screen bg-offwhite" data-testid="pov">
-      <Banners pov={pov} />
-      <div className="mx-auto flex max-w-5xl flex-col gap-10 px-4 pb-16 pt-8 sm:px-[30px]">
+    // PRINT (UX-1 slice 3; O-D5: the PDF is the browser's print of this page).
+    // In print only, the page is a table: the disclosure banners are its
+    // <thead> and the record line its <tfoot>, which the browser repeats on
+    // EVERY printed page (CLAUDE.md: every printed page carries the disclosure
+    // banner and the run's hash). Real table elements, not CSS-table divs:
+    // Chrome repeats only <thead>/<tfoot>. On screen they are plain blocks.
+    <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="pov">
+      <div className="print:hidden"><Banners pov={pov} /></div>
+      <table className="block w-full border-collapse print:table">
+      <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><Banners pov={pov} /></td></tr></thead>
+      <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter pov={pov} /></td></tr></tfoot>
+      <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
+      <div className="mx-auto flex max-w-5xl flex-col gap-10 px-4 pb-16 pt-8 sm:px-[30px] print:gap-6 print:px-0 print:pb-4 print:pt-4">
         <header className="flex flex-col gap-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div className="flex flex-col gap-1">
@@ -247,10 +274,10 @@ export function PovPage() {
             <Confidence pov={pov} />
           </div>
           <StageBars pov={pov} />
-          <Link to={`/accounts/${pov.institution.id}`} className={'self-start text-[11px] text-ink-45 hover:text-gold-ink ' + FOCUS_RING}>← the account page (where this is authored)</Link>
+          <Link to={`/accounts/${pov.institution.id}`} className={'self-start text-[11px] text-ink-45 hover:text-gold-ink print:hidden ' + FOCUS_RING}>← the account page (where this is authored)</Link>
         </header>
 
-        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2" aria-labelledby="es">
+        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 print:block print:space-y-6" aria-labelledby="es">
           <div className="flex flex-col gap-2">
             <h2 id="es" className={H2}>Executive summary</h2>
             {summaries.length === 0
@@ -267,7 +294,7 @@ export function PovPage() {
 
         {current.map((h) => (
           <section key={h.id} className="flex flex-col gap-3" aria-label={`Value chain: ${h.statement}`}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 print:break-after-avoid">
               <h2 className={H2}>Value chain</h2>
               <span className="text-[12px] text-ink-45">Offering to outcome. A missing step shows as a gap.</span>
             </div>
@@ -277,11 +304,11 @@ export function PovPage() {
         ))}
 
         <section className="flex flex-col gap-3" aria-labelledby="wit">
-          <h2 id="wit" className={H2}>What it takes to raise confidence</h2>
+          <h2 id="wit" className={H2 + ' print:break-after-avoid'}>What it takes to raise confidence</h2>
           <WhatItTakes outcomes={pov.outcomes} />
         </section>
 
-        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 print:block print:space-y-6">
           <div className="flex flex-col gap-2">
             <h2 className={H2}>Account facts</h2>
             {pov.facts.length === 0 ? <p className="m-0 text-[12.5px] text-ink-45">No facts recorded.</p> : (
@@ -289,8 +316,8 @@ export function PovPage() {
                 <tbody>{pov.facts.map((f) => (
                   <tr key={f.id} className="border-b border-rule-soft align-top">
                     <td className="px-3 py-1.5 text-ink-45">{f.kind.replace(/_/g, ' ')}</td>
-                    <td className="px-3 py-1.5 font-mono text-ink">{f.value_text ?? `${recorded(f.value_numeric)}${f.unit ? ` ${f.unit}` : ''}`}</td>
-                    <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {f.as_of}</span></td>
+                    <td className="px-3 py-1.5 text-ink" data-testid="fact-value">{f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</td>
+                    <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {day(f.as_of)}</span></td>
                   </tr>))}</tbody>
               </table>
             )}
@@ -302,8 +329,8 @@ export function PovPage() {
               : <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="locked-runs">{pov.engagements.flatMap((e) => e.locked_runs.map((r) => (
                   <li key={r.id} className="border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0" data-testid="locked-run">
                     <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
-                    <span className="text-ink-45"> · locked {r.locked_at.slice(0, 10)}</span>
-                    <span className="block font-mono text-[10.5px] text-ink-45">{r.payload_hash}</span>
+                    <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100</span>
+                    <span className="block text-[10.5px] text-ink-45">Record hash <span className="font-mono [overflow-wrap:anywhere]">{r.payload_hash}</span></span>
                   </li>)))}</ul>}
           </div>
         </section>
@@ -315,11 +342,37 @@ export function PovPage() {
           </section>
         )}
 
-        <footer className="flex flex-wrap justify-between gap-3 border-t border-ink pt-3 text-[11.5px] text-ink-45">
+        <footer className="flex flex-wrap justify-between gap-3 border-t border-ink pt-3 text-[11.5px] text-ink-45 print:hidden">
           <span>Basis order: system of record › published › client-stated › inferred › assumed</span>
-          <span>Rendered {new Date().toISOString().slice(0, 10)} from the record as it stands</span>
+          <span>Rendered {day(new Date().toISOString())} from the record as it stands</span>
         </footer>
       </div>
+      </td></tr></tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Repeated at the foot of every printed page: what the page is sealed by, and when it was printed. */
+// Every printed page names each locked run's record hash. A footer taller than
+// the browser allows is not repeated at all, so past FULL_HASH_RUNS runs each
+// hash is shortened to its first 16 characters; the full hashes print once,
+// under Locked runs.
+const FULL_HASH_RUNS = 3;
+function PrintFooter({ pov }: { pov: Pov }) {
+  const sealed = pov.engagements.filter((e) => e.locked_runs.length > 0);
+  const full = sealed.reduce((n, e) => n + e.locked_runs.length, 0) <= FULL_HASH_RUNS;
+  return (
+    <div className="mt-3 border-t border-ink pt-1.5 text-[9px] leading-snug text-ink-70">
+      {sealed.length === 0
+        ? <p className="m-0" data-testid="print-unsealed">No locked run: nothing on this page is sealed.</p>
+        : sealed.map((e) => (
+          <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}: {e.locked_runs.map((r, i) => (
+            <span key={r.id}>{i > 0 ? '; ' : ''}run {r.run_number} · record hash <span className="font-mono">{full ? r.payload_hash : `${r.payload_hash.slice(0, 16)}…`}</span></span>
+          ))}</p>
+        ))}
+      {sealed.length > 0 && !full && <p className="m-0">Record hashes shortened to their first 16 characters; each run&apos;s full hash is under Locked runs.</p>}
+      <p className="m-0">Printed {day(new Date().toISOString())} · rendered from the record as it stands · basis order: system of record › published › client-stated › inferred › assumed</p>
     </div>
   );
 }

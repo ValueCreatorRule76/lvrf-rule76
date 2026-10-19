@@ -132,7 +132,9 @@ if (MODE === 'author') {
   await setField(form, 'Conditions', 'on the same denominator');
   await sleep(300);
   const preview = await ev(`(${form}).querySelector('[data-testid=falsifier-preview] p').textContent`);
-  check(preview === `Hyp TRIR zero at or above its baseline of 0 incidents per 200,000 hours (recorded 2025-09-30) on ${LATER}, on the same denominator.`,
+  // UX-1 slice 3: one sentence, dates for people, "by <date>, provided that: …".
+  const dayOf = (ymd) => { const d = new Date(`${ymd}T00:00:00Z`); return `${d.getUTCDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+  check(preview === `Hyp TRIR zero at or above its baseline of 0 incidents per 200,000 hours (recorded 30 Sep 2025) by ${dayOf(LATER)}, provided that: on the same denominator.`,
     'the preview quotes the recorded baseline (0: zero is data) and the pack entry\'s direction', preview);
   check(await ev(`(${form}).textContent.includes('Direction: lower is better — from the pack entry')`), '  ...and says the direction comes from the pack entry');
   await markShot(form); await shot('o2_1_state_hypothesis', '[data-shot="1"]');

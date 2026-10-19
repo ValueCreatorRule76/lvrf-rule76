@@ -24,13 +24,13 @@ export function AppHeader() {
   }, [open]);
   return (
     <>
-      <div className="hidden flex-wrap items-stretch sm:flex" data-testid="header-desktop">
+      <div className="hidden flex-wrap items-stretch sm:flex print:hidden" data-testid="header-desktop">
         <NavBar />
         <div className="min-w-[260px] flex-1">
           <ActorBar />
         </div>
       </div>
-      <div className="sm:hidden" data-testid="header-phone">
+      <div className="sm:hidden print:hidden" data-testid="header-phone">
         <div className="flex items-center justify-between border-b border-rule bg-white px-4 py-2.5">
           <span className="font-display text-[20px] leading-none tracking-[.06em] text-ink">LVRF</span>
           <button type="button" aria-expanded={open} aria-controls="phone-menu" onClick={() => setOpen(!open)} data-testid="menu-button"

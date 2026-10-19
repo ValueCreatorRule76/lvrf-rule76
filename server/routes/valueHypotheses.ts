@@ -557,14 +557,28 @@ export function falsifierSentence(h: {
   metric_name: string; unit: string | null; direction: 'increase' | 'decrease'; falsifier_reference: string;
   reference_value: string; reference_recorded_on: string; falsifier_due: string; falsifier_conditions: string;
 }): string {
+  // UX-1 slice 3: ONE sentence, "… by <date>, provided that: <conditions>."
+  // The unit and the conditions are stored as typed; trailing punctuation is
+  // dropped when composing, so the sentence ends with exactly one period.
+  // Composed at render time, never sealed in a run: no record hash changes.
+  // previewFalsifier (client/src/components/PovAuthoring.tsx) is the same
+  // template; verify_value_hypotheses.sh checks the two are identical.
   const phrase = h.direction === 'decrease' ? 'at or above' : 'at or below';
-  const value = `${recorded(h.reference_value)}${h.unit ? ` ${h.unit}` : ''}`;
+  const value = `${recorded(h.reference_value)}${h.unit ? ` ${trimEnd(h.unit)}` : ''}`;
   const ref = h.falsifier_reference === 'baseline'
-    ? `its baseline of ${value} (recorded ${h.reference_recorded_on})`
-    : `its committed target of ${value} (committed ${h.reference_recorded_on})`;
-  const conditions = h.falsifier_conditions ? `, ${h.falsifier_conditions}` : '';
-  return `${h.metric_name} ${phrase} ${ref} on ${h.falsifier_due}${conditions}.`;
+    ? `its baseline of ${value} (recorded ${dayOf(h.reference_recorded_on)})`
+    : `its committed target of ${value} (committed ${dayOf(h.reference_recorded_on)})`;
+  const conditions = trimEnd(h.falsifier_conditions ?? '');
+  return `${h.metric_name} ${phrase} ${ref} by ${dayOf(h.falsifier_due)}${conditions ? `, provided that: ${conditions}` : ''}.`;
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "2025-09-30" -> "30 Sep 2025" (the record's dates, read as UTC). */
+function dayOf(ymd: string): string {
+  const d = new Date(`${ymd.slice(0, 10)}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? ymd : `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+const trimEnd = (s: string) => s.trim().replace(/[\s.;,:]+$/, '');
 
 const STRONG = new Set(['system_of_record', 'client_stated']);
 
@@ -658,7 +672,10 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              to_char(h.falsifier_due, 'YYYY-MM-DD') AS falsifier_due, h.falsifier_conditions,
              bm.name AS metric_name, bm.unit, m.direction::text AS direction,
              json_build_object('id', l.id, 'name', l.name, 'mechanism', l.mechanism, 'leading_indicator', l.leading_indicator,
-                               'citation', l.citation, 'status', l.status, 'withdrawn', l.deleted_at IS NOT NULL) AS lever,
+                               'citation', l.citation, 'status', l.status, 'withdrawn', l.deleted_at IS NOT NULL,
+                               -- UX-1 slice 3 (read-only): who proposed it and when. Under O-D2
+                               -- the steward's proposal IS the ratification (O-D2a); L32 renames the status.
+                               'proposed_by', lp.full_name, 'proposed_at', l.created_at) AS lever,
              json_build_object('id', m.id, 'name', m.name, 'direction', m.direction, 'confounders', m.confounders) AS pack_entry,
              ap.full_name AS author, h.created_at, h.superseded_by_id, h.supersession_reason,
              h.deleted_at AS withdrawn_at, wp.full_name AS withdrawn_by, h.retirement_reason AS withdrawal_reason
@@ -666,6 +683,7 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
         JOIN value_outcomes vo ON vo.id = h.value_outcome_id
         JOIN business_metrics bm ON bm.id = vo.business_metric_id
         JOIN value_levers l ON l.id = h.value_lever_id
+        LEFT JOIN persons lp ON lp.id = l.proposed_by_person_id
         JOIN industry_measures m ON m.id = l.industry_measure_id
         JOIN persons ap ON ap.id = h.author_person_id
         LEFT JOIN persons wp ON wp.id = h.retired_by_person_id

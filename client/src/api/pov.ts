@@ -127,7 +127,8 @@ export interface PovHypothesis {
   direction: 'increase' | 'decrease';
   direction_label: string;
   falsifier_text: string;
-  lever: { id: string; name: string; mechanism: string; leading_indicator: string; citation: string; status: string; withdrawn: boolean };
+  /** UX-1 slice 3: proposed_by / proposed_at, the steward's proposal = the ratification (O-D2a). */
+  lever: { id: string; name: string; mechanism: string; leading_indicator: string; citation: string; status: string; withdrawn: boolean; proposed_by: string | null; proposed_at: string };
   pack_entry: PackEntryRef;
   author: string;
   created_at: string;

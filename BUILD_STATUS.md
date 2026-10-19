@@ -11059,3 +11059,82 @@ Brad compared the screenshots with the mock-ups and approved them for deploy.
     the only 401s are the deploy's own `GET /api/runs/:id` smoke checks.
 - **Queued for the slice 5 copy pass** (Brad, 19 Oct 2026): the Book confidence card's
   non-empty state wording.
+
+## UX-1 slice 3: the POV on screen and in print — 19 October 2026 (UTC)
+
+**What it builds.** One read-only addition, approved by Brad: the lever on `GET /pov` gains
+`proposed_by` (a name) and `proposed_at`. No table, trigger or rule changes. The falsifier
+sentence is composed when the page renders and is never sealed, so changing its wording
+changes no hash.
+
+**On screen:**
+- **The falsifier** reads as one sentence: "… (recorded 30 Sep 2025) by 30 Sep 2027, provided
+  that: …." It has one final period, never "..". The authoring preview uses the same template.
+- **Plain stage labels** (Baseline set … Returned to the record), with a legend.
+- **Confidence** reads "n / 100 · Band".
+- **The lever** reads "ratified by <name>, <date>". L32 (the lever status rename) stays
+  separate.
+- **Amounts and numbers** follow the stored unit (`client/src/lib/format.ts`):
+  - an ISO currency code gives its symbol, so "$3,413.1 million";
+  - any other unit is written after the number, as in "5,200 people";
+  - an unknown code is shown exactly as typed.
+  No $ sign or unit is ever assumed. Outcome baselines, targets and actuals keep their
+  exact recorded value.
+- **Dates** are written as "19 Oct 2026" throughout, including "Written by" and "Stated by".
+- **Locked runs** show "Record hash", wrapped. There is no sideways scroll at 390.
+
+**In print** (O-D5: the PDF is the browser's own print of the page):
+- **The page is a real `<table>` in print only.** On screen it is plain blocks. Chrome repeats
+  `<thead>` and `<tfoot>` on every printed page; a CSS-table made of divs is not repeated.
+  This was tested on a minimal page before the change.
+  - **The header** (`<thead>`) holds the disclosure banners.
+  - **The footer** (`<tfoot>`) names each locked run's record hash. With no locked run it
+    says "No locked run: nothing on this page is sealed." It also carries "Printed <date> ·
+    rendered from the record as it stands", plus the basis order.
+- **Page numbers:** "Page n of N", in an `@page` margin box. Chrome supports these.
+- **The app header and the back link** don't print.
+- **Page breaks:** two-column sections stack in print, headings stay with their content,
+  and small units (the chain, fact rows, outcome cards) are kept whole.
+- **Departure from the approved spec, for Brad to decide.** Up to 3 locked runs, the footer
+  carries each full hash, as approved. Beyond 3, each hash is cut to its first 16
+  characters plus "…", and the footer says the full hashes print under Locked runs.
+  - **Why:** Curia has 22 locked runs. With 22 full hashes the footer is too tall, and
+    Chrome then repeats it on no page at all. B4 below shows this.
+
+**Gate A:**
+- **`verify_pov_print.sh`: 62 passed, 0 failed.** It runs on a clone of the restored,
+  neutralised prod copy, signed in by session. It covers Scotts, Curia and a new account
+  with no locked run.
+  - **On screen, at 1280 and 390:** the plain labels and legend; confidence; the falsifier
+    pattern; the lever; Scotts' facts ("$3,413.1 million", "5,200 people", and no raw long
+    number); no sideways scroll.
+  - **In print:** Chrome's `Page.printToPDF`, then `pdftotext` read one page at a time.
+    **Every page** carries:
+    - the banners;
+    - every run named with its hash (full, or 16 characters past 3), or the "No locked
+      run" line;
+    - the print date and "rendered from the record as it stands";
+    - "Page n of N";
+    - and never the app header.
+  - **Results:** Scotts, 3 pages and 2 runs; Curia, 4 pages and 22 runs; the new account,
+    1 page.
+  - **Breaks:**
+    - **B1:** banners without the repeating header; page 2 loses them.
+    - **B2:** the old falsifier template.
+    - **B3:** amounts shown raw.
+    - **B4:** every full hash in the footer; Curia's footer is then not repeated.
+
+    All caught, and every file restored byte-identical.
+- **`verify_value_hypotheses` 137/0** checks the new sentence, including that the preview
+  matches the POV. `verify_accounts_home`'s B4 edit string was updated for the header's
+  `print:hidden`; it is 61/0.
+- **The regression:** all **35** scripts pass (tenant scope 203). The build, tsc and oxlint
+  are clean, with the 1 pre-existing warning. The bundle is **`index-C-mNSSVh.js`** /
+  `index--mKXtxKN.css`.
+- **The prod copy:** restored from `lvrf-pre-ux1s2-20261019T171542Z` under the same
+  conditions as before. Against the deployed `feb539f`: **76 GETs, 75 identical.** The
+  only difference is Scotts' `/pov`, which is the one account with a lever and a hypothesis.
+  With `proposed_by`, `proposed_at` and `falsifier_text` allowed, all 76 are identical.
+- **For Brad's review:** screenshots and the PDFs' page images are on the Mac only, in
+  `~/lvrf-backups/slice3-screens/` (600). They cover Scotts, Curia and the new account at
+  1280 and 390, with every printed page as an image and the PDFs themselves.

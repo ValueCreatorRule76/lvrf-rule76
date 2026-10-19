@@ -8,7 +8,9 @@ import {
 } from '../api/pov';
 import { Badge, Card } from './workbench/Card';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
-import { povStatus, type PovStatus } from '../lib/workspaceStatus';
+import { day, povStatus, type PovStatus } from '../lib/workspaceStatus';
+
+const trimEnd = (s: string) => s.trim().replace(/[\s.;,:]+$/, '');
 
 /**
  * O2 (LVRF_PLAN §5; O2-D1–D4) — authoring on the account page: hypotheses,
@@ -66,11 +68,12 @@ function previewFalsifier(o: PovOutcome, reference: string, due: string, conditi
   const raw = isTarget ? o.target_value : o.baseline_value;
   const on = isTarget ? o.committed_on : o.baseline_measured_on;
   if (raw === null || on === null) return null;
+  // UX-1 slice 3: the same ONE sentence as the server's falsifierSentence.
   const phrase = o.pack_entry.direction === 'decrease' ? 'at or above' : 'at or below';
-  const value = `${recorded(raw)}${o.unit ? ` ${o.unit}` : ''}`;
-  const ref = isTarget ? `its committed target of ${value} (committed ${on})` : `its baseline of ${value} (recorded ${on})`;
-  const c = conditions.trim() ? `, ${conditions.trim()}` : '';
-  return `${o.metric_name} ${phrase} ${ref} on ${due}${c}.`;
+  const value = `${recorded(raw)}${o.unit ? ` ${trimEnd(o.unit)}` : ''}`;
+  const ref = isTarget ? `its committed target of ${value} (committed ${day(on)})` : `its baseline of ${value} (recorded ${day(on)})`;
+  const c = trimEnd(conditions);
+  return `${o.metric_name} ${phrase} ${ref} by ${day(due)}${c ? `, provided that: ${c}` : ''}.`;
 }
 
 function FalsifierFields({ outcome, v, set }: {
@@ -239,7 +242,7 @@ export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; ou
       {h.post_hoc && <p className="m-0 mt-0.5 text-[11.5px] text-gold-ink" data-testid="post-hoc">Written after the result: a description, not a test. It never counts as survived.</p>}
       {h.verdict === 'superseded' && h.supersession_reason && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45">Restated: {h.supersession_reason}</p>}
       {h.verdict === 'withdrawn' && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45">Withdrawn by {h.withdrawn_by}, {h.withdrawn_at?.slice(0, 10)} — {h.withdrawal_reason}</p>}
-      <p className="m-0 mt-0.5 text-[11px] text-ink-45">Stated by {h.author}, {h.created_at.slice(0, 10)}</p>
+      <p className="m-0 mt-0.5 text-[11px] text-ink-45">Stated by {h.author}, {day(h.created_at)}</p>
       {onChanged && h.verdict === 'open' && (
         <div className="mt-1.5 flex flex-wrap gap-2">
           <Restate h={h} outcome={outcome} onChanged={onChanged} />
@@ -298,7 +301,7 @@ export function SummaryItem({ s }: { s: ExecutiveSummary }) {
       </div>
       <p className={'m-0 mt-1 whitespace-pre-wrap text-[13px] ' + (s.current ? 'text-ink' : 'text-ink-45')}>{s.body}</p>
       <p className="m-0 mt-0.5 text-[11px] text-ink-45">
-        Written by {s.author}, {s.created_at.slice(0, 10)}
+        Written by {s.author}, {day(s.created_at)}
         {s.drafted_with_ai ? ` · drafted with AI (${s.drafting_tool})` : ' · not AI-drafted'}
       </p>
     </li>

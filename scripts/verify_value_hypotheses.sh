@@ -181,7 +181,9 @@ H1="$(rj b.value_hypothesis_id)"
 expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O3" "$L")" 201 "H3 on the zero-baseline outcome" "" "$X"; H3="$(rj b.value_hypothesis_id)"
 expect GET "/api/institutions/$INST/pov" "" 200 "the POV"
 SENT="$(rj "b.hypotheses.find(h=>h.id==='$H1').falsifier_text")"
-[ "$SENT" = "Hyp TRIR one at or above its baseline of 1.4 incidents per 200,000 hours (recorded 2025-09-30) on $TODAY, on the same denominator, among the covered population." ] \
+# UX-1 slice 3: one sentence, dates for people, "by <date>, provided that: <conditions>."
+TODAY_DAY="$(node -e "const d=new Date(process.argv[1]+'T00:00:00Z');console.log(d.getUTCDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]+' '+d.getUTCFullYear())" "$TODAY")"
+[ "$SENT" = "Hyp TRIR one at or above its baseline of 1.4 incidents per 200,000 hours (recorded 30 Sep 2025) by $TODAY_DAY, provided that: on the same denominator, among the covered population." ] \
   && ok "  ...H1's falsifier sentence: every number quoted from a row; the direction phrase from the pack entry" || bad "  ...sentence: $SENT"
 [ "$(rj "b.hypotheses.find(h=>h.id==='$H3').falsifier_text.includes('its baseline of 0 incidents')")" = "true" ] && ok "  ...H3 quotes the zero baseline as 0 (zero is data)" || bad "  ...H3: $(rj "b.hypotheses.find(h=>h.id==='$H3').falsifier_text")"
 [ "$(rj "b.hypotheses.find(h=>h.id==='$H1').direction_label")" = "lower is better" ] && ok "  ...shown as 'lower is better', from the pack entry" || bad "  ...direction label"

@@ -5,3 +5,24 @@
 body {
   @apply bg-offwhite text-ink font-body antialiased;
 }
+
+/* UX-1 slice 3 — the printed POV (O-D5: the PDF is the browser's print of the
+   page). Page numbers in a margin box (Chrome 131+); the disclosure banners
+   keep their colours when printed. Colours are tokens (theme()), never hex. */
+@page {
+  size: A4;
+  margin: 12mm 12mm 16mm;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 8pt;
+    color: theme('colors.ink-45');
+  }
+}
+@media print {
+  body { background: theme('colors.white'); }
+  [data-testid^='banner-'] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Keep small units whole; let long sections break, so no page is left half empty. */
+  [data-testid='chain'], [data-testid='facts'] tr, [data-testid='outcome'] > div { break-inside: avoid; }
+  [data-testid='pov'] h2 { break-after: avoid; }
+}

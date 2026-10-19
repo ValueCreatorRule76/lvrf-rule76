@@ -244,7 +244,7 @@ edit "$HEADER" 'aria-expanded={open} aria-controls="phone-menu"' 'aria-controls=
 broke b3 '"Menu" is a real button, aria-expanded false' 'B3: "Menu" without aria-expanded → caught'
 restore "$HEADER"
 # B4 — the desktop row shown at 390 (the old three-row stack).
-edit "$HEADER" '<div className="hidden flex-wrap items-stretch sm:flex" data-testid="header-desktop">' '<div className="flex flex-wrap items-stretch" data-testid="header-desktop">'
+edit "$HEADER" '<div className="hidden flex-wrap items-stretch sm:flex print:hidden" data-testid="header-desktop">' '<div className="flex flex-wrap items-stretch print:hidden" data-testid="header-desktop">'
 broke b4 'the one-row phone header is the one shown' 'B4: the desktop row at 390 → caught (one row with "Menu" instead)'
 restore "$HEADER"
 # B5 — a failed read treated as empty (the old behaviour): a status from partial data.
