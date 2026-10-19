@@ -37,6 +37,13 @@ const click = (scope, text) => ev(`(()=>{const el=[...((${scope})||document).que
 const disabled = (scope, text) => ev(`(()=>{const el=[...((${scope})||document).querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(text)});return el?el.disabled:null})()`);
 const tick = (scope, label) => ev(`(()=>{const l=[...(${scope}).querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(label)}));const cb=l&&l.querySelector('input[type=checkbox]');if(!cb)return false;if(!cb.checked)cb.click();return cb.checked})()`);
 async function shot(name, selector) {
+  // UX-1 slice 1: a screenshot's target may sit in a folded workspace step or
+  // the closed "Account detail". Open them first, as a reader would (the
+  // step's own toggle; the <details> element), so the shot shows the target.
+  if (selector) {
+    const opened = await ev(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)return 0;let n=0;for(let p=el;p;p=p.parentElement){if(p.tagName==='DETAILS'&&!p.open){p.open=true;n++;}if(p.dataset&&p.dataset.open==='false'){p.querySelector('[data-step-toggle]')?.click();n++;}}return n})()`);
+    if (opened) await sleep(300);
+  }
   const h = await ev('document.documentElement.scrollHeight');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: Math.min(h, 12000), deviceScaleFactor: 1, mobile: false });
   await sleep(300);

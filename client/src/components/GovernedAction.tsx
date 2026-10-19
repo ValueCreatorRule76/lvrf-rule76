@@ -4,6 +4,8 @@ import { useActor } from '../actor/ActorContext';
 import { ResultBlock, FOCUS_RING } from './GovernedForm';
 
 export interface GovernedActionProps<T> {
+  /** UX-1 standard 1: the open step's next action is the one filled button (see GovernedForm). */
+  primary?: boolean;
   label: string;
   path: string;
   /** Shown when no actor is set — same rule GovernedForm enforces on every field: never a silently dead button. */
@@ -31,6 +33,7 @@ export function GovernedAction<T>({
   renderSuccess,
   body = {},
   onSuccess,
+  primary = false,
 }: GovernedActionProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
@@ -55,11 +58,14 @@ export function GovernedAction<T>({
         onClick={handleClick}
         disabled={disabled}
         title={blockedLocally ? disabledReason : undefined}
+        data-primary={primary && !disabled ? 'true' : undefined}
         className={
-          'border border-silver px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] ' +
-          (disabled
-            ? 'cursor-not-allowed text-ink-25'
-            : 'text-ink hover:bg-ink hover:text-offwhite') +
+          (primary && !disabled
+            ? "border border-ink bg-ink px-4 py-2 text-[12px] font-semibold tracking-[.04em] text-offwhite hover:bg-ink-70 after:ml-2 after:text-gold after:content-['→'] "
+            : 'border border-silver px-[15px] py-[7px] text-xs font-semibold tracking-[.04em] ' +
+              (disabled
+                ? 'cursor-not-allowed text-ink-25'
+                : 'text-ink hover:bg-ink hover:text-offwhite')) +
           ' ' +
           FOCUS_RING
         }

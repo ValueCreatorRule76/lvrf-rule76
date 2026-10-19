@@ -183,7 +183,7 @@ function EntityCard({ state, onCorrected }: { state: Extract<FetchAccountResearc
 
 // ------------------------------------------------------------------ A2, A3
 
-function GenerateCard({ institutionId, phase, onGenerated }: { institutionId: string; phase: 'entity' | 'facts'; onGenerated: () => void }) {
+function GenerateCard({ institutionId, phase, onGenerated, primary = false }: { institutionId: string; phase: 'entity' | 'facts'; onGenerated: () => void; primary?: boolean }) {
   const [key, setKey] = useState(0);
   const [generated, setGenerated] = useState(false);
   return (
@@ -196,6 +196,7 @@ function GenerateCard({ institutionId, phase, onGenerated }: { institutionId: st
       </p>
       <GovernedAction<GeneratedAccountPrompt>
         key={key}
+        primary={primary && !generated}
         label="Generate research prompt"
         path={`/api/institutions/${institutionId}/research-prompts`}
         actorRequiredNote="Sign in to generate a prompt — the prompt records who generated it."
@@ -419,7 +420,17 @@ function PendingCard({ pending, lastDecision, onDecided }: { pending: AccountPen
 
 // ------------------------------------------------------------------ section
 
-export function AccountResearch({ institutionId, onFactsChanged }: { institutionId: string; onFactsChanged: () => void }) {
+/** UX-1 slice 1: what research knows, reported up to the account workspace (step 1). */
+export interface ResearchStatus {
+  entity: { legal_name: string; identifier_type: string } | null;
+}
+
+export function AccountResearch({ institutionId, onFactsChanged, onStatus, primary = false }: {
+  institutionId: string; onFactsChanged: () => void;
+  onStatus?: (s: ResearchStatus) => void;
+  /** UX-1: step 1 is the open step, so "Generate research prompt" is the screen's one filled button. */
+  primary?: boolean;
+}) {
   const [tick, setTick] = useState(0);
   const [state, setState] = useState<FetchAccountResearchResult | null>(null);
   const [lastDecision, setLastDecision] = useState<string | null>(null);
@@ -429,10 +440,17 @@ export function AccountResearch({ institutionId, onFactsChanged }: { institution
     return () => { cancelled = true; };
   }, [institutionId, tick]);
   const reload = () => { setTick((t) => t + 1); onFactsChanged(); };
+  useEffect(() => {
+    if (state && state.status === 'ok') {
+      const e = state.research.entity as Record<string, unknown> | null;
+      onStatus?.({ entity: e ? { legal_name: String(e['legal_name']), identifier_type: String(e['identifier_type']) } : null });
+    }
+  }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <section className="mt-10 border-t border-rule pt-6" data-testid="account-research">
-      <header className="mb-4">
-        <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Research</span>
+    <section className={(onStatus ? '' : 'mt-10 border-t border-rule pt-6')} data-testid="account-research">
+      {/* In the workspace the step already says "Research": no second heading. */}
+      <header className={onStatus ? 'mb-3' : 'mb-4'}>
+        {!onStatus && <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Research</span>}
         <p className="m-0 mt-1 max-w-[85ch] text-[12.5px] leading-relaxed text-ink-45">
           Baseline facts about this account, from what it publishes: the entity first, then revenue, headcount, stated
           priorities and systems. Never a measured outcome — that comes from the customer's own system of record. No code
@@ -443,7 +461,7 @@ export function AccountResearch({ institutionId, onFactsChanged }: { institution
         <>
           <EntityCard state={state.research} onCorrected={reload} />
           {/* Keyed to the entity: a correction clears a prompt shown for the old one. */}
-          <GenerateCard key={state.research.entity?.id ?? 'unpinned'} institutionId={institutionId} phase={state.research.phase_now} onGenerated={reload} />
+          <GenerateCard key={state.research.entity?.id ?? 'unpinned'} institutionId={institutionId} phase={state.research.phase_now} onGenerated={reload} primary={primary} />
           <PromptsCard prompts={state.research.prompts} versionNow={state.research.contract_version_now} />
           <div id="account-parse-card"><ParseCard institutionId={institutionId} onParsed={() => { setLastDecision(null); reload(); }} /></div>
           <div id="account-pending-card">

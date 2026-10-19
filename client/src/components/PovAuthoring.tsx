@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
@@ -24,11 +25,13 @@ const LABEL = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] t
 const INPUT = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 const SMALL_BUTTON = 'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] ';
 
-function Opener({ label, reason, onOpen, children }: { label: string; reason?: string; onOpen: () => void; children?: ReactNode }) {
+function Opener({ label, reason, onOpen, children, primary = false }: { label: string; reason?: string; onOpen: () => void; children?: ReactNode; primary?: boolean }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
-      <button type="button" disabled={Boolean(reason)} title={reason} onClick={onOpen}
-        className={SMALL_BUTTON + (reason ? 'cursor-not-allowed text-ink-25' : 'text-ink-45 hover:border-ink hover:text-ink') + ' ' + FOCUS_RING}>
+      <button type="button" disabled={Boolean(reason)} title={reason} onClick={onOpen} data-primary={primary && !reason ? 'true' : undefined}
+        className={(primary && !reason
+          ? "border border-ink bg-ink px-4 py-2 text-[12px] font-semibold tracking-[.04em] text-offwhite hover:bg-ink-70 after:ml-2 after:text-gold after:content-['→'] "
+          : SMALL_BUTTON + (reason ? 'cursor-not-allowed text-ink-25' : 'text-ink-45 hover:border-ink hover:text-ink')) + ' ' + FOCUS_RING}>
         {label}
       </button>
       {reason && <span className="text-[11px] text-ink-45" data-testid="opener-reason">{children ?? reason}</span>}
@@ -107,7 +110,7 @@ function FalsifierFields({ outcome, v, set }: {
   );
 }
 
-function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: string) => void }) {
+function StateHypothesis({ pov, onChanged, primary = false }: { pov: Pov; onChanged: (notice?: string) => void; primary?: boolean }) {
   const [open, setOpen] = useState(false);
   const [outcomeId, setOutcomeId] = useState('');
   const [leverId, setLeverId] = useState('');
@@ -118,11 +121,11 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
   const leverless = [...new Set(based.filter((o) => !hasLever(o)).map((o) => o.pack_entry!.name))];
   if (!open) {
     if (based.length > 0 && based.every((o) => !hasLever(o))) {
-      return <div className="mt-2"><Opener label="State a hypothesis…" reason={needsLeverText(pov, leverless)} onOpen={() => setOpen(true)}>
+      return <div className="mt-2"><Opener label="State a hypothesis…" reason={needsLeverText(pov, leverless)} onOpen={() => setOpen(true)} primary={primary}>
         <NeedsLever pov={pov} entries={leverless} /></Opener></div>;
     }
     const reason = based.length === 0 ? 'A hypothesis needs an outcome whose metric rests on a pack entry.' : undefined;
-    return <div className="mt-2"><Opener label="State a hypothesis…" reason={reason} onOpen={() => setOpen(true)} /></div>;
+    return <div className="mt-2"><Opener label="State a hypothesis…" reason={reason} onOpen={() => setOpen(true)} primary={primary} /></div>;
   }
   const outcome = based.find((o) => o.id === outcomeId);
   const levers = pov.levers.filter((l) => outcome && l.industry_measure_id === outcome.industry_measure_id);
@@ -161,6 +164,7 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
           ...(/[0-9]/.test(f.conditions) ? ['take the digits out of the conditions (numbers belong in recorded values)'] : []),
         ]}
         buildBody={() => ({ value_outcome_id: outcomeId, value_lever_id: leverId, statement, falsifier_reference: f.reference, falsifier_due: f.due, falsifier_conditions: f.conditions })}
+        primary={primary}
         submitLabel="State the hypothesis"
         onSuccess={() => { const due = f.due; setOpen(false); setOutcomeId(''); setLeverId(''); setStatement(''); setF({ reference: 'baseline', due: '', conditions: '' }); onChanged(`Hypothesis stated. Its verdict is open until a verified actual exists on or after ${due}.`); }}
         renderSuccess={() => <>Stated.</>} />
@@ -245,13 +249,13 @@ export function HypothesisItem({ h, outcome, onChanged }: { h: PovHypothesis; ou
   );
 }
 
-function SummaryForm({ pov, onChanged }: { pov: Pov; onChanged: (notice?: string) => void }) {
+function SummaryForm({ pov, onChanged, primary = false }: { pov: Pov; onChanged: (notice?: string) => void; primary?: boolean }) {
   const [open, setOpen] = useState(false);
   const [lens, setLens] = useState<ExecutiveSummary['lens']>('general');
   const [body, setBody] = useState('');
   const [ai, setAi] = useState(false);
   const [tool, setTool] = useState('');
-  if (!open) return <div className="mt-2"><Opener label="Write the executive summary…" onOpen={() => setOpen(true)} /></div>;
+  if (!open) return <div className="mt-2"><Opener label="Write the executive summary…" onOpen={() => setOpen(true)} primary={primary} /></div>;
   const current = pov.executive_summaries.find((s) => s.lens === lens && s.current);
   return (
     <div className="mt-2 border-t border-rule-soft pt-2" data-testid="write-summary">
@@ -277,6 +281,7 @@ function SummaryForm({ pov, onChanged }: { pov: Pov; onChanged: (notice?: string
           ...(ai && tool.trim().length < 2 ? ['name the AI tool that drafted it'] : []),
         ]}
         buildBody={() => ({ lens, body, drafted_with_ai: ai, ...(ai ? { drafting_tool: tool } : {}), ...(current ? { supersedes_id: current.id } : {}) })}
+        primary={primary}
         submitLabel="Record the summary"
         onSuccess={() => { setOpen(false); setBody(''); setAi(false); setTool(''); onChanged(current ? 'Summary recorded as a new version; the earlier one stays listed.' : 'Summary recorded.'); }} renderSuccess={() => <>Recorded.</>} />
     </div>
@@ -352,7 +357,45 @@ function Notice({ text, testId }: { text: string | null; testId: string }) {
   return text ? <p className="m-0 mb-2 border-l-2 border-healthy pl-2 text-[12.5px] text-ink" role="status" data-testid={testId}>{text}</p> : null;
 }
 
-export function PovAuthoring({ institutionId }: { institutionId: string }) {
+/**
+ * UX-1 slice 1: what the authoring cards know, reported up to the account
+ * workspace (steps 3 and 4, and the marker in "Account detail"), from this
+ * one read of the POV, never a second fetch.
+ */
+export interface PovStatus {
+  hypotheses: { statement: string; due: string; lever: string; created_at: string; verdict: string }[];
+  /** Pack entries this account's outcomes rest on that have no lever yet (Q4l). */
+  leverless: string[];
+  basedOutcomes: number;
+  summaries: { lens: string; versions: number; drafted_with_ai: boolean; drafting_tool: string | null; author: string; created_at: string }[];
+  marker: { kind: ReferenceMarker['kind']; source_citation: string } | null;
+}
+const place = (target: Element | null | undefined, node: ReactNode) => (target ? createPortal(node, target) : node);
+
+function povStatus(pov: Pov): PovStatus {
+  const based = pov.outcomes.filter((o) => o.pack_entry);
+  const hasLever = (o: PovOutcome) => pov.levers.some((l) => l.industry_measure_id === o.industry_measure_id);
+  return {
+    hypotheses: pov.hypotheses.filter((h) => !h.withdrawn_at && !h.superseded_by_id)
+      .map((h) => ({ statement: h.statement, due: h.falsifier_due, lever: h.lever.name, created_at: h.created_at, verdict: h.verdict })),
+    leverless: [...new Set(based.filter((o) => !hasLever(o)).map((o) => o.pack_entry!.name))],
+    basedOutcomes: based.length,
+    summaries: pov.executive_summaries.filter((x) => x.current).map((x) => ({
+      lens: x.lens, versions: pov.executive_summaries.filter((y) => y.lens === x.lens).length,
+      drafted_with_ai: x.drafted_with_ai, drafting_tool: x.drafting_tool, author: x.author, created_at: x.created_at,
+    })),
+    marker: pov.reference_example ? { kind: pov.reference_example.kind, source_citation: pov.reference_example.source_citation } : null,
+  };
+}
+
+export function PovAuthoring({ institutionId, onStatus, targets, primary = null }: {
+  institutionId: string;
+  onStatus?: (s: PovStatus) => void;
+  /** UX-1: each card renders into the workspace step that owns it. */
+  targets?: { hypothesis?: Element | null; summary?: Element | null; marker?: Element | null };
+  /** UX-1: which card holds the screen's one filled button (the open step's), if any. */
+  primary?: 'hypothesis' | 'summary' | null;
+}) {
   const [notices, setNotices] = useState<{ hyp: string | null; sum: string | null; mark: string | null }>({ hyp: null, sum: null, mark: null });
   const [pov, setPov] = useState<Pov | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -363,12 +406,13 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
     });
   }, [institutionId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (pov) onStatus?.(povStatus(pov)); }, [pov]); // eslint-disable-line react-hooks/exhaustive-deps
   if (error) return <Card n="06" title="Hypotheses"><p className="m-0 text-[12.5px] text-critical">{error}</p></Card>;
   if (!pov) return null;
   const marker = pov.reference_example;
   return (
     <>
-      <Card n="06" title="Value hypotheses"
+      {place(targets?.hypothesis, <Card n="06" title="Value hypotheses"
         badge={<Link to={`/accounts/${institutionId}/pov`} className={'text-[11px] font-semibold uppercase tracking-[.1em] text-gold-ink hover:text-ink ' + FOCUS_RING}>Open the POV →</Link>}>
         <Notice text={notices.hyp} testId="notice-hyp" />
         {pov.hypotheses.length === 0
@@ -376,16 +420,16 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
           : <ul className="m-0 list-none p-0" data-testid="hypotheses">
               {pov.hypotheses.map((h) => <HypothesisItem key={h.id} h={h} outcome={pov.outcomes.find((o) => o.id === h.value_outcome_id)} onChanged={said('hyp')} />)}
             </ul>}
-        <StateHypothesis pov={pov} onChanged={said('hyp')} />
-      </Card>
-      <Card n="07" title="Executive summary">
+        <StateHypothesis pov={pov} onChanged={said('hyp')} primary={primary === 'hypothesis'} />
+      </Card>)}
+      {place(targets?.summary, <Card n="07" title="Executive summary">
         <Notice text={notices.sum} testId="notice-sum" />
         {pov.executive_summaries.length === 0
           ? <p className="m-0 text-[12.5px] text-ink-45">No summary written for this account yet.</p>
           : <ul className="m-0 list-none p-0">{pov.executive_summaries.map((s) => <SummaryItem key={s.id} s={s} />)}</ul>}
-        <SummaryForm pov={pov} onChanged={said('sum')} />
-      </Card>
-      <Card n="08" title="Reference example" badge={marker ? <Badge tone="solid">reference example</Badge> : undefined}>
+        <SummaryForm pov={pov} onChanged={said('sum')} primary={primary === 'summary'} />
+      </Card>)}
+      {place(targets?.marker, <Card n="08" title="Reference example" badge={marker ? <Badge tone="solid">reference example</Badge> : undefined}>
         <Notice text={notices.mark} testId="notice-mark" />
         <div data-testid="reference-example">
           {marker
@@ -402,7 +446,7 @@ export function PovAuthoring({ institutionId }: { institutionId: string }) {
             </ul>
           )}
         </div>
-      </Card>
+      </Card>)}
     </>
   );
 }

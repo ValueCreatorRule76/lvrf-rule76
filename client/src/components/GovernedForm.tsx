@@ -52,6 +52,12 @@ export interface GovernedFormProps<T> {
    * without a reason.
    */
   unmet?: string[];
+  /**
+   * UX-1 standard 1 (DESIGN_SPEC §9): the ONE filled button on a screen is the
+   * open step's next action. Set by the step that owns this form; everything
+   * else stays outlined. Disabled, it is grey like any other, with its reason.
+   */
+  primary?: boolean;
 }
 
 export function GovernedForm<T>({
@@ -66,6 +72,7 @@ export function GovernedForm<T>({
   disabledReason,
   onSuccess,
   unmet,
+  primary = false,
 }: GovernedFormProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
@@ -140,13 +147,18 @@ export function GovernedForm<T>({
         type="submit"
         disabled={disabled}
         title={blockedLocally ? disabledReason : undefined}
+        data-primary={primary && !disabled ? 'true' : undefined}
         className={
-          'border border-silver px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-[.1em] ' +
-          (disabled
-            ? 'cursor-not-allowed text-ink-25'
-            : 'text-ink-45 hover:border-ink hover:text-ink') +
-          ' ' +
-          FOCUS_RING
+          primary
+            ? 'border px-4 py-2 text-[12px] font-semibold tracking-[.04em] ' +
+              (disabled ? 'cursor-not-allowed border-rule bg-rule-soft text-ink-45' : "border-ink bg-ink text-offwhite hover:bg-ink-70 after:ml-2 after:text-gold after:content-['→']") +
+              ' ' + FOCUS_RING
+            : 'border border-silver px-3 py-1.5 text-[9.5px] font-semibold uppercase tracking-[.1em] ' +
+              (disabled
+                ? 'cursor-not-allowed text-ink-25'
+                : 'text-ink-45 hover:border-ink hover:text-ink') +
+              ' ' +
+              FOCUS_RING
         }
       >
         {submitLabel}

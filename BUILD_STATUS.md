@@ -10846,3 +10846,93 @@ engagement is retired, Skillsoft is the tenant's own, and Curia is a reference e
   - `POST /api/institutions/:institutionId/executive-summaries 201 … session=y`;
   - two `GET /api/cohort 200 … session=y` (the Accounts page);
   - the only 401s are the deploy's own smoke checks.
+
+## UX-1 slice 1: the account workspace — 19 October 2026 (UTC)
+
+**What it builds** (presentation only: no route, table, trigger, heartbeat or governance
+rule changed; no server or `db/` file changed):
+- **The six-step path.** `/accounts/:id` for every customer account is the path of
+  DESIGN_SPEC §9's UX-1 standards: Research → Outside-in walk → Hypothesis → Summary →
+  Run and lock → Point of view.
+  - **The page around it:** a crumb back to Accounts, and the confidence as
+    "n / 100 · Band" with its run and date.
+  - **The banners:** the retirement notice; and, on a marked account, the marker at the
+    top, as the POV shows it.
+  - **The step rail** at desktop width, dropped at 390.
+  - **The folded "Account detail":** facts, the pack, measuring, the gap, engagements,
+    the marker, retirement.
+- **One instance of each component,** placed by portal: W7–W8 into "Run and lock", W9 and
+  the marker into "Account detail", the hypothesis and summary cards into steps 3 and 4.
+- **Folded steps stay mounted** but are `hidden` and `inert`, out of the layout, the
+  accessibility tree and the tab order. Every form keeps its state and every
+  `data-testid`.
+- **Step status is derived** from what the components already read (their `onStatus`
+  callbacks; `deriveWalk` is now the walk's one derivation):
+  - the entity pinned;
+  - the walk through the baseline's evidence;
+  - a current hypothesis;
+  - a current summary;
+  - a locked run with none open.
+
+  The hypothesis step states its real precondition (a lever).
+- **When research is open but a run is already locked,** step 1 says: "Run N is locked
+  and stands as sealed: research adds facts for the next run and never changes a locked
+  one."
+- **One filled button:** a `primary` prop on `GovernedForm`, `GovernedAction`, the
+  openers and the POV link, set only on the open step's next action. The arrow is a CSS
+  `::after`, so no button's text changed.
+- **The new pieces are in the existing library** (`components/workbench/Workspace.tsx`):
+  `WorkspaceStep`, `StepRail`, `ConfidenceBadge` (Low neutral), `PrimaryLink`.
+- **The tenant's own account keeps the old record view:** loose end **L33**.
+- **The walk libraries' `shot()`** first opens a folded step or "Account detail" around
+  its target.
+- **`restore_prod_copy.sh` now neutralises sign-in data** (Brad's condition, 19 Oct 2026).
+  - **The method:** every session's token is overwritten, revoked and expired; every
+    credential's hash is replaced by one hash of a discarded random secret. These are
+    UPDATEs, not DELETEs: the `_no_delete` guards stay on.
+  - **It asserts both** before the copy is used.
+
+**Decided:** the Q4n book card says "(2 accounts are marked one)". It counts accounts
+with a current marker, whatever their engagements' state; Scotts is marked whether or not
+retired (Brad, 19 Oct 2026).
+
+**Gate A:**
+- **`verify_workspace_path.sh`: 105 passed, 0 failed.** Signed in by session, on a
+  throwaway clone; the three mock-up states at 1280 and 390.
+  - **The states:** new (research next); leverless (the hypothesis next, waiting for a
+    lever, no filled button); mid (the hypothesis next); locked (the point of view next,
+    with an outside-in-test marker).
+  - **In each:**
+    - the six statuses;
+    - exactly one open step, the next one;
+    - **exactly one filled button, counted page-wide,** with its text;
+    - each step's line;
+    - the confidence;
+    - the marker banner;
+    - the rail shown at 1280 and dropped at 390;
+    - no sideways scroll;
+    - no internal terms in the path's own words;
+    - **Tab, 80 stops, never lands inside a folded step or the closed "Account
+      detail"**;
+    - a done step opens on "Show ▸" with its form.
+  - **Breaks:**
+    - **B1:** every step open → "exactly one step is open" fails;
+    - **B2:** the walk's next form filled whatever the open step → two filled buttons;
+    - **B3:** folded content neither hidden nor inert → Tab lands inside it.
+
+    All restored byte-identical.
+- **Regression:** all **33** pass. `verify_account_research` first failed (17): the arrow
+  was a `<span>` inside the button, so exact-text clicks missed. It's now a CSS
+  `::after`, and the walk passes 160/0. Tenant scope 203. The later change, hiding an
+  open step's summary at every width, is client-only; `verify_workspace_path` was re-run
+  after it (105/0) and tsc is clean.
+- **The bundle:** **`index-COXAy6jV.js`** / `index-CDV-cc73.css`.
+- **Prod copy:** restored from today's prod backup (`lvrf-pre-q4n-20261019T152544Z`,
+  copied with the LVRF key, SHA-256 matched, 600, neutralised). Against the deployed code
+  (`c04dd21`): **76 GETs, 76 identical** (no server change).
+- **Screenshots of Scotts (locked) and Curia, 1280 and 390,** were taken on a clone of that
+  copy. They're kept on the Mac only, in `~/lvrf-backups/slice1-screens/` (600), not in
+  the repo (the header shows a real email). The backup predates Brad's Curia marker and
+  summary (15:28, 15:32), so Curia shows unmarked there.
+- **The 10 Oct snapshot was deleted** after the restore, as agreed; the six local
+  pre-migration backups are kept.

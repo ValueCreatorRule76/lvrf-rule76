@@ -47,11 +47,14 @@ export function AddEvidenceCard({
   outcomeId: outcomeIdProp,
   n = '01A',
   onRecorded,
+  primary = false,
 }: {
   run?: Run;
   outcomeId?: string;
   n?: string;
   onRecorded?: () => void;
+  /** UX-1: the open step's next action (see GovernedForm's primary). */
+  primary?: boolean;
 }) {
   const outcomeId = outcomeIdProp ?? run?.payload.valueOutcomeId;
 
@@ -110,6 +113,7 @@ export function AddEvidenceCard({
   return (
     <Card n={n} title="Add evidence">
       <GovernedForm<AddEvidenceResponse>
+        primary={primary}
         onSuccess={() => onRecorded?.()}
         path={`/api/value-outcomes/${outcomeId}/evidence`}
         canSubmit={canSubmit}

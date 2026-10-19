@@ -36,6 +36,13 @@ const bodyHas = (s) => `document.body.textContent.includes(${JSON.stringify(s)})
 
 // Full-page screenshot, or one element's region (scrolled into view).
 async function shot(name, selector) {
+  // UX-1 slice 1: a screenshot's target may sit in a folded workspace step or
+  // the closed "Account detail". Open them first, as a reader would (the
+  // step's own toggle; the <details> element), so the shot shows the target.
+  if (selector) {
+    const opened = await ev(`(()=>{const el=document.querySelector(${JSON.stringify(selector)});if(!el)return 0;let n=0;for(let p=el;p;p=p.parentElement){if(p.tagName==='DETAILS'&&!p.open){p.open=true;n++;}if(p.dataset&&p.dataset.open==='false'){p.querySelector('[data-step-toggle]')?.click();n++;}}return n})()`);
+    if (opened) await sleep(300);
+  }
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
   await sleep(300);
   if (selector) {

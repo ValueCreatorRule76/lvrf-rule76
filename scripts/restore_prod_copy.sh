@@ -148,6 +148,31 @@ echo "==> hardening.sql (re-applies triggers, REVOKEs and GRANTs that --no-acl d
 psql -X -v ON_ERROR_STOP=1 -q -d "$TARGET" -f db/hardening.sql > /tmp/lvrf_prodcopy_hardening.log 2>&1 \
   && ok "hardening.sql applied" || { bad "hardening.sql failed — see /tmp/lvrf_prodcopy_hardening.log"; exit 1; }
 
+echo "==> Sign-in data neutralised (Brad's condition, 19 Oct 2026): no real session or password works on the copy"
+# A copy of prod carries every person's session tokens (hashed) and password
+# hashes. They are made useless here, before anything else uses the copy.
+# NOT deleted: sessions_no_delete and person_credentials_no_delete (hardening
+# section 15) refuse a DELETE, and no script switches a guard off (CLAUDE.md
+# rule 2). The same effect, by UPDATEs the guards allow:
+#   - every session: token_hash overwritten with random bytes, revoked and
+#     expired now, so no cookie from prod can match one;
+#   - every credential: password_hash replaced by ONE argon2id hash of a random
+#     secret that is never stored or printed, so no real password works.
+# A verify script that needs to sign in adds its own fixture credential.
+NEUTRAL_HASH="$(node -e "import('argon2').then(a=>a.default.hash(require('crypto').randomBytes(32).toString('hex'),{type:a.default.argon2id})).then(h=>console.log(h))")"
+case "$NEUTRAL_HASH" in '$argon2id$'*) ;; *) bad "could not make the neutral hash"; exit 1 ;; esac
+psql -X -q -v ON_ERROR_STOP=1 -d "$TARGET" -v h="$NEUTRAL_HASH" <<'SQL' > /dev/null
+UPDATE sessions SET token_hash = md5(random()::text || id::text) || md5(random()::text || clock_timestamp()::text),
+                    revoked_at = coalesce(revoked_at, now()), expires_at = least(expires_at, now()), absolute_expires_at = least(absolute_expires_at, now());
+UPDATE person_credentials SET password_hash = :'h';
+SQL
+LIVE_SESSIONS="$(q "SELECT count(*) FROM sessions WHERE revoked_at IS NULL OR expires_at > now() OR absolute_expires_at > now()")"
+# Through stdin: psql substitutes :'h' in a script, never in -c.
+OTHER_HASHES="$(printf "SELECT count(*) FROM person_credentials WHERE password_hash <> :'h';\n" | psql -X -At -d "$TARGET" -v h="$NEUTRAL_HASH")"
+[ "$LIVE_SESSIONS" = "0" ] && ok "sessions: $(q "SELECT count(*) FROM sessions") on the copy, none live (tokens overwritten, revoked, expired)" || { bad "$LIVE_SESSIONS live session(s) remain"; exit 1; }
+[ "$OTHER_HASHES" = "0" ] && ok "credentials: all $(q "SELECT count(*) FROM person_credentials") replaced by one hash of a discarded random secret" || { bad "$OTHER_HASHES credential(s) keep a real hash"; exit 1; }
+unset NEUTRAL_HASH
+
 echo "==> Checks"
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "triggers: $T (expected $EXPECT_TRIGGERS)"

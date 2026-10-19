@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
@@ -11,9 +11,11 @@ import {
 import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
-import { AccountResearch } from '../components/AccountResearch';
-import { OutsideInWalk } from '../components/OutsideInWalk';
-import { PovAuthoring } from '../components/PovAuthoring';
+import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
+import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
+import { PovAuthoring, type PovStatus } from '../components/PovAuthoring';
+import { ConfidenceBadge, PrimaryLink, StepRail, WorkspaceStep, type StepStatus } from '../components/workbench/Workspace';
+import { MARKER_KIND } from '../api/pov';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -341,6 +343,170 @@ function GapSection({ gap, pack }: { gap: InstitutionGap; pack: InstitutionPackM
   );
 }
 
+// ---------------------------------------------------------------------------
+// UX-1 slice 1 (DESIGN_SPEC §9, "UX-1 standards"): the account as ONE guided
+// path of six steps. Presentation only: every governed form is the one it was,
+// rendered once, by the component that owns it; parts of OutsideInWalk and
+// PovAuthoring are placed into their step by portal. Step status is DERIVED
+// from what those components already read (their onStatus callbacks): no new
+// table, no new fetch, no second implementation of any rule.
+// ---------------------------------------------------------------------------
+
+const STEP_TITLES = ['Research', 'Outside-in walk', 'Hypothesis', 'Summary', 'Run and lock', 'Point of view'] as const;
+// The walk's sub-steps in the reader's words (standard 6: no step codes on screen).
+const WALK_NEXT: Record<string, string> = {
+  w1: 'name the analyst of record', w2: 'attach the offering and its capability', w3: "record the capability's claim on a pack entry",
+  w4: 'record the value outcome with its published baseline', w5: "set the metric's pack basis", w6: 'record evidence for the baseline',
+};
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "5 Sep 2026", in UTC (the record's dates), the same on every browser.
+const day = (iso: string) => { const d = new Date(iso); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const unitText = (u: string) => u.replace(/[.\s]+$/, '');
+const band = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
+
+interface Derived { status: StepStatus; summary: string }
+
+function deriveSteps(r: ResearchStatus | null, w: WalkStatus | null, p: PovStatus | null): Derived[] {
+  const done: boolean[] = [];
+  const summaries: string[] = [];
+  // 1. Research: the entity pinned.
+  done.push(Boolean(r?.entity));
+  const lockedRun = w ? [...w.runs].reverse().find((x) => x.locked_at) : undefined;
+  summaries.push(r?.entity ? `Entity pinned: ${r.entity.legal_name}`
+    : lockedRun ? `The entity is not pinned yet. Run ${lockedRun.run_number} stays as sealed; research adds facts for the next run.`
+    : 'No researched fact is accepted until the entity is pinned.');
+  // 2. The walk, to the baseline's evidence.
+  const walkDone = Boolean(w && (['w1', 'w2', 'w3', 'w4', 'w5', 'w6'] as const).every((k) => w.steps[k] === 'done'));
+  done.push(walkDone);
+  const nextWalk = w ? (['w1', 'w2', 'w3', 'w4', 'w5', 'w6'] as const).find((k) => w.steps[k] !== 'done') : undefined;
+  summaries.push(w?.baseline && walkDone
+    ? `${w.baseline.metric} baseline ${Number(w.baseline.value)} ${unitText(w.baseline.unit)}, recorded ${day(w.baseline.measured_at)} · ${w.evidence.opened_verified} of ${w.evidence.total} citations opened and verified`
+    : nextWalk ? `Next: ${WALK_NEXT[nextWalk]}.` : '');
+  // 3. A current hypothesis. Its real precondition (a lever) is said, not hidden (Q4l).
+  const hyp = p?.hypotheses[p.hypotheses.length - 1];
+  done.push(Boolean(p && p.hypotheses.length > 0));
+  summaries.push(hyp ? `${hyp.verdict === 'open' ? 'Open' : band(hyp.verdict.replace(/_/g, ' '))} · due ${day(hyp.due)} · via "${hyp.lever}"`
+    : p && p.basedOutcomes === 0 ? 'Waits for step 2: an outcome on a pack entry.'
+    : p && p.leverless.length > 0 && p.leverless.length === p.basedOutcomes ? `Waits for a lever on the pack entry ${p.leverless.map((e) => `"${e}"`).join(' and ')}.`
+    : 'State what the capability changes, and what would show it wrong.');
+  // 4. A current summary.
+  const sum = p?.summaries[p.summaries.length - 1];
+  done.push(Boolean(p && p.summaries.length > 0));
+  summaries.push(sum ? `Version ${sum.versions}, ${sum.lens} reader · ${sum.drafted_with_ai ? `drafted with AI (${sum.drafting_tool})` : 'not AI-drafted'} · ${sum.author}, ${day(sum.created_at)}`
+    : 'Written by a named person; LVRF writes no prose.');
+  // 5. A locked run, and none open.
+  const locked = w ? [...w.runs].reverse().find((x) => x.locked_at) : undefined;
+  const open = w ? w.runs.find((x) => !x.locked_at) : undefined;
+  done.push(Boolean(w && (w.engagement?.retired || (locked && !open))));
+  summaries.push(open ? `Run ${open.run_number} produced, not locked yet: lock it.`
+    : locked ? `Run ${locked.run_number} locked ${day(locked.locked_at!)} · ${Number(locked.confidence_score)} / 100 · ${band(locked.confidence_band)}${w!.runs.length > 1 ? ` (${w!.runs.length} runs)` : ''}`
+    : 'A run seals what is on record when it is produced.');
+  // 6. The point of view: a view, never "done".
+  done.push(false);
+  summaries.push('Renders from the record at any time, marked unverified until it is.');
+  const current = done.findIndex((d) => !d);
+  return done.map((d, i) => ({ status: d ? 'done' : i === current ? 'now' : 'wait', summary: summaries[i] }));
+}
+
+function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => void }) {
+  const id = view.institution.id;
+  const [research, setResearch] = useState<ResearchStatus | null>(null);
+  const [walk, setWalk] = useState<WalkStatus | null>(null);
+  const [pov, setPov] = useState<PovStatus | null>(null);
+  // Portal targets: where each part of a component renders.
+  const [hypEl, setHypEl] = useState<HTMLDivElement | null>(null);
+  const [sumEl, setSumEl] = useState<HTMLDivElement | null>(null);
+  const [runEl, setRunEl] = useState<HTMLDivElement | null>(null);
+  const [markerEl, setMarkerEl] = useState<HTMLDivElement | null>(null);
+  const [retireEl, setRetireEl] = useState<HTMLDivElement | null>(null);
+  const steps = deriveSteps(research, walk, pov);
+  const now = steps.findIndex((s) => s.status === 'now') + 1;
+  const measuredIds = measuredIndustryMeasureIds(view.metrics);
+  const locked = walk ? [...walk.runs].reverse().find((x) => x.locked_at) : undefined;
+  const marker = pov?.marker ? MARKER_KIND[pov.marker.kind] : null;
+  const step = (i: number, body: ReactNode) => (
+    <WorkspaceStep key={i} n={i + 1} title={STEP_TITLES[i]} status={steps[i].status} summary={steps[i].summary} testId={`ws-step-${i + 1}`}>{body}</WorkspaceStep>
+  );
+  return (
+    <>
+    {/* A reference example says so at the top, as the POV's banner does (O-D3). */}
+    {pov?.marker && (
+      <div className="bg-ink px-4 py-2.5 font-mono text-[12.5px] tracking-[.02em] text-offwhite sm:px-6" data-testid="ws-marker-banner">
+        <span className="text-gold">{MARKER_KIND[pov.marker.kind].banner.split(' — ')[0]}</span> — {MARKER_KIND[pov.marker.kind].banner.split(' — ').slice(1).join(' — ')} · Source: {pov.marker.source_citation}
+      </div>
+    )}
+    <div className="mx-auto max-w-[1120px] px-4 pb-14 pt-6 sm:px-6" data-testid="workspace">
+      <div className="mb-1.5 text-[12.5px] text-ink-45"><Link to="/" className={'text-ink-45 no-underline hover:text-ink ' + FOCUS_RING}>Accounts</Link> › {view.institution.name}</div>
+      <header className="flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="m-0 font-display text-[34px] leading-none tracking-[.02em] sm:text-[44px]">{view.institution.name}</h1>
+          <p className="m-0 mt-1.5 text-[12.5px] text-ink-45" data-testid="ws-subtitle">
+            {view.institution.industry_name ? `${view.institution.industry_name} pack` : 'Not classified'}
+            {marker ? ` · a reference example (${marker.label.toLowerCase()}), not a customer engagement` : ''}
+          </p>
+        </div>
+        <div data-testid="ws-confidence">
+          <span className="block text-[10.5px] font-semibold uppercase tracking-[.14em] text-ink-45">Computed confidence</span>
+          {locked
+            ? <><ConfidenceBadge score={locked.confidence_score} band={locked.confidence_band} /><span className="mt-1 block text-[12px] text-ink-45">from run {locked.run_number}, locked {day(locked.locked_at!)}</span></>
+            : <ConfidenceBadge score={null} band={null} />}
+        </div>
+      </header>
+      {walk?.engagement?.retired && (
+        <p className="m-0 mt-4 border-l-[3px] border-healthy bg-white px-3 py-2 text-[13px] text-ink" data-testid="ws-retired">
+          The engagement is retired: book confidence no longer counts it. Its runs and hypothesis stay on the record.
+        </p>
+      )}
+      <div className="mt-6 grid grid-cols-1 gap-8 sm:grid-cols-[200px_1fr]">
+        <StepRail steps={steps.map((s, i) => ({ n: i + 1, title: STEP_TITLES[i], status: s.status }))} />
+        <div>
+          {step(0, <>
+            {/* An open research step never reads as a fault in a locked run. */}
+            {!research?.entity && locked && (
+              <p className="m-0 mb-3 border-l-[3px] border-gold bg-white px-3 py-2 text-[13px] text-ink" data-testid="ws-research-locked-note">
+                Run {locked.run_number} is locked and stands as sealed: research adds facts for the next run and never changes a locked one.
+              </p>
+            )}
+            <AccountResearch institutionId={id} onFactsChanged={refresh} onStatus={setResearch} primary={now === 1} />
+          </>)}
+          {step(1, <OutsideInWalk institutionId={id} onChanged={refresh} onStatus={setWalk} targets={{ run: runEl, retire: retireEl }}
+            primaryFor={now === 2 ? ['w1', 'w2', 'w3', 'w4', 'w5', 'w6'] : now === 5 ? ['w7', 'w8'] : []} />)}
+          {step(2, <div ref={setHypEl} />)}
+          {step(3, <div ref={setSumEl} />)}
+          {step(4, <div ref={setRunEl} />)}
+          {step(5, <div>
+            <p className="m-0 mb-3 text-[13px] text-ink">It renders from the record as it stands, with its disclosure banners, and prints with each run's record hash.</p>
+            <PrimaryLink href={`/accounts/${id}/pov`} primary={now === 6}>Open the point of view</PrimaryLink>
+          </div>)}
+          {/* Hidden authoring host: the cards render into steps 3, 4 and the detail below. */}
+          <PovAuthoring institutionId={id} onStatus={setPov} targets={{ hypothesis: hypEl, summary: sumEl, marker: markerEl }}
+            primary={now === 3 ? 'hypothesis' : now === 4 ? 'summary' : null} />
+          <details className="mt-6 border border-rule bg-white" data-testid="account-detail">
+            <summary className="cursor-pointer list-none px-[18px] py-3 text-[13px] font-semibold tracking-[.02em]">
+              Account detail ▸ <span className="font-normal text-ink-45">facts · what the industry says carries money · what this account measures · the gap · engagements · reference marker · retire the engagement</span>
+            </summary>
+            <div className="px-4 pb-4 pt-2">
+              <ClassificationSection view={view} />
+              <AccountFactsCard n="01" institutionId={id} facts={view.facts} onRecorded={refresh} />
+              <PackSection pack={view.pack} measuredIds={measuredIds} isTenantSelf={false} />
+              <MetricsSection metrics={view.metrics} isTenantSelf={false} />
+              <GapSection gap={view.gap} pack={view.pack} />
+              <Card n="05" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
+                {view.engagements.length === 0
+                  ? <p className="m-0 text-[12.5px] text-ink-45">No engagements recorded for this account.</p>
+                  : <ul className="m-0 list-none p-0">{view.engagements.map((e) => <li key={e.id} className="border-b border-rule-soft py-1.5 last:border-b-0"><span className="text-[13px] text-ink">{e.name}</span></li>)}</ul>}
+              </Card>
+              <div ref={setMarkerEl} />
+              <div ref={setRetireEl} className="border border-rule bg-white px-4" />
+            </div>
+          </details>
+        </div>
+      </div>
+    </div>
+    </>
+  );
+}
+
 export function InstitutionPage() {
   const { id } = useParams<{ id: string }>();
   const { actor } = useActor();
@@ -385,6 +551,10 @@ export function InstitutionPage() {
   }
 
   const { view } = result;
+  // UX-1 slice 1: a customer account is worked as the six-step path. The
+  // tenant's own account is not an account to work (no walk, no research,
+  // no POV), so it keeps the plain record view below.
+  if (!view.institution.is_tenant_self) return <Workspace view={view} refresh={refresh} />;
   const measuredIds = measuredIndustryMeasureIds(view.metrics);
 
   return (

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/http';
 import { useActor } from '../actor/ActorContext';
@@ -62,6 +63,55 @@ const INPUT_CLASS = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px
 const HELP_CLASS = 'm-0 mt-1 text-[11px] text-ink-45';
 
 type StepState = 'done' | 'next' | 'waiting';
+
+/**
+ * UX-1 slice 1: what the walk knows, reported up to the account workspace so
+ * it can say which of its six steps is done, open or waiting, from this one
+ * read, never a second fetch. Derived by deriveWalk, the same function the
+ * W-steps render from (one implementation of the rule).
+ */
+export interface WalkStatus {
+  steps: Record<'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7' | 'w8' | 'w9', StepState>;
+  engagement: { id: string; name: string; retired: boolean } | null;
+  runs: { run_number: number; locked_at: string | null; confidence_score: string | null; confidence_band: string }[];
+  baseline: { value: string; unit: string; measured_at: string; metric: string } | null;
+  evidence: { opened_verified: number; total: number };
+}
+
+function deriveWalk(w: WalkState) {
+  const claims = w.capabilities.flatMap((c) => c.claims.map((cl) => ({ ...cl, capability_id: c.id, capability_name: c.name })));
+  // The engagement walked here: the latest one with an outcome.
+  const eng = [...w.engagements].reverse().find((e) => e.outcomes.length > 0) ?? null;
+  const outcome = eng?.outcomes[eng.outcomes.length - 1] ?? null;
+  // The LATEST locked run (a later lock is named, not the first one).
+  const lockedRun = eng ? [...eng.runs].reverse().find((r) => r.locked_at) ?? null : null;
+  const openRun = eng ? [...eng.runs].reverse().find((r) => !r.locked_at) ?? null : null;
+  const hasBaselineEvidence = Boolean(outcome?.evidence.some((e) => e.supports === 'baseline'));
+  const s1: StepState = w.persons.length > 0 || w.analysts.length > 0 ? 'done' : 'next';
+  const s2: StepState = w.capabilities.length > 0 ? 'done' : s1 === 'done' ? 'next' : 'waiting';
+  const s3: StepState = claims.length > 0 ? 'done' : s2 === 'done' ? (w.pack.length ? 'next' : 'waiting') : 'waiting';
+  const s4: StepState = outcome ? 'done' : s3 === 'done' ? 'next' : 'waiting';
+  const s5: StepState = outcome?.metric.industry_measure_id ? 'done' : s4 === 'done' ? 'next' : 'waiting';
+  const s6: StepState = hasBaselineEvidence ? 'done' : s5 === 'done' ? 'next' : 'waiting';
+  const s7: StepState = eng && eng.runs.length > 0 ? 'done' : s6 === 'done' ? 'next' : 'waiting';
+  const s8: StepState = lockedRun ? 'done' : s7 === 'done' ? 'next' : 'waiting';
+  const s9: StepState = eng?.retired ? 'done' : s8 === 'done' ? 'next' : 'waiting';
+  return { claims, eng, outcome, lockedRun, openRun, hasBaselineEvidence, s1, s2, s3, s4, s5, s6, s7, s8, s9 };
+}
+
+function walkStatus(w: WalkState): WalkStatus {
+  const d = deriveWalk(w);
+  return {
+    steps: { w1: d.s1, w2: d.s2, w3: d.s3, w4: d.s4, w5: d.s5, w6: d.s6, w7: d.s7, w8: d.s8, w9: d.s9 },
+    engagement: d.eng ? { id: d.eng.id, name: d.eng.name, retired: d.eng.retired } : null,
+    runs: (d.eng?.runs ?? []).map((r) => ({ run_number: r.run_number, locked_at: r.locked_at, confidence_score: r.confidence_score, confidence_band: r.confidence_band })),
+    baseline: d.outcome ? { value: d.outcome.baseline_value, unit: d.outcome.metric.unit, measured_at: d.outcome.baseline_measured_at, metric: d.outcome.metric.name } : null,
+    evidence: { opened_verified: d.outcome?.evidence.filter((e) => e.citation_resolved && e.source_verified).length ?? 0, total: d.outcome?.evidence.length ?? 0 },
+  };
+}
+
+/** Render here, or into the workspace step that owns this part (one instance, one state). */
+const place = (target: Element | null | undefined, node: ReactNode) => (target ? createPortal(node, target) : node);
 
 type WalkEvidence = WalkState['engagements'][number]['outcomes'][number]['evidence'][number];
 
@@ -178,7 +228,15 @@ const field = (label: string, el: ReactNode, help?: string, wide = false) => (
   </label>
 );
 
-export function OutsideInWalk({ institutionId, onChanged }: { institutionId: string; onChanged: () => void }) {
+export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, primaryFor }: {
+  institutionId: string; onChanged: () => void;
+  /** UX-1: called with what the walk knows, each time it loads. */
+  onStatus?: (s: WalkStatus) => void;
+  /** UX-1: W7–W8 render into the "Run and lock" step, W9 into "Account detail". */
+  targets?: { run?: Element | null; retire?: Element | null };
+  /** UX-1: the W-steps that may carry the screen's one filled button (the open workspace step's). */
+  primaryFor?: string[];
+}) {
   const { actor } = useActor();
   const [tick, setTick] = useState(0);
   const [w, setW] = useState<WalkState | { error: string } | null>(null);
@@ -202,21 +260,15 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
   const [p7, setP7] = useState({ banner_title: 'OUTSIDE-IN HYPOTHESIS', note: '', source_fixture: '' });
   const [p8, setP8] = useState({ lock_reason: '' });
   const [p9, setP9] = useState({ retirement_reason: '' });
+  useEffect(() => { if (w && !('error' in w)) onStatus?.(walkStatus(w)); }, [w]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!w) return <Card n="W" title="Outside-in walk"><p className="m-0 text-ink-45">loading</p></Card>;
   if ('error' in w) return <Card n="W" title="Outside-in walk"><p className="m-0 text-critical">{w.error}</p></Card>;
 
-  const claims = w.capabilities.flatMap((c) => c.claims.map((cl) => ({ ...cl, capability_id: c.id, capability_name: c.name })));
-  // The engagement walked here: the latest one with an outcome.
-  const eng = [...w.engagements].reverse().find((e) => e.outcomes.length > 0) ?? null;
-  const outcome = eng?.outcomes[eng.outcomes.length - 1] ?? null;
-  // The LATEST locked run (a later lock is named, not the first one).
-  const lockedRun = eng ? [...eng.runs].reverse().find((r) => r.locked_at) ?? null : null;
-  const openRun = eng ? [...eng.runs].reverse().find((r) => !r.locked_at) ?? null : null;
-  const hasBaselineEvidence = Boolean(outcome?.evidence.some((e) => e.supports === 'baseline'));
+  const { claims, eng, outcome, lockedRun, openRun, s1, s2, s3, s4, s5, s6, s7, s8, s9 } = deriveWalk(w);
+  const pr = (sid: string, st: StepState) => Boolean(primaryFor?.includes(sid)) && st === 'next';
   const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
 
-  const s1: StepState = w.persons.length > 0 || w.analysts.length > 0 ? 'done' : 'next';
   // Who may own a capability or an engagement here: the analyst of record
   // (linked staff) and the account's own people.
   const owners = [
@@ -224,14 +276,6 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
     ...w.persons.map((p) => ({ id: p.id, label: p.full_name })),
   ];
   const analystId = pa.person_id || actor?.id || '';
-  const s2: StepState = w.capabilities.length > 0 ? 'done' : s1 === 'done' ? 'next' : 'waiting';
-  const s3: StepState = claims.length > 0 ? 'done' : s2 === 'done' ? (w.pack.length ? 'next' : 'waiting') : 'waiting';
-  const s4: StepState = outcome ? 'done' : s3 === 'done' ? 'next' : 'waiting';
-  const s5: StepState = outcome?.metric.industry_measure_id ? 'done' : s4 === 'done' ? 'next' : 'waiting';
-  const s6: StepState = hasBaselineEvidence ? 'done' : s5 === 'done' ? 'next' : 'waiting';
-  const s7: StepState = eng && eng.runs.length > 0 ? 'done' : s6 === 'done' ? 'next' : 'waiting';
-  const s8: StepState = lockedRun ? 'done' : s7 === 'done' ? 'next' : 'waiting';
-  const s9: StepState = eng?.retired ? 'done' : s8 === 'done' ? 'next' : 'waiting';
   const chosen = w.pack.find((m) => m.id === p3.industry_measure_id);
   const claimedForBasis = claims.filter((c) => outcome && c.capability_name === outcome.capability_name);
 
@@ -257,7 +301,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               </div>}
               canSubmit={!!analystId && pa.title.trim().length >= 3}
               buildBody={() => ({ person_id: analystId, title: pa.title })}
-              submitLabel="Name the analyst of record" onSuccess={reload} renderSuccess={() => <>Named.</>} />
+              primary={pr('w1', s1)} submitLabel="Name the analyst of record" onSuccess={reload} renderSuccess={() => <>Named.</>} />
             </div>
           )}
           {s1 === 'next' && (
@@ -294,7 +338,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               </div>}
               canSubmit={!!p2.offering_key && !!p2.owner_person_id && p2.capability_name.trim() !== '' && p2.basis.trim().length >= 12}
               buildBody={() => ({ offering_key: p2.offering_key, capability_name: p2.capability_name, owner_person_id: p2.owner_person_id, is_primary: false, basis: p2.basis })}
-              submitLabel="Attach" onSuccess={reload} renderSuccess={() => <>Attached.</>} />
+              primary={pr('w2', s2)} submitLabel="Attach" onSuccess={reload} renderSuccess={() => <>Attached.</>} />
           )}
         </Step>
 
@@ -323,7 +367,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               </div>}
               canSubmit={!!p3.capability_id && !!p3.industry_measure_id && p3.claim.trim() !== ''}
               buildBody={() => ({ industry_measure_id: p3.industry_measure_id, claim: p3.claim })}
-              submitLabel="Record the claim" onSuccess={reload} renderSuccess={() => <>Claimed.</>} />
+              primary={pr('w3', s3)} submitLabel="Record the claim" onSuccess={reload} renderSuccess={() => <>Claimed.</>} />
           )}
         </Step>
 
@@ -359,7 +403,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
                 metric: { name: p4.metric_name, unit: p4.unit, direction: p4.direction, source_system: p4.source_system, owner_person_id: p4.owner },
                 baseline_value: Number(p4.baseline_value), baseline_measured_at: `${p4.baseline_measured_at}T00:00:00Z`,
               })}
-              submitLabel="Record the outcome" onSuccess={reload} renderSuccess={() => <>Recorded.</>} />
+              primary={pr('w4', s4)} submitLabel="Record the outcome" onSuccess={reload} renderSuccess={() => <>Recorded.</>} />
           )}
         </Step>
 
@@ -376,7 +420,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               </div>}
               canSubmit={!!p5.industry_measure_id && p5.basis_note.trim() !== ''}
               buildBody={() => ({ industry_measure_id: p5.industry_measure_id, basis_note: p5.basis_note })}
-              submitLabel="Set the basis" onSuccess={reload} renderSuccess={() => <>Set.</>} />
+              primary={pr('w5', s5)} submitLabel="Set the basis" onSuccess={reload} renderSuccess={() => <>Set.</>} />
           )}
         </Step>
 
@@ -393,11 +437,12 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
                 The baseline: <code>public_filing</code>, supports <code>baseline</code>, quoting the series and the company's own reasons.
                 A vendor's claim: <code>vendor_publication</code>, supports <code>impact_basis</code> — never the actual (refused by the database).
               </p>
-              <AddEvidenceCard key={`ev-${outcome.evidence.length}`} n="W6" outcomeId={outcome.id} onRecorded={reload} />
+              <AddEvidenceCard key={`ev-${outcome.evidence.length}`} n="W6" outcomeId={outcome.id} onRecorded={reload} primary={pr('w6', s6)} />
             </>
           )}
         </Step>
 
+        {place(targets?.run, <>
         <Step id="W7" title="Produce the run" state={s7} waitsFor="W6, the baseline's evidence" testId="w7">
           {eng && eng.runs.length > 0 && (
             <ul className="m-0 mb-2 list-none p-0" data-testid="w7-runs">
@@ -437,7 +482,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               </div>}
               canSubmit={p7.banner_title.trim() !== '' && p7.note.trim() !== '' && p7.source_fixture.trim() !== ''}
               buildBody={() => ({ banner_title: p7.banner_title, note: p7.note, source_fixture: p7.source_fixture })}
-              submitLabel="Produce" onSuccess={reload} renderSuccess={() => <>Produced.</>} />
+              primary={pr('w7', s7)} submitLabel="Produce" onSuccess={reload} renderSuccess={() => <>Produced.</>} />
           )}
         </Step>
 
@@ -451,10 +496,13 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               canSubmit={p8.lock_reason.trim() !== ''}
               unmet={['say why the run is locked']}
               buildBody={() => ({ lock_reason: p8.lock_reason })}
-              submitLabel={`Lock run ${openRun.run_number}`} onSuccess={() => { setP8({ lock_reason: '' }); reload(); }} renderSuccess={() => <>Locked.</>} />
+              primary={Boolean(primaryFor?.includes('w8'))} submitLabel={`Lock run ${openRun.run_number}`} onSuccess={() => { setP8({ lock_reason: '' }); reload(); }} renderSuccess={() => <>Locked.</>} />
           )}
         </Step>
 
+        </>)}
+
+        {place(targets?.retire, <>
         <Step id="W9" title="Retire the reference engagement (the cohort decision)" state={s9} waitsFor="W8, a locked run" testId="w9">
           {eng?.retired && <p className="m-0 mb-2 text-[12.5px] text-ink">{eng.name}: retired. Its runs keep their account.</p>}
           {s9 === 'next' && eng && (
@@ -468,6 +516,7 @@ export function OutsideInWalk({ institutionId, onChanged }: { institutionId: str
               submitLabel="Retire the engagement" onSuccess={reload} renderSuccess={() => <>Retired.</>} />
           )}
         </Step>
+        </>)}
       </div>
     </Card>
   );
