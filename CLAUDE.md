@@ -43,10 +43,12 @@ These encode failures already paid for in CVAF 1.2. Violating them recreates kno
    trigger that raises — do not work around it.
 3. **The audit log and heartbeat are append-only.** `UPDATE`, `DELETE` and `TRUNCATE`
    are revoked from `lvrf_app` at the database level. Do not add routes that attempt them.
-   **Pending OWN-1:** migrations run as `lvrf_app`, so it owns the tables and can re-grant
-   itself these privileges, or drop or disable any trigger. Until OWN-1 lands, this
-   revocation and every trigger guard bind the app's code paths, not the `lvrf_app` role
-   itself.
+   **Since OWN-1 (19 Oct 2026) this binds the role itself:** `lvrf_owner` (NOLOGIN) owns
+   the database and every object; `lvrf_app` owns nothing and holds no `DELETE`,
+   `TRUNCATE` or `CREATE` anywhere, so it cannot re-grant itself these privileges or drop
+   or disable a trigger. `hardening.sql` section 24 and deploy step 5d refuse otherwise.
+   A new table the app must `UPDATE` goes into `db/ownership.sql`'s list, and that file
+   is re-run after the migration.
 4. **A human authorizes.** AI may draft a reflection or recommend a lever. AI may never
    be the assessor of record, the reviewer of a reflection, or the verifier of a value
    outcome. Enforced in CHECK constraints; keep it enforced in the API.
@@ -71,8 +73,11 @@ sells, which is defensibility.
 
 ## Stack
 
-**Installed and verified on the VPS `srv1862778`:** Postgres 16.14 (db `lvrf`, role
-`lvrf_app`, localhost only, **data page checksums on**, tuning drop-in at
+**Installed and verified on the VPS `srv1862778`:** Postgres 16.14 (db `lvrf`, owned by
+`lvrf_owner` (NOLOGIN); migrations as `lvrf_migrate`, which acts as `lvrf_owner`, with its
+URL in `~/.lvrf_migrate.env` (600) on the box and `.env.migrate` locally, never in the
+repo; the API as `lvrf_app`, granted only what the code writes (`db/ownership.sql`,
+OWN-1); localhost only, **data page checksums on**, tuning drop-in at
 `conf.d/10-lvrf-tuning.conf` for 8GB RAM) · pgvector 0.6.0 (unused for now) ·
 Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
 `lvrf-rule76.com`, proxying `127.0.0.1:3001` · nightly `pg_dump -Fc` at 03:00,

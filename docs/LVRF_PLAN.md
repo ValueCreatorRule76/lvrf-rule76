@@ -205,7 +205,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q4j~~ | **W1 fix, DONE 12 Oct 2026, deployed `901fc91`** (Gate C clean) (migration 0037, 129 triggers; BUILD_STATUS "W1 fix"): an existing person (the tenant's own staff) named analyst of record on an account through `account_person_links`, with a per-account title; raw unique violations become plain words ("already in LVRF; select them instead") | Brad's Scotts walk, 12 Oct 2026 | W1 was blocked: a duplicate person, or a placeholder, was the only path |
 | Q4k | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4k"; approved by Brad 12 Oct with Q4k-D1: build "Open the citation…", the recorder may open). **Plain refusals everywhere, and the AI-verified evidence form** (L29 widened; plan in §4k) | the Scotts walk | W6 surfaced a raw CHECK message; the form offers a combination the database must refuse |
 | Q4l | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4l"): no silent outcomes (every disabled submit says what it waits for; every success that closes a form leaves a sentence); a run 2 after the walk's first, with W7 listing what each run sealed | the Scotts walk | the hypothesis form failed silently; run 1 was locked before its citations were opened |
-| Q4m | **Built 19 Oct 2026; Gate A passed.** A retired reference engagement renders cleanly on the POV: a plain frozen sentence (no raw 409, no id, no critical red), and every locked run listed. Scotts' W9 is held until it is deployed | Q4l | Brad's reviewer, 19 Oct 2026 (the UX-1 audit's finding 6) |
+| Q4m | **Deployed 19 Oct 2026 (`a88c071`, with OWN-1).** A retired reference engagement renders cleanly on the POV: a plain frozen sentence (no raw 409, no id, no critical red), and every locked run listed. Scotts' W9 is held until it is deployed | Q4l | Brad's reviewer, 19 Oct 2026 (the UX-1 audit's finding 6) |
 | UX-1 | **NEXT after OWN-1; all further O-band work pauses for it** (Brad, 13 Oct 2026): the workflow and UI do not meet Rule76 design standards. Plan in §7 (written 18 Oct 2026, not yet approved; no UI code until Brad approves mock-ups; decisions UX-1-D1–D4) | OWN-1 | the app is hard to navigate and hard to use |
 | OWN-1 | **NEXT, before any further O-band work** (Brad, 12 Oct 2026). **The database owner role** (plan §6): `lvrf_app` stops owning the schema, so the trigger guards and rule 3 bind the role itself, not only the app's code paths | O2 deployed | shown on the prod copy, 12 Oct 2026: `lvrf_app` can DROP TRIGGER and GRANT itself UPDATE on `audit_log` |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
@@ -1839,7 +1839,7 @@ releases, web pages, blog posts, job postings and marketing material.
 - **Recorded in §3** as R1's refinement. **No code depends on it** beyond that help
   text.
 
-### OWN-1, the build plan refreshed (13 Oct 2026; **approved 19 Oct 2026 with OWN-1-D1–D3; built, Gate A passed 19 Oct 2026**: see BUILD_STATUS)
+### OWN-1, the build plan refreshed (13 Oct 2026; **approved 19 Oct 2026 with OWN-1-D1–D3; built, Gate A passed, **deployed 19 Oct 2026 (`a88c071`), Gate C clean, closed**: see BUILD_STATUS)
 
 **What changed since the plan above was written** (O2, the W1 fix and Q4k deployed since):
 

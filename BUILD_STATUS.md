@@ -10535,3 +10535,28 @@ carried it.
 - **What can't be told:** without a request log (**L31**) or a Caddy access log, the
   box can't say which of the two it was.
 - **The `CLAUDE.md` Stack edit (OWN-1-D3) is held** until a write lands under OWN-1.
+
+**The write test PASSES (rerun 19 Oct 2026, read-only over ssh).** Scotts' `general`
+summaries are now:
+
+| Version | Saved (UTC) | AI-drafted | Current |
+|---|---|---|---|
+| v1 | 13 Oct 03:47:10 | no | no |
+| v2 | 19 Oct 11:17:48 | yes, Claude | no |
+| v3 | 19 Oct 11:18:18 | no | no |
+| v4 | 19 Oct 11:19:45 | yes, Claude | **yes** |
+
+- **Each version replaces the one before** (`supersedes_id`).
+- **The audit log** has three `executive_summaries` inserts by Brad Piver, and nothing
+  else since the deploy. 0 refusals, no 500 in the journal, 0 ownership violations; the
+  last session stamp is 11:19:45.
+- **All three came after the post-reapply state check,** so they were written under
+  OWN-1's grants, through the advisory-lock path that replaced `FOR UPDATE`.
+- **The earlier "FAILED" reading was correct when it was taken:** the saves simply came
+  later.
+
+**OWN-1 is closed.** Gate C is clean, the write test passes, and the `CLAUDE.md` Stack
+edit (OWN-1-D3) is made: rule 3's "Pending OWN-1" caveat is replaced by what binds the
+role now, and the Stack names the three roles. **Next:** Brad retires Scotts' reference
+engagement (W9), which Q4m was held for. Then UX-1's mock-ups, with L31 (the request
+log) recommended ahead of them.
