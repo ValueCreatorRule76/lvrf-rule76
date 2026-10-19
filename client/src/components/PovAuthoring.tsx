@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
@@ -24,16 +24,30 @@ const LABEL = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] t
 const INPUT = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 const SMALL_BUTTON = 'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] ';
 
-function Opener({ label, reason, onOpen }: { label: string; reason?: string; onOpen: () => void }) {
+function Opener({ label, reason, onOpen, children }: { label: string; reason?: string; onOpen: () => void; children?: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-2">
       <button type="button" disabled={Boolean(reason)} title={reason} onClick={onOpen}
         className={SMALL_BUTTON + (reason ? 'cursor-not-allowed text-ink-25' : 'text-ink-45 hover:border-ink hover:text-ink') + ' ' + FOCUS_RING}>
         {label}
       </button>
-      {reason && <span className="text-[11px] text-ink-45">{reason}</span>}
+      {reason && <span className="text-[11px] text-ink-45" data-testid="opener-reason">{children ?? reason}</span>}
     </span>
   );
+}
+
+/**
+ * Q4l: a hypothesis names a lever on the outcome's pack entry, and the steward
+ * adds levers on the pack page. While an entry has none, say so and link there,
+ * rather than let a form open that cannot be submitted.
+ */
+const packPage = (pov: Pov) => (pov.institution.industry_name ? `${pov.institution.industry_name} pack page` : 'pack page');
+const needsLeverText = (pov: Pov, entries: string[]) =>
+  `Needs a lever on the pack entry ${entries.map((e) => `"${e}"`).join(' and ')}: add one on the ${packPage(pov)}.`;
+function NeedsLever({ pov, entries }: { pov: Pov; entries: string[] }) {
+  const to = pov.institution.industry_slug ? `/packs/${pov.institution.industry_slug}` : '/packs';
+  return <>Needs a lever on the pack entry {entries.map((e) => `"${e}"`).join(' and ')}: add one on the{' '}
+    <Link to={to} className={'font-semibold text-gold-ink underline hover:text-ink ' + FOCUS_RING} data-testid="needs-lever-link">{packPage(pov)}</Link>.</>;
 }
 
 /**
@@ -100,7 +114,13 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
   const [statement, setStatement] = useState('');
   const [f, setF] = useState({ reference: 'baseline', due: '', conditions: '' });
   const based = pov.outcomes.filter((o) => o.pack_entry);
+  const hasLever = (o: PovOutcome) => pov.levers.some((l) => l.industry_measure_id === o.industry_measure_id);
+  const leverless = [...new Set(based.filter((o) => !hasLever(o)).map((o) => o.pack_entry!.name))];
   if (!open) {
+    if (based.length > 0 && based.every((o) => !hasLever(o))) {
+      return <div className="mt-2"><Opener label="State a hypothesis…" reason={needsLeverText(pov, leverless)} onOpen={() => setOpen(true)}>
+        <NeedsLever pov={pov} entries={leverless} /></Opener></div>;
+    }
     const reason = based.length === 0 ? 'A hypothesis needs an outcome whose metric rests on a pack entry.' : undefined;
     return <div className="mt-2"><Opener label="State a hypothesis…" reason={reason} onOpen={() => setOpen(true)} /></div>;
   }
@@ -116,7 +136,7 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
             <label className="block"><span className={LABEL}>Outcome (capability and metric)</span>
               <select className={INPUT} value={outcomeId} onChange={(e) => { setOutcomeId(e.target.value); setLeverId(''); }}>
                 <option value="">— choose —</option>
-                {based.map((o) => <option key={o.id} value={o.id}>{o.metric_name} — {o.capability_name} (baseline {recorded(o.baseline_value)})</option>)}
+                {based.map((o) => <option key={o.id} value={o.id} disabled={!hasLever(o)}>{o.metric_name} — {o.capability_name} (baseline {recorded(o.baseline_value)}){hasLever(o) ? '' : ' — no lever yet'}</option>)}
               </select>
             </label>
             <label className="block"><span className={LABEL}>Lever</span>
@@ -126,6 +146,7 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
               </select>
             </label>
           </div>
+          {leverless.length > 0 && <p className="m-0 border-l-2 border-gold pl-2 text-[11.5px] text-ink-45" data-testid="leverless-note"><NeedsLever pov={pov} entries={leverless} /></p>}
           <label className="block"><span className={LABEL}>Statement</span>
             <textarea rows={2} className={INPUT} value={statement} onChange={(e) => setStatement(e.target.value)} /></label>
           <FalsifierFields outcome={outcome} v={f} set={(p) => setF({ ...f, ...p })} />
@@ -133,7 +154,7 @@ function StateHypothesis({ pov, onChanged }: { pov: Pov; onChanged: (notice?: st
         canSubmit={!!outcomeId && !!leverId && statement.trim().length >= 24 && !!f.due && !/[0-9]/.test(f.conditions)}
         unmet={[
           ...(!outcomeId ? ['choose an outcome'] : []),
-          ...(outcome && levers.length === 0 ? [`the pack entry "${outcome.pack_entry?.name}" has no current lever — the steward adds one on the pack page ("Add a lever…")`] : []),
+          ...(outcome && levers.length === 0 ? [needsLeverText(pov, [outcome.pack_entry!.name]).replace(/\.$/, '')] : []),
           ...(outcome && levers.length > 0 && !leverId ? ['choose a lever'] : []),
           ...(statement.trim().length < 24 ? [`the statement needs at least 24 characters (${24 - statement.trim().length} more)`] : []),
           ...(!f.due ? ['choose a due date'] : []),

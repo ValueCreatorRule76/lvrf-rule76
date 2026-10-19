@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
@@ -31,6 +31,15 @@ import { respondServerError } from '../lib/serverError.js';
 class ValidationError extends Error {
   constructor(public readonly issues: string[]) { super(issues.join('; ')); }
 }
+/** A 409 the route decides before any write: answered and recorded like a 422. */
+class ConflictRefusal extends Error {}
+/**
+ * An id in the body that is not this account's or tenant's — unknown, or
+ * another tenant's. Answered like any 422 but NOT recorded: sign-in P3
+ * answers another tenant's id exactly as an unknown one, with nothing
+ * written and nothing recorded (verify_tenant_scope), as a 404 is.
+ */
+class UnknownIdError extends ValidationError {}
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const MIN_REASON = 12;
 const NO_NUMBERS = 'numbers belong in recorded values, not falsifier conditions';
@@ -78,8 +87,18 @@ function reasonOf(body: Record<string, unknown>, key: string, what: string, issu
 
 async function answerError(pool: Pool, err: unknown, req: Request, res: Response, endpoint: string, subjectTable: string,
   subjectId: string | null, tenantId: string | null, institutionId: string | null): Promise<void> {
-  if (err instanceof ValidationError) {
-    res.status(422).json({ message: `${err.issues.length} issue(s) found; nothing was written.`, issues: err.issues });
+  // Q4l: an early refusal is recorded (source 'route') once the tenant is
+  // known, so a refused attempt is never invisible on the box. Before that
+  // (a malformed id, an unknown or another tenant's subject) there is no
+  // tenant to file it under, and the answer alone stands.
+  if (err instanceof ValidationError || err instanceof ConflictRefusal) {
+    const message = err instanceof ValidationError ? `${err.issues.length} issue(s) found; nothing was written.` : err.message;
+    if (tenantId && !(err instanceof UnknownIdError)) {
+      await recordRouteRefusal(pool, req, { endpoint, subjectTable, subjectId, tenantId, institutionId, attemptedPayload: req.body },
+        err instanceof ValidationError ? `${message} ${err.issues.join('; ')}` : message);
+    }
+    if (err instanceof ValidationError) res.status(422).json({ message, issues: err.issues });
+    else res.status(409).json({ message });
     return;
   }
   if (await handleGovernanceError(pool, err, req, res, {
@@ -133,7 +152,7 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
         { endpoint, subjectTable: 'value_hypotheses', subjectId: null, tenantId, institutionId }, hypothesisFieldExplained)) return;
       const body = req.body;
       const issues: string[] = [];
-      for (const k of ['value_outcome_id', 'value_lever_id']) if (!isId(body[k])) issues.push(`body.${k} must be an id`);
+      for (const k of ['value_outcome_id', 'value_lever_id']) if (!isId(body[k])) issues.push(k === 'value_lever_id' ? 'body.value_lever_id: choose a lever (the pack entry needs one first)' : 'body.value_outcome_id: choose an outcome');
       const f = falsifierFields(body, issues);
       if (issues.length > 0) throw new ValidationError(issues);
       // Ids in the body, answered as unknown whether they are missing or
@@ -142,12 +161,12 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
         `SELECT 1 FROM value_outcomes WHERE id = $1 AND institution_id = $2 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [body.value_outcome_id, institutionId],
       );
-      if (!o) throw new ValidationError([`body.value_outcome_id ${body.value_outcome_id} is not a current outcome of this account`]);
+      if (!o) throw new UnknownIdError(['body.value_outcome_id: that outcome is not a current outcome of this account']);
       const { rows: [l] } = await client.query(
         `SELECT 1 FROM value_levers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [body.value_lever_id, tenantId],
       );
-      if (!l) throw new ValidationError([`body.value_lever_id ${body.value_lever_id} is not a current lever of this tenant`]);
+      if (!l) throw new UnknownIdError(['body.value_lever_id: that lever is not current (withdrawn, superseded or unknown)']);
       // The chain, the author, the reference value and post hoc are the
       // database's to check and compute (value_hypotheses_guard).
       const { rows: [h] } = await client.query<{ id: string; reference_value: string; post_hoc: boolean; verdict: string }>(
@@ -202,7 +221,7 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
           `SELECT 1 FROM value_runs r JOIN engagements e ON e.id = r.engagement_id WHERE r.id = $1 AND e.institution_id = $2`,
           [b.value_run_id, institutionId],
         );
-        if (!run) throw new ValidationError([`body.value_run_id ${b.value_run_id} is not a run of this account`]);
+        if (!run) throw new UnknownIdError(['body.value_run_id: that run is not a run of this account']);
       }
       // One current summary per account and lens: a new one supersedes it, by name.
       const { rows: [current] } = await client.query<{ id: string }>(
@@ -213,13 +232,15 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
         [institutionId, lens],
       );
       const supersedes = isId(b.supersedes_id) ? b.supersedes_id : null;
-      if (current && supersedes !== current.id) {
-        res.status(409).json({ message: `this account has a current ${lens} summary (${current.id}); a new version names it in supersedes_id.` });
-        return;
+      // A wrong supersedes_id is an id that is not this account's (P3: not recorded).
+      if (current && supersedes && supersedes !== current.id) {
+        throw new UnknownIdError([`body.supersedes_id: that summary is not this account's current ${lens} summary`]);
+      }
+      if (current && !supersedes) {
+        throw new ConflictRefusal(`This account already has a current ${lens} summary; a new version names it in supersedes_id.`);
       }
       if (!current && supersedes) {
-        res.status(409).json({ message: `summary ${supersedes} is not this account's current ${lens} summary.` });
-        return;
+        throw new UnknownIdError([`body.supersedes_id: that summary is not this account's current ${lens} summary`]);
       }
       const { rows: [s] } = await client.query<{ id: string }>(
         `INSERT INTO executive_summaries (tenant_id, institution_id, value_run_id, lens, body, author_person_id, drafted_with_ai, drafting_tool, supersedes_id)
@@ -258,8 +279,7 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
         [institutionId],
       );
       if (cur) {
-        res.status(409).json({ message: `"${inst.name}" is already marked a reference example (${cur.id}); supersede the marker to correct it.` });
-        return;
+        throw new ConflictRefusal(`"${inst.name}" is already marked a reference example; correct the marker instead.`);
       }
       const { rows: [row] } = await client.query<{ id: string }>(
         `INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
@@ -345,12 +365,10 @@ export function valueHypothesisRouter(pool: Pool): Router {
         ['statement', 'falsifier_reference', 'falsifier_due', 'falsifier_conditions', 'supersession_reason'],
         { endpoint, subjectTable: 'value_hypotheses', subjectId: id, tenantId, institutionId }, hypothesisFieldExplained)) return;
       if (h.deleted_at !== null || h.superseded_by_id !== null) {
-        res.status(409).json({ message: `hypothesis ${id} is not current (withdrawn or superseded).` });
-        return;
+        throw new ConflictRefusal('This hypothesis is not current (withdrawn or superseded).');
       }
       if (h.verdict !== 'open') {
-        res.status(409).json({ message: `hypothesis ${id}'s verdict is in (${h.verdict}); a tested hypothesis is not superseded.` });
-        return;
+        throw new ConflictRefusal(`This hypothesis's verdict is in (${h.verdict}); a tested hypothesis is not superseded.`);
       }
       const issues: string[] = [];
       const f = falsifierFields(req.body, issues);
@@ -394,12 +412,10 @@ export function valueHypothesisRouter(pool: Pool): Router {
       if (await refuseUnknownFields(pool, req, res, ['retirement_reason'],
         { endpoint, subjectTable: 'value_hypotheses', subjectId: id, tenantId, institutionId }, hypothesisFieldExplained)) return;
       if (h.deleted_at !== null || h.superseded_by_id !== null) {
-        res.status(409).json({ message: `hypothesis ${id} is not current (withdrawn or superseded).` });
-        return;
+        throw new ConflictRefusal('This hypothesis is not current (withdrawn or superseded).');
       }
       if (h.verdict !== 'open') {
-        res.status(409).json({ message: `hypothesis ${id}'s verdict is in (${h.verdict}); a tested hypothesis is not withdrawn.` });
-        return;
+        throw new ConflictRefusal(`This hypothesis's verdict is in (${h.verdict}); a tested hypothesis is not withdrawn.`);
       }
       const issues: string[] = [];
       const reason = reasonOf(req.body, 'retirement_reason', 'the hypothesis is withdrawn', issues);
@@ -454,8 +470,7 @@ export function referenceExampleRouter(pool: Pool): Router {
       if (await refuseUnknownFields(pool, req, res, ['kind', 'source_citation', 'note', 'supersession_reason'],
         { endpoint, subjectTable: 'reference_example_markers', subjectId: id, tenantId, institutionId })) return;
       if (m.deleted_at !== null || m.superseded_by_id !== null) {
-        res.status(409).json({ message: `marker ${id} is not current (unmarked or superseded).` });
-        return;
+        throw new ConflictRefusal('This marker is not current (unmarked or superseded).');
       }
       const f = markerFields(req.body);
       const issues: string[] = [];
@@ -498,8 +513,7 @@ export function referenceExampleRouter(pool: Pool): Router {
       if (await refuseUnknownFields(pool, req, res, ['retirement_reason'],
         { endpoint, subjectTable: 'reference_example_markers', subjectId: id, tenantId, institutionId })) return;
       if (m.deleted_at !== null || m.superseded_by_id !== null) {
-        res.status(409).json({ message: `marker ${id} is not current (unmarked or superseded).` });
-        return;
+        throw new ConflictRefusal('This marker is not current (unmarked or superseded).');
       }
       const issues: string[] = [];
       const reason = reasonOf(req.body, 'retirement_reason', 'the account is no longer a reference example', issues);

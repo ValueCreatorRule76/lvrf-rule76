@@ -10195,3 +10195,37 @@ path to a run 2. **No migration;** client and one read change. Not deployed.
   that name amendments, unchanged.
 - **The conflict is between the written spec and an approved, deployed decision.** It
   goes to UX-1 for Brad to resolve: amend the spec or narrow Q4k.
+
+### Q4l, extended (18 Oct 2026): the lever precondition, and early refusals recorded
+
+**The prod diagnosis (Brad, read-only):**
+- since 2026-10-13 03:36 UTC: 0 refusals, no audit rows for `value_hypotheses`, 0 hypotheses and 0 `value_levers`;
+- `journalctl -u lvrf-api` showed nothing, because the API keeps no request log (now loose end **L31**).
+
+**The cause, from the code:**
+- a hypothesis names a current lever on its outcome's pack entry, and Scotts' TRIR entry had none;
+- on Q4k, "State a hypothesis…" opened anyway, and its submit stayed disabled with nothing on screen;
+- **so no request was ever sent.**
+
+**The fixes:**
+- **The step waits for a lever.** With no lever on any of the account's pack entries, "State a hypothesis…" is disabled. It says *Needs a lever on the pack entry "X": add one on the Manufacturing pack page.* and the page name links to `/packs/<slug>`. An outcome whose entry has no lever is offered as "— no lever yet" and can't be chosen.
+- **The walk:** W1–W9 has no hypothesis step; card 06 is the only place the step appears.
+- **"Ratified" is left out of the sentence on purpose.** No lever ratification act exists: under O-D2, ratification is the steward-only write, and the status stays `proposed`.
+- **Early refusals in `valueHypotheses.ts` are recorded and in words:**
+  - **what is recorded:** a field-check 422 or a route 409 on the hypothesis, summary and marker routes writes a `refusals` row (source `route`), once the tenant is known;
+  - **plain messages:** 409 and 422 messages no longer carry ids.
+- **What is not recorded, and why:**
+  - **an id that is not this account's or tenant's** (unknown, or another tenant's) is answered in words and not recorded. Sign-in P3 answers another tenant's id exactly as an unknown one, with nothing recorded. A first version recorded these, and `verify_tenant_scope` caught it ("refusals 1 -> 5");
+  - **a malformed id, or a 404,** has no tenant to file it under.
+- **A side effect:** a wrong `supersedes_id` on a summary is now a 422 (id lookup) instead of a 409.
+
+**Gate A:**
+- **`verify_walk_runs`: 74 passed, 0 failed.**
+  - **Before a lever:** the opener is disabled, the sentence is exact, the link goes to `/packs/manufacturing` and opens the entry, and no form opens.
+  - **After a lever:** the opener is enabled, and the open form names "choose a lever" and "14 more" characters.
+  - **Refusals:** an unknown lever is refused in words, with no id and no `refusals` row. A digit in the conditions is refused and recorded. A second withdrawal is a 409, recorded against the hypothesis.
+  - **The deliberate break, B3:** with the lever gate removed, the step is offered with no lever and no link. Restored byte-identical.
+  - The screenshots were looked at.
+- **Regression:** all **30** pass. Tenant scope: 203 cases. `verify_value_hypotheses`: 137/0. oxlint: the 1 pre-existing warning.
+- **The bundle:** `index-CQMYamjM.js` / `index-6J3Ne-U_.css`.
+- **Prod copy against the deployed code (`37e6358`):** 67 GETs: 65 identical. The 2 walk reads differ only by Q4l's `confidence_score` and `sealed_evidence`; with those excluded, all 67 are identical.

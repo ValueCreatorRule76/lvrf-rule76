@@ -5,7 +5,7 @@
 //
 //   node scripts/lib/walk_runs_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB INST S_EMAIL X_EMAIL PW S_NAME PHASE
 //
-// MODE: main | break-unmet | break-lock. PHASE (main only): before-lever | after-lever.
+// MODE: main | break-unmet | break-lock | break-gate. PHASE (main only): before-lever | after-lever.
 import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -108,17 +108,20 @@ async function openStateForm() {
   return f;
 }
 
+const NEEDS = 'Needs a lever on the pack entry "Q4l TRIR (fixture)": add one on the Manufacturing pack page.';
 if (MODE === 'main' && PHASE === 'before-lever') {
-  const f = await openStateForm();
-  await setField(f, 'Statement', 'Too short.');
-  await setField(f, 'Due', '2027-09-30');
-  await setField(f, 'Conditions', 'on the same denominator');
-  await sleep(300);
-  check((await buttonDisabled(f, 'State the hypothesis')) === true, 'no lever on the pack entry: "State the hypothesis" is disabled');
-  const unmet = await ev(`(${f}).querySelector('[data-testid=form-unmet]')?.textContent ?? ''`);
-  check(unmet.includes('has no current lever') && unmet.includes('the steward adds one on the pack page'), '  ...and the form SAYS why: the pack entry has no current lever, and who adds one', unmet);
-  check(unmet.includes('the statement needs at least 24 characters'), '  ...and that the statement is too short, by how much', unmet);
-  await markShot(f); await shot('q4l_1_hypothesis_waits_for', '[data-shot="1"]');
+  // No lever on the pack entry: the step is not offered as available. The
+  // opener is disabled, says why, and links to where the lever is added.
+  check((await buttonDisabled(hyp, 'State a hypothesis…')) === true, 'no lever on the pack entry: "State a hypothesis…" is disabled (the step waits)');
+  check(await ev(`(${hyp}).querySelector('[data-testid=opener-reason]')?.textContent === ${JSON.stringify(NEEDS)}`),
+    '  ...and SAYS why, in a plain sentence naming the pack entry and the pack page', await ev(`(${hyp}).querySelector('[data-testid=opener-reason]')?.textContent`));
+  check(await ev(`(${hyp}).querySelector('[data-testid=needs-lever-link]')?.getAttribute('href') === '/packs/manufacturing'`), '  ..."Manufacturing pack page" links to /packs/manufacturing');
+  check(await ev(`!(${hyp}).querySelector('[data-testid=state-hypothesis]')`), '  ...and no form opens that could not be submitted');
+  await markShot(hyp); await shot('q4l_1_hypothesis_waits_for_lever', '[data-shot="1"]');
+  await ev(`(${hyp}).querySelector('[data-testid=needs-lever-link]').click()`);
+  check(await waitFor(`location.pathname === '/packs/manufacturing' && document.body.textContent.includes('Q4l TRIR (fixture)')`), '  ...the link opens the Manufacturing pack, showing the entry');
+  await send('Page.navigate', { url: `${APP}/accounts/${INST}` });
+  await waitFor(`!!${hyp} && !!${step('w9')}`);
   // A form that names nothing of its own still explains itself (W9's retire form, untouched).
   check(await ev(`${step('w9')}?.querySelector('[data-testid=form-unmet]')?.textContent === 'Fill in every required field to submit.'`), "a form with no list of its own (W9) still explains its disabled button");
   // The marker's kind starts unchosen.
@@ -129,8 +132,15 @@ if (MODE === 'main' && PHASE === 'before-lever') {
   check(await ev(`(${ref}).querySelector('[data-testid=form-unmet]')?.textContent.includes('choose the kind')`), "  ...and the form says 'choose the kind'");
 } else if (MODE === 'main' && PHASE === 'after-lever') {
   // (1) With a lever, the hypothesis is stated, and the card says what happened.
+  check((await buttonDisabled(hyp, 'State a hypothesis…')) === false && await ev(`!(${hyp}).querySelector('[data-testid=opener-reason]')`),
+    'with a lever on the entry, "State a hypothesis…" is enabled, with no waiting sentence');
   const f = await openStateForm();
   const LEV = psql(`SELECT id FROM value_levers WHERE name = 'Q4l lever' AND deleted_at IS NULL`);
+  await setField(f, 'Statement', 'Too short.');
+  await sleep(300);
+  check((await ev(`(${f}).querySelector('[data-testid=form-unmet]')?.textContent ?? ''`)).includes('choose a lever') && (await ev(`(${f}).querySelector('[data-testid=form-unmet]')?.textContent ?? ''`)).includes('the statement needs at least 24 characters (14 more)'),
+    'the open form says what its disabled button waits for: a lever, and 14 more characters', await ev(`(${f}).querySelector('[data-testid=form-unmet]')?.textContent`));
+  await markShot(f); await shot('q4l_1b_hypothesis_waits_for', '[data-shot="1"]');
   await setField(f, 'Lever', LEV);
   await setField(f, 'Statement', 'Frontline hazard recognition reduces recordable injuries at this account.');
   await setField(f, 'Due', '2027-09-30');
@@ -176,6 +186,9 @@ if (MODE === 'main' && PHASE === 'before-lever') {
   await setField(f, 'Statement', 'Too short.');
   await sleep(300);
   check(await ev(`!(${f}).querySelector('[data-testid=form-unmet]')`), 'break-unmet: without the unmet text, the disabled button says nothing — the silent failure Brad met; the text is what prevents it');
+} else if (MODE === 'break-gate') {
+  check((await buttonDisabled(hyp, 'State a hypothesis…')) === false && await ev(`!(${hyp}).querySelector('[data-testid=needs-lever-link]')`),
+    'break-gate: with the lever gate removed, "State a hypothesis…" is offered with no lever and no link — the gate is what holds the step');
 } else if (MODE === 'break-lock') {
   const w8 = step('w8');
   check(await ev(`![...(${w8}).querySelectorAll('button')].some(b=>/Lock run 3/.test(b.textContent))`), 'break-lock: with W8 back to first-run-only, an open run 3 cannot be locked from the walk — the condition is what closes the gap');
