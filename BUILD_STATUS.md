@@ -10624,3 +10624,45 @@ LVRF req POST /api/institutions/:institutionId/hypotheses 401 21ms session=y  (a
   (`index-KWocnhhB.js`).
 - **Prod copy against the deployed code (`a88c071`):** 67 GETs, **67 identical**. The new
   server logged 68 request lines, and none carries an id.
+
+### Deployed — 19 October 2026 (UTC): L31 (`3a1165e`)
+
+`773d25c..3a1165e` went to production: L31 (`3a1165e`) and docs. **No migration, no
+hardening change**, and the deploy script was unchanged, so there was no re-exec.
+
+- **Backup:** `~/lvrf-pre-l31-20261019T140927Z.dump`, **872,309 bytes**, `-rw-------`,
+  **630 TOC entries.**
+  - **I estimated 631; the difference is one entry.** Prod's pre-OWN-1 dump already had
+    an ACL entry on schema `public` (it had 3 ACL entries; my local pre-OWN-1 database
+    had 2), so OWN-1 added 42 ACL entries on prod, not 43.
+  - **Prod's change since the Q4l dump (585):** ACL 3 → 45 (40 tables, 2 sequences, the
+    migrations table, schemas `public` and `drizzle`), default privileges 0 → 2,
+    functions 24 → 25 (`lvrf_ownership_violations`), so +45. Every other type is
+    unchanged (41 tables, 129 triggers, 27 types, 175 FKs).
+  - **From now on,** estimates use the box's own previous dump, not a local stand-in.
+- **The deploy:**
+  - exit 0, HEAD **`3a1165e`**;
+  - drift none (38 migrations, 930 objects); D1/D3/D4 no findings; **5d ownership
+    passed**; smoke checks as expected;
+  - bundle **`index-KWocnhhB.js`** / `index-6J3Ne-U_.css` (unchanged);
+  - the API has been up since **14:10:54 UTC**.
+
+**Gate C** (read-only, by me over ssh):
+- **The standard checks:** run hashes 25/25; `check_ownership` clean; drift D1/D3/D4 no
+  findings; plain sentences 69/69; **129 triggers by `pg_trigger`, 0 disabled**.
+- **Since the restart:** 0 refusals, 0 audit rows.
+- **The journal:** 3 request lines since the restart, all from the deploy's own smoke
+  checks:
+  - `LVRF req GET /api/health 200 Nms session=n`;
+  - **two `LVRF req GET /api/runs/:id 401 Nms session=n`: a 401 names its route.**
+
+  Scanned, **0 lines** carry an id, a query string, an IP, an `@` or a cookie word.
+- **`design/mockups` isn't web-served.** Caddy's roots are `/srv/lvrf/client/dist` only
+  (`/assets/*` and the catch-all), and `dist` has no `design/`.
+  - **An authenticated request returns the app shell (200), not 404.** The catch-all
+    is `try_files {path} /index.html`, so such a request for
+    `/design/mockups/pov.html` gets `index.html`, not the mock-up.
+  - **Not tested authenticated:** I don't hold the basic-auth credentials. Brad's check
+    is `curl -s -u brad https://lvrf-rule76.com/design/mockups/pov.html | grep -c "UX-1
+    mock-up"`, which should print 0.
+  - Unauthenticated, it's 401, like every path; the API itself answers 404.
