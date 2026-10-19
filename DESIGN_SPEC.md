@@ -914,8 +914,13 @@ This is the component's reason to exist:
 **A governance refusal is the system working. A 500 is the system failing.**
 Rendering both the same would undo the argument the database enforces.
 
-A refusal message is never prefixed, wrapped, appended, or mapped to a friendlier
-string. Those sentences name amendments. They are the product.
+A refusal the schema writes (an `LVRF:` message) is never prefixed, wrapped,
+appended, or mapped to a friendlier string. Those sentences name amendments. They are
+the product. **Amended by UX-1-D2 (Brad Piver, 19 Oct 2026):** raw database text that
+is not such a sentence (a CHECK, foreign-key, type or not-null error) is shown as the
+plain sentence that names its rule (`server/lib/plainChecks.ts`, Q4k), never as
+Postgres's own words, and the raw text is logged. The reason for the rule above,
+"those sentences name amendments", does not hold for raw database text.
 
 Ink is **reserved for refusals and conflicts**. The actor requirement uses
 HealthCard's gold-left-border callout instead — "you have not chosen who you are"
@@ -963,6 +968,60 @@ reason — seven production runs predate it.
   the single most important thing that card can show
 - An unbuilt action is `disabled` with *not yet implemented*. An action blocked by
   a gate is `disabled` with the gate's reason. Different states, distinguished
+
+### UX-1 standards (ratified by Brad Piver, 19 Oct 2026)
+
+Ratified from the UX-1 mock-ups (`design/mockups/`, `docs/LVRF_PLAN.md` §7f), with two
+of Brad's own (6 and 7). These are the first written rules for navigation, hierarchy
+and actions; every screen inherits them. They change presentation only: no governance
+rule is added, removed or relaxed by any of them.
+
+1. **One filled button per screen: the next step's action.** It is ink with offwhite
+   text. Every other action is outlined. A disabled action is grey and **always carries
+   its reason directly under it** (GovernedForm's `unmet`, or the gate's reason). Never
+   colour alone.
+2. **The account is one guided path of six steps:** Research → Outside-in walk →
+   Hypothesis → Summary → Run and lock → Point of view.
+   - **One step is open at a time,** the first one not done.
+   - **A done step folds** to one line: what was recorded, by whom, when, and "Show ▸".
+     Unfolded, it shows what it showed before.
+   - **A waiting step is one line** saying what it waits for, in the words of the
+     existing unmet lists.
+   - **A step rail** shows where you are at desktop width. At phone width it is
+     dropped: the numbered steps are the path.
+   - **Governed detail outside the path** (facts, what the industry says carries
+     money, what the account measures, the gap, engagements, the reference marker,
+     retirement) sits in a folded "Account detail" section.
+3. **Path order is guidance, not a gate.** Where the server allows a step out of order
+   (a summary, a run), the waiting step keeps a secondary link to it. The UI never
+   blocks what the server permits, and never offers what the server refuses.
+4. **The value spine in plain labels:** Baseline set · Capability attached · Value
+   modelled · Target committed · Actual measured · Verified · Returned to the record.
+   The enum keeps its values (`db/schema.ts`); the labels map onto them in one place.
+5. **Confidence is always "n / 100" with its band written out:** "35 / 100 · Low", in
+   that one form on every screen.
+   - **Low is neutral (ink-70), never critical red,** because a low score is a state of
+     the evidence, not a failure. It isn't amber either: amber (`--warning`) already
+     means UNVERIFIED (one meaning, one value; CLAUDE.md).
+   - **Medium is gold-ink and High is healthy.**
+   - **No score-as-game wording:** no "points outstanding" or "points to go".
+6. **No internal terms on screen** (Brad):
+   - **None of these in any label, heading or sentence a user reads:** step codes
+     (W1–W9), plan or decision ids (§, O-D…, item numbers), enum codes, constraint or
+     table names, heartbeat ids;
+   - **an auditor's identifiers** (a record hash, an id) appear only in a mono detail
+     line;
+   - **the reader's words instead:** "book confidence", not "cohort"; "your own
+     company's account", not "customer zero".
+7. **Every stage bar has a legend** (Brad): Done · Furthest reached · Not reached.
+8. **Record values, or an explicit bracketed state.** A label or example is never
+   invented. Where the record has no value, the screen says so, as §9's rendering rules
+   already require.
+9. **At phone width (390):**
+   - no page scrolls sideways;
+   - a "Menu" button replaces the navigation and the actor line;
+   - tables become stacked rows;
+   - long identifiers break; prose never does.
 
 ## 10. Brand and design system
 

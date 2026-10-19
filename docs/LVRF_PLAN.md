@@ -2195,3 +2195,72 @@ changes**):
 
 **Not mocked:** the Packs and Runs index pages (reference views, unchanged in role);
 sign-in.
+
+### 7g. Mock-up review, the standards ratified, and the build in slices (19 Oct 2026)
+
+**The review (Brad's reviewer), all fixed in `design/mockups/`; screenshots refreshed:**
+1. **Curia is a reference example.** Accounts home now shows Curia marked a published
+   case study, and book confidence says **"No live customer engagements"**, not a
+   number. **The server doesn't do this yet** (see Q4n below).
+2. **Each account row lists its engagements, with the latest locked run of each:**
+   Curia's live engagement is run 1 at 10 / 100, its retired reference engagement run 21
+   at 55 / 100.
+3. **Record values only.** The capability is "EHS solution". The metric, unit, entity,
+   facts and falsifier conditions are the record's own words, and anything else is in
+   brackets.
+   - **The falsifier's double period is explained:** the metric's unit is stored as
+     "recordable incidents per 200,000 hours worked." (ending in a period). Slice 3
+     strips trailing punctuation when composing the sentence, in both
+     `falsifierSentence` and `previewFalsifier`.
+4. **"65 points outstanding" is removed.**
+5. **Low confidence is neutral (ink-70),** not critical red. It isn't amber either:
+   amber already means UNVERIFIED and can't be told apart from Medium's gold-ink at
+   badge size.
+6. **Internal terms are removed** ("W9", "§7e", "cohort", "customer zero").
+7. **Every stage bar has a legend:** Done · Furthest reached · Not reached.
+8. **At 390 the step strip is dropped;** the numbered steps are the path.
+- **A retired run's page** shows one line, "Locked, and its engagement retired: no
+  evidence is added to this run", in place of a disabled "Add evidence…".
+
+**Ratified into `DESIGN_SPEC.md` §9, "UX-1 standards"** (Brad, 19 Oct 2026): §7f's 1–5,
+Brad's 6 (no internal terms) and 7 (stage-bar legends), plus record-values-only and the
+390 rules. **UX-1-D2 is applied:** §9's refusal rule now covers `LVRF:` sentences
+verbatim and raw database text as plain sentences.
+
+**Q4n, before the UX-1 build: book confidence leaves out reference examples (O-D3).**
+- **The gap:** `server/routes/cohort.ts` leaves out the tenant's own account and retired
+  engagements, but **not** accounts with a current reference-example marker. So marking
+  Curia alone wouldn't change book confidence: its live engagement (run 1, 10 / 100)
+  would still set it.
+- **The change:** the cohort query skips any institution with a current marker. The
+  read gains `reference_example_count`, so "No live customer engagements" can say why.
+  The server change is read-only (no migration, no trigger). The value-spine stage it
+  serves is **verify**: what the book claims.
+- **Gate A:**
+  - an extended `verify_cohort`: a marked account isn't counted; unmarking it counts it
+    again; and the "no live engagements" state;
+  - the accounts page's book card shows the new state;
+  - deliberate break: the filter removed → the marked account sets the book again.
+- **Brad's act on prod, after the deploy:** mark Curia a published case study (the
+  steward's act, with its citation). Only then does prod read "No live customer
+  engagements".
+
+**The UX-1 build, in slices.** Every slice:
+- has its own Gate A (verify scripts with deliberate breaks, browser walks with
+  screenshots compared against the mock-up, regression, prod-copy equivalence), Gate B
+  and Gate C;
+- changes presentation only;
+- **keeps every `data-testid` the verify scripts select by**, or changes the script in
+  the same commit;
+- adds no table, no heartbeat and no governance rule;
+- serves the stages its screen already serves.
+
+| Slice | What | Notes |
+|---|---|---|
+| **1. Account workspace** (first) | The six-step path on `/accounts/:id`. Steps reuse today's components: AccountResearch → 1; OutsideInWalk W1–W6 → 2; PovAuthoring's hypothesis → 3, summary → 4; W7/W8 (produce, lock, the run list) → 5; the POV link → 6. **Step status is derived** from the reads the page already makes (entity pinned, walk steps, hypotheses, summaries, runs), so there is no new table. The rest moves into "Account detail" (facts, pack, measuring, gap, engagements, marker, retirement). The primary-button variant and the fold/open step are added to the existing component library (`components/workbench/`, §0b: no second library) | The largest slice. `verify_outside_in_walk`, `verify_walk_runs`, `verify_account_research`, `verify_value_hypotheses` and `verify_account_workbench` walk this page; their selectors must still find every form. The new `verify_workspace_path.sh` walks the three mock-up states (new, mid-walk, locked) at 1280 and 390, with breaks (two steps open at once; a disabled action without its reason) |
+| **2. Accounts home and the header** | Rows as real links (keyboard-reachable), each engagement's latest locked run, "where it stands" from slice 1's derivation, "New account…" behind a button; the 390 "Menu" header on every page | The accounts read gains each engagement's latest locked run (read-only) |
+| **3. The POV** | §7e 1–4: one-sentence falsifier with trailing punctuation stripped; money formatted; plain stage labels with the legend; the lever "ratified by <steward>, <date>". Plus §7e 5–6 (done: Q4m, D3), the record hash label, the 390 layout | The falsifier template changes in server and client together. `verify_value_hypotheses` checks they are identical, so it is updated in the same commit. Print QA: print to PDF and look at every page (CLAUDE.md) |
+| **4. The run page** | Breadcrumb to its step; the stage strip with legend at 390; the evidence form folded behind "Add evidence…"; the retired line; ledgers folded | The run page is a printed record too: banners and hash on every printed page |
+| **5. The copy pass and the index pages** | No internal terms anywhere (standard 6); Packs and Runs indexes at 390 (the Runs table scrolled sideways at 788 px) | A grep-based check for step codes and decision ids in client strings, so a new one fails Gate A |
+
+**After UX-1:** L32 (rename the lever's stored status so storage and display agree).
