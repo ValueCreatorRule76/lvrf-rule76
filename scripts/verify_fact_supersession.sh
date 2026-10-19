@@ -5,7 +5,7 @@
 #
 #   ./scripts/verify_fact_supersession.sh
 #
-# Clone `lvrf_verifyfacts` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifyfacts` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest (0028) and hardened, dropped on exit. The header is used as the
 # actor (LVRF_ALLOW_ACTOR_HEADER=1 on this throwaway server only), as in
 # the other verify scripts. The first correction it makes mirrors the real
@@ -13,6 +13,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -48,8 +49,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to latest (0028), harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$T triggers (0028 adds none)" || bad "triggers $T (expected $EXPECT_TRIGGERS)"

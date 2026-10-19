@@ -5,7 +5,7 @@
 #
 #   ./scripts/verify_pack_research.sh [screenshot_dir]
 #
-# Clone `lvrf_verifypackresearch` (createdb -T lvrf -O lvrf_app), migrated
+# Clone `lvrf_verifypackresearch` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated
 # and hardened, dropped on exit. Two parts:
 #
 #  A. The API, with the header actor (LVRF_ALLOW_ACTOR_HEADER=1 on this
@@ -21,6 +21,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -77,8 +78,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate, harden; fixtures"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening"; exit 1; }
 TS="$(date +%s)"
 S="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"

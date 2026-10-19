@@ -15,6 +15,10 @@
 # that differs from the newest snapshot (D2), or on a critical drift finding
 # (D1/D3/D4).
 #
+# Step 5d (OWN-1) refuses to restart if lvrf_app owns anything, or holds
+# DELETE, TRUNCATE or CREATE, or UPDATE on audit_log, heartbeat_events or
+# refusals, or if any trigger is disabled (hardening.sql section 24).
+#
 # Step 7 checks the app is UP and FAIL-CLOSED, then the vhost:
 #   - GET /api/health on 127.0.0.1 -> 200, and it must report
 #     origin_check "configured": a missing LVRF_PUBLIC_ORIGIN fails the
@@ -142,6 +146,15 @@ node scripts/check_schema_drift.mjs \
   || die "D2: the database is not what this code expects (see above); not restarting. Apply the migrations and db/hardening.sql first."
 npx tsx scripts/drift_report.ts \
   || die "a critical drift finding (see above); not restarting"
+
+# 5d. Ownership, before the restart (OWN-1). The app role owns nothing and
+#     holds no DELETE, TRUNCATE or CREATE: lvrf_ownership_violations(), the
+#     one definition, installed by hardening.sql section 24, read-only as
+#     lvrf_app (scripts/check_ownership.ts). Any violation, or a database not
+#     yet converted by db/ownership.sql, stops the deploy with the running
+#     service untouched.
+DATABASE_URL="${DATABASE_URL:-$(grep '^DATABASE_URL=' .env | cut -d= -f2-)}" npx tsx scripts/check_ownership.ts \
+  || die "OWN-1: the ownership check failed (see above); not restarting. Run db/ownership.sql and db/hardening.sql as postgres first."
 
 # 6. Restart the service and confirm it came up.
 sudo systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed"

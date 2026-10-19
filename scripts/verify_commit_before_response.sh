@@ -4,7 +4,7 @@
 #
 #   ./scripts/verify_commit_before_response.sh
 #
-# Clone `lvrf_verifycommit` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifycommit` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest and hardened, dropped on exit. Stop `npm run dev` first.
 #
 # Two kinds of check:
@@ -19,6 +19,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -41,8 +42,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to latest, harden, add the clone-only COMMIT-time failure"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_commit.log 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 # THIS CLONE ONLY. Never in a migration or hardening.sql.
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" <<'SQL'

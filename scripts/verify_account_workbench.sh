@@ -15,6 +15,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value). A migration that adds triggers updates that line, and
@@ -67,12 +68,12 @@ dropdb --if-exists "$VERIFY_DB"
 # -O lvrf_app: local lvrf is owned by lvrf_app, and .env connects as it. A
 # clone owned by whoever ran createdb leaves lvrf_app without CREATE, and
 # drizzle-kit migrate dies on CREATE SCHEMA drizzle with its error swallowed.
-createdb -T lvrf -O lvrf_app "$VERIFY_DB"
+make_clone "$VERIFY_DB"
 ok "cloned"
 
 # ---------------------------------------------------------------------
 step "3. Migrate and harden the copy"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate
+migrate_clone "$VERIFY_DB"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_0024.log 2>&1 \
   && ok "hardening.sql applied" || { bad "hardening.sql failed — see /tmp/lvrf_hardening_0024.log"; exit 1; }
 

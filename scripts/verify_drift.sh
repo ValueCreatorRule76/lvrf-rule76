@@ -6,7 +6,7 @@
 #
 #   ./scripts/verify_drift.sh
 #
-# Clone `lvrf_verifydrift` (createdb -T lvrf -O lvrf_app), migrated and
+# Clone `lvrf_verifydrift` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated and
 # hardened, dropped on exit; a second clone `lvrf_verifydriftbehind`,
 # migrated to one migration BEFORE the newest, for the unmigrated case.
 # Every fault is introduced as the superuser on the clone, checked, and put
@@ -14,6 +14,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -46,8 +47,8 @@ npx tsc -p tsconfig.scripts.json --noEmit && ok "scripts tsc" || bad "scripts ts
 
 step "2. Clone, migrate, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 
 step "3. Clean state"
@@ -55,7 +56,7 @@ OUT="$(d2 "$VERIFY_URL")"; case "$OUT" in "schema drift: none"*) ok "D2: $OUT" ;
 baseline_ok && ok "D1/D3/D4: no findings (L16 closed: the four link tables are governed)" || bad "baseline report: $(report)"
 
 step "4. D2 — never new code against an unmigrated database"
-dropdb --if-exists "$BEHIND_DB"; createdb -T lvrf -O lvrf_app "$BEHIND_DB"
+dropdb --if-exists "$BEHIND_DB"; make_clone "$BEHIND_DB"
 mkdir -p "$W/mig"; cp -R db/drizzle "$W/mig/"
 NEWEST_TAG="$(node -e "const j=require('./db/drizzle/meta/_journal.json');console.log(j.entries[j.entries.length-1].tag)")"
 rm "$W/mig/drizzle/$NEWEST_TAG.sql"
@@ -63,9 +64,9 @@ node -e "const fs=require('fs');const p='$W/mig/drizzle/meta/_journal.json';cons
 # A plain object: this config sits outside the repo, where 'drizzle-kit'
 # would not resolve as an import.
 cat > "$W/mig/drizzle.config.ts" <<EOF
-export default { dialect: 'postgresql', schema: '$PWD/db/schema.ts', out: '$W/mig/drizzle', dbCredentials: { url: '$BEHIND_URL' } };
+export default { dialect: 'postgresql', schema: '$PWD/db/schema.ts', out: '$W/mig/drizzle', dbCredentials: { url: '$(migrate_url "$BEHIND_DB")' } };
 EOF
-npx drizzle-kit migrate --config "$W/mig/drizzle.config.ts" > /dev/null && ok "a second clone migrated to one BEFORE the newest ($NEWEST_TAG not applied)" || bad "could not build the behind clone"
+npx drizzle-kit migrate --config "$W/mig/drizzle.config.ts" > /dev/null && psql -X -q -v ON_ERROR_STOP=1 -d "$BEHIND_DB" -f db/ownership.sql > /dev/null 2>&1 && ok "a second clone migrated to one BEFORE the newest ($NEWEST_TAG not applied)" || bad "could not build the behind clone"
 OUT="$(d2 "$BEHIND_URL" || true)"
 case "$OUT" in *"D2 critical: UNMIGRATED: 1 migration(s) this code ships are not applied: $NEWEST_TAG"*) ok "check_schema_drift: refused — 1 unapplied migration, named" ;; *) bad "behind: $OUT" ;; esac
 # The deploy's own step 5c, extracted and run against the behind clone.

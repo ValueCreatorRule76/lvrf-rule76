@@ -6,7 +6,7 @@
 #
 #   ./scripts/verify_steward_acts.sh
 #
-# Clone `lvrf_verifysteward` (createdb -T lvrf -O lvrf_app), migrated and
+# Clone `lvrf_verifysteward` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated and
 # hardened, dropped on exit. The tenant is local Skillsoft (it holds
 # pending research results, industries and engagements); its first staff
 # person is named steward S, and a second staff person X is granted access.
@@ -14,6 +14,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -54,8 +55,8 @@ WRONG="$(while read -r m p cls; do t="$(grep "^$m $p " "$W/table.txt" | awk '{pr
 
 step "3. Clone, migrate, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 
 step "4. Fixtures: steward S and authorized X, both granted"

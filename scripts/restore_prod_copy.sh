@@ -66,7 +66,7 @@ q()   { psql -X -At -d "$TARGET" -c "$1"; }
 
 echo "==> Snapshot: $DUMP ($(wc -c < "$DUMP" | tr -d ' ') bytes, $(pg_restore --list "$DUMP" | grep -vc '^;') TOC entries)"
 
-echo "==> Recreate $TARGET (owner lvrf_app)"
+echo "==> Recreate $TARGET (owner lvrf_app, as prod before OWN-1; converted below)"
 dropdb --if-exists "$TARGET"
 createdb -O lvrf_app "$TARGET"
 
@@ -120,7 +120,14 @@ END $$;
 SQL
 ok "ownership transferred"
 
-echo "==> Migrations newer than the snapshot, applied as lvrf_app (as on prod)"
+# OWN-1: then convert it exactly as OWN-1's Gate B converts prod. Until OWN-1
+# deploys, prod itself is still the lvrf_app-owned state above; after it,
+# both match. hardening.sql section 24 refuses an unconverted database.
+echo "==> OWN-1: db/ownership.sql (lvrf_owner owns everything; lvrf_app granted only what the code needs)"
+psql -X -q -v ON_ERROR_STOP=1 -d "$TARGET" -f db/ownership.sql > /tmp/lvrf_prodcopy_ownership.log 2>&1 \
+  && ok "converted (db/ownership.sql)" || { bad "db/ownership.sql failed — see /tmp/lvrf_prodcopy_ownership.log"; exit 1; }
+
+echo "==> Migrations newer than the snapshot, applied as lvrf_migrate (as on prod after OWN-1)"
 # A snapshot taken before the repo's latest migration would leave tables
 # that hardening.sql's later sections reference missing (0027's
 # person_credentials and sessions, for one). Applying the pending
@@ -128,9 +135,12 @@ echo "==> Migrations newer than the snapshot, applied as lvrf_app (as on prod)"
 # what testing unreleased code against real data needs. Printed, so it is
 # never silent.
 BEFORE_MIG="$(q "SELECT count(*) FROM drizzle.__drizzle_migrations")"
-COPY_URL="${LOCAL_URL%/*}/$TARGET"
-DATABASE_URL="$COPY_URL" npx drizzle-kit migrate > /tmp/lvrf_prodcopy_migrate.log 2>&1 \
+[ -r .env.migrate ] || { bad "REFUSING: .env.migrate is missing (the local lvrf_migrate URL; OWN-1)"; exit 1; }
+MIGRATE_URL="$(grep '^MIGRATE_DATABASE_URL=' .env.migrate | cut -d= -f2-)"
+DATABASE_URL="${MIGRATE_URL%/*}/$TARGET" npx drizzle-kit migrate > /tmp/lvrf_prodcopy_migrate.log 2>&1 \
   || { bad "drizzle-kit migrate failed — see /tmp/lvrf_prodcopy_migrate.log"; exit 1; }
+psql -X -q -v ON_ERROR_STOP=1 -d "$TARGET" -f db/ownership.sql > /dev/null 2>&1 \
+  || { bad "db/ownership.sql (after migrating) failed"; exit 1; }
 AFTER_MIG="$(q "SELECT count(*) FROM drizzle.__drizzle_migrations")"
 if [ "$AFTER_MIG" = "$BEFORE_MIG" ]; then ok "snapshot was already at the repo's latest migration"; else ok "applied $((AFTER_MIG - BEFORE_MIG)) migration(s) newer than the snapshot"; fi
 
@@ -147,10 +157,14 @@ for tbl in audit_log heartbeat_events; do
   [ "$P" = "falsefalsefalse|truetrue" ] && ok "$tbl: UPDATE/DELETE/TRUNCATE revoked from lvrf_app; INSERT/SELECT granted" || bad "$tbl privileges: $P"
 done
 
-NOT_APP="$(q "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-               WHERE n.nspname IN ('public','drizzle') AND c.relkind IN ('r','p','S','v','m') AND c.relowner <> 'lvrf_app'::regrole
+# OWN-1: every relation is lvrf_owner's, and the one definition of the
+# ownership rules (hardening.sql section 24) finds nothing, read as lvrf_app.
+NOT_OWNER="$(q "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname IN ('public','drizzle') AND c.relkind IN ('r','p','S','v','m') AND c.relowner <> 'lvrf_owner'::regrole
                  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e')")"
-[ "$NOT_APP" = "0" ] && ok "every table and sequence is owned by lvrf_app" || bad "$NOT_APP relation(s) not owned by lvrf_app"
+[ "$NOT_OWNER" = "0" ] && ok "every table and sequence is owned by lvrf_owner (OWN-1)" || bad "$NOT_OWNER relation(s) not owned by lvrf_owner"
+VIOLATIONS="$(q "SELECT count(*) FROM lvrf_ownership_violations()")"
+[ "$VIOLATIONS" = "0" ] && ok "lvrf_ownership_violations(): none" || bad "$VIOLATIONS ownership violation(s): $(q "SELECT string_agg(v, '; ') FROM lvrf_ownership_violations() v")"
 FN_APP="$(q "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname LIKE 'lvrf\_%' AND p.proowner = 'lvrf_app'::regrole")"
 FN_ALL="$(q "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname LIKE 'lvrf\_%'")"
 [ "$FN_APP" = "0" ] && ok "none of the $FN_ALL lvrf_* functions is owned by lvrf_app (superuser, as on prod)" || bad "$FN_APP lvrf_* function(s) owned by lvrf_app"

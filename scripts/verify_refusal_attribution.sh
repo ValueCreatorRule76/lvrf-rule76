@@ -5,13 +5,14 @@
 #
 #   ./scripts/verify_refusal_attribution.sh
 #
-# Clone `lvrf_verifyrefusal` (createdb -T lvrf -O lvrf_app), migrated to
+# Clone `lvrf_verifyrefusal` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to
 # the latest migration and hardened, dropped on exit. Needs an institution with two current
 # outcomes under current engagements (local Northgate has two). Stop
 # `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value). A migration that adds triggers updates that line, and
@@ -40,8 +41,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to latest, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB"
 [ "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name = 'refusals' AND column_name = 'value_outcome_id'")" = "1" ] \
   && ok "refusals.value_outcome_id exists" || { bad "column missing after migrate"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_0025.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }

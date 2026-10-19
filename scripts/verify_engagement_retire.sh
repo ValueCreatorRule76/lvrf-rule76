@@ -4,12 +4,13 @@
 #
 #   ./scripts/verify_engagement_retire.sh
 #
-# Runs against `lvrf_verifyretire`, a `createdb -T lvrf -O lvrf_app` clone
+# Runs against `lvrf_verifyretire`, a `make_clone` clone (createdb -T lvrf, then db/ownership.sql)
 # dropped on exit — a retirement cannot be undone, so it is never tested on
 # the real local lvrf. Stop `npm run dev` first. No migration is involved.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -32,7 +33,7 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
+make_clone "$VERIFY_DB" && ok "cloned"
 
 step "3. API against the clone, port ${PORT}"
 LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > /tmp/lvrf_verify_retire_server.log 2>&1 &

@@ -5,12 +5,13 @@
 #
 #   ./scripts/verify_signin_p2a.sh
 #
-# Clone `lvrf_verifyp2a` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifyp2a` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest and hardened, dropped on exit. Every address is a placeholder.
 # Stop `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared.
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
@@ -58,8 +59,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to latest, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$T triggers (no migration in P2a)" || bad "triggers $T (expected $EXPECT_TRIGGERS)"

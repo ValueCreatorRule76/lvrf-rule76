@@ -6,7 +6,7 @@
 #
 #   ./scripts/verify_access_grants.sh
 #
-# Clone `lvrf_verifygrants` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifygrants` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest and hardened, dropped on exit. The access scripts read passwords
 # without echo, so they are driven through a pseudo-terminal
 # (scripts/lib/pty_answer.py), which also fails a run that echoes any
@@ -14,6 +14,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -54,8 +55,8 @@ npx tsc -p tsconfig.scripts.json --noEmit && ok "scripts tsc" || bad "scripts ts
 
 step "2. Clone, migrate to latest (0029), harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$T triggers" || bad "triggers $T (expected $EXPECT_TRIGGERS)"

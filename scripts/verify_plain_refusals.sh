@@ -5,7 +5,7 @@
 #
 #   ./scripts/verify_plain_refusals.sh [screenshot_dir]
 #
-# Clone `lvrf_verifyq4k` (createdb -T lvrf -O lvrf_app), migrated and
+# Clone `lvrf_verifyq4k` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated and
 # hardened, dropped on exit. API with the header actor
 # (LVRF_ALLOW_ACTOR_HEADER=1, this throwaway server only); the page through
 # Vite and headless Chrome, signed in by SESSION
@@ -19,6 +19,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -94,8 +95,8 @@ npx tsc -p tsconfig.scripts.json --noEmit && ok "scripts tsc" || bad "scripts ts
 
 step "2. Clone, migrate, harden; the coverage check"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening"; exit 1; }
 N_TRIG="$(q "SELECT count(DISTINCT trigger_name || '.' || event_object_table) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && [ "$(q "SELECT count(*) FROM hardening_manifest")" = "$EXPECT_TRIGGERS" ] && ok "$N_TRIG triggers and manifest rows, as declared (the AI-origin rule is folded into an existing trigger)" || bad "triggers $N_TRIG"

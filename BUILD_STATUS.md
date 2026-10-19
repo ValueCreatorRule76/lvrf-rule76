@@ -10307,3 +10307,89 @@ deployed** (Brad's reviewer, 19 Oct 2026).
   reads differ only by `locked_runs` and `engagement_retired` (with those excluded, 66
   are identical). One gap read for Curia's retired outcome is still a 409, now the plain
   sentence instead of the raw one with the id.
+
+## OWN-1: the database owner role — 19 October 2026 (UTC)
+
+**Why:** migrations ran as `lvrf_app`, so the app role owned every table. It could
+re-grant itself what `hardening.sql` revokes, and drop or disable any trigger. CLAUDE.md
+rule 3 says "Pending OWN-1".
+
+**Decisions OWN-1-D1–D3** (Brad, 19 Oct 2026; plan §3):
+- **D1:** local roles with the prod names and a local-only password. Ownership changes
+  **only on throwaway clones**.
+- **D2:** no live DDL on prod; the refusals are proved on clones.
+- **D3:** the `CLAUDE.md` Stack edit comes after Gate C.
+
+**What it builds** (no migration; **129 triggers, unchanged**):
+- **`db/ownership.sql`** (as a superuser, idempotent):
+  - **the roles:** `lvrf_owner` (NOLOGIN) and `lvrf_migrate` (LOGIN, a member, with
+    `role = lvrf_owner` on login). The password comes from `LVRF_MIGRATE_PASSWORD` via
+    `\getenv` or a pre-`\set`; it is never in the file and never on a command line;
+  - **the database and every relation, enum and migration-made function** move to
+    `lvrf_owner` (explicit loops, not `REASSIGN OWNED`);
+  - **`lvrf_app`'s grants, re-derived from the code:** SELECT everywhere; INSERT on 31
+    tables and UPDATE on 20, for the tables that exist (it is run again after a
+    migration that adds tables); no DELETE, TRUNCATE or CREATE;
+  - **default privileges:** a new table gives the app SELECT and INSERT only;
+  - **the DROP ROLE steps** for undoing it locally, in the header.
+- **`hardening.sql` section 24:**
+  - **`lvrf_ownership_violations()`**, the one definition of the rules, owned by the
+    superuser. It lists every violation: the database or any relation, type, function
+    or schema owned by `lvrf_app`; DELETE, TRUNCATE, TRIGGER or REFERENCES anywhere;
+    UPDATE on `audit_log`, `heartbeat_events` or `refusals`; CREATE on a schema or the
+    database; `lvrf_app` a member of `lvrf_owner` or `lvrf_migrate`; a disabled
+    trigger;
+  - **a DO block fails the hardening run on any violation.** An unconverted database,
+    such as real local `lvrf`, fails it by design.
+- **`scripts/check_ownership.ts`** (read-only, as `lvrf_app`; deploy **step 5d**) and
+  **`scripts/check_migrate_role.ts`** (the migration URL must be `lvrf_migrate` acting as
+  `lvrf_owner`).
+- **Deploy step 5d** runs after 5c, before the restart. It honours a `DATABASE_URL`
+  already set, as 5c does.
+- **The harness, `scripts/lib/clone.sh`:**
+  - `make_clone` (createdb, then `ownership.sql`) and `migrate_clone` (migrate as
+    `lvrf_migrate`, then `ownership.sql` again), substituted into all 29 verify scripts
+    and `verify_drift`'s behind clone;
+  - **it refuses `lvrf`.** The local `lvrf_migrate` URL is in the git-ignored
+    `.env.migrate` (600).
+- **`restore_prod_copy.sh`** converts the copy as Gate B will convert prod, and migrates
+  as `lvrf_migrate`.
+- **One code change:** the executive-summary route row-locked with `SELECT … FOR
+  UPDATE`, which needs UPDATE privilege on an append-only table, and the grant list from
+  the grep had missed it. It now serializes on `pg_advisory_xact_lock`, so the app's
+  grants stay exactly what the code writes. Every other row lock is on a table with
+  UPDATE granted.
+
+**Gate A:**
+- **`verify_ownership.sh`: 50 passed, 0 failed.**
+  - **Twelve attempts as `lvrf_app`, each refused with nothing changed:** DROP TRIGGER,
+    DISABLE TRIGGER, GRANT itself UPDATE on `audit_log`, ADD COLUMN, CREATE TABLE, DROP
+    TABLE `refusals`, TRUNCATE, DELETE, UPDATE `audit_log`, `session_replication_role`,
+    ALTER DATABASE OWNER, and replacing the ownership function.
+  - **A migration as `lvrf_migrate`:** its table is `lvrf_owner`'s, and `lvrf_app` gets
+    SELECT and INSERT only.
+  - **Breaks:**
+    - **B1:** a table back to `lvrf_app` → section 24 fails, naming it, and 5d refuses;
+    - **B2:** UPDATE on `refusals` → both guards;
+    - **B2b:** UPDATE on `audit_log` → 5d refuses, and hardening repairs it (section 7
+      re-revokes it on every run);
+    - **B3:** CREATE given back, so a "migration" as `lvrf_app` → both guards, naming
+      the table and the CREATE;
+    - **B4:** a disabled trigger → 5d refuses, and hardening repairs it (it re-creates
+      every trigger enabled).
+    The plan expected hardening itself to fail on B2b and B4; it repairs them instead,
+    and 5d is the guard between runs.
+  - **On a converted prod copy:** DROP TRIGGER, GRANT and DISABLE TRIGGER, each
+    refused.
+  - **Real local `lvrf` unchanged** (owner `lvrf_app`, 122 `lvrf_app` relations), and
+    `make_clone` refuses it.
+- **Regression:** all **31** pass, every one on converted clones. Tenant scope 203;
+  `verify_value_hypotheses` 137/0 (it caught the FOR UPDATE); `verify_drift` 30/0 (it
+  caught 5d reading `.env`). The bundle is unchanged: `index-KWocnhhB.js`.
+- **`restore_prod_copy.sh`:** 14/0. Everything is `lvrf_owner`'s, with no violations.
+- **Prod copy:** the deployed code (`6a6eaf1`) on an unconverted copy against OWN-1 on a
+  converted copy: **67 GETs, 67 identical**, and no "permission denied" in the server
+  log.
+
+**Not yet:** Gate B on prod (pastes; `pg_hba.conf` checked first); Gate C; then the
+`CLAUDE.md` Stack edit (OWN-1-D3).

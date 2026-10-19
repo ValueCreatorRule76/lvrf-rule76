@@ -1797,6 +1797,78 @@ CREATE TRIGGER account_person_links_guard
   FOR EACH ROW EXECUTE FUNCTION lvrf_account_person_link_guard();
 
 -- ------------------------------------------------------------------
+-- 24. OWN-1 (19 Oct 2026) — the app role owns nothing and cannot rewrite the rules
+-- ------------------------------------------------------------------
+-- WHY: until OWN-1, migrations ran as lvrf_app, so the app role OWNED every
+-- table and could re-grant itself what section 7 revokes, or drop or disable
+-- any trigger in this file (CLAUDE.md rule 3, "Pending OWN-1"). db/ownership.sql
+-- hands everything to lvrf_owner (NOLOGIN); migrations run as lvrf_migrate,
+-- acting as lvrf_owner. This section ASSERTS the result after every run:
+-- any violation fails the run, and the transaction rolls back.
+--
+-- ONE DEFINITION. lvrf_ownership_violations() lists every violation as a
+-- sentence; this section raises if it returns any row, and deploy step 5d
+-- (scripts/check_ownership.ts) calls the same function, read-only, as
+-- lvrf_app. Owned by the superuser that runs this file, so lvrf_app cannot
+-- replace it. It reads only the catalogs.
+--
+-- ORDER ON A DATABASE: ownership.sql BEFORE this file. On a database not yet
+-- converted (real local lvrf, until OWN-1 deploys) this section fails, by
+-- design: hardening such a database would certify what is not true.
+CREATE OR REPLACE FUNCTION lvrf_ownership_violations() RETURNS SETOF text
+LANGUAGE sql STABLE AS $$
+  SELECT format('the database %s is owned by %s, not lvrf_owner', d.datname, d.datdba::regrole)
+    FROM pg_database d WHERE d.datname = current_database() AND d.datdba <> 'lvrf_owner'::regrole
+  UNION ALL
+  SELECT format('lvrf_app owns %s %I.%I', CASE c.relkind WHEN 'S' THEN 'sequence' WHEN 'v' THEN 'view' ELSE 'table' END, n.nspname, c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   WHERE n.nspname IN ('public', 'drizzle') AND c.relowner = 'lvrf_app'::regrole
+  UNION ALL
+  SELECT format('lvrf_app owns type %I.%I', n.nspname, t.typname)
+    FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+   WHERE n.nspname IN ('public', 'drizzle') AND t.typowner = 'lvrf_app'::regrole
+  UNION ALL
+  SELECT format('lvrf_app owns function %s', p.oid::regprocedure)
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+   WHERE n.nspname IN ('public', 'drizzle') AND p.proowner = 'lvrf_app'::regrole
+  UNION ALL
+  SELECT format('lvrf_app owns schema %I', n.nspname)
+    FROM pg_namespace n WHERE n.nspname IN ('public', 'drizzle') AND n.nspowner = 'lvrf_app'::regrole
+  UNION ALL
+  SELECT format('lvrf_app holds %s on %I.%I', priv, n.nspname, c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   CROSS JOIN unnest(ARRAY['DELETE', 'TRUNCATE', 'TRIGGER', 'REFERENCES']) priv
+   WHERE n.nspname IN ('public', 'drizzle') AND c.relkind IN ('r', 'p')
+     AND has_table_privilege('lvrf_app', c.oid, priv)
+  UNION ALL
+  SELECT format('lvrf_app holds UPDATE on %s', t)
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals']) t
+   WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
+  UNION ALL
+  SELECT format('lvrf_app holds CREATE on schema %s', s)
+    FROM unnest(ARRAY['public', 'drizzle']) s
+   WHERE EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = s) AND has_schema_privilege('lvrf_app', s, 'CREATE')
+  UNION ALL
+  SELECT format('lvrf_app holds CREATE on the database %s', current_database())
+   WHERE has_database_privilege('lvrf_app', current_database(), 'CREATE')
+  UNION ALL
+  SELECT format('lvrf_app is a member of %s', m.roleid::regrole)
+    FROM pg_auth_members m WHERE m.member = 'lvrf_app'::regrole AND m.roleid IN ('lvrf_owner'::regrole, 'lvrf_migrate'::regrole)
+  UNION ALL
+  SELECT format('trigger %s on %s is disabled (tgenabled = %s)', tg.tgname, tg.tgrelid::regclass, tg.tgenabled)
+    FROM pg_trigger tg WHERE NOT tg.tgisinternal AND tg.tgenabled <> 'O'
+$$;
+
+DO $$
+DECLARE v text[];
+BEGIN
+  SELECT array_agg(x) INTO v FROM lvrf_ownership_violations() x;
+  IF v IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: OWN-1 ownership assertion failed (hardening.sql section 24; run db/ownership.sql first): %', array_to_string(v, '; ');
+  END IF;
+END $$;
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the

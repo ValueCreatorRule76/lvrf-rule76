@@ -4,7 +4,7 @@
 #
 #   ./scripts/verify_frozen_outcomes.sh
 #
-# Clone `lvrf_verifyfrozen` (createdb -T lvrf -O lvrf_app), dropped on exit.
+# Clone `lvrf_verifyfrozen` (make_clone: createdb -T lvrf, then db/ownership.sql), dropped on exit.
 # Migrated to the repo's latest migration and hardened, so it runs against
 # the code's schema even when local lvrf is behind. Picks a current customer
 # outcome, retires its engagement, then proves commit, measure, verify,
@@ -14,6 +14,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -36,11 +37,11 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
+make_clone "$VERIFY_DB" && ok "cloned"
 # The server code may expect columns local lvrf does not have yet (0025's
 # refusals.value_outcome_id, for one): migrate and harden the clone, never
 # the real local lvrf.
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /tmp/lvrf_frozen_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_frozen_migrate.log"; exit 1; }
+migrate_clone "$VERIFY_DB" > /tmp/lvrf_frozen_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_frozen_migrate.log"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_frozen_hardening.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"

@@ -6,7 +6,7 @@
 #
 #   ./scripts/verify_research_contract.sh
 #
-# Clone `lvrf_verifycontract` (createdb -T lvrf -O lvrf_app), migrated and
+# Clone `lvrf_verifycontract` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated and
 # hardened, dropped on exit. The header is the actor
 # (LVRF_ALLOW_ACTOR_HEADER=1 on this throwaway server only).
 #
@@ -20,6 +20,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -79,8 +80,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 step "2. Clone, migrate, harden"
 dropdb --if-exists "$VERIFY_DB"
 LEGACY_BEFORE="$(psql -X -At -d lvrf -c "SELECT count(*) FROM research_results")"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned (local lvrf has $LEGACY_BEFORE research_results)"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+make_clone "$VERIFY_DB" && ok "cloned (local lvrf has $LEGACY_BEFORE research_results)"
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > "$W/harden.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep ERROR "$W/harden.log" | head -2)"; exit 1; }
 N_TRIG="$(q "SELECT count(DISTINCT trigger_name || '.' || event_object_table) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && ok "$N_TRIG distinct triggers, as hardening.sql's Total says" || bad "triggers: $N_TRIG, expected $EXPECT_TRIGGERS"

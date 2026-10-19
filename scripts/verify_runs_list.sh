@@ -6,12 +6,13 @@
 #
 #   ./scripts/verify_runs_list.sh
 #
-# Clone `lvrf_verifyrunslist` (createdb -T lvrf -O lvrf_app), migrated and
+# Clone `lvrf_verifyrunslist` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated and
 # hardened, dropped on exit. The header is the actor
 # (LVRF_ALLOW_ACTOR_HEADER=1 on this throwaway server only).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -34,8 +35,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate, harden; retire one engagement that has runs"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND NOT simulated AND deleted_at IS NULL ORDER BY created_at LIMIT 1")"
 ENG_R="$(q "SELECT e.id FROM engagements e WHERE e.deleted_at IS NULL AND EXISTS (SELECT 1 FROM value_runs v WHERE v.engagement_id = e.id) ORDER BY e.created_at LIMIT 1")"

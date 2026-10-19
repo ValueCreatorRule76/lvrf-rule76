@@ -4,7 +4,7 @@
 #
 #   ./scripts/verify_pack_review.sh
 #
-# Clone `lvrf_verifyreview` (createdb -T lvrf -O lvrf_app), dropped on exit.
+# Clone `lvrf_verifyreview` (make_clone: createdb -T lvrf, then db/ownership.sql), dropped on exit.
 # Local lvrf has no real pack data, so the script makes one entry the way
 # prod does: parse a one-measure research payload into an empty industry,
 # accept it with a review note, then reads GET /api/industries/:slug/pack
@@ -15,6 +15,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -38,11 +39,11 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone local lvrf -> ${VERIFY_DB}"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
+make_clone "$VERIFY_DB" && ok "cloned"
 # The server code may expect columns local lvrf does not have yet (0026's
 # exclusion provenance, read by the pack route): migrate and harden the
 # clone, never the real local lvrf.
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /tmp/lvrf_review_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_review_migrate.log"; exit 1; }
+migrate_clone "$VERIFY_DB" > /tmp/lvrf_review_migrate.log 2>&1 && ok "clone migrated to the latest migration" || { bad "migrate failed — see /tmp/lvrf_review_migrate.log"; exit 1; }
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_review_hardening.log 2>&1 && ok "hardening.sql applied" || { bad "hardening failed"; exit 1; }
 
 step "3. API against the clone, port ${PORT}"

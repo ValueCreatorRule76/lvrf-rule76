@@ -4,7 +4,7 @@
 #
 #   ./scripts/verify_signin_p1.sh
 #
-# Clone `lvrf_verifysignin` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifysignin` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest and hardened, dropped on exit. Credentials are inserted directly
 # with an argon2id hash computed here, because scripts/set_password.ts reads
 # the password from a terminal without echo and cannot be scripted.
@@ -12,6 +12,7 @@
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value). A migration that adds triggers updates that line, and
@@ -41,8 +42,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to latest, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_signin.log 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 # P1's own two triggers, by name; the total is whatever hardening.sql now

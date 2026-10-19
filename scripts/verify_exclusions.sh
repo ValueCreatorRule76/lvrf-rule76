@@ -5,12 +5,13 @@
 #
 #   ./scripts/verify_exclusions.sh
 #
-# Clone `lvrf_verifyexcl` (createdb -T lvrf -O lvrf_app), migrated to 0026
+# Clone `lvrf_verifyexcl` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to 0026
 # and hardened, dropped on exit. Exclusions are insert-only, so they are
 # never tested on the real local lvrf. Stop `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value). A migration that adds triggers updates that line, and
@@ -48,8 +49,8 @@ npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
 
 step "2. Clone, migrate to 0026, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB"
 [ "$(q "SELECT count(*) FROM information_schema.columns WHERE table_name = 'industry_measure_exclusions' AND column_name IN ('proposed_by_research_tool','proposal_text')")" = "2" ] \
   && ok "provenance columns exist" || { bad "provenance columns missing"; exit 1; }
 [ "$(q "SELECT count(*) FROM pg_indexes WHERE indexname = 'research_results_one_accepted_per_measure'")" = "1" ] \

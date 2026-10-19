@@ -4,13 +4,14 @@
 #
 #   ./scripts/verify_set_email.sh
 #
-# Clone `lvrf_verifyemail` (createdb -T lvrf -O lvrf_app), migrated to the
+# Clone `lvrf_verifyemail` (make_clone: createdb -T lvrf, then db/ownership.sql), migrated to the
 # latest and hardened, dropped on exit. Every address used is a placeholder
 # (.example / .invalid); no real address appears here.
 # Stop `npm run dev` first.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+. scripts/lib/clone.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value).
@@ -42,8 +43,8 @@ rm -f "$TMPCFG"
 
 step "2. Clone, migrate to latest, harden"
 dropdb --if-exists "$VERIFY_DB"
-createdb -T lvrf -O lvrf_app "$VERIFY_DB" && ok "cloned"
-DATABASE_URL="$VERIFY_URL" npx drizzle-kit migrate > /dev/null && ok "migrated"
+make_clone "$VERIFY_DB" && ok "cloned"
+migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_hardening_email.log 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "triggers: $T (expected $EXPECT_TRIGGERS)"

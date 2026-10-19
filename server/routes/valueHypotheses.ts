@@ -224,11 +224,14 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
         if (!run) throw new UnknownIdError(['body.value_run_id: that run is not a run of this account']);
       }
       // One current summary per account and lens: a new one supersedes it, by name.
+      // Two new versions for the same account and lens serialize on a
+      // transaction-scoped advisory lock (OWN-1): SELECT … FOR UPDATE needs
+      // UPDATE privilege, and lvrf_app has none on this append-only table.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('executive_summaries:' || $1 || ':' || $2))`, [institutionId, lens]);
       const { rows: [current] } = await client.query<{ id: string }>(
         `SELECT s.id FROM executive_summaries s
           WHERE s.institution_id = $1 AND s.lens = $2
-            AND NOT EXISTS (SELECT 1 FROM executive_summaries n WHERE n.supersedes_id = s.id)
-          FOR UPDATE`,
+            AND NOT EXISTS (SELECT 1 FROM executive_summaries n WHERE n.supersedes_id = s.id)`,
         [institutionId, lens],
       );
       const supersedes = isId(b.supersedes_id) ? b.supersedes_id : null;
