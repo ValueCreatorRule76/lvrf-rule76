@@ -199,7 +199,7 @@ exclusions of IT entries (§4d) → Q4g → Q4h → Q4c2 → Q4d.
 | ~~Q4j~~ | **W1 fix, DONE 12 Oct 2026, deployed `901fc91`** (Gate C clean) (migration 0037, 129 triggers; BUILD_STATUS "W1 fix"): an existing person (the tenant's own staff) named analyst of record on an account through `account_person_links`, with a per-account title; raw unique violations become plain words ("already in LVRF; select them instead") | Brad's Scotts walk, 12 Oct 2026 | W1 was blocked: a duplicate person, or a placeholder, was the only path |
 | Q4k | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4k"; approved by Brad 12 Oct with Q4k-D1: build "Open the citation…", the recorder may open). **Plain refusals everywhere, and the AI-verified evidence form** (L29 widened; plan in §4k) | the Scotts walk | W6 surfaced a raw CHECK message; the form offers a combination the database must refuse |
 | Q4l | **BUILT 13 Oct 2026, Gate A passed, not deployed** (BUILD_STATUS "Q4l"): no silent outcomes (every disabled submit says what it waits for; every success that closes a form leaves a sentence); a run 2 after the walk's first, with W7 listing what each run sealed | the Scotts walk | the hypothesis form failed silently; run 1 was locked before its citations were opened |
-| UX-1 | **NEXT after OWN-1; all further O-band work pauses for it** (Brad, 13 Oct 2026): the workflow and UI do not meet Rule76 design standards. Plan in §7 (not yet approved; no UI code until Brad approves mock-ups) | OWN-1 | the app is hard to navigate and hard to use |
+| UX-1 | **NEXT after OWN-1; all further O-band work pauses for it** (Brad, 13 Oct 2026): the workflow and UI do not meet Rule76 design standards. Plan in §7 (written 18 Oct 2026, not yet approved; no UI code until Brad approves mock-ups; decisions UX-1-D1–D4) | OWN-1 | the app is hard to navigate and hard to use |
 | OWN-1 | **NEXT, before any further O-band work** (Brad, 12 Oct 2026). **The database owner role** (plan §6): `lvrf_app` stops owning the schema, so the trigger guards and rule 3 bind the role itself, not only the app's code paths | O2 deployed | shown on the prod copy, 12 Oct 2026: `lvrf_app` can DROP TRIGGER and GRANT itself UPDATE on `audit_log` |
 | O3 | **Outputs, phase 3: lenses and the value case** (plan §5): `lens_policies` (steward-ratified), the value case per locked run as a web page through a lens (output 2), outcomes by lever with confidence and basis (output 5) | O2 | a lens is a policy, not a template (CAPABILITY_MAP item 4) |
 | O4 | **Outputs, phase 4: the value case as a PDF** (plan §5; 3.0 item 15; **O-D5: a print stylesheet**): the browser prints the rendered page; no new dependency; both banners and the run's `payload_hash` on every printed page; QA by printing and looking | O3 | the PDF renders what O3 already shows; no new claim enters at print |
@@ -1938,3 +1938,178 @@ releases, web pages, blog posts, job postings and marketing material.
 - **OWN-1-D1:** may the local roles be created?
 - **OWN-1-D2:** no live DDL attempts on prod (recommended)?
 - **OWN-1-D3:** the `CLAUDE.md` Stack edit after OWN-1's Gate C.
+
+---
+
+## 7. UX-1: navigation and usability (planned 18 Oct 2026; **plan only, not yet approved; no UI code until Brad approves mock-ups**)
+
+**The value-spine stage it serves:** all of them. The operator walks `baseline → attach →
+model → commit → measure → verify → return` on these pages. UX-1 changes how those
+pages are presented. It does not change any governance rule, route, table, trigger or CHECK.
+
+### 7a. The Rule76 design standards in the repo
+
+These are the written standards. Nothing here is invented.
+
+| Where | What it rules | Status |
+|---|---|---|
+| `CLAUDE.md`, "Rule76 design tokens" | The canonical tokens. The ink, gold and gold-ink rule. WATCH reuses gold. No component restates a hex value | Normative |
+| `AMENDMENT-004` (Cathedral) | The semantic palette and contrast. Gold on white fails AA. Art. IV: screen and print are one system | In force |
+| `DESIGN_SPEC.md` §0b | "The component library — do not invent a second one" | Draft (CDS volumes unratified) |
+| `DESIGN_SPEC.md` §9, GovernedForm | Four result states: a refusal (422) and a conflict (409) render as an **ink block, verbatim**; an error is muted | Draft |
+| `DESIGN_SPEC.md` §9, "Rules every form inherits" | No plausible defaults (`— choose —`, tri-state booleans). Provenance first. The actor requirement above the fields. The result block above the submit button. Labels teach the constraint | Draft, implemented |
+| `DESIGN_SPEC.md` §9, "Rendering rules" | No bare 0, dash, `""` or `"null"`; render an explicit state. Zero events is UNMEASURED. An unbuilt action is disabled, saying it is *not yet implemented*. A gated action is disabled, giving the gate's reason | Draft, partly implemented |
+| `DESIGN_SPEC.md` §9 | Ink is reserved for refusals and conflicts. Preconditions use the **gold left-border callout** | Draft |
+| `DESIGN_SPEC.md` §10 | Tokens (plus the derived `ink-70`, `rule` and `rule-soft`). Bebas Neue, Barlow and the system mono. The `RULE \| 76` lockup is built in markup. The Chapel is subordinate (Rule76 above LVRF). No raw hex, one exception | Draft |
+| `design/BRAND.md` | Seven logo and lockup rules | Draft |
+| `design/workbench.html` | A static mock-up of the run workbench (the run page's ancestor) | Reference only |
+
+**What is not written anywhere:** no standard for navigation, information architecture,
+page hierarchy, a primary action, step order, progressive disclosure or responsive
+layout. No button hierarchy is defined either: every button is the same outlined ghost,
+and disabled differs from enabled only by a lighter grey. UX-1's IA (7c) would be the
+first written rule in that space. It is a **proposal for Brad to ratify**, not a
+standard found in the repo.
+
+**A named conflict, carried from Q4k:** `DESIGN_SPEC.md` §9 says a refusal message is
+"never prefixed, wrapped, appended, or mapped to a friendlier string". Q4k maps every
+raw Postgres CHECK text to a plain sentence. "LVRF:" messages still pass verbatim.
+**Brad decides:** amend §9 to "LVRF: sentences verbatim; raw database text in a plain
+sentence that names the rule", or narrow Q4k. Recommendation: amend §9. Raw CHECK text
+is not a sentence that names an amendment, and §9's reason for the rule doesn't hold
+for it.
+
+### 7b. The audit (captured 18 Oct 2026)
+
+**How it was captured:**
+- the prod copy (`lvrf_prodcopy`) on a throwaway clone, signed in by session as the steward;
+- 9 pages at 1280 and at 390, full height, each one looked at;
+- the clone was dropped afterwards.
+
+The prod copy predates Scotts. Curia (the walk done, run 1 locked) and Skillsoft
+(customer zero) stand in for it.
+
+**How findings are ranked:**
+- **B1, blocks:** a user can't find or finish the next step without help.
+- **B2, misleads:** the user reaches a wrong belief, or the page shows internal or raw text.
+- **B3, slows:** the user gets there, with effort.
+- **B4, polish.**
+
+| # | Rank | Page | Finding | Standard |
+|---|---|---|---|---|
+| 1 | B1 | Account | **The page runs against the workflow.** Top to bottom: facts → walk (W1–W9) → industry → measuring → gap → engagements → hypotheses (06) → summary (07) → reference (08) → **Research (A1–A5) last**, 4,455 px down. The work goes research → walk → hypothesis → summary → run → POV. Research, the first step, is the last thing on the page | Usability: hierarchy |
+| 2 | B1 | Account | **There is no single next action.** W6 and W9 both say NEXT at once. W6 says NEXT while its own text says the run is locked and evidence "would not be in it". Seventeen cards are all open at the same weight, and none says "do this now" | One primary action per step |
+| 3 | B1 | All | **There is no visual primary action.** Every button is the same small, grey, outlined, uppercase ghost. Disabled differs from enabled only by a lighter grey (ink-25 text, which AMENDMENT-004 allows for disabled). "Generate research prompt" is the only button with a dark border. On a long page the user can't see what's clickable | Not written (7a) |
+| 4 | B1 | Accounts | **The account rows don't look like links.** The `<tr onClick>` has no link, no focus and no keyboard access, and nothing says "open". It is the only way into an account | Usability: navigation |
+| 5 | B1 | Account → Run, POV | **Nothing joins the steps.** Engagements (05) are plain text, not links. The run is reached from W7's "Run 1" or from the Runs list. The POV link is a small gold "Open the POV →" on card 06. There's no breadcrumb from a run back to its step | Usability: navigation |
+| 6 | B2 | POV | **Raw server text with a UUID**, in critical red, on a customer-facing page: "value outcome e3fb0061-… belongs to a retired engagement; its outcomes are frozen". It comes from `server/routes/outcomeWalk.ts` (3 places). A frozen outcome isn't a failure, so critical red is the wrong colour | Q4k plain sentences; §9 ink/colour |
+| 7 | B2 | Run, POV, Runs | **Pages scroll sideways at 390:** Run 674 px, Runs 788 px, POV 438 px (the hash lines). The run page's dark spine sidebar and the confidence column stack above the record | Responsive (CLAUDE.md artifact rule; not in DESIGN_SPEC) |
+| 8 | B2 | All | **Internal vocabulary on screen:** "(3.0 item 3)", "the cohort decision", "pack basis", "reference engagement", "CURIA_VALIDATED" (a provenance enum shown raw), "HB-0013", schema CHECK names in findings (`value_outcomes_verified_requires_human`), `public_filing`/`observation` as code | Plain language |
+| 9 | B2 | Accounts | "Curia · Curia — lot acceptance…": the account name is repeated, because the engagement name already includes it. "10.0 LOW" has no scale; the POV says "LOW 10" and the run page says "10 /100" | Plain language; one meaning, one value |
+| 10 | B2 | Runs | All 22 rows look alike, with ISO timestamps to the millisecond. 21 are a retired engagement's runs; the one that counts (Curia run 1, locked) isn't marked as the run of record | Hierarchy |
+| 11 | B3 | Accounts | "Create account" fills the middle of the home page, provenance first, above book confidence. It's a rare act on the most-visited page | One primary action |
+| 12 | B3 | Account | Numbering mixes 00–08, W1–W9 and A1–A5 on one page; the Pack page uses R1–R5. Numbers suggest an order the page doesn't follow | Hierarchy |
+| 13 | B3 | Run | The evidence form is open by default, about 600 px of selects, between the ledger and the gap register, on a run that may be locked | Progressive disclosure |
+| 14 | B3 | Pack | The research cards R1–R5 show at equal weight even when the pack has no measures. "Exclude a measure" has a stray "Clear" button below its own unmet line | One primary action |
+| 15 | B3 | All, 390 | The header wraps to three rows (nav, then the actor, then Change password/Sign out), so 150 px of chrome sits above every page | Responsive |
+| 16 | B4 | Sign in | The nav (Accounts/Packs/Runs) shows to a signed-out visitor, and each link leads back to sign-in | Navigation |
+| 17 | B4 | Packs | "0 MEASURES" badges outnumber the useful ones 7 to 3; no filter | Hierarchy |
+
+**What already meets the standards:**
+- **Disabled submits explain themselves:** Q4l added "To submit: …" and "Fill in every required field to submit.".
+- **No plausible defaults:** selects start on `— choose —`.
+- **The unverified banner prints:** it shows on POV and Run.
+- **Refusals:** an ink block, kept for refusals.
+- **Tokens:** used with no stray hex seen; display, body and mono faces as specified.
+- **Explicit states:** "Not recorded", "Not yet measured" and "No pack basis" stand in for blanks.
+
+### 7c. The proposed information architecture
+
+**The rule:** governed detail is presented differently, never removed. Every form,
+refusal, provenance block, unmet list, disclosure banner and payload hash stays. The
+only change is where they render and how much is open at once.
+
+```
+Sign in
+└─ Accounts home                      (one list; "Create account" behind a button)
+   │   row = name · industry · current step · confidence (n/100, band) · last act
+   │   book confidence below the list
+   └─ Account workspace  /accounts/:id
+        header: name · industry · confidence n/100 · the ONE next action (filled button)
+        ┌ 1 Research       entity pinned → facts accepted          [done ▸ / next / waiting]
+        ├ 2 Outside-in walk W1–W8 as sub-steps; one open at a time
+        ├ 3 Hypothesis     the lever, the statement, the due date
+        ├ 4 Summary        the executive summary
+        ├ 5 Run and lock   the run list (what each sealed) · produce · lock
+        └ 6 Point of view  open, print/PDF (the existing POV page)
+        "Account detail" (folded): facts · industry money · measuring · gap ·
+                                   engagements · reference marker · retire (W9)
+        └─ Run page  /runs/:id     breadcrumb: Account › Run and lock › Run N
+        └─ POV page  /accounts/:id/pov  breadcrumb back; unchanged as a document
+   Packs, Runs: kept in the top nav as steward/reference views, not the path
+```
+
+**How the steps behave:**
+- **One step is open: the first one not done.** Its single primary action is the only
+  filled button (ink fill with offwhite text, or gold on ink). Every other action is an
+  outlined secondary.
+- **A done step folds** to one line: what it recorded, who, when, and "▸ show".
+  Unfolded, it shows exactly what it shows today.
+- **A waiting step** shows one line, "Waits for: step N, <the reason>". The text comes
+  from the existing unmet lists, in the gold left-border callout (§9's precondition
+  treatment).
+- **A step is never skipped by presentation.** If the server would refuse, the step
+  says why before the user starts, using the same `unmet` sentences as today.
+
+**Step status is derived, not stored:**
+- it comes from the reads the page already makes (entity pinned, walk step states,
+  hypotheses, summary, runs, locked);
+- it adds **no table and no heartbeat**;
+- if a derivation needs a field a GET doesn't return, the GET gains it, read-only, as
+  in Q4l.
+
+**The other screens:**
+- **Run page at 390:** the spine sidebar becomes a horizontal stage strip, and the
+  confidence column moves below the record header. The evidence form folds behind
+  "Add evidence…", which is disabled with the lock's reason on a locked run.
+- **Plain language:** a glossary pass to replace internal labels (item numbers, enum
+  codes, CHECK names, heartbeat ids) with words. The codes stay in the mono detail
+  line, where an auditor needs them.
+- **Fixes for the raw POV text and its red colour (#6):** a plain sentence in ink-45,
+  "Frozen: this engagement is retired, so its outcomes have no open asks.", through
+  the existing refusal mapping. It is a small server change, and it is part of UX-1's
+  build, not its plan.
+
+**What UX-1 does not do:**
+- no new route, table, trigger or heartbeat;
+- no change to any CHECK, gate, grant or refusal;
+- the disclosure banner stays on every unverified page;
+- no learner-facing feature.
+
+### 7d. The markers: what exists, and "outside-in test"
+
+**What exists:** `reference_example_kind` has two values, `published_case_study` and
+`demonstration`. Before Q4l the marker form defaulted to `published_case_study`. That
+is how Scotts, an outside-in test of published material, came to be offered "published
+case study". Q4l made the kind start unchosen.
+
+**Recommendation: yes, add `outside_in_test`.** Scotts is neither of the existing
+kinds: not a customer's published case study, and not a demonstration built for
+show. It is an outside-in test of the method against a real company's public record.
+Calling it "demonstration" undersells the record; calling it "case study" overstates it.
+
+**It is its own item, after UX-1's mock-ups and before its build:**
+- an enum migration (the one change to the database);
+- a plain sentence for the kind;
+- the POV render label "Outside-in test: built from published material, not a
+  customer engagement".
+
+Before the migration: it adds an enum value, and **orphans nothing**.
+
+**Brad decides:**
+- **UX-1-D1:** approve the IA in 7c as the basis for mock-ups.
+- **UX-1-D2:** the §9 refusal-wording conflict (7a).
+- **UX-1-D3:** add `outside_in_test` as a marker kind (7d).
+- **UX-1-D4:** the mock-up form. Static HTML in `design/` like `workbench.html`, one
+  per screen (Accounts home, Account workspace in three states: new, mid-walk and
+  locked; Run at 390), using only the canonical tokens. Recommended.
