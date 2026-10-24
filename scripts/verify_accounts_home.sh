@@ -44,7 +44,8 @@ cleanup() {
   for f in "$HOME_PAGE" "$HEADER"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W/chrome"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 
 step "1. Typecheck"
@@ -259,4 +260,5 @@ echo "  screenshots: $SHOTS"
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" = "0" ]

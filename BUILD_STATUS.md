@@ -11180,3 +11180,53 @@ changes no hash.
 - **For Brad's review:** screenshots and the PDFs' page images are on the Mac only, in
   `~/lvrf-backups/slice3-screens/` (600). They cover Scotts, Curia and the new account at
   1280 and 390, with every printed page as an image and the PDFs themselves.
+
+### The early-exit audit — 24 October 2026 (UTC), before slice 3's Gate B
+
+Brad asked which verify scripts or walk libraries could exit 0 without reaching their final
+tally.
+
+- **All 35 `verify_*.sh` could.** Each runs under `set -euo pipefail` with an EXIT trap that
+  cleans up.
+  - **The mechanism:** under macOS's bash 3.2, a fatal shell error (an unset variable, a
+    bad substitution, a syntax error reached at run time) ends the script with `$?` already
+    0 inside the trap. The script's exit status then comes from the trap's last command,
+    which is usually a cleanup that returns 0. Saving `$?` in the trap does not help, since
+    `$?` is already 0 there.
+  - **Not affected:** an ordinary failing command under `set -e` keeps its non-zero status.
+  - **Shown on a copy of `verify_deploy_reexec`** with one unset variable injected: it
+    stopped after section B, with C and D unrun, and **exited 0**. The same injection into
+    the fixed script **exits 1**.
+- **The fix:** `scripts/lib/finish.sh`. Every script now traps `finish`, which runs its
+  cleanup and then **fails unless the script set `REACHED_TALLY=1`**. Each script sets it
+  on the line after its "==> N passed, M failed". Once the tally is reached, the script
+  exits with the tally's own result.
+  - `verify_account_workbench`'s optional local apply resets the sentinel and must reach
+    its own end.
+  - The stop-early line I added to `verify_pov_print` on 19 Oct is removed: its
+    saved-`$?` approach has the hole described above.
+- **Walk libraries (`scripts/lib/*.mjs`): none can exit 0 early.**
+  - Every mid-file `process.exit(0)` ends a mode branch after that mode's checks.
+  - No `catch` swallows a failure; the only one is on the logout fetch.
+  - A crash exits non-zero, and every caller counts a non-zero exit as a failure
+    (`PIPESTATUS`, or `|| bad`). The inline walks print only at the end, so a crash prints
+    nothing and is counted.
+- **Break checks that pass when something is absent:** every one has a positive control
+  (the status code, or the line it expects, is checked first), except `verify_pov_print`'s
+  B1. If its walk crashed, there was no PDF, so "page 2 has no banner" held without proving
+  anything.
+  - **The fix:** B1 now prints into its own fresh directory, and passes only if the PDF
+    exists **and** page 1 still carries the banner.
+- **Re-run, after the fix, all 35 scripts:** every one reached its tally and passed:
+  - runs_list 10; drift 30; hygiene 19; steward_acts 35; grant_enforcement 31;
+    access_grants 76; fact_supersession 38; tenant_scope setup 12 and cases 203;
+    signin_p2b 44; deploy_reexec 13; signin_p2a 49; signin_p1 35;
+  - set_email 29; commit_before_response 17; account_workbench 28; cohort 79;
+    engagement_retire 17; frozen_outcomes 21; refusal_attribution 13; pack_review 17;
+    exclusions 28; research_contract 100; pack_research 62; pack_entry_retire 73;
+  - account_research 160; outside_in_walk 119; value_levers 169; value_hypotheses 137;
+    plain_refusals 85; walk_runs 116; ownership 75; request_log 38; workspace_path 107;
+    accounts_home 61; pov_print 115.
+
+  The build, tsc and oxlint are clean (the 1 pre-existing warning). The bundle is
+  unchanged: `index-BEtOnLYY.js` / `index--mKXtxKN.css`.

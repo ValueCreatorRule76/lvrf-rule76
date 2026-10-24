@@ -40,7 +40,8 @@ step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 cleanup() { dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; dropdb --if-exists "$COPY_DB" 2>/dev/null || true; rm -rf "$W"; }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q()  { psql -X -At -d "$1" -c "$2"; }                     # as the local superuser
 harden() { psql -X -q -v ON_ERROR_STOP=1 -d "$1" -f db/hardening.sql > "$W/harden.log" 2>&1; }
 owncheck() { DATABASE_URL="$1" npx tsx scripts/check_ownership.ts > "$W/own.log" 2>&1; }
@@ -250,4 +251,5 @@ dropdb --if-exists "$D10"
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" = "0" ]

@@ -39,7 +39,8 @@ cleanup() {
   dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
   rm -rf "$W"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 start_server() {  # LOGFILE
   LVRF_PUBLIC_ORIGIN="$ORIGIN" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=0 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$1" 2>&1 &
@@ -168,4 +169,5 @@ grep -m1 -E '^LVRF req GET /api/institutions/:institutionId/pov 401 ' "$LOG" | s
 grep -m1 -E '^LVRF req POST /api/institutions/:institutionId/hypotheses 401 ' "$LOG" | sed 's/^/    /'
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" = "0" ]

@@ -26,7 +26,9 @@ PASS=0; FAIL=0
 ok()  { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad() { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 T="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_deploy_reexec.XXXXXX")"
-trap 'rm -rf "$T"' EXIT
+cleanup() { rm -rf "$T"; }
+. scripts/lib/finish.sh
+trap finish EXIT
 
 git init -q --bare "$T/origin.git"
 git clone -q "$T/origin.git" "$T/work" 2>/dev/null
@@ -76,4 +78,5 @@ echo "$OUT" | grep -q 'STUB npm' && bad "it went on to build" || ok "nothing bui
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]

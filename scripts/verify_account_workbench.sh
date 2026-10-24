@@ -55,7 +55,8 @@ cleanup() {
   sleep 1
   dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 
 # ---------------------------------------------------------------------
 step "1. Typecheck — server and client"
@@ -185,9 +186,11 @@ fi
 # ---------------------------------------------------------------------
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ] || exit 1
 
 if $APPLY_LOCAL; then
+  REACHED_TALLY=0  # the local apply must reach its own end too
   kill "$SERVER_PID" 2>/dev/null || true
   SERVER_PID=""
   step "6. Apply to local lvrf (CLAUDE.md rule 8: back up first)"
@@ -200,4 +203,5 @@ if $APPLY_LOCAL; then
   LOCAL_TRIGGERS="$(psql -At -d lvrf -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
   echo "  local lvrf distinct triggers: $LOCAL_TRIGGERS (expect $EXPECT_TRIGGERS)"
   [ "$LOCAL_TRIGGERS" = "$EXPECT_TRIGGERS" ] || exit 1
+  REACHED_TALLY=1
 fi

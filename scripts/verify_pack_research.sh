@@ -53,7 +53,8 @@ cleanup() {
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
   rm -rf "$W/chrome"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 start_server() {
   # The browser walk's Vite runs on $VITE_PORT, not the dev default 5173, so
@@ -183,4 +184,5 @@ echo "  screenshots: $SHOTS"
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]

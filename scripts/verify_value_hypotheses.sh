@@ -53,7 +53,8 @@ cleanup() {
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
   rm -rf "$W/chrome"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 start_server() {
   LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 &
@@ -352,4 +353,5 @@ echo "  screenshots: $SHOTS"
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]

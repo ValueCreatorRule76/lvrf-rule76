@@ -43,7 +43,8 @@ cleanup() {
   cmp -s "$W/cohort.ts.orig" "$COHORT" || { cp "$W/cohort.ts.orig" "$COHORT"; echo "  (EXIT trap restored $COHORT)"; }
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 
 step "1. Typecheck"
 npx tsc -p tsconfig.json --noEmit && ok "server tsc" || bad "server tsc"
@@ -223,4 +224,5 @@ stop_server
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]

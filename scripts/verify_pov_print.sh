@@ -48,16 +48,14 @@ start_server() {
   bad "server did not start"; exit 1
 }
 cleanup() {
-  local rc=$?
   stop_server
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
   for f in "$POVPAGE" "$FORMAT" "$ROUTE"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W/chrome"
-  [ "$rc" = "0" ] || echo "  FAIL  the script stopped early (exit $rc)"
-  exit "$rc"
 }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 
 step "1. Typecheck"
@@ -250,9 +248,14 @@ B="$W/breaks"; mkdir -p "$B"
 [ "${SCOTTS_PAGES:-1}" -ge 2 ] && {
   edit "$POVPAGE" '<thead className="hidden print:table-header-group" data-testid="print-header">' '<thead className="hidden" data-testid="print-header">'
   edit "$POVPAGE" '<div className="print:hidden"><Banners pov={pov} /></div>' '<div><Banners pov={pov} /></div>'
-  sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" scotts "$SCOTTS" '{}' > /dev/null 2>&1 || true
-  t2="$(pdftotext -f 2 -l 2 "$B/ux1s3_pov_scotts.pdf" - 2>/dev/null)"
-  printf '%s' "$t2" | grep -qF "OUTSIDE-IN TEST" && bad "B1: page 2 still carries the banner without the header group" || ok "B1: without the repeating header group, page 2 loses the banner — the header group is what puts it on every page"
+  # Its own fresh directory, and a positive control: a walk that crashed leaves no
+  # PDF, and a page 2 with no banner then proves nothing.
+  B1D="$B/b1"; mkdir -p "$B1D"
+  sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B1D" scotts "$SCOTTS" '{}' > /dev/null 2>&1 || true
+  if [ ! -f "$B1D/ux1s3_pov_scotts.pdf" ]; then bad "B1: the break's walk printed no PDF — nothing to judge"
+  elif ! pdftotext -f 1 -l 1 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | grep -qF "OUTSIDE-IN TEST"; then bad "B1: page 1 of the break's PDF has no banner either — the control failed, nothing to judge"
+  elif pdftotext -f 2 -l 2 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | grep -qF "OUTSIDE-IN TEST"; then bad "B1: page 2 still carries the banner without the header group"
+  else ok "B1: without the repeating header group, page 1 carries the banner and page 2 loses it — the header group is what puts it on every page"; fi
   restore "$POVPAGE"
 } || bad "B1 needs Scotts to print on 2+ pages (it printed ${SCOTTS_PAGES:-?})"
 # B2 — the old falsifier template ("on <date>, <conditions>").
@@ -293,4 +296,5 @@ echo "  screenshots and PDFs: $SHOTS"
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" = "0" ]

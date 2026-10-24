@@ -32,7 +32,8 @@ step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -f "$TMPCFG"; }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -At -d "$VERIFY_DB" -c "$1"; }
 set_email() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/set_email.ts "$@" > /tmp/lvrf_se.out 2>&1; }
 
@@ -132,4 +133,5 @@ T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHE
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]

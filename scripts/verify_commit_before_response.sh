@@ -34,7 +34,8 @@ step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 cleanup() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; }
-trap cleanup EXIT
+. scripts/lib/finish.sh
+trap finish EXIT
 q() { psql -At -d "$VERIFY_DB" -c "$1"; }
 
 step "1. Typecheck"
@@ -125,4 +126,5 @@ IDLE_TX="$(q "SELECT count(*) FROM pg_stat_activity WHERE datname = '$VERIFY_DB'
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
 [ "$FAIL" -eq 0 ]
