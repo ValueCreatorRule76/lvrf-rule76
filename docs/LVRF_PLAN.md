@@ -2266,3 +2266,183 @@ verbatim and raw database text as plain sentences.
 | **5. The copy pass and the index pages** | No internal terms anywhere (standard 6); Packs and Runs indexes at 390 (the Runs table scrolled sideways at 788 px). **From the slice 1 review (Brad, 19 Oct 2026):** (1) a waiting step's line never starts "Next:" while another step carries NEXT (Curia's step 2 read "Next: record evidence for the baseline."): use "Then: …" or "Waits for …"; (2) the research step's internal terms: "(3.0 item 3)", the A1–A5 codes, "Phase: ENTITY FIRST" in capitals; (3) the marker banner's "Source:" when the citation only repeats the kind (Scotts' "Source: Reference example"). **From the slice 2 review (Brad, 19 Oct 2026):** (4) the Book confidence card's non-empty state still uses the old wording ("NO SCORE · UNMEASURED FLOOR", "Set by the weakest member…", "0 of 1 engagements across 1 account have a run of record", "1 unclassified account is in the book but under no industry"); bring it into the UX-1 standards. No separate deploy | A grep-based check for step codes and decision ids in client strings, so a new one fails Gate A |
 
 **After UX-1:** L32 (rename the lever's stored status so storage and display agree).
+
+---
+
+## 8. P1: the evidence form and the figure check (planned 24 Oct 2026; **approved by Brad, 24 Oct 2026, with P1-D1–D6 as recommended**)
+
+**From the ratified design** `docs/LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md` (f162f9e), §2.1,
+§5.1 and §7 P1. The smallest governed slice: it makes every new piece of evidence say
+**what it rests on** (quoted words, a located cell, or a person's own statement) and **how
+the value was read from it**, and it checks every figure against its quote or locator.
+
+**Value spine stages served:** `baseline` (account facts and outcome baselines) and
+`measure` (outcome actuals). It changes no stage's gate yet: the verification state that
+reads the figure check is P3.
+
+**Runs after:** UX-1 slice 3 deployed (Gate B pending) and UX-1 slice 4 (P1-D2).
+
+### What exists (read 24 Oct 2026)
+
+- **Eight places write `evidence`.** Two carry a source:
+  - `server/lib/institutionFactWriter.ts` (typed facts, and researched facts on accept);
+  - `server/routes/outcomeEvidence.ts` (evidence for an outcome's baseline, actual or impact basis).
+
+  Six record **a person's act**, as `observation` or `attestation` with no source:
+  - `classifyInstitution.ts`, `engagementRetire.ts`, `metricPackBasis.ts`,
+    `offeringAttachment.ts`, `validateMetric.ts`;
+  - `outcomeWalk.ts` (the commitment and the verification attestations).
+- **Researched facts already carry a quote.** The `institution_fact` contract (v1) requires
+  `quote` ("the sentence the figure comes from"). On accept it is folded into the evidence
+  `summary` as prose (`accountResearch.ts` line 656), where nothing can check it.
+- **Evidence is never edited.** The only `UPDATE evidence` is `open-citation`
+  (`evidenceCitation.ts`). Corrections happen by superseding the **fact**, which writes a new
+  evidence row.
+- **`AddEvidenceCard`** (`client/src/components/workbench/`) is the one evidence form; UX-1
+  slice 4 folds it behind "Add evidence…".
+
+### What it builds
+
+**1. Migration 0039 (`evidence_form`).** It changes `evidence` and adds `figure_checks`. It
+orphans nothing: no FK is dropped, no row is deleted, every existing row is backfilled.
+- **Enum `evidence_form`:** `quote` · `locator` · `statement` · `legacy`.
+- **`evidence.evidence_form`:** added nullable, every existing row backfilled to `legacy`,
+  then set NOT NULL. A trigger refuses `legacy` on INSERT, so only rows that existed before
+  0039 can ever carry it.
+- **`evidence.quote_text`, `evidence.locator` (jsonb), `evidence.how_read`.**
+- **CHECK `evidence_form_shape`**, one rule per form:
+  - `quote`: `quote_text` present and at most 40 words; `locator` absent;
+  - `locator`: `locator` present, with keys `document`, `value` and `scale` (`units` ·
+    `thousands` · `millions` · `billions` · `percent`), and optional `table`, `row`,
+    `column`; `quote_text` absent;
+  - `statement`: both absent, and `kind` is `observation` or `attestation`;
+  - `legacy`: both absent.
+- **CHECK `evidence_how_read`:** for `quote` and `locator`, `how_read` is at least 24
+  characters. The ratified rationale rule: say how the value was read, not restate the source.
+- **Trigger `lvrf_evidence_form_final`:** `evidence_form`, `quote_text`, `locator` and
+  `how_read` never change after INSERT. The same discipline as `evidence_resolution_is_final`.
+- **The form is kept through a correction.** A trigger on `institution_facts` checks the
+  case where a fact is superseded and its old evidence was `quote` or `locator`: the
+  successor's evidence must have the same form. A `legacy` or `statement` predecessor may
+  move to either form, because that is an upgrade, not a swap.
+- **Table `figure_checks`, append-only:**
+  - what was checked: evidence id, subject table, id and field;
+  - the value checked; the numbers in it; the numbers found and the numbers missing;
+  - the wording flags;
+  - `result` (`pass` · `flag`), `rules_version`, `checked_at`, the actor.
+- **`hardening.sql`:** the audit and no-delete triggers on `figure_checks`, plus the new
+  guard triggers above.
+- **`ownership.sql`:** INSERT only on `figure_checks` for `lvrf_app`. The trigger count
+  rises by the new triggers; Gate C counts them from `pg_trigger`.
+
+**2. The writers.**
+- **The six act-recording sites write `statement`.** No source is invented for them. Their
+  basis is unchanged (`lvrf_evidence_basis` already makes an unsourced observation
+  `assumed`).
+- **`institutionFactWriter`** and **`outcomeEvidence`** take `evidence_form` with `quote_text`
+  or `locator`, plus `how_read`. A body with both a quote and a locator, or neither, is a 422
+  in a plain sentence (Q4k standard), recorded in `refusals`.
+- **Researched facts: `institution_fact` contract v2.**
+  - Exactly one of `quote` or `locator`, plus a required `how_read`.
+  - The prompt template is bumped and regenerated, and contract v1 is kept by number, as
+    contract v4 was.
+  - Results parsed under v1 still accept: the quote moves into `quote_text`, and the
+    reviewer supplies `how_read` in the accept form (P1-D5).
+  - The quote no longer goes into `summary`.
+
+**3. The figure check** (`server/lib/figureCheck.ts`, deterministic, `rules_version` 1).
+- **When it runs:** on every write of a numeric fact (revenue, headcount) and every outcome
+  evidence row that supports a baseline, actual or impact basis.
+- **What it does:**
+  - It reads the numbers in the quote, with commas and scale words ("3,413.1 million",
+    "5,200", "1.42", "12%").
+  - It compares them with the value at the precision the source states. "3,413.1 million"
+    matches 3,413,100,000.
+  - For a locator, it compares `value` × `scale`.
+- **The result:**
+  - A number in the value that the evidence lacks gives `flag`, with the missing number
+    named. For example: "1.4 is not in the quote; the quote states 1.42".
+  - Qualifiers in a text value that the quote lacks ("approximately", "up to", "at least",
+    "estimated", "adjusted", "excluding", "including", "over") are listed as wording flags.
+- **It never blocks a write.** The design rules that extra wording is flagged, not blocked,
+  and the verification state that acts on a flag is P3. It records the check, and the fact
+  and evidence show it.
+
+**4. Q10, folded in (P1-D3).** `outcomeEvidence` stops reading `body.confidence`; the
+column is written `medium` until it is retired, and every display labels it "stated by the
+analyst". Run payloads keep carrying it, so no hash changes.
+
+**5. Display** (`client/src/lib/labels.ts`, the one source of labels).
+- **A quote:** in quotation marks, then "How it was read: …".
+- **A locator:** "Document · table · row · column: value (scale)".
+- **A statement:** "Stated by <name>, <date>".
+- **Legacy:** "Recorded before evidence forms (24 Oct 2026)".
+- **A flagged figure check:** one line beside the fact: "Figure check: 1.4 is not in the
+  quote (it states 1.42)". On screen and in print, the same.
+
+**6. Runs (P1-D4).** A run produced after 0039 seals, for each fact it uses, the evidence
+form, its quote or locator, its `how_read`, and the latest figure-check result. The payload
+gets a version field. Runs produced before stay byte-identical, and `check_run_hashes`
+verifies both versions.
+
+### Gate A (planned)
+
+**`verify_evidence_form.sh`, new**, on a clone of the restored, neutralised prod copy.
+- **It proves:**
+  - every pre-0039 evidence row reads `legacy` and none is blank;
+  - each of the eight writers writes its form: the six act sites `statement`, the fact
+    writer and outcome evidence `quote` or `locator`;
+  - a researched v1 result accepts with the reviewer's `how_read` and its quote in
+    `quote_text`, while a v2 result needs its own `how_read`;
+  - the figure check:
+    - Scotts' "$3,413.1 million" passes against its stored revenue;
+    - a fixture value 1.4 against a quote stating 1.42 flags, naming 1.42;
+    - "approximately 5,200" against a quote of "5,200" passes the number and raises one
+      wording flag;
+    - a locator of 3,413.1 in millions passes;
+  - a superseding fact from a `quote` predecessor keeps `quote`; from a `legacy`
+    predecessor it may take either form;
+  - the evidence form displays at 1280 and 390, and in print.
+- **Breaks, each caught, every file restored byte-identical:**
+  - **B1:** an INSERT with form `legacy`.
+  - **B2:** a 41-word quote.
+  - **B3:** a locator missing `scale`.
+  - **B4:** a `statement` on a `public_filing`.
+  - **B5:** a quote with `how_read` of 10 characters.
+  - **B6:** an UPDATE of `quote_text` after insert.
+  - **B7:** a successor swapping quote for locator.
+  - **B8:** the figure check's scale handling removed, so the Scotts revenue check must fail.
+  - **B9:** the figure check silently passing a missing number.
+  - **B10:** a DELETE on `figure_checks`.
+- **The regression:** all 35 scripts plus the new one. `verify_account_research`,
+  `verify_account_workbench`, `verify_outside_in_walk` and `verify_walk_runs` send evidence
+  bodies, so they are updated in the same commit.
+- **Prod-copy equivalence:** every GET identical except the added fields.
+- **Clean checks:** build, tsc and oxlint clean; the drift check passes after 0039.
+
+### Gate B (planned pastes, a STOP after each)
+
+1. **Backup:** `pg_dump -Fc`, and the TOC count against the last dump.
+2. **Deploy:** `lvrf-deploy.sh`.
+   - The migration runs as `lvrf_migrate`, then `hardening.sql` and `ownership.sql` re-run.
+   - Expected: drift none (40 migrations), step 5d passes, deploy exit 0, the new HEAD, and
+     the new bundle.
+
+### Gate C (planned)
+
+- **The standard checks:** run hashes, ownership, drift, and the trigger count from
+  `pg_trigger` (129 plus the new triggers).
+- **Every evidence row `legacy`;** `figure_checks` empty until the first write.
+- **No refusals since the restart.**
+- **The journal:** no evidence values logged.
+
+### Decisions (decided by Brad, 24 Oct 2026: all six as recommended)
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **P1-D1** | A third evidence form, **`statement`**, for evidence that records a person's own act (classification, retirement, commitment, verification). The design named only quote and locator, but six of the eight writers have no source to quote | **Yes.** Forcing a quote on them would invent one; `statement` says truthfully that the evidence is a named person's word, and the basis function already treats it so |
+| **P1-D2** | Order against UX-1: slice 4 rebuilds the run page's evidence form, which P1 also changes | **Slice 4 first, then P1.** One change to the form, not two. Slice 5 (copy pass) is independent and can run any time |
+| **P1-D3** | Fold Q10 (stop writing the asserted confidence) into P1 | **Yes.** Same route, same form, same verify scripts |
+| **P1-D4** | New runs seal each fact's evidence form, quote or locator, how-read and figure-check result | **Yes.** A sealed case must reproduce what it rested on; old runs stay byte-identical under a payload version |
+| **P1-D5** | Research results already parsed under contract v1 (quote, no how-read): the reviewer supplies how-read at accept | **Yes.** A person states how they read it, which is the rule's intent; nothing is backfilled by machine |
+| **P1-D6** | Existing evidence rows stay `legacy` forever (no backfill to quote or locator by script) | **Yes.** A legacy row is corrected only the normal way: superseding its fact with new evidence. A script guessing forms would be the system rewriting what was recorded |
