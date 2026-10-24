@@ -29,8 +29,8 @@ const ASK_TYPE_SUBHEAD: Record<AskType, string> = {
 };
 
 const TODAYS_LIST_CAVEAT =
-  "This is today's register, computed from the outcome as it stands now — not from this run's " +
-  'payload. On a locked run the confidence score above is a photograph; this list is not.';
+  "This is today's register, computed from the outcome as it stands now — not from what this run " +
+  'sealed. On a locked run the confidence score above is a photograph; this list is not.';
 
 export function GapListCard({ run }: { run: Run }) {
   const outcomeId = run.payload.valueOutcomeId;
@@ -40,13 +40,11 @@ export function GapListCard({ run }: { run: Run }) {
     // assume a field a historical run's payload never had.
     return (
       <Card
-        n="01B"
         title="Gap register"
         badge={<Badge tone="neutral">Unavailable on this run</Badge>}
       >
         <p className="m-0 text-[12.5px] text-ink-70">
-          This run was produced before valueOutcomeId was added to the payload. The gap register
-          cannot be computed for an outcome this run does not name.
+          This run predates the link to its outcome, so the gap register cannot be computed for it.
         </p>
       </Card>
     );
@@ -71,7 +69,7 @@ function GapListBody({ run, outcomeId }: { run: Run; outcomeId: string }) {
 
   if (!result) {
     return (
-      <Card n="01B" title="Gap register">
+      <Card title="Gap register">
         <p className="m-0 text-[12.5px] text-ink-45">loading</p>
       </Card>
     );
@@ -79,8 +77,9 @@ function GapListBody({ run, outcomeId }: { run: Run; outcomeId: string }) {
 
   if (result.status === 'error') {
     return (
-      <Card n="01B" title="Gap register">
-        <p className="m-0 text-[12.5px] text-critical">{result.message}</p>
+      <Card title="Gap register">
+        {/* In words: never the server's message or an id (UX-1 standard 6). */}
+        <p className="m-0 text-[12.5px] text-ink-70" data-testid="gaps-unavailable">Couldn&apos;t load the gap register for this outcome.</p>
       </Card>
     );
   }
@@ -102,7 +101,7 @@ function buildPlainTextHeader(run: Run, gaps: GapEntry[]): string[] {
 
   const lines: string[] = [];
   lines.push(`Value record for ${run.payload.engagement} — ${businessMetricName(run.payload.businessMetric)}.`);
-  lines.push(`Computed confidence: ${score}/100 (${band.toUpperCase()}).`);
+  lines.push(`Computed confidence: ${score} / 100 · ${band.charAt(0).toUpperCase() + band.slice(1)}.`);
   if (f4) lines.push(f4.message);
 
   if (gaps.length > 0) {
@@ -113,7 +112,7 @@ function buildPlainTextHeader(run: Run, gaps: GapEntry[]): string[] {
     const totalEarns = Math.round(gaps.reduce((sum, g) => sum + g.earns, 0) * 10) / 10;
     lines.push('');
     lines.push(
-      `Closing the ${gaps.length} item${gaps.length === 1 ? '' : 's'} below adds ${totalEarns} points.`,
+      `Closing the ${gaps.length} item${gaps.length === 1 ? '' : 's'} below raises computed confidence by ${totalEarns}, out of 100.`,
     );
     lines.push('Once closed, the outcome can be verified and the record shared with the customer.');
   }
@@ -187,7 +186,7 @@ function CopyAsTextButton({ text }: { text: string }) {
 
 function GapList({ run, gaps }: { run: Run; gaps: GapEntry[] }) {
   return (
-    <Card n="01B" title="Gap register" badge={<CopyAsTextButton text={buildPlainText(run, gaps)} />}>
+    <Card title="Gap register" badge={<CopyAsTextButton text={buildPlainText(run, gaps)} />}>
       <p className="m-0 mb-3.5 text-[11.5px] text-ink-45">{TODAYS_LIST_CAVEAT}</p>
 
       {gaps.length === 0 ? (

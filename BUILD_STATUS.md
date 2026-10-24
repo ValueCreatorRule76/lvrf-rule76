@@ -11230,3 +11230,126 @@ tally.
 
   The build, tsc and oxlint are clean (the 1 pre-existing warning). The bundle is
   unchanged: `index-BEtOnLYY.js` / `index--mKXtxKN.css`.
+
+### Deployed — 24 October 2026 (UTC): UX-1 slice 3 (`16ebe57`), Gate C pending
+
+Brad deployed slice 3. The box is at `16ebe57`: the audit fix plus two docs commits (the
+ratified design and P1's plan), with no server or client change after `b5a3588`.
+- **Gate C has not run yet.** The box refused the LVRF key ("Permission denied
+  (publickey)") because the ssh agent was empty after a session restart. I tried no other
+  key.
+- **What's needed:** Brad runs the read-only Gate C paste, or adds the key to the agent with
+  `ssh-add ~/.ssh/id_ed25519_lvrf`.
+- **This note is completed** when Gate C has run.
+
+## UX-1 slice 4: the run page — 24 October 2026 (UTC)
+
+**What it builds** (presentation only: no route, table, trigger or rule changes, and **no new
+read**; LVRF_PLAN §7g, mock-up `design/mockups/run.html`, DESIGN_SPEC §9):
+- **Banners**, all repeated on every printed page:
+  - the account's reference marker, from the POV read the app already makes, which carries
+    the marker and the engagements' locked runs;
+  - the run's own sealed banner ("OUTSIDE-IN HYPOTHESIS — as sealed with this run");
+  - the disclosure: "UNVERIFIED — this run's outcome has no verified actual", or VERIFIED.
+  - If the account read fails, a line says so rather than leaving the marker out silently.
+- **The header:**
+  - a breadcrumb: Accounts › <account> › Run and lock › Run N;
+  - "Realization record · run N · locked <date>";
+  - the engagement, capability and metric with its direction;
+  - confidence as "n / 100 · Band";
+  - the run's sealed note;
+  - the stage strip in plain labels with its legend, showing the run's
+    `terminal_value_stage` as sealed;
+  - the full record hash;
+  - the actions.
+- **The figures:**
+  - the record's values, with the stored unit and its trailing punctuation dropped;
+  - "Not set" or "Not measured yet" where the record has no value;
+  - realization and disclosure in words;
+  - currency figures shown without an assumed currency.
+- **What this run sealed:** stacked rows, every value in words; the provenance as recorded.
+- **"Add evidence…"** folds the evidence form, with `aria-expanded`.
+  - A retired engagement shows one line: "Locked, and its engagement retired: no evidence is
+    added to this run."
+  - A run from before the outcome link says to add evidence on the account page.
+- **Two folded sections, printed in full:**
+  - "What it takes to raise confidence": the gap register, or the frozen sentence;
+  - "How the score was made, findings, heartbeat ledger, health, and the comparison with the
+    previous run".
+- **Removed:**
+  - the dark spine rail and its old stage names;
+  - the refusal block that named a constraint;
+  - Low in critical red;
+  - "The missing 65 points are a work list";
+  - numbered cards;
+  - the placeholder "Add evidence" button.
+  - `Rail`, `Topbar`, `Gate`, `ProvenanceBanner` and `MeasurementRow` are deleted. They
+    were used only here.
+- **Fixed on the way:**
+  - **The comparison for a retired engagement** printed "engagement <id> not found", because
+    that engagement's own run list is refused. It now takes the earlier run from the POV
+    read's locked runs; the compare route itself works for these runs.
+  - **A failed read on this page** now says so in a plain sentence, never the server's
+    message or an id.
+- **Across the app:**
+  - **`GovernedAction` shows a disabled action's reason under it** (standard 1). Before, it
+    showed only as a tooltip. This also reaches the pack pages' steward-only actions.
+  - **The evidence form's options and kind help** read in words: "Public filing" and
+    "Observation", in place of `public_filing` and `observation`.
+    - **This changes R1's ratified help text** (Brad, 12 Oct 2026) to name the options as
+      the reader now sees them. `evidence_form_walk`'s check is updated in the same commit.
+- **Shared labels** (stage, realization, disclosure, evidence kind, supports) are in
+  `lib/labels.ts`. The POV now reads its stage labels from there.
+
+**Gate A:**
+- **`verify_run_page.sh`: 196 passed, 0 failed.** It reads only, on a clone of the restored,
+  neutralised prod copy, signed in by session. It covers four real runs:
+  - Scotts run 2: retired, with a marker;
+  - Curia run 1: the live engagement, with no sealed evidence;
+  - Curia run 21: retired, compared with run 20;
+  - Skillsoft run 1: from before the outcome link, with no marker.
+- **Every expectation comes from `GET /api/runs/:id` and the account's POV.** At 1280 and 390
+  it checks:
+  - the breadcrumb links and the banners;
+  - the title and confidence;
+  - nothing on the page in critical red;
+  - the stage strip's labels, its current stage and its legend;
+  - the full hash;
+  - the baseline and its unit, with no trailing punctuation;
+  - the count of sealed items;
+  - the evidence-form case: folded with `aria-expanded`, the retired line, or the
+    no-outcome line;
+  - every disabled action's reason;
+  - each fold hidden and inert until opened;
+  - the retired engagement's comparison;
+  - no internal term, enum code, id or "not found" in the app's own words (record text
+    excluded);
+  - no sideways scroll.
+- **In print** (Chrome's `Page.printToPDF`, read page by page):
+  - **every page carries:**
+    - the disclosure banner and the marker;
+    - the run's **full** record hash;
+    - the print date and "rendered from the record as it stands";
+    - "Page n of N";
+  - **never printed:** the app header or a screen-only control;
+  - **the folds** print in full.
+  - **Page counts:** Scotts 5, Curia run 1 4, Curia run 21 8, Skillsoft 5.
+- **Breaks, all caught, every file restored byte-identical:**
+  - **B1:** banners without the repeating header (with page 1 as the control);
+  - **B2:** a shortened hash in the print footer;
+  - **B3:** a fold's content visible while closed;
+  - **B4:** "Share with customer" without its reason;
+  - **B5:** the retired engagement's comparison from its refused run list;
+  - **B6:** the evidence kind as its stored code;
+  - **B7:** the stage strip in enum values.
+- **The regression:** all **36** scripts reached their tallies and passed, including
+  `verify_run_page` (tenant scope 203). After the last print-only CSS change (a heading
+  split across two printed pages), `verify_run_page` (196/0) and `verify_pov_print`
+  (115/0) were re-run. The build, tsc and oxlint are clean, with the 1 pre-existing
+  warning. The bundle is **`index-Dg-tFIBr.js`** / `index-yzluhmTC.css`.
+- **The prod copy:** against the deployed `16ebe57`, **76 GETs, 76 identical** (no server
+  change).
+  - **The copy:** the one restored on 19 Oct (from `lvrf-pre-ux1s2-…`). No newer copy was
+    taken, because ssh to the box is unavailable this session.
+- **For Brad's review:** screenshots at 1280 and 390, every printed page as an image, and
+  the PDFs, all on the Mac only, in `~/lvrf-backups/slice4-screens/` (600).

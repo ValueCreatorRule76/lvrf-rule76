@@ -1,18 +1,30 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { fetchRun, type FetchRunResult } from '../api/runs';
-import { Workbench } from '../components/workbench/Workbench';
+import { fetchPov } from '../api/pov';
+import { Workbench, type AccountRead } from '../components/workbench/Workbench';
 
 export function RunPage() {
   const { id } = useParams<{ id: string }>();
   const [result, setResult] = useState<FetchRunResult | null>(null);
+  const [account, setAccount] = useState<AccountRead>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     setResult(null);
+    setAccount({ status: 'loading' });
     if (id) {
       fetchRun(id).then((r) => {
-        if (!cancelled) setResult(r);
+        if (cancelled) return;
+        setResult(r);
+        // The account's reference marker and its engagements' locked runs come
+        // from the POV read the app already makes; no new read (UX-1 slice 4).
+        // A null owner join means the account is retired: nothing to read.
+        if (r.status !== 'ok') return;
+        if (!r.run.institution_id) { setAccount({ status: 'none' }); return; }
+        fetchPov(r.run.institution_id).then((a) => {
+          if (!cancelled) setAccount(a.status === 'ok' ? { status: 'ok', pov: a.pov } : { status: 'error' });
+        });
       });
     }
     return () => {
@@ -21,40 +33,7 @@ export function RunPage() {
   }, [id]);
 
   if (!result) return <p className="p-8 text-ink-45">loading</p>;
-
-  if (result.status === 'not_found') {
-    return <p className="p-8 text-ink-45">run {id} not found</p>;
-  }
-  if (result.status === 'error') {
-    return <p className="p-8 text-critical">{result.message}</p>;
-  }
-
-  const { run } = result;
-
-  return (
-    <>
-      {/* The account back-link — the header naming whose engagement this
-          is. Added here rather than in Topbar/Workbench, which this
-          change doesn't touch. Rendered only when the owner join actually
-          resolved; null means the owning institution was retired, and that
-          absence is not papered over with a stand-in. L26: a retired
-          ENGAGEMENT keeps the account, and says so beside it. */}
-      {run.institution_id && run.institution_name && (
-        <div className="border-b border-rule bg-white px-[30px] py-2">
-          <Link
-            to={`/accounts/${run.institution_id}`}
-            className="text-xs text-ink-45 hover:text-gold-ink"
-          >
-            ← {run.institution_name}
-          </Link>
-          {run.engagement_retired && (
-            <span className="ml-2 text-[10px] font-semibold uppercase tracking-[.12em] text-ink-45">
-              · retired engagement
-            </span>
-          )}
-        </div>
-      )}
-      <Workbench run={run} />
-    </>
-  );
+  if (result.status === 'not_found') return <p className="p-8 text-ink-45">This run was not found.</p>;
+  if (result.status === 'error') return <p className="p-8 text-ink-70">Couldn&apos;t load this run. Reload the page to try again.</p>;
+  return <Workbench run={result.run} account={account} />;
 }

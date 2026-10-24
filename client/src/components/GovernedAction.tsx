@@ -73,6 +73,9 @@ export function GovernedAction<T>({
         {label}
       </button>
 
+      {/* UX-1 standard 1: a disabled action carries its reason directly under it, never only as a tooltip. */}
+      {blockedLocally && <p className="m-0 mt-1.5 max-w-xs text-[11px] text-ink-45" data-testid="action-reason">{disabledReason}</p>}
+
       {!blockedLocally && !actor && (
         <p className="m-0 mt-1.5 max-w-xs text-[11px] text-ink-45">{actorRequiredNote}</p>
       )}

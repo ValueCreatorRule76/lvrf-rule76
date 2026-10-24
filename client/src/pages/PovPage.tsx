@@ -4,14 +4,10 @@ import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { ConfidenceBadge } from '../components/workbench/Workspace';
 import { day, unitText } from '../lib/workspaceStatus';
-import { label, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
+import { label, STAGE_LABEL, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
 import { formatQuantity } from '../lib/format';
 
 // UX-1 standard 4: the value spine in plain labels; the enum keeps its values.
-const STAGE_LABEL: Record<string, string> = {
-  baseline: 'Baseline set', attach: 'Capability attached', model: 'Value modelled', commit: 'Target committed',
-  measure: 'Actual measured', verify: 'Verified', return: 'Returned to the record',
-};
 import { fetchGaps, type GapEntry } from '../api/gaps';
 import { Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';

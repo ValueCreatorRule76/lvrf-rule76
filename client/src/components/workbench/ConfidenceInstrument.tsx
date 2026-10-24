@@ -1,4 +1,5 @@
 import type { ConfidenceFactorKey, Run } from '../../types/run';
+import { ConfidenceBadge } from './Workspace';
 
 // Fixed visual sequence, matching design/workbench.html's instrument and
 // factor list — narrative order (what's known, then what's harder), not
@@ -25,110 +26,57 @@ const FACTOR_LABEL: Record<ConfidenceFactorKey, string> = {
   human_verifier_of_record: 'Named human verifier of record',
 };
 
+/**
+ * UX-1 slice 4: inline in the run page's folded ledgers (no longer a sticky
+ * side panel). The score is written once, "n / 100 · Band" (standard 5), with
+ * Low neutral; no "points outstanding" wording.
+ */
 export function ConfidenceInstrument({ run }: { run: Run }) {
   const c = run.payload.confidence;
   const factors = DISPLAY_ORDER.map((key) => c.factors.find((f) => f.factor === key)).filter(
     (f): f is NonNullable<typeof f> => f != null,
   );
-  const totalWeight = factors.reduce((sum, f) => sum + f.weight, 0);
-  const outstanding = c.score != null ? 100 - c.score : null;
 
   return (
-    <aside
-      aria-label="Confidence ledger"
-      className="sticky top-0 h-screen w-[336px] flex-none overflow-y-auto border-l border-rule bg-white px-[22px] pb-10 pt-[22px]"
-    >
-      <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">
-        Computed confidence
-      </span>
-      <div className="mb-4 border-b-[3px] border-ink pb-3">
-        <div className="flex items-baseline gap-[9px]">
-          <span className="font-display text-[66px] leading-[.88]">{c.score}</span>
-          <span className="font-display text-[22px] text-ink-25">/100</span>
-        </div>
-        <p className="m-0 mt-0.5 font-display text-[17px] tracking-[.1em] text-critical">
-          {c.band.toUpperCase()}
-        </p>
-        <p className="m-0 mt-[9px] text-[11px] italic text-ink-45">{c.method}</p>
-      </div>
+    <section aria-label="How the score was made" className="mb-5 border border-rule bg-white px-4 py-4" data-testid="confidence-ledger">
+      <h3 className="m-0 font-display text-[15px] tracking-[.07em]">How the score was made</h3>
+      <p className="m-0 mt-2 flex flex-wrap items-baseline gap-2">
+        <ConfidenceBadge score={c.score} band={c.band} />
+        <span className="text-[11.5px] text-ink-45" data-record>{c.method}</span>
+      </p>
 
       {/* the instrument: width = weight (already a share of 100, reused as
           the flex-basis directly), fill = earned/weight — the only ratio
           computed in this component, and the raw earned/weight numbers it
-          visualizes are always printed on the segment itself and in the
-          factor list right below, so it can't silently disagree with them. */}
-      <div className="mb-1 flex h-[46px] gap-0.5" role="img" aria-label={`Confidence: ${factors.map((f) => `${f.earned} of ${f.weight} ${FACTOR_LABEL[f.factor]}`).join(', ')}`}>
+          visualizes are always printed in the factor list right below, so it
+          can't silently disagree with them. */}
+      <div className="mb-3 mt-3 flex h-[22px] gap-0.5" role="img" aria-label={`Confidence: ${factors.map((f) => `${f.earned} of ${f.weight} ${FACTOR_LABEL[f.factor]}`).join(', ')}`}>
         {factors.map((f) => {
           const full = f.earned === f.weight && f.earned > 0;
           const empty = f.earned === 0;
           const partialPct = f.weight > 0 ? (f.earned / f.weight) * 100 : 0;
           return (
-            <div
-              key={f.factor}
-              className={
-                'relative overflow-hidden ' +
-                (empty ? 'border border-dashed border-silver bg-transparent' : 'bg-rule-soft')
-              }
-              style={{ flex: f.weight }}
-            >
+            <div key={f.factor} className={'relative overflow-hidden ' + (empty ? 'border border-dashed border-silver bg-transparent' : 'bg-rule-soft')} style={{ flex: f.weight }}>
               {full && <span className="absolute inset-0 bg-ink" />}
-              {!full && !empty && (
-                <span
-                  className="absolute inset-y-0 left-0 bg-ink"
-                  style={{ width: `${partialPct}%` }}
-                />
-              )}
-              <span
-                className={
-                  'absolute inset-x-0 bottom-[3px] text-center font-mono text-[9px] ' +
-                  (empty ? 'text-ink-25' : full ? 'text-offwhite' : 'text-ink')
-                }
-                // Partial segments straddle a black fill and a light
-                // unfilled remainder — no single flat colour is legible
-                // against both. A white halo keeps the dark label readable
-                // over the black portion without hurting it over the light.
-                style={!full && !empty ? { textShadow: '0 0 2px #FAFAFA, 0 0 2px #FAFAFA, 0 0 2px #FAFAFA' } : undefined}
-              >
-                {full ? f.weight : `${f.earned}/${f.weight}`}
-              </span>
+              {!full && !empty && <span className="absolute inset-y-0 left-0 bg-ink" style={{ width: `${partialPct}%` }} />}
             </div>
           );
         })}
       </div>
-      <p className="mb-5 flex justify-between text-[9.5px] uppercase tracking-[.06em] text-ink-45">
-        <span>Earned {c.score}</span>
-        <span>Outstanding {outstanding}</span>
-      </p>
 
-      <ul className="m-0 mb-5 list-none p-0">
+      <ul className="m-0 list-none p-0">
         {factors.map((f) => (
-          <li key={f.factor} className="flex items-start gap-2.5 border-b border-rule-soft py-[9px]">
-            <span
-              className={
-                'flex-none min-w-[44px] pt-px text-right font-mono text-[11px] ' +
-                (f.earned === f.weight ? 'font-semibold text-healthy' : f.earned === 0 ? 'text-ink-25' : '')
-              }
-            >
-              {f.earned}/{f.weight}
+          <li key={f.factor} className="flex items-start gap-2.5 border-b border-rule-soft py-[9px] last:border-b-0">
+            <span className={'min-w-[44px] flex-none pt-px text-right font-mono text-[11px] ' + (f.earned === f.weight ? 'font-semibold text-healthy' : 'text-ink-70')}>
+              {f.earned} of {f.weight}
             </span>
             <span>
               <span className="text-xs leading-[1.4]">{FACTOR_LABEL[f.factor]}</span>
-              <p className="m-0 mt-0.5 text-[10.5px] text-ink-45">{f.note}</p>
+              <p className="m-0 mt-0.5 text-[11px] text-ink-45" data-record>{f.note}</p>
             </span>
           </li>
         ))}
       </ul>
-
-      <div className="border-l-[3px] border-gold bg-offwhite px-3.5 py-3">
-        <h4 className="m-0 mb-1 font-display text-sm tracking-[.07em]">
-          {outstanding && outstanding > 0
-            ? `The missing ${outstanding} points are a work list`
-            : 'Nothing outstanding on this ledger'}
-        </h4>
-        <p className="m-0 text-[11.5px] text-ink-70">
-          Not a grade. Total weight across the six factors is {totalWeight}.
-        </p>
-      </div>
-    </aside>
+    </section>
   );
 }

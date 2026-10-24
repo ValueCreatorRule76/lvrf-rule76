@@ -109,8 +109,8 @@ check(await waitFor(`!!${w6} && !!${form}`), 'the account page shows W6 and its 
 
 if (MODE === 'form') {
   const help = await ev(`(${form}).querySelector('[data-testid=kind-help]')?.textContent ?? ''`);
-  check(help.includes('10-K') && help.includes('public_filing') && help.includes('observation') && help.includes('press release'),
-    "R1's help text under Kind: formal annual disclosure reports are public_filing, looser material observation", help.slice(0, 120));
+  check(help.includes('10-K') && help.includes('Public filing') && help.includes('Observation') && help.includes('press release') && !/public_filing|observation\b/.test(help),
+    "R1's help text under Kind, in the option's own words (UX-1 standard 6): formal annual disclosure reports are Public filing, looser material Observation", help.slice(0, 120));
   check(await ev(`(${form}).querySelector('[data-testid=source-verified]').disabled === false`), 'Source verified is open while AI-sourced is unchosen');
   await setField(form, 'AI-sourced', 'true');
   await sleep(300);

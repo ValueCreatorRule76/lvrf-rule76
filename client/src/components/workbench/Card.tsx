@@ -6,7 +6,8 @@ export function Card({
   badge,
   children,
 }: {
-  n: string;
+  /** A card's number; left out on the run page (UX-1 slice 4). */
+  n?: string;
   title: string;
   badge?: ReactNode;
   children: ReactNode;
@@ -15,7 +16,7 @@ export function Card({
     <section className="mb-5 border border-rule bg-white">
       <header className="flex items-center justify-between gap-3 border-b border-rule px-4 py-[11px]">
         <h3 className="m-0 font-display text-[15px] tracking-[.07em]">
-          <span className="mr-1.5 text-gold">{n}</span>
+          {n && <span className="mr-1.5 text-gold">{n}</span>}
           {title}
         </h3>
         {badge}

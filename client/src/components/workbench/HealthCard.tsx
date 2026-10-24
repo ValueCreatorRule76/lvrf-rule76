@@ -6,7 +6,6 @@ export function HealthCard({ run }: { run: Run }) {
 
   return (
     <Card
-      n="03"
       title="Institutional health"
       badge={
         <Badge tone="watch">
@@ -18,7 +17,7 @@ export function HealthCard({ run }: { run: Run }) {
             than throwing. coverage_pct is never null (0 when nothing is
             measured), so it renders unconditionally either way.
           */}
-          {h.band === null ? 'UNMEASURED' : `${h.composite} · ${h.band}`} · {h.coverage_pct}% coverage
+          {h.band === null ? 'Unmeasured' : `${h.composite} · ${h.band}`} · {h.coverage_pct}% coverage
         </Badge>
       }
     >

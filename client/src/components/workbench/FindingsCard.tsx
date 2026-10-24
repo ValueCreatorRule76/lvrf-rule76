@@ -8,41 +8,27 @@ const SEVERITY_TONE: Record<string, 'healthy' | 'watch' | 'warning' | 'critical'
   constitutional_failure: 'failure',
 };
 
+// UX-1 slice 4: stacked rows, not a table. The code is an auditor's
+// identifier (mono); the message is the record's own words, as sealed.
 export function FindingsCard({ run }: { run: Run }) {
   const findings = run.payload.findings;
 
   return (
-    <Card n="04" title="Findings" badge={<Badge tone="neutral">{findings.length}</Badge>}>
+    <Card title="Findings" badge={<Badge tone="neutral">{findings.length}</Badge>}>
       {findings.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">None raised for this run.</p>
       ) : (
-        <table className="w-full border-collapse text-[12.5px]">
-          <thead>
-            <tr>
-              {['Code', 'Severity', 'Finding'].map((h) => (
-                <th
-                  key={h}
-                  className="whitespace-nowrap border-b border-silver px-3 py-[9px] text-left text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {findings.map((f) => (
-              <tr key={f.code}>
-                <td className="border-b border-rule-soft px-3 py-[9px] font-mono font-semibold">
-                  {f.code}
-                </td>
-                <td className="border-b border-rule-soft px-3 py-[9px]">
-                  <Badge tone={SEVERITY_TONE[f.severity] ?? 'neutral'}>{f.severity}</Badge>
-                </td>
-                <td className="border-b border-rule-soft px-3 py-[9px]">{f.message}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="m-0 list-none p-0" data-testid="findings">
+          {findings.map((f) => (
+            <li key={f.code} className="border-b border-rule-soft py-2 last:border-b-0">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <Badge tone={SEVERITY_TONE[f.severity] ?? 'neutral'}>{f.severity.replace(/_/g, ' ')}</Badge>
+                <span className="font-mono text-[10.5px] text-ink-45">{f.code}</span>
+              </div>
+              <p className="m-0 mt-1 text-[12.5px] text-ink" data-record>{f.message}</p>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

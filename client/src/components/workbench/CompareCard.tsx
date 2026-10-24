@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Run } from '../../types/run';
 import { Card, Badge } from './Card';
-import { fetchEngagementRuns, type EngagementRun, type FetchEngagementRunsResult } from '../../api/engagementRuns';
+import { fetchEngagementRuns, type FetchEngagementRunsResult } from '../../api/engagementRuns';
 
 // Shape of GET /api/value-runs/:baselineRunId/compare/:comparisonRunId — only
 // the fields this card renders. server/routes/compareRuns.ts also returns
@@ -72,6 +72,15 @@ async function fetchCompare(baselineRunId: string, comparisonRunId: string): Pro
   return { status: 'ok', data };
 }
 
+/** Earlier runs supplied by the page (a retired engagement's own run list is refused), or their state. */
+export type EarlierRuns = 'loading' | 'unavailable' | { id: string; run_number: number; locked_at: string | null }[];
+
+const TITLE = 'Comparison with the previous run';
+const band = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
+const health = (v: number | 'UNMEASURED') => (v === 'UNMEASURED' ? 'Unmeasured' : v);
+// A failed read says so in words: never the server's message, never an id (UX-1 standard 6).
+const UNAVAILABLE = "Couldn't load this engagement's earlier runs, so no comparison is shown.";
+
 /**
  * Compares this run to its predecessor on the same engagement. The endpoint
  * this reads (compareRuns.ts) computes no narrative and no recommendation —
@@ -79,10 +88,11 @@ async function fetchCompare(baselineRunId: string, comparisonRunId: string): Pro
  * what didn't, and — the one thing worth calling out on its own — where the
  * score held while the evidence behind it did not.
  */
-export function CompareCard({ run }: { run: Run }) {
+export function CompareCard({ run, earlier }: { run: Run; earlier?: EarlierRuns }) {
   const [siblingsResult, setSiblingsResult] = useState<FetchEngagementRunsResult | null>(null);
 
   useEffect(() => {
+    if (earlier !== undefined) return;
     let cancelled = false;
     setSiblingsResult(null);
     fetchEngagementRuns(run.engagement_id).then((r) => {
@@ -91,31 +101,35 @@ export function CompareCard({ run }: { run: Run }) {
     return () => {
       cancelled = true;
     };
-  }, [run.engagement_id]);
+  }, [run.engagement_id, earlier]);
 
-  if (!siblingsResult) {
+  const siblings: EarlierRuns | null = earlier !== undefined ? earlier
+    : siblingsResult === null ? 'loading'
+    : siblingsResult.status === 'error' ? 'unavailable' : siblingsResult.runs;
+
+  if (siblings === 'loading' || siblings === null) {
     return (
-      <Card n="05" title="Compare to predecessor">
+      <Card title={TITLE}>
         <p className="m-0 text-[12.5px] text-ink-45">loading</p>
       </Card>
     );
   }
 
-  if (siblingsResult.status === 'error') {
+  if (siblings === 'unavailable') {
     return (
-      <Card n="05" title="Compare to predecessor">
-        <p className="m-0 text-[12.5px] text-critical">{siblingsResult.message}</p>
+      <Card title={TITLE}>
+        <p className="m-0 text-[12.5px] text-ink-70" data-testid="compare-unavailable">{UNAVAILABLE}</p>
       </Card>
     );
   }
 
-  const earlier = siblingsResult.runs.filter((r) => r.run_number < run.payload.runNumber);
+  const earlierRuns = siblings.filter((r) => r.run_number < run.payload.runNumber);
 
   // Three explicit states before any comparison is attempted, each a
   // legitimate outcome in its own right, never rendered as a blank card.
-  if (earlier.length === 0) {
+  if (earlierRuns.length === 0) {
     return (
-      <Card n="05" title="Compare to predecessor" badge={<Badge tone="neutral">No comparison</Badge>}>
+      <Card title={TITLE} badge={<Badge tone="neutral">No comparison</Badge>}>
         <p className="m-0 text-[12.5px] text-ink-70">
           This is the first run on its engagement. There is nothing to compare it to.
         </p>
@@ -125,9 +139,9 @@ export function CompareCard({ run }: { run: Run }) {
 
   if (run.locked_at === null) {
     return (
-      <Card n="05" title="Compare to predecessor" badge={<Badge tone="neutral">No comparison</Badge>}>
+      <Card title={TITLE} badge={<Badge tone="neutral">No comparison</Badge>}>
         <p className="m-0 text-[12.5px] text-ink-70">
-          This run is not locked. A comparison against a mutable record would not be reproducible,
+          This run is not locked. A comparison against a record that can still change would not be reproducible,
           so one is not offered.
         </p>
       </Card>
@@ -136,11 +150,11 @@ export function CompareCard({ run }: { run: Run }) {
 
   // Unlocked earlier runs are skipped, not offered — compareRuns.ts refuses
   // an unlocked run with a 409 that this reader could do nothing about.
-  const lockedEarlier = earlier.filter((r) => r.locked_at !== null);
+  const lockedEarlier = earlierRuns.filter((r) => r.locked_at !== null);
 
   if (lockedEarlier.length === 0) {
     return (
-      <Card n="05" title="Compare to predecessor" badge={<Badge tone="neutral">No comparison</Badge>}>
+      <Card title={TITLE} badge={<Badge tone="neutral">No comparison</Badge>}>
         <p className="m-0 text-[12.5px] text-ink-70">
           No earlier locked run exists for this engagement.
         </p>
@@ -191,7 +205,7 @@ function ModelQualification({ model }: { model: CompareResponse['model'] }) {
   );
 }
 
-function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRun }) {
+function CompareBody({ run, predecessor }: { run: Run; predecessor: { id: string; run_number: number } }) {
   const [result, setResult] = useState<CompareFetchResult | null>(null);
 
   useEffect(() => {
@@ -207,7 +221,7 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
 
   if (!result) {
     return (
-      <Card n="05" title="Compare to predecessor">
+      <Card title={TITLE}>
         <p className="m-0 text-[12.5px] text-ink-45">loading</p>
       </Card>
     );
@@ -215,8 +229,8 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
 
   if (result.status === 'error') {
     return (
-      <Card n="05" title="Compare to predecessor">
-        <p className="m-0 text-[12.5px] text-critical">{result.message}</p>
+      <Card title={TITLE}>
+        <p className="m-0 text-[12.5px] text-ink-70" data-testid="compare-unavailable">Couldn&apos;t load the comparison with run {predecessor.run_number}.</p>
       </Card>
     );
   }
@@ -225,8 +239,7 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
 
   return (
     <Card
-      n="05"
-      title="Compare to predecessor"
+      title={TITLE}
       badge={
         <Badge tone="neutral">
           run {predecessor.run_number} → run {run.payload.runNumber}
@@ -238,107 +251,53 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
       <ModelQualification model={c.model} />
 
       {/* A band that did not move is information, not an absence of one — never omitted. */}
-      <p className="m-0 mb-4 text-[12.5px] text-ink-70">
+      <p className="m-0 mb-4 text-[12.5px] text-ink-70" data-testid="compare-confidence">
         Run {predecessor.run_number} to run {run.payload.runNumber}: confidence{' '}
-        <strong className="text-ink">{c.confidence.score_from}</strong> →{' '}
-        <strong className="text-ink">{c.confidence.score_to}</strong> (
-        {c.confidence.delta > 0 ? '+' : ''}
-        {c.confidence.delta}).{' '}
-        {c.confidence.band_changed ? (
-          <>
-            Band changed from <strong className="text-ink">{c.confidence.band_from.toUpperCase()}</strong> to{' '}
-            <strong className="text-ink">{c.confidence.band_to.toUpperCase()}</strong>.
-          </>
-        ) : (
-          <>
-            Band held at <strong className="text-ink">{c.confidence.band_to.toUpperCase()}</strong>.
-          </>
-        )}
+        <strong className="text-ink">{c.confidence.score_from} / 100</strong> →{' '}
+        <strong className="text-ink">{c.confidence.score_to} / 100</strong> ({c.confidence.delta > 0 ? '+' : ''}{c.confidence.delta}).{' '}
+        {c.confidence.band_changed
+          ? <>Band changed from <strong className="text-ink">{band(c.confidence.band_from)}</strong> to <strong className="text-ink">{band(c.confidence.band_to)}</strong>.</>
+          : <>Band held at <strong className="text-ink">{band(c.confidence.band_to)}</strong>.</>}
       </p>
 
-      <table className="w-full border-collapse text-[12.5px]">
-        <thead>
-          <tr>
-            {['Factor', 'Weight', 'Earned from', 'Earned to', 'Delta'].map((h) => (
-              <th
-                key={h}
-                className="whitespace-nowrap border-b border-silver px-3 py-[9px] text-left text-[9.5px] font-semibold uppercase tracking-[.13em] text-ink-45"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {c.factors.map((f) => {
-            // A zero delta is not nothing: if the evidence behind a factor
-            // changed but the score it earned did not, that is the single
-            // most important thing this card can show — marked, not
-            // rendered identically to a row where nothing happened at all.
-            const zeroDeltaNotesDiffer =
-              f.status === 'present' && f.delta === 0 && f.note_from !== f.note_to;
-            const bothNotes = f.status === 'present' && (f.delta !== 0 || zeroDeltaNotesDiffer);
-            const rowClass = zeroDeltaNotesDiffer ? 'bg-gold/[.10]' : undefined;
-
-            return (
-              <Fragment key={f.factor}>
-                <tr className={rowClass}>
-                  <td className="border-b border-rule-soft px-3 py-[9px]">{f.question}</td>
-                  <td className="border-b border-rule-soft px-3 py-[9px] text-ink-45">{f.weight}%</td>
-                  <td className="border-b border-rule-soft px-3 py-[9px]">
-                    {f.earned_from === null ? (
-                      <span className="italic text-ink-45">—</span>
-                    ) : (
-                      f.earned_from
-                    )}
-                  </td>
-                  <td className="border-b border-rule-soft px-3 py-[9px]">
-                    {f.earned_to === null ? <span className="italic text-ink-45">—</span> : f.earned_to}
-                  </td>
-                  <td className="border-b border-rule-soft px-3 py-[9px]">
-                    {f.status !== 'present' ? (
-                      <Badge tone="neutral">{f.status}</Badge>
-                    ) : (
-                      // Non-null by construction: compareRuns.ts only sets
-                      // delta to null on an 'added' or 'removed' row, and
-                      // this branch is reached only when status is 'present'.
-                      <>
-                        {f.delta! > 0 ? '+' : ''}
-                        {f.delta}
-                      </>
-                    )}
-                  </td>
-                </tr>
-                <tr className={rowClass}>
-                  <td
-                    colSpan={5}
-                    className="border-b border-rule-soft px-3 pb-[9px] pt-0 text-[11.5px] text-ink-45"
-                  >
-                    {zeroDeltaNotesDiffer && (
-                      <div className="mb-1">
-                        <Badge tone="watch">Evidence changed, score held</Badge>
-                      </div>
-                    )}
-                    {f.status === 'present' && bothNotes && (
-                      <>
-                        <span className="block">
-                          <strong className="text-ink-70">From:</strong> {f.note_from}
-                        </span>
-                        <span className="block">
-                          <strong className="text-ink-70">To:</strong> {f.note_to}
-                        </span>
-                      </>
-                    )}
-                    {f.status === 'present' && !bothNotes && <span>{f.note_to}</span>}
-                    {f.status === 'added' && <span>{f.note_to}</span>}
-                    {f.status === 'removed' && <span>{f.note_from}</span>}
-                  </td>
-                </tr>
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* UX-1 slice 4: stacked rows, not a table (standard 9). */}
+      <ul className="m-0 list-none p-0" data-testid="compare-factors">
+        {c.factors.map((f) => {
+          // A zero delta is not nothing: if the evidence behind a factor
+          // changed but the score it earned did not, that is the single
+          // most important thing this card can show — marked, not
+          // rendered identically to a row where nothing happened at all.
+          const zeroDeltaNotesDiffer = f.status === 'present' && f.delta === 0 && f.note_from !== f.note_to;
+          const bothNotes = f.status === 'present' && (f.delta !== 0 || zeroDeltaNotesDiffer);
+          const earned = (v: number | null) => (v === null ? 'not scored' : String(v));
+          return (
+            <li key={f.factor} className={'border-b border-rule-soft px-1 py-2 last:border-b-0 ' + (zeroDeltaNotesDiffer ? 'bg-gold/[.10]' : '')}>
+              <p className="m-0 text-[12.5px] text-ink">{f.question}</p>
+              <p className="m-0 mt-0.5 text-[11.5px] text-ink-70">
+                Weight {f.weight} · run {predecessor.run_number}: {earned(f.earned_from)} · run {run.payload.runNumber}: {earned(f.earned_to)}
+                {' · '}
+                {f.status !== 'present'
+                  ? (f.status === 'added' ? 'added in this run' : 'not in this run')
+                  // Non-null by construction: compareRuns.ts only sets delta to
+                  // null on an 'added' or 'removed' row.
+                  : `change ${f.delta! > 0 ? '+' : ''}${f.delta}`}
+              </p>
+              {zeroDeltaNotesDiffer && <p className="m-0 mt-1"><Badge tone="watch">Evidence changed, score held</Badge></p>}
+              <div className="mt-0.5 text-[11.5px] text-ink-45" data-record>
+                {f.status === 'present' && bothNotes && (
+                  <>
+                    <span className="block"><strong className="text-ink-70">Run {predecessor.run_number}:</strong> {f.note_from}</span>
+                    <span className="block"><strong className="text-ink-70">Run {run.payload.runNumber}:</strong> {f.note_to}</span>
+                  </>
+                )}
+                {f.status === 'present' && !bothNotes && <span>{f.note_to}</span>}
+                {f.status === 'added' && <span>{f.note_to}</span>}
+                {f.status === 'removed' && <span>{f.note_from}</span>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       <div className="mt-4 flex gap-8">
         <div>
@@ -346,7 +305,7 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: EngagementRu
             Health composite
           </span>
           <p className="m-0 font-display text-[17px] tracking-[.05em]">
-            {c.health.composite_from} → {c.health.composite_to}
+            {health(c.health.composite_from)} → {health(c.health.composite_to)}
           </p>
         </div>
         <div>

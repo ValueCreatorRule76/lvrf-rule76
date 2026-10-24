@@ -25,4 +25,7 @@ body {
   /* Keep small units whole; let long sections break, so no page is left half empty. */
   [data-testid='chain'], [data-testid='facts'] tr, [data-testid='outcome'] > div { break-inside: avoid; }
   [data-testid='pov'] h2 { break-after: avoid; }
+  /* The run page (UX-1 slice 4): headings and count lines stay with what follows; small rows stay whole. */
+  [data-testid='run-page'] h2, [data-testid='run-page'] h3, [data-testid='sealed-evidence'] > p { break-after: avoid; }
+  [data-testid='run-page'] li, [data-testid='run-page'] dl > div, [data-testid='confidence'], [data-testid='run-page'] h2 { break-inside: avoid; }
 }

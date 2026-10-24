@@ -199,6 +199,8 @@ export interface Run {
   source_fixture: string | null;
   walked_at: string;
   locked_at: string | null;
+  /** SHA-256 of the payload as stored; a locked run's never changes. */
+  payload_hash: string;
   // The owner join (runs.ts) — null if the owning engagement or
   // institution has since been retired. Never substitute the engagement
   // name or anything else in its place; render the absence.

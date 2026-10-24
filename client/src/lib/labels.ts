@@ -20,5 +20,23 @@ export const ASK_TYPE: Record<string, string> = { definition: 'Definition', docu
 export const GAP_STATE: Record<string, string> = { open: 'Open', refused: 'Refused' };
 export const GAP_PATH: Record<string, string> = { viable: 'can still be closed', blocked: 'cannot be closed from the current source' };
 
+// The value spine in plain labels (UX-1 standard 4); the enum keeps its values (db/schema.ts).
+export const STAGE_LABEL: Record<string, string> = {
+  baseline: 'Baseline set', attach: 'Capability attached', model: 'Value modelled', commit: 'Target committed',
+  measure: 'Actual measured', verify: 'Verified', return: 'Returned to the record',
+};
+export const REALIZATION: Record<string, string> = {
+  claimed: 'Claimed: a target or hypothesis, no measured actual', measured: 'Measured: an actual arrived, not yet verified',
+  verified: 'Verified: a named person confirmed the sources and the change', not_realized: 'Not realized: measured, and the target was not met',
+};
+export const DISCLOSURE: Record<string, string> = {
+  draft: 'Draft: not for circulation', internal: 'Internal: not shared with the customer', customer_shared: 'Shared with the customer',
+};
+export const EVIDENCE_KIND: Record<string, string> = {
+  assessment_result: 'Assessment result', system_export: 'System export', artifact: 'Artifact', observation: 'Observation',
+  attestation: 'Attestation', public_filing: 'Public filing', vendor_publication: 'Vendor publication',
+};
+export const SUPPORTS: Record<string, string> = { baseline: 'the baseline', actual: 'the actual', impact_basis: 'the impact basis' };
+
 /** The label for a stored value; an unknown value is shown as stored, never guessed. */
 export const label = (map: Record<string, string>, v: string) => map[v] ?? v;

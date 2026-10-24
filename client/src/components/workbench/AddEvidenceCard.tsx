@@ -2,6 +2,10 @@ import { useState } from 'react';
 import type { Run } from '../../types/run';
 import { Card, Badge } from './Card';
 import { GovernedForm, FOCUS_RING } from '../GovernedForm';
+import { label, EVIDENCE_KIND } from '../../lib/labels';
+
+// The supports options in words (the stored values are unchanged).
+const SUPPORTS_LABEL: Record<string, string> = { baseline: 'The baseline', actual: 'The actual', impact_basis: 'The impact basis' };
 
 const KIND_OPTIONS = [
   'assessment_result',
@@ -82,8 +86,8 @@ export function AddEvidenceCard({
         badge={<Badge tone="neutral">Unavailable on this run</Badge>}
       >
         <p className="m-0 text-[12.5px] text-ink-70">
-          This run was produced before valueOutcomeId was added to the payload. Evidence cannot
-          be linked to an outcome this run does not name.
+          This run predates the link to its outcome, so evidence cannot be added through it. Add
+          it on the account page.
         </p>
       </Card>
     );
@@ -164,15 +168,15 @@ export function AddEvidenceCard({
                 </option>
                 {KIND_OPTIONS.map((k) => (
                   <option key={k} value={k}>
-                    {k}
+                    {label(EVIDENCE_KIND, k)}
                   </option>
                 ))}
               </select>
               {/* R1, refined (Brad, 12 Oct 2026; LVRF_PLAN §3). */}
               <span className="mt-1 block text-[11px] text-ink-45" data-testid="kind-help">
                 A company's formal annual disclosure report — a 10-K, annual report, or CR, sustainability or ESG
-                report — is <code>public_filing</code>. Looser company material — a press release, web page, blog
-                post, job posting or marketing — is <code>observation</code>.
+                report — is <strong>Public filing</strong>. Looser company material — a press release, web page, blog
+                post, job posting or marketing — is <strong>Observation</strong>.
               </span>
             </label>
 
@@ -213,7 +217,7 @@ export function AddEvidenceCard({
                 </option>
                 {SUPPORTS_OPTIONS.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {label(SUPPORTS_LABEL, s)}
                   </option>
                 ))}
               </select>
@@ -232,7 +236,7 @@ export function AddEvidenceCard({
                 </option>
                 {CONFIDENCE_OPTIONS.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {c.charAt(0).toUpperCase() + c.slice(1)}
                   </option>
                 ))}
               </select>
