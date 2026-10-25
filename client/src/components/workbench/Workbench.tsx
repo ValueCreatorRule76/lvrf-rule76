@@ -40,7 +40,7 @@ const OUTLINED = 'border border-ink px-3 py-1.5 text-[12px] font-semibold tracki
  * marker's citation, an erratum's texts) prints in full once, on page 1 (PrintPageOne);
  * the header says so. On screen the banners are as before.
  */
-const HEADER_LINE = 'print:overflow-hidden print:text-ellipsis print:whitespace-nowrap';
+const HEADER_LINE = 'print:overflow-hidden print:text-ellipsis print:whitespace-nowrap print:text-[10.5px] print:tracking-normal';
 
 function RunBanners({ run, account, compact = false }: { run: Run; account: AccountRead; compact?: boolean }) {
   const p = run.payload;
@@ -78,8 +78,9 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
         ? errata.length > 0 && (
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
-                ? <><span className="font-semibold">ERRATUM</span> recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1.</>
-                : <><span className="font-semibold">{errata.length} ERRATA</span> recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}. Full text on page 1.</>}
+                // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
+                ? <><span className="font-semibold">ERRATUM</span>: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )
         : errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
@@ -393,7 +394,7 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
     // printed page. On screen they are plain blocks.
     <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="run-page">
       <div className="print:hidden"><RunBanners run={run} account={account} /></div>
-      <table className="block w-full border-collapse print:table">
+      <table className="block w-full border-collapse print:table print:table-fixed">
         <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} compact /></td></tr></thead>
         <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter run={run} /></td></tr></tfoot>
         <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">

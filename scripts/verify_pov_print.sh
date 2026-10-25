@@ -250,17 +250,32 @@ ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id &
 const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (x) => (await send('Runtime.evaluate', { expression: x, returnByValue: true })).result?.result?.value;
 await send('Network.setCookie', { name: 'lvrf_session', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true });
-await send('Emulation.setDeviceMetricsOverride', { width: 794, height: 1123, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: `http://localhost:${VITE}/accounts/${ID}/pov` });
-for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=pov] h1')`)) break; }
-await sleep(900);
-await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
-const rows = await ev(`[...document.querySelectorAll('[data-testid=print-header] [data-testid=banners] > div')].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5; const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth); return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line) }; })`);
-console.log(JSON.stringify(rows)); ws.close(); process.exit(0);
+// C1b: at A4's and Letter's content widths (703 and 725 px at 12 mm side margins).
+const out = {};
+for (const w of [703, 725]) {
+  await send('Emulation.setEmulatedMedia', { media: 'screen' });
+  await send('Emulation.setDeviceMetricsOverride', { width: w, height: 1123, deviceScaleFactor: 1, mobile: false });
+  await send('Page.navigate', { url: `http://localhost:${VITE}/accounts/${ID}/pov` });
+  for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=pov] h1')`)) break; }
+  await sleep(900);
+  await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
+  out[w] = await ev(`(() => {
+    const H = '[data-testid=print-header] [data-testid=banners] > div';
+    const rows = [...document.querySelectorAll(H)].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5; const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth); return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line), clipped: d.scrollWidth > d.clientWidth + 1 }; });
+    const seen = (box, phrase) => { if (!box) return null; const b = box.getBoundingClientRect(); const right = b.right - parseFloat(getComputedStyle(box).paddingRight);
+      const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT); let nd; while ((nd = tw.nextNode())) { const k = nd.textContent.indexOf(phrase);
+        if (k >= 0) { const rg = document.createRange(); rg.setStart(nd, k); rg.setEnd(nd, k + phrase.length); return rg.getBoundingClientRect().right <= right + 1; } } return false; };
+    const disc = document.querySelector('[data-testid=print-header] [data-testid=banner-unverified]');
+    return { rows, markerVisible: seen(document.querySelector('[data-testid=print-header] [data-testid=banner-reference]'), 'Source on page 1'),
+      discWhole: !disc || (disc.scrollWidth <= disc.clientWidth + 1 && /^UNVERIFIED — (not every outcome on this page has a verified actual|no outcome is recorded)/.test(disc.textContent.trim())),
+      pageFits: document.documentElement.scrollWidth <= window.innerWidth + 1 && [...document.querySelectorAll(H)].every(d => d.getBoundingClientRect().right <= window.innerWidth + 1) };
+  })()`);
+}
+console.log(JSON.stringify(out)); ws.close(); process.exit(0);
 JS
 HL="$(node "$W/header.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$CURIA" 2>/dev/null)"
-[ -n "$HL" ] && [ "$(node -e "const r=JSON.parse(process.argv[1]); console.log(r.length >= 2 && r.every(x => x.lines === 1))" "$HL")" = "true" ] \
-  && ok "curia: in print emulation, every printed header line is one line tall: $HL" || bad "curia: printed header lines: $HL"
+[ "$(node -e "const o=JSON.parse(process.argv[1] || '{}'); console.log(Object.keys(o).length === 2 && Object.values(o).every((m) => m.rows.length >= 2 && m.rows.every(x => x.lines === 1) && m.pageFits && m.markerVisible === true && m.discWhole))" "$HL")" = "true" ] \
+  && ok "curia: in print emulation at 703 and 725 px, every printed header line is one line tall and within the page; \"Source on page 1\" visible; the disclosure whole, never clipped" || bad "curia: printed header lines: $HL"
 step "5. A new account (no locked run): every printed page says nothing is sealed"
 look unsealed "$NEW" '{"noStages":true}' "UNVERIFIED" "No locked run: nothing on this page is sealed."
 

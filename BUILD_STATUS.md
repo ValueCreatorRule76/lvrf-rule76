@@ -12354,3 +12354,66 @@ prod since C1.**
 - **The printed pages for Brad's review:** `~/lvrf-backups/c1b-screens/` (700; files 600).
   Scotts run 2 (4 pages), the fixture (3 pages), Curia's POV (4 pages), each as a PDF and
   per-page PNGs; B9's PDF and pages; B10's PDF.
+
+### C1b, Brad's two confirmations — 25 October 2026 (UTC)
+
+**Brad approved C1b with two confirmations before Gate B.**
+1. `verify_run_page` requires the full disclosure sentence, "UNVERIFIED — this run's outcome
+   has no verified actual", on every printed page, never clipped.
+2. The bounded erratum line keeps "recomputed n / 100 (sealed m / 100)" and "Full text on
+   page 1" visible when clipped. Either they go before the name and date, or the full line is
+   proved to fit at Letter and A4 portrait with the longest real name. A break with a long name
+   is added.
+
+**What was done:**
+- **Confirmation 1.**
+  - Every printed page's text must contain the exact sentence. It already did.
+  - The disclosure lines now carry no clip, in `Workbench.tsx` and in `PovPage.tsx`.
+  - In print emulation, the line is measured whole and unclipped at 703 and 725 px, A4's and
+    Letter's content widths at 12 mm side margins.
+- **Confirmation 2.** The erratum line now reads "ERRATUM: recomputed n / 100 (sealed m / 100).
+  Full text on page 1. Recorded after sealing, <date>, by <name>." If it clips, only who and
+  when are cut. The per-page patterns in `verify_run_page` and `verify_corrections` follow the
+  new order.
+
+**A defect the long-name check found, and fixed.**
+- **The nowrap header lines were widening the printed table, not clipping.** Even a
+  119-character name "fit": the cell grew past the page.
+- **The earlier C1b prints were therefore shrunk to fit.** Scotts printed 4 pages, against 5
+  before C1b.
+- **The fix:** `print:table-fixed` on the outer print table (run page and POV), so the cell is
+  the page's width and the clip works.
+- **The pages at true scale:** Scotts run 2 now prints 6 pages (the earlier 5, plus page 1's
+  full erratum and citation), the fixture 5, Curia run 21 7, Skillsoft 5, Curia's POV 4.
+- **At true scale, the marker line clipped its own "Source on page 1".** The kind text is
+  canonical (`MARKER_KIND`), so the compact print lines are set at 10.5 px with normal tracking,
+  and the pointer is checked visible.
+
+**Gate A, run on the fresh copy:**
+- **`verify_run_page`: 273 passed, 0 failed.**
+  - At 703 and 725 px, in print emulation:
+    - every header line is one line, within the page's width;
+    - the marker's "Source on page 1" is visible;
+    - the disclosure is whole and unclipped;
+    - the erratum's figures and "Full text on page 1." are visible.
+  - **The longest real name**, "Brad Piver (external analyst of record)" (39 characters), shown
+    as the recorder: the figures and the pointer are visible and the line is one line.
+  - **A name three times as long** (119 characters): the line clips in the name, within the
+    page, with the figures and the pointer still visible.
+  - **B11, the old order (name and date first) with the 119-character name:** caught. "Full text
+    on page 1." is clipped out of sight at both widths.
+  - **B12, the table's fixed layout removed, with that name:** caught. The line widens the table
+    past the page at both widths.
+  - **B9 and B10** are caught as before.
+  - `Workbench.tsx` is restored byte-identical after each break.
+- **`verify_pov_print`: 116 passed, 0 failed.** At 703 and 725 px: every header line is one line
+  within the page, "Source on page 1" is visible, and the disclosure is whole.
+- **`verify_corrections`** depends on the older copy's state (L39), so it runs in the regression
+  there.
+- **The regression on the older copy: all 39 scripts pass**, `verify_corrections` 185/0. The
+  build and lint are clean (the 1 pre-existing warning). The bundle is `index-DtBPwnYU.js` /
+  `index-C9WVm_9W.css`. The fresh copy is restored as `lvrf_prodcopy` afterwards.
+- **The printed pages at true scale:** `~/lvrf-backups/c1b-screens/confirmations/`.
+- **An observation, not changed in C1b:** at true scale, Scotts run 2's page break falls
+  between "How the score was made" and its composition bar, so the bar opens page 3. It is
+  cosmetic, and it is how the page broke before C1b.

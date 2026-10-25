@@ -389,7 +389,7 @@ pages() {  # NAME PDF WANT(yes|no)
   for p in $(seq 1 "$n"); do
     flat="$(pdftotext -f "$p" -l "$p" "$2" - 2>/dev/null | tr -d '[:space:]')"
     # C1b: every page carries the erratum's bounded line (and the disclosure); page 1 its full text.
-    printf '%s' "$flat" | grep -qF "ERRATUMrecordedaftersealing" && printf '%s' "$flat" | grep -qF "UNVERIFIED—thisrun'soutcomehasnoverifiedactual" || missing="$missing p$p"
+    printf '%s' "$flat" | grep -qE "ERRATUM:recomputed[0-9.]+/100\(sealed[0-9.]+/100\)\.Fulltextonpage1\." && printf '%s' "$flat" | grep -qF "UNVERIFIED—thisrun'soutcomehasnoverifiedactual" || missing="$missing p$p"
     [ "$p" != "1" ] || printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || missing="$missing p1:full-text"
   done
   if [ "$3" = yes ]; then [ -z "$missing" ] && ok "$1: the erratum's line and the disclosure on every one of $n printed pages, its full text on page 1, read page by page" || bad "$1: pages without the erratum:$missing (of $n)"

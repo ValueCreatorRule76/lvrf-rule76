@@ -228,7 +228,7 @@ pages_check() {  # NAME PDF XFILE
     [ -z "$marker" ] || printf '%s' "$txt" | grep -qF "$marker" || bad_pages="$bad_pages p$p:marker"
     # C1b: the header's lines are bounded — the marker points to page 1 for its source; an erratum is one line.
     [ -z "$marker" ] || printf '%s' "$flat" | grep -qF "·Sourceonpage1" || bad_pages="$bad_pages p$p:marker-line"
-    [ "$errata" = "0" ] || printf '%s' "$flat" | grep -qE "ERRATUMrecordedaftersealing|ERRATArecordedaftersealing" || bad_pages="$bad_pages p$p:erratum-line"
+    [ "$errata" = "0" ] || { printf '%s' "$flat" | grep -qE "ERRATUM:recomputed[0-9.]+/100\(sealed[0-9.]+/100\)\.Fulltextonpage1\.|ERRATA\.Fulltextonpage1\." || bad_pages="$bad_pages p$p:erratum-line"; }
     if [ "$p" = "1" ]; then
       [ -z "$citation" ] || printf '%s' "$flat" | grep -qF -- "$citation" || bad_pages="$bad_pages p1:full-citation"
       [ "$errata" = "0" ] || printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || bad_pages="$bad_pages p1:full-erratum"
@@ -304,7 +304,10 @@ C1B_PAGES="${PAGES_N:-0}"
 # C1b (Brad): every printed header line is bounded — measured in print emulation, each line of the
 # printed header is one line tall, whatever its text (the marker, the sealed banner, the disclosure, the erratum).
 cat > "$W/header.mjs" <<'JS'
-const [CDP, VITE, TOKEN, ID] = process.argv.slice(2);
+// Per width (CSS px of A4's and Letter's content width at 12 mm side margins): each printed header
+// line's height in lines; the disclosure sentence whole and unclipped; the erratum line's figures
+// and "Full text on page 1." visible; and whether the whole erratum line fits.
+const [CDP, VITE, TOKEN, ID, ...WIDTHS] = process.argv.slice(2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const t = await (await fetch(`http://127.0.0.1:${CDP}/json/new?about:blank`, { method: 'PUT' })).json();
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener('open', r));
@@ -313,18 +316,54 @@ ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id &
 const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (x) => (await send('Runtime.evaluate', { expression: x, returnByValue: true })).result?.result?.value;
 await send('Network.setCookie', { name: 'lvrf_session', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true });
-await send('Emulation.setDeviceMetricsOverride', { width: 794, height: 1123, deviceScaleFactor: 1, mobile: false });
-await send('Page.navigate', { url: `http://localhost:${VITE}/runs/${ID}` });
-for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=run-page] h1')`)) break; }
-await sleep(900);
-await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
-const rows = await ev(`[...document.querySelectorAll('[data-testid=print-header] [data-testid=banners] > div')].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5; const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth); return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line) }; })`);
-console.log(JSON.stringify(rows)); ws.close(); process.exit(0);
+const out = {};
+for (const w of (WIDTHS.length ? WIDTHS : ['703', '725'])) {
+  await send('Emulation.setEmulatedMedia', { media: 'screen' });
+  await send('Emulation.setDeviceMetricsOverride', { width: Number(w), height: 1123, deviceScaleFactor: 1, mobile: false });
+  await send('Page.navigate', { url: `http://localhost:${VITE}/runs/${ID}` });
+  for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=run-page] h1')`)) break; }
+  await sleep(900);
+  await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
+  out[w] = await ev(`(() => {
+    const H = '[data-testid=print-header] [data-testid=banners] > div';
+    const rows = [...document.querySelectorAll(H)].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5;
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+      return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line), clipped: d.scrollWidth > d.clientWidth + 1 }; });
+    const disc = document.querySelector('[data-testid=print-header] [data-testid=banner-unverified], [data-testid=print-header] [data-testid=banner-verified]');
+    const discWhole = !!disc && disc.scrollWidth <= disc.clientWidth + 1 && /^(UNVERIFIED — this run’s outcome has no verified actual|UNVERIFIED — this run's outcome has no verified actual|VERIFIED — this run's outcome has an actual verified by a named person)$/.test(disc.textContent.trim());
+    const el = document.querySelector('[data-testid=print-header] [data-testid=banner-erratum-line]');
+    let erratumVisible = null, erratumFits = null;
+    if (el) {
+      const box = el.getBoundingClientRect(); const cs = getComputedStyle(el); const right = box.right - parseFloat(cs.paddingRight);
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let node, hit = null;
+      while ((node = walker.nextNode())) { const k = node.textContent.indexOf('Full text on page 1.'); if (k >= 0) { hit = [node, k]; break; } }
+      if (hit) { const rg = document.createRange(); rg.setStart(hit[0], hit[1]); rg.setEnd(hit[0], hit[1] + 'Full text on page 1.'.length); erratumVisible = rg.getBoundingClientRect().right <= right + 1; }
+      erratumFits = el.scrollWidth <= el.clientWidth + 1;
+    }
+    const ref = document.querySelector('[data-testid=print-header] [data-testid=banner-reference]');
+    const seen = (box, phrase) => { if (!box) return null; const b = box.getBoundingClientRect(); const right = b.right - parseFloat(getComputedStyle(box).paddingRight);
+      const tw = document.createTreeWalker(box, NodeFilter.SHOW_TEXT); let nd; while ((nd = tw.nextNode())) { const k = nd.textContent.indexOf(phrase);
+        if (k >= 0) { const rg = document.createRange(); rg.setStart(nd, k); rg.setEnd(nd, k + phrase.length); return rg.getBoundingClientRect().right <= right + 1; } } return false; };
+    const markerVisible = seen(ref, 'Source on page 1');
+    const pageFits = document.documentElement.scrollWidth <= window.innerWidth + 1 && [...document.querySelectorAll(H)].every(d => d.getBoundingClientRect().right <= window.innerWidth + 1);
+    return { rows, discWhole, erratumVisible, erratumFits, markerVisible, pageFits, erratumText: el ? el.textContent : null, widths: el ? [Math.round(el.clientWidth), el.scrollWidth, window.innerWidth, document.documentElement.scrollWidth] : null };
+  })()`);
+}
+console.log(JSON.stringify(out)); ws.close(); process.exit(0);
 JS
-header_lines() { node "$W/header.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$FRUN" 2>/dev/null; }
+header_lines() { node "$W/header.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$FRUN" 703 725 2>/dev/null; }
+HJ() { node -e "const o=JSON.parse(process.argv[1] || '{}'); const f=$2; console.log(Object.keys(o).length === 2 && Object.values(o).every(f))" "$1"; }
 HL="$(header_lines)"
-[ -n "$HL" ] && [ "$(node -e "const r=JSON.parse(process.argv[1]); console.log(r.length >= 4 && r.every(x => x.lines === 1))" "$HL")" = "true" ] \
-  && ok "  ...in print emulation, every printed header line is one line tall: $HL" || bad "  ...printed header lines: $HL"
+[ "$(HJ "$HL" "(m) => m.rows.length >= 4 && m.rows.every(x => x.lines === 1)")" = "true" ] \
+  && ok "  ...in print emulation at A4's and Letter's content widths (703 and 725 px), every printed header line is one line tall" || bad "  ...printed header lines: $HL"
+[ "$(HJ "$HL" "(m) => m.pageFits")" = "true" ] \
+  && ok "  ...and within the page's width: no header line widens the printed table past it" || bad "  ...a header line wider than the page: $HL"
+[ "$(HJ "$HL" "(m) => m.markerVisible === true")" = "true" ] \
+  && ok "  ...the marker line's \"Source on page 1\" visible at both widths" || bad "  ...the marker's pointer: $HL"
+[ "$(HJ "$HL" "(m) => m.discWhole && !m.rows.find(x => x.id === 'banner-unverified').clipped")" = "true" ] \
+  && ok "  ...the disclosure sentence \"UNVERIFIED — this run's outcome has no verified actual\" whole, never clipped, at both widths" || bad "  ...disclosure: $HL"
+[ "$(HJ "$HL" "(m) => m.erratumVisible === true")" = "true" ] \
+  && ok "  ...the erratum line's \"recomputed n / 100 (sealed m / 100). Full text on page 1.\" visible at both widths ($(node -e "const o=JSON.parse(process.argv[1]); console.log(Object.entries(o).map(([w,m]) => w + ' px: whole line ' + (m.erratumFits ? 'fits' : 'clipped after the pointer')).join('; '))" "$HL"))" || bad "  ...erratum line: $HL"
 [ "$C1B_PAGES" -ge 2 ] && ok "  ...it prints on $C1B_PAGES pages, so the repeating header is tested past page 1" || bad "  ...the C1b fixture printed on $C1B_PAGES page(s): the check needs 2+"
 
 step "7. Deliberate breaks"
@@ -408,8 +447,42 @@ edit "$WB" "{MARKER_KIND[marker.kind].banner} · {compact ? 'Source on page 1' :
 edit "$WB" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6' + line} data-testid=\"banner-reference\">" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6'} data-testid=\"banner-reference\">"
 c1b_break "B10: the marker's full citation back in the printed header, unclipped" b10 note
 sleep 3; HL10="$(header_lines)"
-[ "$(node -e "const r=JSON.parse(process.argv[1] || '[]'); const m=r.find(x => x.id === 'banner-reference'); console.log(!!m && m.lines > 1)" "$HL10")" = "true" ] \
+[ "$(node -e "const o=JSON.parse(process.argv[1] || '{}'); console.log(Object.keys(o).length === 2 && Object.values(o).every((m) => (m.rows.find(x => x.id === 'banner-reference') || {}).lines > 1))" "$HL10")" = "true" ] \
   && ok "B10 → caught: the marker's header line is no longer bounded ($HL10)" || bad "B10: the header-line bound did not catch it: $HL10"
+restore "$WB"
+# C1b (Brad's confirmation 2) — the longest real name on record, "Brad Piver (external analyst of record)"
+# (39 characters), shown as the erratum's recorder: the figures and "Full text on page 1." stay visible
+# at both widths, because they come before the name and date. Display only; the file is restored.
+LONG_NAME="Brad Piver (external analyst of record)"
+edit "$WB" "Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" "Recorded after sealing, {day(errata[0].recorded_at)}, by {'$LONG_NAME'}.</>"
+sleep 5; HLN="$(header_lines)"
+[ "$(HJ "$HLN" "(m) => m.erratumVisible === true && m.rows.every(x => x.lines === 1)")" = "true" ] \
+  && ok "the longest real name (${#LONG_NAME} characters) as the recorder: the figures and \"Full text on page 1.\" visible, one line, at 703 and 725 px ($(node -e "const o=JSON.parse(process.argv[1]); console.log(Object.entries(o).map(([w,m]) => w + ' px: whole line ' + (m.erratumFits ? 'fits' : 'clipped after the pointer')).join('; '))" "$HLN"))" \
+  || bad "the longest real name: $HLN"
+restore "$WB"
+# The same with a name three times the longest real one (display only), so the line must clip: the
+# figures and "Full text on page 1." still visible, the clip falling in the name.
+HUGE_NAME="$LONG_NAME $LONG_NAME $LONG_NAME"
+edit "$WB" "Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" "Recorded after sealing, {day(errata[0].recorded_at)}, by {'$HUGE_NAME'}.</>"
+sleep 5; HLH="$(header_lines)"
+[ "$(HJ "$HLH" "(m) => m.erratumVisible === true && m.erratumFits === false && m.pageFits && m.markerVisible && m.rows.every(x => x.lines === 1)")" = "true" ] \
+  && ok "a ${#HUGE_NAME}-character name: the line clips, in the name, within the page's width; the figures and \"Full text on page 1.\" still visible at 703 and 725 px" || bad "the ${#HUGE_NAME}-character name: $HLH"
+restore "$WB"
+# B12 (C1b) — the print table's fixed layout removed, with that long name: the nowrap line widens the
+# table instead of clipping, past the page's width (the defect the long-name check found in Gate A).
+edit "$WB" '      <table className="block w-full border-collapse print:table print:table-fixed">' '      <table className="block w-full border-collapse print:table">'
+edit "$WB" "Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" "Recorded after sealing, {day(errata[0].recorded_at)}, by {'$HUGE_NAME'}.</>"
+sleep 5; HL12="$(header_lines)"
+[ "$(node -e "const o=JSON.parse(process.argv[1] || '{}'); console.log(Object.keys(o).length === 2 && Object.values(o).every((m) => m.pageFits === false))" "$HL12")" = "true" ] \
+  && ok "B12: the print table's fixed layout removed → caught: the erratum line widens the table past the page at both widths" || bad "B12: not caught: $HL12"
+restore "$WB"
+# B11 (C1b) — the erratum line in its old order (name and date first) with that long name: the
+# figures and "Full text on page 1." are pushed past the clip at both widths.
+edit "$WB" "<><span className=\"font-semibold\">ERRATUM</span>: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" \
+  "<><span className=\"font-semibold\">ERRATUM</span> recorded after sealing, {day(errata[0].recorded_at)}, by {'$HUGE_NAME'}: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1.</>"
+sleep 5; HL11="$(header_lines)"
+[ "$(node -e "const o=JSON.parse(process.argv[1] || '{}'); console.log(Object.keys(o).length === 2 && Object.values(o).every((m) => m.erratumVisible === false))" "$HL11")" = "true" ] \
+  && ok "B11: the old order with a ${#HUGE_NAME}-character name → caught: \"Full text on page 1.\" clipped out of sight at both widths" || bad "B11: not caught: $HL11"
 restore "$WB"
 # B8 — the findings' sealed messages without their mark.
 edit "$FND" '        <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Messages as recorded at sealing.</p>' ''
