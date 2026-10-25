@@ -224,6 +224,15 @@ export interface Run {
 /** C1 (LVRF_PLAN §9): what a sealed run got wrong, and the server's recompute under the model it was sealed with. */
 export interface RunErratum {
   id: string;
+  evidence_id: string;
+  /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. */
+  corrected_to_supports: string;
+  /** C1 review: an erratum is corrected only by a later one that supersedes it, naming it. */
+  supersedes_id: string | null;
+  supersession_reason: string | null;
+  supersedes_recorded_by: string | null;
+  supersedes_recorded_at: string | null;
+  superseded_by_id: string | null;
   what_was_wrong: string;
   what_is_right: string;
   reason: string;

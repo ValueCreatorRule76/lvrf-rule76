@@ -74,6 +74,8 @@ export const PLAIN_CHECK: Record<string, string> = {
   run_errata_bands_known: "An erratum's scores are banded low, medium or high.",
   run_errata_method_stated: 'An erratum states how its score was recomputed, in at least 24 characters.',
   run_errata_scores_in_range: "An erratum's scores run from 0 to 100.",
+  run_errata_supersession_complete: 'An erratum that supersedes another names it and says why, in at least 12 characters; one that supersedes none says neither.',
+  run_errata_supports_known: 'An erratum names what the corrected link supports: the baseline, the actual or the impact basis.',
   run_errata_texts_stated: 'An erratum says what was wrong, what is right and why, each in at least 12 characters.',
   sessions_expiry_is_bounded: "A session's expiry cannot pass its absolute limit.",
   stewardship_returns_requires_source: 'A stewardship return names the reflection or outcome it returns from.',

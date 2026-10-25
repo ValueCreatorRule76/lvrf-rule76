@@ -12,6 +12,7 @@
 //              POV's withdrawn line; the walk's struck-through link
 //   nonsteward both controls disabled, each with its reason
 //   print      RUN's page printed to SHOTS/PDF_NAME only (break B8)
+//   supersede  the steward supersedes RUN's erratum through the form (Brad's C1 review)
 import { writeFileSync } from 'node:fs';
 
 const [MODE, VITE_PORT, CDP_PORT, SHOTS, TOKEN, INST, RUN, EVIDENCE, PDF_NAME] = process.argv.slice(2);
@@ -147,6 +148,27 @@ if (MODE === 'nonsteward') {
   check((await ev(`document.querySelector('[data-testid=erratum-reason]')?.textContent ?? ''`)).startsWith("Recording an erratum is the steward's act"), 'X: …with its reason, naming the steward');
   check(await ev(`!!document.querySelector('[data-testid=banner-erratum]')`), 'X: the erratum is shown to every reader');
   await shot('c1_run_nonsteward_1280', 1280);
+}
+
+if (MODE === 'supersede') {
+  const shown = `[...document.querySelectorAll('[data-testid=banners]')].find(x=>x.offsetParent!==null)`;
+  check(await open(`/runs/${RUN}`, runReady), 'run 1 opens');
+  check(await ev(`(${shown}).querySelectorAll('[data-testid=banner-erratum]').length`) === 1, 'run 1 shows its one erratum');
+  await ev(`document.querySelector('[data-testid=record-erratum-open]').click()`); await sleep(300);
+  const ef = `document.querySelector('[data-testid=record-erratum]')`;
+  await setField(ef, 'The corrected link', EVIDENCE);
+  check(await waitFor(`!!document.querySelector('[data-testid=erratum-supersedes]')`), 'choosing the link names the erratum it would supersede, and says the earlier one stays on the record');
+  await setField(ef, 'What was wrong', 'The vendor publication was sealed as support for the baseline (run 1).');
+  await setField(ef, 'What is right', "It supports the impact basis only; the baseline rests on the account's own filing.");
+  await setField(ef, 'Why it is recorded', "Verification: Brad's C1 ruling, point 1, restated.");
+  check(!(await click(ef, 'Record the erratum')), 'without a reason for superseding, the form does not submit');
+  await setField(ef, 'Why the earlier erratum is superseded', "Verification: the first erratum's wording was a draft.");
+  check(await click(ef, 'Record the erratum'), 'with it, the steward submits');
+  check(await waitFor(`(${shown})?.textContent.includes('It supersedes the erratum recorded')`), 'the page reloads with the superseding erratum');
+  const b = await ev(`(${shown}).querySelector('[data-testid=banner-erratum]').textContent`);
+  check(await ev(`(${shown}).querySelectorAll('[data-testid=banner-erratum]').length`) === 1 && b.includes("because: Verification: the first erratum's wording was a draft.") && b.includes('The sealed record below is unchanged.'),
+    'one erratum shown — the current one — naming the one it supersedes, who recorded it and why', b.slice(0, 200));
+  await shot('c1_run1_superseded_1280', 1280);
 }
 
 if (MODE === 'print') {

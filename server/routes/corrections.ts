@@ -24,7 +24,9 @@ import { recomputeWithCorrection } from '../lib/recomputeRun.js';
  *     a sealed run got it wrong: an erratum beside it — what was wrong, what is
  *     right, why — with the server's recompute of the run's confidence under the
  *     model it was sealed with (C1-D3). A score is never typed: a body naming
- *     one is refused. The sealed run is never touched.
+ *     one is refused. The sealed run is never touched. One erratum per run and
+ *     correction: a later one supersedes the current one, naming it
+ *     (supersedes_erratum_id) with a reason (C1 review, Brad, 25 Oct 2026).
  *
  * All writes on req.dbClient, inside actorContext's transaction.
  */
@@ -161,7 +163,7 @@ export function erratumRouter(pool: Pool): Router {
       tenantId = run.tenant_id;
       institutionId = run.institution_id;
       // C1-D3: the recompute is the server's; a score sent in the body is refused.
-      if (await refuseUnknownFields(pool, req, res, ['evidence_id', 'what_was_wrong', 'what_is_right', 'reason'],
+      if (await refuseUnknownFields(pool, req, res, ['evidence_id', 'what_was_wrong', 'what_is_right', 'reason', 'supersedes_erratum_id', 'supersession_reason'],
         { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId },
         (k) => (/score|band|recompute|model/.test(k) ? `body.${k} is not taken: the recompute is the server's, under the model the run was sealed with` : null))) return;
       if (run.locked_at === null) throw new Refusal(409, 'An erratum is recorded on a locked run; an unlocked run is replaced, not corrected.');
@@ -182,16 +184,43 @@ export function erratumRouter(pool: Pool): Router {
         [b.evidence_id, outcomeId],
       );
       if (!ev || ev.supports_now === null) throw new Refusal(422, "That evidence has no current link to this run's outcome.");
+      // C1 review (Brad, 25 Oct 2026): one erratum per run and correction. A later one supersedes
+      // the current one, naming it, with a reason (run_errata_one_per_correction, _superseded_once).
+      const { rows: [current] } = await client.query<{ id: string; recorded_on: string; recorded_by: string }>(
+        `SELECT e.id, to_char(e.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS recorded_on, p.full_name AS recorded_by
+           FROM run_errata e JOIN persons p ON p.id = e.recorded_by_person_id
+          WHERE e.value_run_id = $1 AND e.evidence_id = $2 AND e.corrected_to_supports = $3
+            AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = e.id)`,
+        [runId, b.evidence_id, ev.supports_now],
+      );
+      const supersedes = b.supersedes_erratum_id;
+      const supersessionReason = typeof b.supersession_reason === 'string' ? b.supersession_reason.trim() : '';
+      if (supersedes === undefined && b.supersession_reason !== undefined) {
+        throw new Refusal(422, 'A supersession reason goes with the erratum it supersedes; name it.');
+      }
+      if (supersedes === undefined && current) {
+        throw new Refusal(409, `An erratum for this correction is already recorded on this run (${current.recorded_on}, by ${current.recorded_by}); correct it with a new erratum that supersedes it, naming it, with a reason.`);
+      }
+      if (supersedes !== undefined) {
+        if (typeof supersedes !== 'string' || !isUuid(supersedes)) throw new Refusal(422, 'Name the erratum this one supersedes.');
+        if (!current) throw new Refusal(409, 'There is no erratum for this correction on this run to supersede.');
+        if (supersedes !== current.id) {
+          throw new Refusal(409, `That is not the current erratum for this correction on this run; the current one is ${current.id} (${current.recorded_on}, by ${current.recorded_by}).`);
+        }
+        if (supersessionReason.length < MIN_REASON) throw new Refusal(422, `Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
+      }
       const r = recomputeWithCorrection(run.payload as never, { kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as 'baseline');
       if (!r.ok) throw new Refusal(422, r.reason);
       const { rows: [row] } = await client.query<{ id: string }>(
-        `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, what_was_wrong, what_is_right, reason,
+        `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason,
+           what_was_wrong, what_is_right, reason,
            model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id`,
-        [tenantId, runId, outcomeId, b.evidence_id, String(texts.wrong).trim(), String(texts.right).trim(), String(texts.reason).trim(),
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+        [tenantId, runId, outcomeId, b.evidence_id, ev.supports_now, supersedes ?? null, supersedes === undefined ? null : supersessionReason,
+          String(texts.wrong).trim(), String(texts.right).trim(), String(texts.reason).trim(),
           r.modelVersion, r.modelFingerprint, r.sealedScore, r.sealedBand, r.score, r.band, r.method, actor],
       );
-      res.status(201).json({ erratum_id: row.id, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion });
+      res.status(201).json({ erratum_id: row.id, supersedes_erratum_id: supersedes ?? null, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId });
     }

@@ -11839,3 +11839,82 @@ and the figure-check guard. `/view` reads no links.
 3. **Added refusals:** an erratum about evidence the run sealed as it is linked now, and a
    plain sentence for re-linking a withdrawn support.
 4. **B10 and B11 are added**, for D1 and D3.
+
+### C1 review (Brad, 25 Oct 2026) — built on top of `3ff80e5`, before Gate B
+
+**1. One erratum per run and correction; an erratum is corrected only by one that
+supersedes it.**
+- **Migration 0040 is amended, not followed by a 0041.** It has never run on prod or in real
+  local `lvrf`, only on throwaway clones, so the regenerated file replaces it.
+- **`run_errata` gains three columns:**
+  - `corrected_to_supports`: with the run and the evidence, it names the correction;
+  - `supersedes_id`: a self-FK, `ON DELETE RESTRICT`;
+  - `supersession_reason`.
+- **Two partial unique indexes:**
+  - `run_errata_one_per_correction` on (run, evidence, `corrected_to_supports`), where
+    the erratum supersedes none;
+  - `run_errata_superseded_once` on `supersedes_id`.
+- **CHECKs:**
+  - `run_errata_supports_known`;
+  - `run_errata_supersession_complete`: a superseding erratum names its predecessor and
+    gives a reason of at least 12 characters; an original gives neither.
+  - **A NULL hole, caught by its first test and fixed:** with `supersedes_id` set and the
+    reason NULL, the CHECK was unknown, so it passed. Every term is now definite. The two
+    link CHECKs were already definite: every column is tested with `IS NOT NULL`.
+- **The erratum trigger** (`lvrf_run_erratum_steward_only`; no new trigger, still 141) now
+  also refuses:
+  - an erratum not about a current corrected link of that support;
+  - a supersession of an erratum from another run or another correction.
+- **The route:**
+  - a second erratum for the same correction gets 409, naming the current one's date and
+    recorder, and saying to supersede it;
+  - `supersedes_erratum_id` must be the current erratum for that correction;
+  - `supersession_reason` must be at least 12 characters, and is refused without a named
+    erratum.
+- **The display:**
+  - `GET /api/runs/:id` returns every erratum, with `supersedes_id` and `superseded_by_id`;
+  - the run page shows only current errata, a superseding one adding "It supersedes the
+    erratum recorded <date> by <name>, because: <reason>";
+  - the form, once the chosen correction has an erratum, says so and asks why it is
+    superseded.
+- **Plain sentences:** two for the CHECKs, and two for the unique indexes.
+- **Gate A:** `verify_corrections` **185 passed, 0 failed**. Section 11b covers:
+  - refused at the route and in the database: a second erratum, superseding another run's
+    erratum, and superseding E1 twice;
+  - refused: a short supersession reason, a reason with nothing named, a supersession with
+    no reason (in the database), and an erratum about a never-corrected link (in the
+    database);
+  - **run 1's erratum superseded in the browser:** the form names the earlier erratum and
+    won't submit without the reason. Afterwards one erratum is shown, naming its
+    predecessor; E1 stays on the record; the recompute is 10 again.
+  - **New break B12:** the route's duplicate check removed. The unique index refuses
+    (409, in words), and nothing is written.
+  - **B1** now supersedes run 1's current erratum as the non-steward, so the request reaches
+    the database's steward check.
+- **The regression:** all 38 scripts pass (tenant scope 209 cases); build, tsc and oxlint are
+  clean. The bundle is `index-CpcN8E2B.js` / `index-CXf26yGQ.css`. The prod copy against
+  `9c179ac` gives 76 of 76 identical, with the C1 fields allowed. Drift none (41
+  migrations, 1010 objects). The screens are refreshed in `~/lvrf-backups/c1-screens/`,
+  with `c1_run1_superseded_1280.png` added.
+
+**2. "With the correction applied" is accepted.** L36 is recorded in LVRF_PLAN §2: a vendor
+publication about another company, linked as `impact_basis`, must earn no confidence credit
+in any factor. Today it can earn half of factor 4 when a currency figure is claimed. It is a
+CONFIDENCE_MODEL ruling for later, with no change in C1.
+
+**3. `verify_account_research`'s six failures (03:05 UTC, 25 Oct 2026): the cause.**
+- **Correction:** they were not "a partial run before C1's build", as I first reported. They
+  came from a re-run of five affected scripts **during P1's Gate A**, against P1's code with
+  the account-research test not yet updated for P1.
+- **Evidence** (the script's surviving work directory and the session record):
+  - `phase_now`/`contract_version_now` read `entity|null|2` where the test still expected
+    contract v1;
+  - the walk's "correct the entity" step sent no quote or `how_read`, which contract v2
+    requires, so the correction was refused and the walk crashed (`TypeError` at
+    `account_research_walk.mjs:196`);
+  - the three later failures followed from it: the previous-entity listing, the headcount
+    under the previous entity, and B-H1.
+- **The fix:** at 03:09 the test was updated (v2, and the walk's correction carries a quote
+  and how-read). It passed 160 of 160 at 03:09:58, and in P1's full regression at 03:10.
+  The fix is in `475bccd`.
+- **Conclusion: a test not yet updated, not a flaky one.** It passed in every run since.

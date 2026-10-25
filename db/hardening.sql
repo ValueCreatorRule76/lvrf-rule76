@@ -2026,7 +2026,9 @@ CREATE TRIGGER figure_checks_guard
 --     support the impact basis only (Brad's ruling, point 3).
 --   run_errata_audit, _no_delete, _immutable, _steward_only — an erratum is
 --     the steward's, on a locked run of their tenant, about that run's
---     outcome; and it is final.
+--     outcome and a current corrected link of it; and it is final. One per run
+--     and correction (run_errata_one_per_correction); a later one supersedes
+--     it, naming it — same run, same correction — at most once (C1 review).
 --
 -- CONSEQUENCE: trigger count goes 135 -> 141.
 
@@ -2133,6 +2135,20 @@ BEGIN
   END IF;
   IF r.outcome IS DISTINCT FROM NEW.value_outcome_id::text THEN
     RAISE EXCEPTION 'LVRF: run_errata: the erratum''s outcome is not the one run % sealed.', NEW.value_run_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- An erratum is about a correction: a current, correcting link of that support.
+  IF NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
+                  WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id = NEW.evidence_id
+                    AND l.supports = NEW.corrected_to_supports AND l.corrects_supports IS NOT NULL AND l.withdrawn_at IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: an erratum is about a corrected link; this outcome has no current link of that evidence corrected to %.', NEW.corrected_to_supports
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- C1 review (Brad, 25 Oct 2026): an erratum is corrected only by one that supersedes it — same run, same correction.
+  IF NEW.supersedes_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM run_errata p WHERE p.id = NEW.supersedes_id AND p.value_run_id = NEW.value_run_id
+          AND p.evidence_id = NEW.evidence_id AND p.corrected_to_supports = NEW.corrected_to_supports) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: an erratum supersedes one of the same run and the same correction.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;

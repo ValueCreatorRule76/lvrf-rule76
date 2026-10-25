@@ -2487,6 +2487,15 @@ export const runErrata = pgTable('run_errata', {
   /** The corrected link this erratum reflects: its outcome and evidence. */
   valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
   evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. */
+  correctedToSupports: text('corrected_to_supports').notNull(),
+  /**
+   * C1 review (Brad, 25 Oct 2026): one erratum per run and correction. An
+   * erratum is corrected only by a new one that supersedes it, naming it, with
+   * a reason; it is superseded at most once (run_errata_superseded_once).
+   */
+  supersedesId: uuid('supersedes_id').references((): AnyPgColumn => runErrata.id, { onDelete: 'restrict' }),
+  supersessionReason: text('supersession_reason'),
   whatWasWrong: text('what_was_wrong').notNull(),
   whatIsRight: text('what_is_right').notNull(),
   reason: text('reason').notNull(),
@@ -2502,6 +2511,12 @@ export const runErrata = pgTable('run_errata', {
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('run_errata_run_idx').on(t.valueRunId),
+  uniqueIndex('run_errata_one_per_correction').on(t.valueRunId, t.evidenceId, t.correctedToSupports).where(sql`${t.supersedesId} IS NULL`),
+  uniqueIndex('run_errata_superseded_once').on(t.supersedesId).where(sql`${t.supersedesId} IS NOT NULL`),
+  check('run_errata_supports_known', sql`${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis')`),
+  check('run_errata_supersession_complete',
+    // Every term definite: a NULL reason must make this false, never unknown (an unknown CHECK passes; P1's B3).
+    sql`(${t.supersedesId} IS NULL AND ${t.supersessionReason} IS NULL) OR (${t.supersedesId} IS NOT NULL AND ${t.supersessionReason} IS NOT NULL AND length(btrim(coalesce(${t.supersessionReason}, ''))) >= 12)`),
   check('run_errata_texts_stated',
     sql`length(btrim(${t.whatWasWrong})) >= 12 AND length(btrim(${t.whatIsRight})) >= 12 AND length(btrim(${t.reason})) >= 12`),
   check('run_errata_scores_in_range',

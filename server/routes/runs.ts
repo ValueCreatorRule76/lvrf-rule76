@@ -44,11 +44,16 @@ export function runsRouter(pool: Pool): Router {
         res.status(404).json({ message: `run ${req.params.id} not found` });
         return;
       }
-      // C1: the errata recorded beside this sealed run (never part of it).
+      // C1: the errata recorded beside this sealed run (never part of it), every one of them;
+      // a superseded erratum names its successor, and a superseding one its predecessor.
       const { rows: errata } = await pool.query(
-        `SELECT x.id, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
+        `SELECT x.id, x.evidence_id, x.corrected_to_supports, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
                 x.sealed_score, x.sealed_band, x.recomputed_score, x.recomputed_band, x.recompute_method,
-                p.full_name AS recorded_by, x.recorded_at
+                p.full_name AS recorded_by, x.recorded_at,
+                x.supersedes_id, x.supersession_reason,
+                (SELECT q.full_name FROM run_errata o JOIN persons q ON q.id = o.recorded_by_person_id WHERE o.id = x.supersedes_id) AS supersedes_recorded_by,
+                (SELECT o.recorded_at FROM run_errata o WHERE o.id = x.supersedes_id) AS supersedes_recorded_at,
+                (SELECT s.id FROM run_errata s WHERE s.supersedes_id = x.id) AS superseded_by_id
            FROM run_errata x JOIN persons p ON p.id = x.recorded_by_person_id
           WHERE x.value_run_id = $1 ORDER BY x.recorded_at`,
         [req.params.id],

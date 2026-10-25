@@ -63,7 +63,7 @@ function RunBanners({ run, account }: { run: Run; account: AccountRead }) {
             UNVERIFIED — this run&apos;s outcome has no verified actual
           </div>}
       {/* C1 (LVRF_PLAN §9): an erratum, recorded after sealing, beneath the disclosure banner, on screen and on every printed page. */}
-      {(run.errata ?? []).map((x) => <ErratumBanner key={x.id} x={x} />)}
+      {(run.errata ?? []).filter((x) => x.superseded_by_id === null).map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
   );
 }
@@ -77,6 +77,7 @@ function ErratumBanner({ x }: { x: RunErratum }) {
     <div className="border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink [overflow-wrap:anywhere] sm:px-6" data-testid="banner-erratum">
       <span className="font-semibold">ERRATUM</span> — recorded after sealing, {day(x.recorded_at)}, by {x.recorded_by}.
       {' '}What was wrong: {sentence(x.what_was_wrong)}. What is right: {sentence(x.what_is_right)}. Why: {sentence(x.reason)}.
+      {x.supersedes_id && <>{' '}It supersedes the erratum recorded {x.supersedes_recorded_at ? day(x.supersedes_recorded_at) : ''} by {x.supersedes_recorded_by}, because: {sentence(x.supersession_reason ?? '')}.</>}
       {' '}<span className="font-semibold">The sealed record below is unchanged.</span>
       {' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).
     </div>
@@ -225,6 +226,7 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
   const [wrong, setWrong] = useState('');
   const [right, setRight] = useState('');
   const [why, setWhy] = useState('');
+  const [supersessionReason, setSupersessionReason] = useState('');
   if (run.locked_at === null) return null;
   const outcome = account.status === 'ok' ? account.pov.outcomes.find((o) => o.id === run.payload.valueOutcomeId) : undefined;
   const corrected = (outcome?.evidence ?? []).filter((e) => e.corrects_supports !== null);
@@ -242,6 +244,9 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
       </div>
     );
   }
+  // C1 review: one erratum per run and correction; a later one supersedes the current one.
+  const chosen = corrected.find((e) => e.evidence_id === evidenceId);
+  const current = chosen ? (run.errata ?? []).find((x) => x.superseded_by_id === null && x.evidence_id === chosen.evidence_id && x.corrected_to_supports === chosen.supports) : undefined;
   const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
   const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
   const unmet = [
@@ -249,6 +254,7 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
     ...(wrong.trim().length < 12 ? ['say what was wrong, in at least 12 characters'] : []),
     ...(right.trim().length < 12 ? ['say what is right, in at least 12 characters'] : []),
     ...(why.trim().length < 12 ? ['say why, in at least 12 characters'] : []),
+    ...(current && supersessionReason.trim().length < 12 ? ['say why the earlier erratum is superseded, in at least 12 characters'] : []),
   ];
   return (
     <div className="border-t border-rule-soft pt-3 print:hidden" data-testid="record-erratum">
@@ -265,12 +271,17 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
           <label className="block"><span className={L}>What was wrong</span><textarea rows={2} className={I} value={wrong} onChange={(e) => setWrong(e.target.value)} /></label>
           <label className="block"><span className={L}>What is right</span><textarea rows={2} className={I} value={right} onChange={(e) => setRight(e.target.value)} /></label>
           <label className="block"><span className={L}>Why it is recorded</span><textarea rows={2} className={I} value={why} onChange={(e) => setWhy(e.target.value)} /></label>
+          {current && <>
+            <p className="m-0 text-[12px] text-ink" data-testid="erratum-supersedes">An erratum for this correction is already recorded ({day(current.recorded_at)}, by {current.recorded_by}). This one <strong>supersedes</strong> it; the earlier one stays on the record.</p>
+            <label className="block"><span className={L}>Why the earlier erratum is superseded</span><textarea rows={2} className={I} value={supersessionReason} onChange={(e) => setSupersessionReason(e.target.value)} /></label>
+          </>}
         </div>}
         canSubmit={unmet.length === 0}
         unmet={unmet}
-        buildBody={() => ({ evidence_id: evidenceId, what_was_wrong: wrong.trim(), what_is_right: right.trim(), reason: why.trim() })}
+        buildBody={() => ({ evidence_id: evidenceId, what_was_wrong: wrong.trim(), what_is_right: right.trim(), reason: why.trim(),
+          ...(current ? { supersedes_erratum_id: current.id, supersession_reason: supersessionReason.trim() } : {}) })}
         submitLabel="Record the erratum"
-        onSuccess={() => { setOpen(false); onChanged(); }}
+        onSuccess={() => { setOpen(false); setSupersessionReason(''); onChanged(); }}
         renderSuccess={(d) => <>Recorded. Recomputed: {Number(d.recomputed_score)} / 100.</>}
       />
     </div>

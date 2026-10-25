@@ -2,7 +2,9 @@
 -- C1 (LVRF_PLAN §9; Brad's ruling and C1-D1–D4, 25 Oct 2026). Changes
 -- value_outcome_evidence (the key widens to include supports; withdrawal and
 -- correction columns, all null on every existing link, so every link stays
--- current; one current link per outcome and evidence) and adds run_errata.
+-- current; one current link per outcome and evidence) and adds run_errata
+-- (one erratum per run and correction; an erratum is corrected only by a new
+-- one that supersedes it — Brad's C1 review, 25 Oct 2026).
 -- Orphans nothing: no row is deleted or changed, no FK is dropped.
 -- ------------------------------------------------------------------
 CREATE TABLE "run_errata" (
@@ -11,6 +13,9 @@ CREATE TABLE "run_errata" (
 	"value_run_id" uuid NOT NULL,
 	"value_outcome_id" uuid NOT NULL,
 	"evidence_id" uuid NOT NULL,
+	"corrected_to_supports" text NOT NULL,
+	"supersedes_id" uuid,
+	"supersession_reason" text,
 	"what_was_wrong" text NOT NULL,
 	"what_is_right" text NOT NULL,
 	"reason" text NOT NULL,
@@ -23,6 +28,8 @@ CREATE TABLE "run_errata" (
 	"recompute_method" text NOT NULL,
 	"recorded_by_person_id" uuid NOT NULL,
 	"recorded_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "run_errata_supports_known" CHECK ("run_errata"."corrected_to_supports" IN ('baseline', 'actual', 'impact_basis')),
+	CONSTRAINT "run_errata_supersession_complete" CHECK (("run_errata"."supersedes_id" IS NULL AND "run_errata"."supersession_reason" IS NULL) OR ("run_errata"."supersedes_id" IS NOT NULL AND "run_errata"."supersession_reason" IS NOT NULL AND length(btrim(coalesce("run_errata"."supersession_reason", ''))) >= 12)),
 	CONSTRAINT "run_errata_texts_stated" CHECK (length(btrim("run_errata"."what_was_wrong")) >= 12 AND length(btrim("run_errata"."what_is_right")) >= 12 AND length(btrim("run_errata"."reason")) >= 12),
 	CONSTRAINT "run_errata_scores_in_range" CHECK ("run_errata"."sealed_score" BETWEEN 0 AND 100 AND "run_errata"."recomputed_score" BETWEEN 0 AND 100),
 	CONSTRAINT "run_errata_bands_known" CHECK ("run_errata"."sealed_band" IN ('low', 'medium', 'high') AND "run_errata"."recomputed_band" IN ('low', 'medium', 'high')),
@@ -41,8 +48,11 @@ ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_tenant_id_tenants_id_fk" FOR
 ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_value_run_id_value_runs_id_fk" FOREIGN KEY ("value_run_id") REFERENCES "public"."value_runs"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_value_outcome_id_value_outcomes_id_fk" FOREIGN KEY ("value_outcome_id") REFERENCES "public"."value_outcomes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_evidence_id_evidence_id_fk" FOREIGN KEY ("evidence_id") REFERENCES "public"."evidence"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_supersedes_id_run_errata_id_fk" FOREIGN KEY ("supersedes_id") REFERENCES "public"."run_errata"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_recorded_by_person_id_persons_id_fk" FOREIGN KEY ("recorded_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "run_errata_run_idx" ON "run_errata" USING btree ("value_run_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "run_errata_one_per_correction" ON "run_errata" USING btree ("value_run_id","evidence_id","corrected_to_supports") WHERE "run_errata"."supersedes_id" IS NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "run_errata_superseded_once" ON "run_errata" USING btree ("supersedes_id") WHERE "run_errata"."supersedes_id" IS NOT NULL;--> statement-breakpoint
 ALTER TABLE "value_outcome_evidence" ADD CONSTRAINT "value_outcome_evidence_withdrawn_by_person_id_persons_id_fk" FOREIGN KEY ("withdrawn_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "value_outcome_evidence" ADD CONSTRAINT "value_outcome_evidence_corrected_by_person_id_persons_id_fk" FOREIGN KEY ("corrected_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "value_outcome_evidence_one_current" ON "value_outcome_evidence" USING btree ("value_outcome_id","evidence_id") WHERE "value_outcome_evidence"."withdrawn_at" IS NULL;--> statement-breakpoint

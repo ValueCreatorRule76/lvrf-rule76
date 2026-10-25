@@ -41,6 +41,11 @@ const PLAIN_UNIQUE: Record<string, (detail: string | undefined) => string> = {
   // C1-D1: the widened key. A withdrawn link is kept, never restored by a second link of the same support.
   value_outcome_evidence_value_outcome_id_evidence_id_supports_pk: () =>
     'This evidence was already linked to this outcome with that support, and that link was withdrawn; a withdrawn link is not recorded again.',
+  // C1 review (Brad, 25 Oct 2026): one erratum per run and correction; each superseded at most once.
+  run_errata_one_per_correction: () =>
+    'An erratum for this correction is already recorded on this run; correct it with a new erratum that supersedes it.',
+  run_errata_superseded_once: () =>
+    'That erratum has already been superseded; supersede the current one instead.',
   persons_email_key: (detail) => {
     const email = detail?.match(/\(email\)=\(([^)]*)\)/)?.[1];
     return `${email ? `${email} is` : 'That person is'} already in LVRF; select them instead of adding them again.`;

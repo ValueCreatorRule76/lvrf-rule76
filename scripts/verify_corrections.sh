@@ -26,6 +26,7 @@
 #   B9  a typed recompute score sent in the erratum body: refused
 #   B10 (C1-D1) the correction route inserting before it withdraws: refused by the one-current index
 #   B11 (C1-D3) a run sealed under another model version: the recompute refused
+#   B12 (C1 review) the route's one-erratum-per-correction check removed: the unique index refuses
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -324,10 +325,36 @@ for pair in "1:$R1:$E1:10" "2:$R2:$E2:35"; do
 done
 expect GET "/api/runs/$R2" "" 200 "GET the run"
 [ "$(rj "b.errata.length + '|' + b.errata[0].recorded_by + '|' + Number(b.errata[0].recomputed_score)")" = "1|$S_NAME|35" ] && ok "  ...it carries the erratum: by $S_NAME, recomputed 35" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
-sqlrefused "an erratum recorded by X, at the database" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, evidence_id, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$X' FROM run_errata WHERE id = '$E1'" "only the tenant's steward records an erratum" "$X"
-sqlrefused "an erratum naming an outcome its run did not seal" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, '$O_F', evidence_id, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$S' FROM run_errata WHERE id = '$E1'" "is not the one run"
+sqlrefused "an erratum recorded by X, at the database" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$X' FROM run_errata WHERE id = '$E1'" "only the tenant's steward records an erratum" "$X"
+sqlrefused "an erratum naming an outcome its run did not seal" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, '$O_F', evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$S' FROM run_errata WHERE id = '$E1'" "is not the one run"
 sqlrefused "B2: an UPDATE of an erratum" "UPDATE run_errata SET recomputed_score = 80 WHERE id = '$E1'" "is final"
 sqlrefused "B2: a DELETE of an erratum" "DELETE FROM run_errata WHERE id = '$E1'" "cannot be deleted"
+
+step "11b. One erratum per run and correction; an erratum is corrected only by one that supersedes it (Brad's C1 review)"
+ECOPY() {  # FROM_ERRATUM RUN EVIDENCE SUPPORTS SUPERSEDES_SQL SUPERSESSION_REASON_SQL
+  printf "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, '%s', value_outcome_id, '%s', '%s', %s, %s, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id FROM run_errata WHERE id = '%s'" "$2" "$3" "$4" "$5" "$6" "$1"
+}
+[ "$(q "SELECT corrected_to_supports || '|' || (supersedes_id IS NULL) FROM run_errata WHERE id IN ('$E1', '$E2') GROUP BY 1")" = "impact_basis|true" ] \
+  && ok "each erratum names its correction: Scotts' vendor link, corrected to impact_basis; neither supersedes another" || bad "corrected_to_supports: $(q "SELECT corrected_to_supports, supersedes_id FROM run_errata")"
+expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_V")" 409 "a second erratum for the same run and correction, at the route" "An erratum for this correction is already recorded on this run"
+sqlrefused "  ...at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis NULL NULL)" "run_errata_one_per_correction"
+SUP() { printf ',"supersedes_erratum_id":"%s","supersession_reason":"%s"' "$1" "$2"; }
+expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1" "Too short")")" 422 "superseding with a 9-character reason" "Say why the erratum is superseded, in at least 12 characters"
+expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_V" "$(SUP "$E1" "Verification: run 1's erratum, named on run 2.")")" 409 "superseding another run's erratum, at the route" "That is not the current erratum for this correction on this run"
+sqlrefused "  ...at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis "'$E1'" "'Verification: run 1''s erratum, named on run 2.'")" "an erratum supersedes one of the same run and the same correction"
+expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" ',"supersession_reason":"Verification: a reason with nothing named."')" 422 "a supersession reason with no erratum named" "name it"
+sqlrefused "a supersession named with no reason, at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis "'$E2'" NULL)" "run_errata_supersession_complete"
+sqlrefused "an erratum about a link that was never corrected (Scotts' filing), at the database" "$(ECOPY "$E2" "$R2" "$EV_B" baseline NULL NULL)" "an erratum is about a corrected link"
+walk supersede "$TOKEN" "$R1"
+E1B="$(q "SELECT id FROM run_errata WHERE supersedes_id = '$E1'")"
+[ -n "$E1B" ] && [ "$(q "SELECT value_run_id || '|' || corrected_to_supports || '|' || recomputed_score::numeric::int || '|' || (recorded_by_person_id = '$S') || '|' || supersession_reason FROM run_errata WHERE id = '$E1B'")" = "$R1|impact_basis|10|true|Verification: the first erratum's wording was a draft." ] \
+  && ok "run 1: the superseding erratum names E1, with the reason; the server's recompute again 10; the steward's" || bad "superseding row: $(q "SELECT * FROM run_errata WHERE supersedes_id = '$E1'")"
+[ "$(q "SELECT count(*) FROM run_errata WHERE id = '$E1'")" = "1" ] && ok "  ...E1 stays on the record (append-only)" || bad "  ...E1 gone"
+expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1" "Verification: superseding E1 a second time.")")" 409 "superseding E1 again (already superseded), at the route" "That is not the current erratum for this correction on this run"
+sqlrefused "  ...at the database" "$(ECOPY "$E1B" "$R1" "$EV_V" impact_basis "'$E1'" "'Verification: superseding E1 a second time.'")" "run_errata_superseded_once"
+expect GET "/api/runs/$R1" "" 200 "GET run 1"
+[ "$(rj "b.errata.length + '|' + b.errata.find(x=>x.id==='$E1').superseded_by_id + '|' + b.errata.find(x=>x.id==='$E1B').supersedes_id")" = "2|$E1B|$E1" ] \
+  && ok "  ...returns both errata: E1 superseded by the new one, which names E1" || bad "  ...$(rj "JSON.stringify(b.errata.map(x=>[x.id,x.supersedes_id,x.superseded_by_id]))")"
 
 step "12. C1-D2: the other legitimate acts on a retired engagement still succeed"
 expect POST "/api/institutions/$INST/value-outcomes" "$(OUTB two "$OWNER")" 201 "a second fixture engagement and outcome"
@@ -369,7 +396,14 @@ step "15. Deliberate breaks"
 # B1 — the erratum route's steward check removed: the database refuses X still.
 edit "$CORR" "router.post('/:runId/errata', requireSteward(pool), async" "router.post('/:runId/errata', async"
 stop_server; start_server
-expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V")" 422 "B1: without the route's check, X's erratum → the database refuses" "only the tenant's steward records an erratum" "$X"
+# (X supersedes run 1's current erratum, so the request passes every route check but the steward's.)
+expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1B" "Verification: B1, X superseding it.")")" 422 "B1: without the route's check, X's erratum → the database refuses" "only the tenant's steward records an erratum" "$X"
+restore "$CORR"
+# B12 (C1 review) — the route's one-erratum-per-correction check removed: the database refuses.
+edit "$CORR" "      if (supersedes === undefined && current) {" "      if (supersedes === undefined && current && false) {"
+stop_server; start_server
+expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_V")" 409 "B12: without the route's check, a second erratum on run 2 → the unique index refuses, in words" "An erratum for this correction is already recorded on this run; correct it with a new erratum that supersedes it."
+[ "$(q "SELECT count(*) FROM run_errata WHERE value_run_id = '$R2'")" = "1" ] && ok "  ...nothing written" || bad "  ...B12 wrote"
 restore "$CORR"
 # B10 (C1-D1) — the route inserts the corrected link before it withdraws the old one.
 python3 - "$CORR" <<'PY'
