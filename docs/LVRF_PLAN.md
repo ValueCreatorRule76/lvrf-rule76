@@ -150,6 +150,7 @@ on institution routes (P3).
 | D11 | **No amendment** for the entity record (product schema) or the vocabulary (derived, no new stored class) | Brad Piver, 11 Oct 2026 |
 | — | **3.0 revision 3 is adopted as the working plan.** Not ratified; Q1 (the doctrine source) stays open | Brad Piver, 11 Oct 2026 |
 | D6 | **Model versions and thresholds change by commit and deploy** (the commit author is the decider). Weights as data is **optional** (L24) | Brad Piver, 11 Oct 2026 |
+| M1 (C2-D1) | **Every model version's scorer is kept.** A sealed run can always be recomputed under the model it was sealed with, whatever version is current, as design Q11 (24 Oct 2026) keeps each output-rules version's renderer so a sealed case reproduces exactly. A new `MODEL_VERSION` **adds** a scorer beside the old ones; it never replaces one. C1's erratum recompute (`server/lib/recomputeRun.ts`) then selects the scorer by the run's sealed version and fingerprint, instead of refusing a run sealed under another model. Standing principle, not a one-off | Brad Piver, 25 Oct 2026 |
 | O-D1 | **The CFO lens threshold is 55** (the computed confidence's medium floor). A `lens_policies` value, ratified and versioned; below it the CFO lens refuses, with the reason and the gap register's asks | Brad Piver, 12 Oct 2026 |
 | O-D2 | **The steward ratifies value levers and lever↔offering links**, as pack entries (Band A) | Brad Piver, 12 Oct 2026 |
 | OWN-1-D1 | **Local roles approved.** `lvrf_owner` (NOLOGIN) and `lvrf_migrate` are created on this Mac's cluster with the same names as prod. `lvrf_migrate` has a local-only password, never prod's and never in the repo (it lives in the git-ignored `.env.migrate`). Ownership changes **only on throwaway clones**; real local `lvrf` is not converted until OWN-1 deploys. The DROP ROLE steps are documented in `db/ownership.sql` | Brad Piver, 19 Oct 2026 |
@@ -2962,7 +2963,7 @@ D1, D2 and D8 as recommended. D7 with the label "matched by kind, summary and so
 
 ---
 
-## 11. C2: what a commitment's and a verification's attestation supports (ruled by Brad, 25 Oct 2026; **planned; not to be built until P2's Gate C is clean**)
+## 11. C2: what a commitment's and a verification's attestation supports (ruled by Brad, 25 Oct 2026; **decisions ruled 25 Oct 2026; built after L39, each with its own Gate A**)
 
 **Value spine stages served:** `commit` and `verify` (what each attestation is evidence of), and
 `return` (the errata on the runs that sealed it).
@@ -3061,9 +3062,16 @@ The count is expected to be **9 (Curia 13–21), each recomputing to its sealed 
   - runs 13–21 byte-identical;
   - no refusals but deliberate ones.
 
-### Decisions for Brad
+### Decisions (decided by Brad, 25 Oct 2026)
 
-| # | Decision | Recommendation |
+- **D1:** measure the fingerprint at build. **If it moves, stop and bring it to Brad.** It is also
+  ruled as a standing principle, M1 in §3: every model version's scorer is kept.
+- **D2:** approved. The 9 Curia errata are recorded through the UI, one at a time, against the
+  read-only dry run's list.
+- **D3:** approved, `verification` only.
+- **Order:** L39 first, with its own Gate A, then C2. Stop after each Gate A for Brad's review.
+
+| # | Decision | Ruled |
 |---|---|---|
 | **C2-D1** | Widening `supports`' type in the model: does it change `MODEL_FINGERPRINT`, and so need a new `MODEL_VERSION`? | **Measure it at build.** If the fingerprint is unchanged (no constant or logic changes), keep 1.0.0: every sealed run still recomputes under its own model. If it moves, bump to 1.0.1 and record why. C1's recompute then refuses old runs unless their model is kept beside the new one, so name that before building |
 | **C2-D2** | The 9 errata: through the UI one by one, or a steward script with `--apply`? | **The UI, one by one, against the dry run's list.** Each is a steward act with its own act row, and scripts never write to prod. Nine is a sitting, not a batch |
