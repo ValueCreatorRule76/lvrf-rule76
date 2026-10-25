@@ -11586,3 +11586,63 @@ keep their bytes, and `check_run_hashes` verifies both versions.
     `stated_on`, plus `contract_version_now` 2.
 - **For Brad's review:** the fixture POV at 1280 and 390, the PDF and its pages, in
   `~/lvrf-backups/p1-screens/` (600).
+
+### Deployed — 25 October 2026 (UTC): P1 (`9c179ac`, migration 0039); Gate C clean
+
+`710abca..9c179ac`: P1 (`475bccd`) and the L35 docs commit. **Migration 0039; hardening
+re-run; no re-exec.**
+- **Gate B:**
+  - **Paste 1 (backup):** `~/lvrf-pre-p1-20261025T042227Z.dump`, 874,757 bytes,
+    `-rw-------`, **630 TOC entries**, with no `figure_checks` entry. It was taken before the
+    migration (the hardening log is from 04:29:03).
+    - **How it was checked:** Brad's report left this output as a placeholder, so I
+      confirmed it on the box, read-only.
+  - **Paste 2 (pull, migrate, ownership, hardening, checks):**
+    - HEAD `9c179ac`; migrations applied;
+    - `ownership exit 0`, with two harmless NOTICEs;
+    - `hardening exit 0`, 0 ERROR;
+    - **135 triggers**;
+    - `legacy|34`; 0 figure checks;
+    - drift none (40 migrations, 963 objects);
+    - ownership clean; run hashes 25/25.
+
+    All as predicted.
+  - **Paste 3 (deploy):** at first it had not run.
+    - **What the box showed:** the API was still the slice 4 process (up since 01:32:10),
+      serving `index-CH43WjZ8.js` against the migrated database.
+    - **No harm:** there were 0 requests, refusals, evidence rows or audit rows between the
+      migration and the deploy.
+    - **Then:** Brad ran it.
+- **Gate C** (read-only, by me over ssh):
+  - **the deploy:** HEAD `9c179ac`, clean tree; bundle **`index-BlOZQdpO.js`** /
+    `index-yzluhmTC.css`; the API up since 04:44:05 UTC;
+  - **the standard checks:**
+    - run hashes 25/25 (recomputed and embedded);
+    - ownership clean;
+    - **plain sentences 76/76** (69 + P1's seven);
+    - drift D1/D3/D4 no findings; schema drift none (40 migrations);
+    - **135 triggers by `pg_trigger`, 0 disabled**;
+  - **P1's state:** every evidence row `legacy` (34); `figure_checks` empty;
+  - **since the restart:** **0 refusals**, 0 audit rows;
+  - **the journal:** 7 request lines, **none carrying a value** (no id, query string,
+    address, cookie, quote or `how_read`).
+    - **Brad's visit:** `GET /api/institutions/:institutionId/pov` 200, `GET
+      /api/runs/:id` 304, the comparison 304 and `GET /api/auth/me` 200, all `session=y`.
+    - **The only 401s:** the deploy's two `GET /api/runs/:id` smoke checks.
+
+**Finding (Brad, 25 Oct 2026), stopped for a ruling: Scotts' vendor publication is
+recorded as `supports = baseline`.**
+- **On run 2's page** it reads "supports the baseline". Its own summary says it is "never
+  applied to the baseline", and LVRF_PLAN §4a A9 recorded it as `supports = impact_basis`.
+- **What the record says** (read-only, on prod):
+  - **the live link** (`value_outcome_evidence`, the one link for that evidence row,
+    recorded 12 Oct 2026 20:46 by Brad Piver) says `baseline`;
+  - **run 1 and run 2 both sealed it** as `baseline / vendor_publication`.
+- **So the label is right and the data is wrong.** This needs a ruling on how to correct
+  it. The sealed runs are never edited.
+- **What constrains the correction:**
+  - **The link can't be edited or retired:** the link table has no `supports` edit and no
+    retirement.
+  - **The outcome is frozen:** its engagement is retired, so outcome evidence is refused
+    (409).
+  - **The sealed record stays:** runs 1 and 2 keep "baseline" as sealed.
