@@ -89,7 +89,15 @@ export function actorContext(pool: Pool) {
               }
             },
             (err: unknown) => {
-              console.error('LVRF: COMMIT failed; the write was not saved.', err);
+              // P2 review (Brad, 25 Oct 2026): logged as an error with NO values — the method, the
+              // route's pattern, the SQLSTATE and the rule's name only. The database's message names
+              // the row (an id), so it goes to the caller, who sent the request, never to the journal.
+              const e = (err ?? {}) as { code?: unknown; constraint?: unknown };
+              const pattern = req.route?.path ? `${req.baseUrl}${req.route.path === '/' ? '' : req.route.path}` : '(no route)';
+              console.error(
+                `LVRF: COMMIT failed; the write was not saved. ${req.method} ${pattern} · sqlstate ${typeof e.code === 'string' ? e.code : 'none'}` +
+                ` · rule ${typeof e.constraint === 'string' ? e.constraint : 'none'}`,
+              );
               try {
                 res.status(500);
                 originalJson({

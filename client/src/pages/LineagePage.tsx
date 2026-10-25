@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/http';
 import { day } from '../lib/workspaceStatus';
+import { formatQuantity } from '../lib/format';
 
 /**
  * P2 (LVRF_PLAN §10; design §2.4, §4) — /lineage/:table/:id: where a figure
@@ -52,20 +53,27 @@ function What({ s }: { s: Step }) {
     }
     case 'open_citation': return <>{d.source_verified ? 'source verified' : 'opened; stays unverified'}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
     case 'figure_check': return <>{str(d.result)}: {str(d.detail)}</>;
-    case 'fact': return <>{str(d.kind).replace(/_/g, ' ')}: {str(d.value_numeric ?? d.value_text)} {str(d.unit)} (as of {str(d.as_of)})</>;
+    case 'fact': return <>{str(d.kind).replace(/_/g, ' ')}: {d.value_numeric !== null && d.value_numeric !== undefined ? formatQuantity(d.value_numeric as number | string, (d.unit as string | null) ?? null) : str(d.value_text)} (as of {day(str(d.as_of))})</>;
     case 'entity': return <>{str(d.legal_name)} · {str(d.identifier_type)} {str(d.identifier)}</>;
     case 'measure': return <>{str(d.name)} · {str(d.unit)} · {str(d.status)}</>;
-    case 'baseline': case 'actual': return <>{str(d.metric)}: {str(d.value)}{d.measured_at ? ` (measured ${day(str(d.measured_at))})` : ''}</>;
+    case 'baseline': case 'actual': return <>{str(d.metric)}: {d.value === null || d.value === undefined ? 'not recorded' : formatQuantity(d.value as number | string, (d.unit as string | null) ?? null)}{d.measured_at ? ` (measured ${day(str(d.measured_at))})` : ''}</>;
     case 'link': case 'correct': return (
-      <span className={d.current ? '' : 'line-through'}>
+      <span className={d.current ? '' : 'line-through'} data-testid={d.current ? 'lineage-link-current' : 'lineage-link-withdrawn'}>
         supports {str(d.supports).replace('_', ' ')}{d.corrects_supports ? `, correcting ${str(d.corrects_supports).replace('_', ' ')}: ${str(d.reason)}` : ''}
       </span>
     );
+    case 'withdrawn': return <span data-testid="lineage-withdrawal">{d.supports ? `the link supporting ${str(d.supports).replace('_', ' ')} withdrawn: ` : 'withdrawn: '}{str(d.reason)}</span>;
     case 'seal': return (
       <>
         <Link to={`/runs/${s.row_id}`} className="underline">Run {str(d.run_number)}</Link>{d.locked ? ', locked' : ''} · <span className="font-mono">{str(d.payload_hash).slice(0, 12)}…</span>
         {d.sealed_supports ? ` · sealed as support for the ${str(d.sealed_supports).replace('_', ' ')}` : ''}
-        {d.sealed_baseline !== undefined ? ` · sealed baseline ${str(d.sealed_baseline) || 'none'}, actual ${str(d.sealed_actual) || 'none'}` : ''}
+        {d.sealed_baseline !== undefined ? ` · sealed baseline ${d.sealed_baseline === null ? 'none' : formatQuantity(d.sealed_baseline as number | string, null)}, actual ${d.sealed_actual === null ? 'none' : formatQuantity(d.sealed_actual as number | string, null)}` : ''}
+        {/* P2 review: the errata recorded after this seal, beside it (the sealed record is never changed). */}
+        {Array.isArray(d.errata) && (d.errata as Record<string, unknown>[]).map((x) => (
+          <span key={str(x.id)} className="block text-warning" data-testid="lineage-seal-erratum">
+            Erratum recorded after sealing, {day(str(x.recorded_at))}, by {str(x.recorded_by)}{x.supersedes ? ' (it supersedes an earlier erratum)' : ''}: {str(x.what_was_wrong)} Recomputed {Number(x.recomputed)} / 100 (sealed {Number(x.sealed)} / 100).
+          </span>
+        ))}
         {d.matched ? <span className="block text-ink-45">{str(d.matched)}</span> : null}
       </>
     );

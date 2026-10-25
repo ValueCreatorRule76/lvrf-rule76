@@ -27,6 +27,8 @@
 #   B9  the act helper call removed from the accept route: the write is refused at COMMIT
 #   B10 the lineage's supersession steps removed (on the clone): the chain loses its step
 #   B11 a paste over 512 KB: refused in words, recorded by hash and size, not text
+#   B12 the open-citation route's own act removed: the opening is refused at COMMIT
+#   B13 the errata note on a run's seal step removed (on the clone): the seal loses its erratum
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,8 +48,8 @@ PORT=3097; VITE_PORT=5197; CDP_PORT=9357
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_acts.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
-ACCT=server/routes/accountResearch.ts
-EDITED=("$ACCT")
+ACCT=server/routes/accountResearch.ts; CITE=server/routes/evidenceCitation.ts
+EDITED=("$ACCT" "$CITE")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -249,6 +251,14 @@ EV_AI="$(rj b.evidence_id)"
 act_is "create-only routes write no act" ""
 expect POST "/api/evidence/$EV_AI/open-citation" '{"source_verified":true}' 200 "open its citation"
 act_is "open_citation" "open_citation:evidence:-:true:POST /api/evidence/:id/open-citation"
+# P2 review (Brad): the standalone opening writes its own act; the row, as recorded.
+echo "  ROW   $(q "SELECT 'act=' || act || ' subject=' || subject_table || '/' || subject_id || ' actor=' || (SELECT full_name FROM persons WHERE id = actor_person_id) || ' route=' || route || ' reason=' || coalesce(reason, 'NULL') || ' txid=' || txid || ' at=' || to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM governance_acts WHERE subject_table = 'evidence' AND subject_id = '$EV_AI'")"
+[ "$(q "SELECT count(*) || '|' || bool_and(subject_id = '$EV_AI' AND result_table IS NULL AND evidence_ids = '{}') FROM governance_acts WHERE act = 'open_citation'")" = "1|true" ] \
+  && ok "  ...one open_citation act, its subject the evidence opened, standing on its own (no accept involved)" || bad "  ...open_citation acts: $(q "SELECT count(*) FROM governance_acts WHERE act = 'open_citation'")"
+expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing 'AI search two' 'TRIR FY25, AI-found again (fixture)' baseline false true)" 201 "a second AI-sourced item (create-only)"
+EV_AI2="$(rj b.evidence_id)"; acts_new
+sqlrefused "opening a citation outside an accept, by SQL with no act → refused at COMMIT" "UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = '$S', citation_resolved_at = now() WHERE id = '$EV_AI2'" "a citation opened with no governance act recorded in this transaction"
+[ "$(q "SELECT citation_resolved FROM evidence WHERE id = '$EV_AI2'")" = "f" ] && ok "  ...the citation stays unopened" || bad "  ...opened without an act"
 expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$O1\",\"value_lever_id\":\"$LEV\",\"statement\":\"Frontline hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"Same definition and denominator as the published baseline.\"}" 201 "a hypothesis (create-only)"
 H1="$(rj b.value_hypothesis_id)"; acts_new
 expect POST "/api/value-hypotheses/$H1/supersede" '{"statement":"Frontline hazard recognition reduces recordable injuries across the account.","falsifier_reference":"baseline","falsifier_due":"2027-09-30","falsifier_conditions":"Same definition and denominator as the published baseline.","supersession_reason":"Verification: restated as a fixture."}' 201 "restate the hypothesis"
@@ -323,6 +333,17 @@ LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvr
   && ok "corrected evidence: evidence > figure check > link > withdrawn (act) > corrected link (act) > the run's seal (matched) > erratum" || bad "evidence lineage: $(LN evidence "$EV3")"
 [ "$(q "SELECT detail->>'matched' FROM lvrf_lineage('evidence', '$EV3') WHERE kind = 'seal'")" = "matched by kind, summary and source; not sealed by id" ] \
   && ok "  ...the seal labelled \"matched by kind, summary and source; not sealed by id\" (P2-D7)" || bad "  ...seal label"
+# P2 review (Brad): an outcome's baseline after a correction — the withdrawn link with name, date and
+# reason; the correcting link; the run's seal noting the erratum recorded after it.
+LB3="$(LN value_outcomes "$O3" baseline)"
+[ "$LB3" = "baseline:record > evidence:record > figure_check:record > link:record > withdrawn:act > correct:act > seal:seal > erratum:act" ] \
+  && ok "a corrected baseline: baseline > evidence > figure check > link > withdrawn (act) > corrected link (act) > the run's seal > erratum" || bad "corrected baseline: $LB3"
+[ "$(q "SELECT (detail->>'current') || '|' || (detail->>'supports') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'link'")|$(q "SELECT actor || '|' || (at::date = now()::date) || '|' || (detail->>'reason') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'withdrawn'")" = "false|baseline|$S_NAME|true|Verification: this filing bases the impact, not the baseline." ] \
+  && ok "  ...the withdrawn link: not current; withdrawn by $S_NAME, today, with the reason" || bad "  ...withdrawn step: $(q "SELECT detail FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'withdrawn'")"
+[ "$(q "SELECT (detail->>'supports') || '|' || (detail->>'corrects_supports') || '|' || (detail->>'current') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'correct'")" = "impact_basis|baseline|true" ] \
+  && ok "  ...the impact-basis link as its correction, current" || bad "  ...correct step"
+[ "$(q "SELECT jsonb_array_length(detail->'errata') || '|' || (detail->'errata'->0->>'recorded_by') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1|$S_NAME" ] \
+  && ok "  ...the run's seal notes the erratum recorded after it (by $S_NAME), beside the seal" || bad "  ...seal errata: $(q "SELECT detail->'errata' FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")"
 [ "$(LN value_outcomes "$O1" actual | grep -c 'verify:act')" = "1" ] && ok "the outcome's actual: ... > verify (act)" || bad "actual lineage: $(LN value_outcomes "$O1" actual)"
 expect GET "/api/lineage/institution_facts/$F_HC" "" 200 "GET the fact's lineage"
 [ "$(rj "b.steps.length + '|' + b.steps[0].step + '|' + b.steps.map(s=>s.kind).includes('import')")" = "$(q "SELECT count(*) FROM lvrf_lineage('institution_facts', '$F_HC')")|1|true" ] && ok "  ...the numbered steps, as the function returns them" || bad "  ...$(head -c 300 "$W/r.json")"
@@ -357,7 +378,7 @@ step "10. The display: the lineage page at 1280 and 390, and in print; the links
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -H "Origin: http://localhost:$VITE_PORT" -d "{\"email\":\"$S_EMAIL\",\"password\":\"$PW\"}" "$BASE/api/auth/login" | awk '$6 == "lvrf_session" {print $7}')"
 [ -n "$TOKEN" ] && ok "signed in by session" || { bad "no session"; exit 1; }
-node scripts/lib/lineage_walk.mjs "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$F_HC" "$O_S" "$INST" "$R0" > "$W/walk.log" 2>&1; rc=$?
+node scripts/lib/lineage_walk.mjs "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$F_HC" "$O_S" "$INST" "$R0" "$O3" > "$W/walk.log" 2>&1; rc=$?
 PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.log" || true)))
 grep -E '^  (PASS|FAIL)' "$W/walk.log" || true
 [ "$rc" = "0" ] || bad "the lineage walk exited $rc (see $W/walk.log)"
@@ -395,8 +416,26 @@ assert m; open(p, 'w').write(s.replace(m.group(0), ''))
 PY
 stop_server; start_server
 expect POST "/api/account-research-results/$RP/accept" '{"review_note":"Verification: B9.","citation_opened":true}' 500 "B9: accept without its act → refused at COMMIT" "with no governance act recorded in this transaction"
+sleep 0.5
+JL="$(grep 'LVRF: COMMIT failed' "$W/server.log" || true)"
+[ "$JL" = "LVRF: COMMIT failed; the write was not saved. POST /api/account-research-results/:id/accept · sqlstate 23514 · rule governance_act_present" ] \
+  && ok "  ...the journal logs it as an error, with no values: \"$JL\"" || bad "  ...journal line: $JL"
+! grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-' "$W/server.log" && ! grep -qF 'Verification: B9' "$W/server.log" \
+  && ok "  ...no id and no body text anywhere in the server's log" || bad "  ...a value in the log: $(grep -oE '.{40}[0-9a-f]{8}-[0-9a-f]{4}-.{20}' "$W/server.log" | head -2)"
 [ "$(q "SELECT review_state FROM research_results WHERE id = '$RP'")" = "pending" ] && ok "  ...nothing written: the result still pending" || bad "  ...B9 wrote"
-restore "$ACCT"; stop_server; start_server
+restore "$ACCT"
+# B12 (P2 review) — the open-citation route's own act removed: the opening is refused at COMMIT.
+python3 - "$CITE" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+a = "      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id });\n"
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, ''))
+PY
+stop_server; start_server
+expect POST "/api/evidence/$EV_AI2/open-citation" '{"source_verified":true}' 500 "B12: the standalone opening without its act → refused at COMMIT" "a citation opened with no governance act recorded in this transaction"
+[ "$(q "SELECT citation_resolved FROM evidence WHERE id = '$EV_AI2'")|$(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$EV_AI2'")" = "f|0" ] && ok "  ...nothing written: unopened, no act" || bad "  ...B12 wrote"
+restore "$CITE"; stop_server; start_server
+expect POST "/api/evidence/$EV_AI2/open-citation" '{"source_verified":true}' 200 "  ...restored: the opening goes through with its act"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$EV_AI2' AND act = 'open_citation'")" = "1" ] && ok "  ...one open_citation act for it" || bad "  ...no act after restore"
 # B10 — the lineage's supersession steps removed (on the clone).
 python3 - "$W/b10.sql" <<'PY'
 import re, sys
@@ -411,6 +450,20 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b10.sql" > /dev/null
   && ok "B10: caught — without the supersession steps the chain loses \"superseded_by\"; the script names the missing step" || bad "B10: not caught: $(LN institution_facts "$F_HC")"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "167" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
   && ok "  ...hardening.sql re-applied: the step back, 167 triggers" || bad "  ...B10 restore"
+# B13 (P2 review) — the errata note on a seal step removed (on the clone).
+python3 - "$W/b13.sql" <<'PY'
+import re, sys
+s = open('db/hardening.sql').read()
+fn = re.search(r"CREATE OR REPLACE FUNCTION lvrf_lineage_run_errata\(.*?\n\$\$;\n", s, re.S).group(0)
+a = "WHERE x.value_run_id = p_run"
+assert fn.count(a) == 1
+open(sys.argv[1], 'w').write(fn.replace(a, "WHERE false AND x.value_run_id = p_run"))
+PY
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b13.sql" > /dev/null
+[ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "0" ] \
+  && ok "B13: caught — without the errata note the seal step reads as if nothing were recorded after it" || bad "B13: not caught"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "167" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
+  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 167 triggers" || bad "  ...B13 restore"
 # B11 — a paste over 512 KB; and a parser refusal recorded by hash and size, never text.
 BIG="$(node -e "process.stdout.write(JSON.stringify({prompt_id:'$PF', pad:'x'.repeat(530000)}))")"
 REF0="$(q "SELECT count(*) FROM refusals")"

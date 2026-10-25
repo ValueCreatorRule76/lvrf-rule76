@@ -2541,12 +2541,26 @@ BEGIN
   END LOOP;
 END $$;
 
+-- P2 review (Brad, 25 Oct 2026): a run's seal step notes the errata recorded after it —
+-- the current ones (a superseded erratum is named by its successor) — beside the seal,
+-- never inside it (L37's direction: the sealed record is never changed).
+CREATE OR REPLACE FUNCTION lvrf_lineage_run_errata(p_run uuid)
+RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+           'id', x.id, 'recorded_by', p.full_name, 'recorded_at', x.recorded_at,
+           'sealed', x.sealed_score, 'recomputed', x.recomputed_score, 'what_was_wrong', x.what_was_wrong,
+           'supersedes', x.supersedes_id IS NOT NULL) ORDER BY x.recorded_at), '[]'::jsonb)
+    FROM run_errata x JOIN persons p ON p.id = x.recorded_by_person_id
+   WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
+$$;
+
 CREATE OR REPLACE FUNCTION lvrf_lineage_seals(p_where text, p_value text)
 RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
 LANGUAGE sql STABLE AS $$
   SELECT 'seal'::text, 'value_runs'::text, r.id, (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
          coalesce(r.locked_at, r.walked_at), 'seal'::text,
-         jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL)
+         jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL,
+                            'errata', lvrf_lineage_run_errata(r.id))
            || CASE WHEN p_where = 'outcome' THEN jsonb_build_object('sealed_baseline', r.payload->'baselineValue', 'sealed_actual', r.payload->'actualValue') ELSE '{}'::jsonb END
     FROM value_runs r
    WHERE r.deleted_at IS NULL
@@ -2663,7 +2677,7 @@ BEGIN
                'actor', (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
                'at', coalesce(r.locked_at, r.walked_at), 'source', 'seal',
                'detail', jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL,
-                                            'sealed_supports', item->>'supports', 'matched', matched)) ORDER BY r.run_number)
+                                            'sealed_supports', item->>'supports', 'matched', matched, 'errata', lvrf_lineage_run_errata(r.id))) ORDER BY r.run_number)
         FROM evidence e
         JOIN (SELECT DISTINCT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = p_id) lo ON true
         JOIN value_runs r ON r.payload->>'valueOutcomeId' = lo.value_outcome_id::text AND r.deleted_at IS NULL
@@ -2678,7 +2692,7 @@ BEGIN
        WHERE x2.evidence_id = p_id), '[]'::jsonb);
 
   ELSE -- value_outcomes, one figure
-    SELECT vo.*, bm.name AS metric INTO o FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id WHERE vo.id = p_id;
+    SELECT vo.*, bm.name AS metric, bm.unit INTO o FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id WHERE vo.id = p_id;
     IF o.id IS NULL THEN RETURN; END IF;
     SELECT * INTO a FROM lvrf_lineage_act('value_outcomes', p_id, ARRAY['measure']);
     st := lvrf_lineage_rows(st, p_figure, 'value_outcomes', o.id,
@@ -2687,7 +2701,7 @@ BEGIN
                         WHERE al.table_name = 'value_outcomes' AND al.record_id = o.id::text AND al.operation = 'insert' ORDER BY al.at LIMIT 1) END,
             CASE WHEN p_figure = 'baseline' THEN o.created_at ELSE o.actual_measured_at END,
             CASE WHEN p_figure = 'actual' AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
-            jsonb_build_object('metric', o.metric, 'value', CASE WHEN p_figure = 'baseline' THEN o.baseline_value ELSE o.actual_value END,
+            jsonb_build_object('metric', o.metric, 'unit', o.unit, 'value', CASE WHEN p_figure = 'baseline' THEN o.baseline_value ELSE o.actual_value END,
                                'measured_at', CASE WHEN p_figure = 'baseline' THEN o.baseline_measured_at ELSE o.actual_measured_at END));
     FOR ev IN SELECT v.evidence_id FROM value_outcome_evidence v JOIN evidence e ON e.id = v.evidence_id
                WHERE v.value_outcome_id = p_id AND (v.supports = p_figure OR v.corrects_supports = p_figure)

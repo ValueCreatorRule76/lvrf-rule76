@@ -7,7 +7,7 @@
 //   node scripts/lib/lineage_walk.mjs VITE_PORT CDP_PORT SHOTS TOKEN FACT OUTCOME_SCOTTS INST RUN
 import { writeFileSync } from 'node:fs';
 
-const [VITE_PORT, CDP_PORT, SHOTS, TOKEN, FACT, OUTCOME, INST, RUN] = process.argv.slice(2);
+const [VITE_PORT, CDP_PORT, SHOTS, TOKEN, FACT, OUTCOME, INST, RUN, OUTCOME_CORRECTED] = process.argv.slice(2);
 const APP = `http://localhost:${VITE_PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ok = (m) => console.log(`  PASS  ${m}`);
@@ -57,6 +57,15 @@ for (const width of [1280, 390]) {
   check((await ev('document.documentElement.scrollWidth')) <= width, `@${width}: no sideways scroll`);
   await shot(`p2_lineage_fact_${width}`, width);
 }
+check((await ev(`document.querySelector('[data-testid=lineage]').textContent`)).includes('headcount: 4,200 people'), 'a fact\'s value reads as the POV reads it: "headcount: 4,200 people"');
+// P2 review (Brad): a corrected baseline — the withdrawn link, struck, with who, when and why; the
+// correction; the run's seal noting its erratum.
+check(await open(`/lineage/value_outcomes/${OUTCOME_CORRECTED}?figure=baseline`, lineageReady), 'the corrected fixture baseline opens');
+check(await ev(`!!document.querySelector('[data-testid=lineage-link-withdrawn].line-through') && !!document.querySelector('[data-testid=lineage-link-current]')`), '  ...the withdrawn link struck through; the correcting link current');
+check(/withdrawn: Verification: this filing bases the impact, not the baseline\./.test(await ev(`document.querySelector('[data-testid=lineage-withdrawal]')?.textContent ?? ''`)), '  ...the withdrawal with its reason, beside who and when');
+check(/^Erratum recorded after sealing, \d{1,2} [A-Z][a-z]{2} \d{4}, by .+: .+ Recomputed \d+ \/ 100 \(sealed \d+ \/ 100\)\.$/.test(await ev(`document.querySelector('[data-testid=lineage-seal-erratum]')?.textContent ?? ''`)),
+  "  ...the run's seal step notes the erratum recorded after it", await ev(`document.querySelector('[data-testid=lineage-seal-erratum]')?.textContent ?? ''`));
+await shot('p2_lineage_corrected_baseline_1280', 1280);
 await open(`/lineage/institution_facts/${FACT}`, lineageReady);
 const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
 writeFileSync(`${SHOTS}/p2_lineage_fact.pdf`, Buffer.from(pdf.result.data, 'base64'));

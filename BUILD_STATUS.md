@@ -12150,3 +12150,76 @@ its source in words. It works at phone width and prints, with a footer.
 4. **The JSON parser moved to `server/lib/jsonBodies.ts`,** and `list_api_routes` accepts it.
 5. **B9's refusal is a 500.** `actorContext` answers a failed COMMIT that way, with the
    database's sentence, and records no `refusals` row, as for every commit-time failure.
+
+### P2 reviews (Brad, 25 Oct 2026) — built on top of `19f6a04`, before Gate B
+
+**Departures 1, 2, 4 and 5 accepted.**
+
+**B9, the journal.** A commit-time failure was logged as the whole Postgres error, whose
+message names the row (an id).
+- **Now (`actorContext.ts`)** it is one error line with no values: "LVRF: COMMIT failed; the
+  write was not saved. POST /api/account-research-results/:id/accept · sqlstate 23514 · rule
+  governance_act_present".
+- The caller still gets the database's sentence; it sent the request.
+- **Gate A** checks the exact line, and that the server's log holds no id and none of the body.
+  `verify_commit_before_response` still finds the line's prefix.
+
+**Departure 3, the standalone citation opening.** `POST /api/evidence/:id/open-citation`
+writes its own act. The row from Gate A: `act=open_citation
+subject=evidence/f3ec9229-… actor=Brad Piver route=POST /api/evidence/:id/open-citation
+reason=NULL txid=71884 at=2026-10-25 13:35:27`. Its reason is NULL because the route takes
+none.
+- **Opening a citation outside an accept, by SQL with no act,** is refused at COMMIT ("a
+  citation opened with no governance act recorded in this transaction"), and the citation
+  stays unopened.
+- **New break B12:** the route's act removed, so the opening is refused at COMMIT, with
+  nothing written. Restored, it goes through with its act.
+
+**1. Scotts' baseline lineage, corrections and errata.**
+- **Withdrawals and corrections were already read.** The fixture's corrected baseline shows
+  baseline > evidence > figure check > link (struck through) > withdrawn (act: name, date,
+  reason) > corrected link (act) > seal > erratum.
+- **What was missing:** a seal step did not note the errata recorded after it.
+  `lvrf_lineage_run_errata(run)` now puts each run's current errata beside its seal step, on
+  outcome and evidence lineage: "Erratum recorded after sealing, <date>, by <name>: … Recomputed
+  n / 100 (sealed m / 100)". A superseded erratum is named by its successor. The sealed record
+  is never changed (L37's direction).
+- **New break B13:** the note removed on the clone, so the seal step loses it, then restored.
+- **The real record, with your 25 Oct acts:** Gate A's prod copy was restored from the 25 Oct
+  pre-C1 dump, which predates them.
+  - Gate B paste 1's backup is the first dump that holds them.
+  - I copy it (scp, LVRF key, 600), restore it as `lvrf_prodcopy` (sign-in data
+    neutralised), and show Scotts' baseline lineage before pastes 2 and 3.
+
+**2. Commitment and verification attestations linked as `impact_basis`** (read-only; no
+change, for Brad's ruling):
+- **The code:**
+  - `server/routes/outcomeWalk.ts:233` (commit) links the attestation as `impact_basis`,
+    stated;
+  - `server/routes/outcomeWalk.ts:590` (verify) links it as `attestation` only if that value
+    already exists in the table. `value_outcome_evidence_supports_known` (0030) allows only
+    baseline, actual and impact_basis, so it is always `impact_basis`;
+  - `walkSpine.ts` links a fixture's own impact-basis items, not these.
+- **The real record (prod, read-only):**
+  - **Curia:** 1 commitment attestation linked `impact_basis`, current;
+  - **Scotts and Skillsoft:** none;
+  - **9 sealed runs (Curia 13–21) seal it as `impact_basis`.**
+- **Credit:** none, in any sealed run.
+  - In all 9, factor 4 earned its full 10 as "No currency figure claimed — nothing to
+    substantiate", so the item was not graded.
+  - **The latent risk:** were a currency figure claimed with a stated basis, an attestation
+    linked `impact_basis` would be graded by `evidenceCredit`, at 0.6 for an
+    institution-scoped attester. It could then earn factor-4 credit for an act that is not
+    evidence of the currency figure's derivation.
+
+**3. L38 recorded** in LVRF_PLAN §2: a value that drops a qualifier the quote has (e.g.
+"approximately 4,200" → 4200) passes. Assigned to figure-check rules v2.
+
+**4. Lineage numbers** use the POV's `formatQuantity` ("headcount: 4,200 people"; a baseline
+with its metric's unit). The outcome step now carries the unit.
+
+**Gate A:**
+- **`verify_acts_lineage`: 189 passed, 0 failed,** with B1–B13.
+- **The regression:** all 39 scripts pass (tenant scope 212); the build, tsc and oxlint are
+  clean. The bundle is `index-DTamUagY.js` / `index-DrNmLaoH.css`.
+- **The screens:** `~/lvrf-backups/p2-screens/` adds `p2_lineage_corrected_baseline_1280.png`.
