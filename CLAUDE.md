@@ -204,11 +204,12 @@ result kind, read by the generated prompt, the parser and the accept mapping),
 3.0 item 6), `server/lib/institutionFactWriter.ts` (the one writer of `institution_facts`),
 `server/routes/researchPrompt.ts`, the immutable
 `research_prompts` table (each prompt exactly as generated, with its SHA-256 and contract
-version) and the `research_results` staging table; consolidated as `server/research/` when
+version), the immutable `research_imports` table (each pasted response exactly as parsed, with
+its SHA-256; P2, 0041) and the `research_results` staging table; consolidated as `server/research/` when
 3.0 item 6 begins. **No code calls a research tool** — a person runs the prompt. **A prompt
 is generated from live rows, never hand-written**; changing a contract field bumps its
-version. **Only `industryResearch.ts` and `accountResearch.ts` write `research_prompts` and
-`research_results`**, and **only `institutionFactWriter.ts` writes `institution_facts`** (verify
+version. **Only `industryResearch.ts` and `accountResearch.ts` write `research_prompts`,
+`research_imports` and `research_results`**, and **only `institutionFactWriter.ts` writes `institution_facts`** (verify
 scripts excepted, on throwaway clones); **a new result must name the prompt it answered**;
 other code may read accepted results (e.g. the pack view).
 When Compass OS exists as code, research moves there and this boundary becomes its client.

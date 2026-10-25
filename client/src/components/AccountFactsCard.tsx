@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LineageLink } from './LineageLink';
 import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import type { InstitutionFact, InstitutionFactHistoryEntry, InstitutionFactKind } from '../api/institution';
@@ -453,6 +454,7 @@ export function AccountFactsCard({
                       {label(EVIDENCE_KIND, f.evidence_kind)} · confidence stated by the analyst: {f.confidence} · {f.captured_by}
                     </span>
                     <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <LineageLink table="institution_facts" id={f.id} />
                       {f.history.length > 0 && (
                         <button
                           type="button"

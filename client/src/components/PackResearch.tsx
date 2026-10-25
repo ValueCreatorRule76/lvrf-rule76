@@ -280,7 +280,7 @@ function ParseCard({
           </label>
         }
         canSubmit={parsed?.ok === true}
-        buildBody={() => (parsed?.ok ? parsed.value : {})}
+        buildBody={() => ({ raw_text: text })} /* P2 (P2-D5): the text itself; the server parses it and keeps it, hashed. */
         submitLabel="Parse"
         onSuccess={() => {
           const v = parsed?.ok ? parsed.value : {};

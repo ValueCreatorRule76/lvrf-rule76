@@ -21,6 +21,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
+. scripts/lib/raw_text.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -60,7 +62,7 @@ start_server() {
 # post PATH BODY [ACTOR] — status in $CODE, body in $W/r.json
 post() {
   CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' \
-    -H "x-actor-person-id: ${3:-$ACTOR}" -d "$2" "$BASE$1")"
+    -H "x-actor-person-id: ${3:-$ACTOR}" -d "$(asraw "$1" "$2")" "$BASE$1")"
 }
 rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }
 # The message and every issue, unescaped, so a 5th-argument match can find an issue, not only the message.
@@ -128,9 +130,12 @@ read -r IND_X TEN_X <<< "$(q "SELECT id || ' ' || tenant_id FROM industries WHER
 q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
    VALUES ('$TEN', '$IND', 'Contract fixture: current entry', '%', 'increase', 'd', 'w', false, 'r', 'c', 'Verification fixture, not a source.'),
           ('$TEN', '$IND', 'Contract fixture: retired entry', '%', 'increase', 'd', 'w', true, 'r', 'c', 'Verification fixture, not a source.')" > /dev/null
-q "UPDATE industry_measures SET deleted_at = now(), status = 'retired', retired_by_person_id = '$ACTOR', retirement_reason = 'Verification fixture: a retired entry.' WHERE industry_id = '$IND' AND name = 'Contract fixture: retired entry'" > /dev/null
-q "INSERT INTO industry_measure_exclusions (tenant_id, industry_id, name, reason, excluded_by_person_id)
-   VALUES ('$TEN', '$IND', 'Contract fixture: excluded', 'Verification: set by the market, not by capability.', '$ACTOR')" > /dev/null
+# P2: each governed transition written by SQL on the clone carries its act (scripts/lib/acts.sh).
+RETIRED_E="$(q "SELECT id FROM industry_measures WHERE industry_id = '$IND' AND name = 'Contract fixture: retired entry'")"
+q "UPDATE industry_measures SET deleted_at = now(), status = 'retired', retired_by_person_id = '$ACTOR', retirement_reason = 'Verification fixture: a retired entry.' WHERE id = '$RETIRED_E'; $(act_sql withdraw industry_measures "$RETIRED_E" "$ACTOR" 'POST /api/industry-measures/:id/retire')" > /dev/null
+EXCL1="$(newid)"
+q "INSERT INTO industry_measure_exclusions (id, tenant_id, industry_id, name, reason, excluded_by_person_id)
+   VALUES ('$EXCL1', '$TEN', '$IND', 'Contract fixture: excluded', 'Verification: set by the market, not by capability.', '$ACTOR'); $(act_sql exclude industry_measure_exclusions "$EXCL1" "$ACTOR" 'POST /api/industries/:industryId/exclusions')" > /dev/null
 [ -n "$OTHER" ] && [ -n "$IND2" ] && [ -n "$IND_X" ] && ok "actor (steward) and a second staff person; industries $SLUG and $SLUG2; another tenant's industry; one entry, one retired, one exclusion" || { bad "fixtures"; exit 1; }
 start_server && ok "server up"
 
@@ -166,8 +171,9 @@ grep -qF "\"prompt_id\": \"$P1\"" "$W/p1.txt" && grep -qF "\"industry\": \"$SLUG
 expect "/api/industries/$IND/research-prompts" '{}' 201 "generate again, nothing changed"
 P1B="$(rj b.prompt_id)"; rj b.prompt | sed "s/$P1B/$P1/g" > "$W/p1b.txt"
 cmp -s "$W/p1.txt" "$W/p1b.txt" && ok "deterministic: the same rows give the same text (only the id differs)" || bad "not deterministic: $(diff "$W/p1.txt" "$W/p1b.txt" | head -4)"
-q "INSERT INTO industry_measure_exclusions (tenant_id, industry_id, name, reason, excluded_by_person_id)
-   VALUES ('$TEN', '$IND', 'Contract fixture: a later exclusion', 'Verification: recorded after the first prompt.', '$ACTOR')" > /dev/null
+EXCL2="$(newid)"
+q "INSERT INTO industry_measure_exclusions (id, tenant_id, industry_id, name, reason, excluded_by_person_id)
+   VALUES ('$EXCL2', '$TEN', '$IND', 'Contract fixture: a later exclusion', 'Verification: recorded after the first prompt.', '$ACTOR'); $(act_sql exclude industry_measure_exclusions "$EXCL2" "$ACTOR" 'POST /api/industries/:industryId/exclusions')" > /dev/null
 expect "/api/industries/$IND/research-prompts" '{}' 201 "generate after a new exclusion"
 P2="$(rj b.prompt_id)"; rj b.prompt | sed "s/$P2/$P1/g" > "$W/p2.txt"
 grep -qF "Contract fixture: a later exclusion" "$W/p2.txt" && ! grep -qF "a later exclusion" "$W/p1.txt" && ! cmp -s "$W/p1.txt" "$W/p2.txt" \
@@ -226,16 +232,19 @@ expect "$PARSE" "$(body "$P1" "$(printf '%s' "$SLUG" | tr '[:lower:]' '[:upper:]
 RR_2="$(rj b.results[0].id)"
 expect "$PARSE" "$(body "$P1" "  $IND_NAME " "${GOOD_M/Contract measure/Contract measure 3}")" 201 "the industry's name instead of its slug"
 RR_3="$(rj b.results[0].id)"
-NOPROMPT="$(psql -X -d "$VERIFY_DB" -c "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id)
-  VALUES ('$TEN', 'industry_measure', '$IND', 'direct', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR')" 2>&1 || true)"
+# P2: a direct insert names an import (research_results_import_after_cutover would refuse first otherwise:
+# CHECKs are tested in name order), so the rule under test is the one that refuses.
+IMP_P1="$(q "SELECT import_id FROM research_results WHERE prompt_id = '$P1' AND import_id IS NOT NULL LIMIT 1")"
+NOPROMPT="$(psql -X -d "$VERIFY_DB" -c "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, import_id)
+  VALUES ('$TEN', 'industry_measure', '$IND', 'direct', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', '$IMP_P1')" 2>&1 || true)"
 printf '%s' "$NOPROMPT" | grep -qF "research_results_prompt_named" && ok "a new result with no prompt, by direct SQL: refused by research_results_prompt_named" || bad "a promptless result was written: $NOPROMPT"
 # The cut-off: an untracked row must have been parsed before it, and
 # parsed_at is the server's, not the caller's.
 CUTOFF="$(grep -o "parsed_at\" < '[^']*'" db/drizzle/0031_research_prompts.sql | grep -o "'.*'" | tr -d "'")"
-UNTRACKED="INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_tracked"
-OUT="$(psql -X -d "$VERIFY_DB" -c "$UNTRACKED) VALUES ('$TEN', 'industry_measure', '$IND', 'untracked', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', false)" 2>&1 || true)"
+UNTRACKED="INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, import_id, prompt_tracked"
+OUT="$(psql -X -d "$VERIFY_DB" -c "$UNTRACKED) VALUES ('$TEN', 'industry_measure', '$IND', 'untracked', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', '$IMP_P1', false)" 2>&1 || true)"
 printf '%s' "$OUT" | grep -qF "research_results_untracked_predates_prompts" && ok "a new UNTRACKED row, by direct SQL: refused by research_results_untracked_predates_prompts (cut-off $CUTOFF)" || bad "an untracked row was written: $OUT"
-OUT="$(psql -X -d "$VERIFY_DB" -c "$UNTRACKED, parsed_at) VALUES ('$TEN', 'industry_measure', '$IND', 'untracked', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', false, '2026-01-01')" 2>&1 || true)"
+OUT="$(psql -X -d "$VERIFY_DB" -c "$UNTRACKED, parsed_at) VALUES ('$TEN', 'industry_measure', '$IND', 'untracked', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', '$IMP_P1', false, '2026-01-01')" 2>&1 || true)"
 printf '%s' "$OUT" | grep -qF "research_results_untracked_predates_prompts" && ok "...and with parsed_at backdated to 2026-01-01: still refused (stamped now() on INSERT)" || bad "a backdated untracked row was written: $OUT"
 PA="$(q "SELECT parsed_at FROM research_results WHERE id = '$RR_2'")"
 OUT="$(psql -X -d "$VERIFY_DB" -c "UPDATE research_results SET prompt_tracked = false, parsed_at = '2026-01-01' WHERE id = '$RR_2'" 2>&1 || true)"
@@ -257,8 +266,10 @@ grep -qF '"caveats" is required on every measure' "$W/p1.txt" && grep -qF -- '- 
 # parse can no longer write v3: accept judges it against v4 and refuses it;
 # the checker judges it against v3 and passes it.
 V3_RAW="$(printf '%s' "$GOOD_M" | sed 's/,"caveats":\[\]//; s/Contract measure/A v3-era pending result/')"
-RR_V3="$(q "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
-  VALUES ('$TEN', 'industry_measure', '$IND', 'A v3-era pending result', true, '$V3_RAW'::jsonb, 'q', 'qe', 't', '$ACTOR', '$P_OLD', 3) RETURNING id" | head -1)"
+# P2: a result written by SQL after the cutover names its import (with its own act; scripts/lib/acts.sh).
+IMP_V3="$(newid)"; RR_V3="$(newid)"
+q "$(import_sql "$IMP_V3" "$P_OLD" "$ACTOR" "$V3_RAW"); INSERT INTO research_results (id, tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id)
+  VALUES ('$RR_V3', '$TEN', 'industry_measure', '$IND', 'A v3-era pending result', true, '$V3_RAW'::jsonb, 'q', 'qe', 't', '$ACTOR', '$P_OLD', 3, '$IMP_V3')" > /dev/null
 expect "/api/research-results/$RR_V3/accept" '{"review_note":"Verification: a v3-era result."}' 422 "accepting a v3-era pending result (no caveats)" "raw_response.caveats is missing. This raw_response predates the accept mapping"
 OUT="$(legacy)"
 printf '%s' "$OUT" | grep -qF "$RR_V3" && bad "the checker flags the v3-era result: $(printf '%s' "$OUT" | grep -F "$RR_V3")" || ok "the checker passes the v3-era result against v3, the version it was parsed under"
@@ -271,8 +282,8 @@ REVIEW_SRC() { awk '/^export function researchResultsReviewRouter/{p=1} p' ; }
 # Q4k changed one line of it on purpose: the 500 fallback answers plainly
 # (respondServerError). Apply that substitution to the old copy; everything
 # else must still match byte for byte.
-git show 65f8486:"$ROUTE" | REVIEW_SRC | sed "s/res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });/respondServerError(res, err);/" > "$W/review.before"; REVIEW_SRC < "$ROUTE" > "$W/review.now"
-[ -s "$W/review.before" ] && cmp -s "$W/review.before" "$W/review.now" && ok "researchResultsReviewRouter (accept, reject) is byte-identical to the Q4b refactor commit 65f8486, but for Q4k's plain 500 fallback ($(wc -l < "$W/review.now" | tr -d ' ') lines)" || bad "the review router changed: $(diff "$W/review.before" "$W/review.now" | head -4)"
+git show 65f8486:"$ROUTE" | REVIEW_SRC | sed "s/res.status(500).json({ message: err instanceof Error ? err.message : 'unknown error' });/respondServerError(res, err);/" > "$W/review.before"; REVIEW_SRC < "$ROUTE" | awk '/await recordAct\(client, req, /{skip=1} !skip{print} skip && /^      \}\);$/{skip=0}' > "$W/review.now"
+[ -s "$W/review.before" ] && cmp -s "$W/review.before" "$W/review.now" && ok "researchResultsReviewRouter (accept, reject) is byte-identical to the Q4b refactor commit 65f8486, but for Q4k's plain 500 fallback and P2's two recordAct calls, set aside ($(wc -l < "$W/review.now" | tr -d ' ') lines)" || bad "the review router changed: $(diff "$W/review.before" "$W/review.now" | head -4)"
 post "/api/research-results/$RR_2/accept" '{"review_note":"Verification: accepted."}' "$OTHER"
 [ "$CODE" = "403" ] && ok "accept by a non-steward -> 403" || bad "non-steward accept -> $CODE $(said | head -c 200)"
 post "/api/research-results/$RR_3/reject" '{"review_note":"Verification: rejected."}' "$OTHER"
@@ -306,9 +317,11 @@ expect "$PARSE" "$(body "$P1" "$SLUG2" "${GOOD_M/Contract measure/Break two agai
 # B3 — a missing prompt_id let through by the route: the database refuses it.
 break_route "prompt_id requirement removed" 's/if \(typeof promptId !== .string. \|\| !isUuid\(promptId\)\) \{/if (promptId === undefined) { \/\* broken \*\/ } else if (typeof promptId !== "string" || !isUuid(promptId)) {/'
 post "$PARSE" "$(body - "$SLUG" "${GOOD_M/Contract measure/Break three}")"
-[ "$CODE" != "201" ] && said | grep -qF "A research result names the prompt it answered." && ! said | grep -qF "research_results_prompt_named" \
-  && [ "$(psql -X -At -d "$VERIFY_DB" -c "SELECT constraint_name FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")" = "research_results_prompt_named" ] \
-  && ok "B3: with the route's check gone, research_results_prompt_named still refuses it ($CODE) — the second wall, said plainly (Q4k), recorded with its name" || bad "B3: $CODE $(said | head -c 300)"
+# P2 (0041): the import is written before its results, and an import names its prompt (NOT NULL), so
+# the database's first wall is now the import's; research_results_prompt_named stands behind it.
+[ "$CODE" != "201" ] && said | grep -qF "A required value is missing" && [ "$(q "SELECT count(*) FROM research_results WHERE field_name = 'Break three'")" = "0" ] \
+  && [ "$(q "SELECT count(*) FROM research_imports WHERE raw_text LIKE '%Break three%'")" = "0" ] \
+  && ok "B3: with the route's check gone, the database still refuses it ($CODE): an import names the prompt it answered (P2), said plainly; nothing written" || bad "B3: $CODE $(said | head -c 300)"
 restore_route
 expect "$PARSE" "$(body - "$SLUG")" 422 "B3 restored: the route refuses it first" "body.prompt_id is required"
 # B4 — immutability: drop the trigger, the edit lands; re-harden, refused again.
@@ -320,11 +333,11 @@ UPD="$(psql -X -d "$VERIFY_DB" -c "UPDATE research_prompts SET prompt_text = pro
 printf '%s' "$UPD" | grep -qF "is final" && ok "B4 restored: UPDATE refused again" || bad "B4 restore: $UPD"
 # B5 — the cut-off CHECK dropped (inside a transaction, rolled back): a new
 # untracked row is written.
-OUT="$(printf 'BEGIN;\n%s\n%s\nROLLBACK;\n' "ALTER TABLE research_results DROP CONSTRAINT research_results_untracked_predates_prompts;" "$UNTRACKED) VALUES ('$TEN', 'industry_measure', '$IND', 'B5', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', false);" \
+OUT="$(printf 'BEGIN;\n%s\n%s\nROLLBACK;\n' "ALTER TABLE research_results DROP CONSTRAINT research_results_untracked_predates_prompts;" "$UNTRACKED) VALUES ('$TEN', 'industry_measure', '$IND', 'B5', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', '$IMP_P1', false);" \
   | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
 printf '%s' "$OUT" | grep -qF "INSERT 0 1" && ok "B5: without research_results_untracked_predates_prompts, a new untracked row is written — the CHECK is what refuses it (rolled back)" || bad "B5: $OUT"
 # B6 — the parsed_at stamp dropped (rolled back): a backdated untracked row passes the CHECK.
-OUT="$(printf 'BEGIN;\n%s\n%s\nROLLBACK;\n' "DROP TRIGGER research_results_touch ON research_results;" "$UNTRACKED, parsed_at) VALUES ('$TEN', 'industry_measure', '$IND', 'B6', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', false, '2026-01-01');" \
+OUT="$(printf 'BEGIN;\n%s\n%s\nROLLBACK;\n' "DROP TRIGGER research_results_touch ON research_results;" "$UNTRACKED, parsed_at) VALUES ('$TEN', 'industry_measure', '$IND', 'B6', true, '{}'::jsonb, 'q', 'qe', 't', '$ACTOR', '$IMP_P1', false, '2026-01-01');" \
   | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
 printf '%s' "$OUT" | grep -qF "INSERT 0 1" && ok "B6: without the parsed_at stamp, a row backdated to 2026-01-01 claims to predate prompts — the stamp is what makes the cut-off hold (rolled back)" || bad "B6: $OUT"
 [ "$(q "SELECT count(*) FROM pg_constraint WHERE conname = 'research_results_untracked_predates_prompts'")$(q "SELECT count(*) FROM research_results WHERE field_name IN ('B5', 'B6')")" = "10" ] && ok "  ...after B5 and B6: the CHECK is in place, neither row exists" || bad "B5/B6 left state behind"

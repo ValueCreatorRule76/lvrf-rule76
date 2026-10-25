@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
@@ -352,6 +353,10 @@ export function institutionFactsRouter(pool: Pool): Router {
         });
         return;
       }
+      await recordAct(client, req, 'POST /api/institutions/:institutionId/facts/:factId/supersede', {
+        act: 'supersede', tenantId: old.tenant_id, subjectTable: 'institution_facts', subjectId: factId,
+        resultTable: 'institution_facts', resultId: written.factId, evidenceIds: [written.evidenceId], reason,
+      });
 
       res.status(201).json({
         fact_id: written.factId,

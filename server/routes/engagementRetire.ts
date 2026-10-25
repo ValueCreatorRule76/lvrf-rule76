@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -157,6 +158,10 @@ export function engagementRetireRouter(pool: Pool): Router {
         });
         return;
       }
+      await recordAct(client, req, 'POST /api/engagements/:id/retire', {
+        act: 'retire', tenantId: engagement.tenant_id, subjectTable: 'engagements', subjectId: engagementId,
+        evidenceIds: [evidenceRow.id], reason: String(reason),
+      });
 
       res.status(200).json({
         engagement_id: engagement.id,

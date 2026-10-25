@@ -16,7 +16,7 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable, pgEnum, uuid, text, numeric, integer, boolean,
-  timestamp, date, jsonb, bigserial, index, unique, uniqueIndex, check, primaryKey, foreignKey,
+  timestamp, date, jsonb, bigint, bigserial, index, unique, uniqueIndex, check, primaryKey, foreignKey,
 } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 
@@ -168,6 +168,16 @@ export const researchPromptPhase = pgEnum('research_prompt_phase', ['entity', 'f
  * the attempt stands on record, as a parser refusal does.
  */
 export const refusalSource = pgEnum('refusal_source', ['database', 'parser', 'route']);
+
+/**
+ * P2 (LVRF_PLAN §10; design §2.4, P2-D3): the acts governance_acts records.
+ * The design's fifteen, then the eight today's routes need (measure … record_erratum).
+ */
+export const governanceAct = pgEnum('governance_act', [
+  'import', 'validate', 'approve', 'certify', 'activate', 'supersede', 'verify', 'attest',
+  'open_citation', 'accept', 'reject', 'withdraw', 'ratify', 'demote', 'commit',
+  'measure', 'lock', 'retire', 'exclude', 'mark', 'link', 'correct', 'record_erratum',
+]);
 
 /* ================================================================== */
 /* Shared builders                                                    */
@@ -1614,7 +1624,16 @@ export const researchResults = pgTable('research_results', {
    * can claim to predate prompt tracking.
    */
   promptTracked: boolean('prompt_tracked').notNull().default(true),
+  /**
+   * P2 (P2-D5, P2-D6): the import — the whole pasted text, hashed — this result
+   * was parsed from. Required for every result parsed from the cutover on
+   * (research_results_import_after_cutover); earlier results keep NULL, never
+   * an invented import.
+   */
+  importId: uuid('import_id').references((): AnyPgColumn => researchImports.id, { onDelete: 'restrict' }),
 }, (t) => [
+  check('research_results_import_after_cutover',
+    sql`${t.importId} IS NOT NULL OR ${t.parsedAt} < '2026-10-25 00:00:00+00'::timestamptz`),
   /** 0031: a tracked result names its prompt and contract version; prompt and version come together. */
   check('research_results_prompt_named',
     sql`((${t.promptId} IS NULL) = (${t.contractVersion} IS NULL))
@@ -2524,4 +2543,60 @@ export const runErrata = pgTable('run_errata', {
   check('run_errata_bands_known',
     sql`${t.sealedBand} IN ('low', 'medium', 'high') AND ${t.recomputedBand} IN ('low', 'medium', 'high')`),
   check('run_errata_method_stated', sql`length(btrim(${t.recomputeMethod})) >= 24`),
+]);
+
+/**
+ * P2 (LVRF_PLAN §10; design §5.1, P2-D5): the whole text a person pasted from a
+ * research tool, exactly as the server parsed it, with its SHA-256 — so a
+ * result can be traced to the bytes it came from. Immutable (hardening.sql
+ * section 27); written only by industryResearch.ts and accountResearch.ts
+ * (CLAUDE.md, the research boundary, P2-D8).
+ */
+export const researchImports = pgTable('research_imports', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  promptId: uuid('prompt_id').notNull().references(() => researchPrompts.id, { onDelete: 'restrict' }),
+  rawText: text('raw_text').notNull(),
+  rawSha256: text('raw_sha256').notNull(),
+  byteLength: integer('byte_length').notNull(),
+  importedByPersonId: uuid('imported_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('research_imports_prompt_idx').on(t.promptId),
+  check('research_imports_sha256_is_the_text', sql`${t.rawSha256} = encode(sha256(convert_to(${t.rawText}, 'UTF8')), 'hex')`),
+  check('research_imports_size', sql`${t.byteLength} = octet_length(${t.rawText}) AND ${t.byteLength} BETWEEN 1 AND 524288`),
+]);
+
+/**
+ * P2 (LVRF_PLAN §10; design §2.4, P2-D3/D4): one row per governance act,
+ * append-only, written by the route in the same transaction as the change it
+ * governs. A deferred constraint trigger on each governed table refuses, at
+ * COMMIT, a governed transition with no act for that row in the transaction
+ * (txid). The subject is the row governed; the result, the row the act
+ * created (a supersession's successor, a correcting link's evidence, an
+ * accepted result's record). The route is a pattern, never a value.
+ */
+export const governanceActs = pgTable('governance_acts', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  act: governanceAct('act').notNull(),
+  subjectTable: text('subject_table').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  resultTable: text('result_table'),
+  resultId: uuid('result_id'),
+  evidenceIds: uuid('evidence_ids').array().notNull().default(sql`'{}'::uuid[]`),
+  actorPersonId: uuid('actor_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  /** The route's own reason or note, verbatim; NULL when the route takes none (never invented). */
+  reason: text('reason'),
+  route: text('route').notNull(),
+  txid: bigint('txid', { mode: 'number' }).notNull().default(sql`txid_current()`),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('governance_acts_txid_idx').on(t.txid, t.subjectTable, t.subjectId),
+  index('governance_acts_subject_idx').on(t.subjectTable, t.subjectId),
+  index('governance_acts_result_idx').on(t.resultTable, t.resultId),
+  check('governance_acts_result_complete', sql`(${t.resultTable} IS NULL) = (${t.resultId} IS NULL)`),
+  check('governance_acts_reason_stated', sql`${t.reason} IS NULL OR length(btrim(${t.reason})) > 0`),
+  check('governance_acts_route_is_a_pattern',
+    sql`${t.route} ~ '^(POST|PUT|PATCH|DELETE) /api/[A-Za-z0-9/:_-]+$' AND ${t.route} !~ '[0-9a-f]{8}-[0-9a-f]{4}'`),
 ]);

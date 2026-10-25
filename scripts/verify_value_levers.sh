@@ -23,6 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -102,7 +103,8 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "mi
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening"; exit 1; }
 N_TRIG="$(q "SELECT count(DISTINCT trigger_name || '.' || event_object_table) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && ok "$N_TRIG distinct triggers, as hardening.sql declares" || bad "triggers: $N_TRIG, expected $EXPECT_TRIGGERS"
-[ "$(q "SELECT string_agg(trigger_name, ',' ORDER BY trigger_name) FROM (SELECT DISTINCT trigger_name FROM information_schema.triggers WHERE event_object_table IN ('value_levers', 'lever_offerings')) t")" = "lever_offerings_audit,lever_offerings_no_delete,lever_offerings_steward_only,value_levers_audit,value_levers_no_delete,value_levers_steward_only,value_levers_supersession_sane,value_levers_touch" ] \
+# (P2's _act_present triggers are verified by name in verify_acts_lineage.sh.)
+[ "$(q "SELECT string_agg(trigger_name, ',' ORDER BY trigger_name) FROM (SELECT DISTINCT trigger_name FROM information_schema.triggers WHERE event_object_table IN ('value_levers', 'lever_offerings') AND trigger_name NOT LIKE '%\_act\_present') t")" = "lever_offerings_audit,lever_offerings_no_delete,lever_offerings_steward_only,value_levers_audit,value_levers_no_delete,value_levers_steward_only,value_levers_supersession_sane,value_levers_touch" ] \
   && ok "value_levers: audit, no_delete, supersession_sane, touch (governed), steward_only; lever_offerings: audit, no_delete, steward_only (append-only)" || bad "triggers on the new tables: $(q "SELECT string_agg(DISTINCT trigger_name, ',') FROM information_schema.triggers WHERE event_object_table IN ('value_levers', 'lever_offerings')")"
 [ "$(q "SELECT provolatile FROM pg_proc WHERE proname = 'lvrf_evidence_basis'")" = "s" ] && ok "lvrf_evidence_basis(evidence) exists, STABLE" || bad "basis function missing"
 OUT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs || true)"
@@ -133,8 +135,10 @@ M_X="$(MEAS "$TEN_X" "$IND_X" "Other tenant entry (fixture)")"
 P_X="$(q "SELECT id FROM persons WHERE tenant_id = '$TEN_X' ORDER BY created_at LIMIT 1")"
 # The database lets only a tenant's steward propose a lever: P_X is made the other tenant's.
 q "UPDATE tenants SET steward_person_id = '$P_X' WHERE id = '$TEN_X'" > /dev/null
-LEVER_X="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
-  VALUES ('$TEN_X', '$M_X', 'Other tenant lever (fixture)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$P_X') RETURNING id" | head -1)"
+# P2: the lever written by SQL on the clone carries its act (scripts/lib/acts.sh).
+LEVER_X="$(newid)"
+q "INSERT INTO value_levers (id, tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
+  VALUES ('$LEVER_X', '$TEN_X', '$M_X', 'Other tenant lever (fixture)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$P_X'); $(act_sql ratify value_levers "$LEVER_X" "$P_X" 'POST /api/industry-measures/:id/levers')" > /dev/null
 SELF="$(q "SELECT id FROM institutions WHERE tenant_id = '$TEN' AND is_tenant_self LIMIT 1")"
 for v in S TEN X IND SLUG E1 E_WALK E_RET IND_X TEN_X M_X P_X LEVER_X SELF; do [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }; done
 ok "steward S ($S_NAME), authorized X; three manufacturing entries; another tenant's entry and lever; the tenant's own institution"

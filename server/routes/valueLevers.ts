@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -124,6 +125,8 @@ export function valueLeverRouter(pool: Pool): Router {
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
         [m.tenant_id, measureId, name, mechanism, leading, citation, actorPersonId],
       );
+      // O-D2: the steward's proposal is the ratification.
+      await recordAct(client, req, 'POST /api/industry-measures/:id/levers', { act: 'ratify', tenantId: m.tenant_id, subjectTable: 'value_levers', subjectId: lever.id });
       res.status(201).json({ value_lever_id: lever.id, industry_measure_id: measureId, status: 'proposed' });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'value_levers', null, refusalTenantId);
@@ -185,6 +188,7 @@ export function leverOfferingRouter(pool: Pool): Router {
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [lever.tenant_id, leverId, offering.id, basis, actorPersonId],
       );
+      await recordAct(client, req, 'POST /api/value-levers/:id/offerings', { act: 'link', tenantId: lever.tenant_id, subjectTable: 'lever_offerings', subjectId: link.id, reason: basis });
       res.status(201).json({ lever_offering_id: link.id, value_lever_id: leverId, offering_key: offeringKey });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'lever_offerings', null, refusalTenantId);
@@ -232,6 +236,7 @@ export function leverOfferingRouter(pool: Pool): Router {
         `UPDATE value_levers SET deleted_at = now(), status = 'retired', retired_by_person_id = $2, retirement_reason = $3 WHERE id = $1`,
         [leverId, actorPersonId, reason],
       );
+      await recordAct(client, req, 'POST /api/value-levers/:id/retire', { act: 'withdraw', tenantId: lever.tenant_id, subjectTable: 'value_levers', subjectId: leverId, reason });
       res.status(200).json({ value_lever_id: leverId, status: 'retired' });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'value_levers', leverId, refusalTenantId);
@@ -281,6 +286,7 @@ export function leverOfferingRetireRouter(pool: Pool): Router {
         `UPDATE lever_offerings SET retired_at = now(), retired_by_person_id = $2, retirement_reason = $3 WHERE id = $1`,
         [linkId, actorPersonId, reason],
       );
+      await recordAct(client, req, 'POST /api/lever-offerings/:id/retire', { act: 'withdraw', tenantId: link.tenant_id, subjectTable: 'lever_offerings', subjectId: linkId, reason });
       res.status(200).json({ lever_offering_id: linkId, retired: true });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'lever_offerings', linkId, refusalTenantId);

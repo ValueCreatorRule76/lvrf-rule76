@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -138,6 +139,9 @@ export function industryExclusionsRouter(pool: Pool): Router {
          RETURNING id, excluded_at`,
         [industry.tenant_id, industryId, name, reason, citation, actorPersonId, proposedByResearchTool, proposalText],
       );
+      await recordAct(client, req, 'POST /api/industries/:industryId/exclusions', {
+        act: 'exclude', tenantId: industry.tenant_id, subjectTable: 'industry_measure_exclusions', subjectId: exclusion.id, reason: String(reason),
+      });
 
       res.status(201).json({
         exclusion_id: exclusion.id,

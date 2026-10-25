@@ -21,6 +21,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
+. scripts/lib/raw_text.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -66,7 +68,7 @@ req() {  # METHOD PATH [BODY] [ACTOR] — status in $CODE, body in $W/r.json
   if [ "$1" = GET ]; then
     CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -H "x-actor-person-id: ${4:-$S}" "$BASE$2")"
   else
-    CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$3" "$BASE$2")"
+    CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$(asraw "$2" "${3:-}")" "$BASE$2")"
   fi
 }
 rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }
@@ -194,8 +196,10 @@ expect POST "/api/research-results/$R1/accept" '{"review_note":"Verification: sh
 # inserted as one, with a v3 prompt of its own.
 P_V3="$(q "INSERT INTO research_prompts (tenant_id, industry_id, result_kind, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
   VALUES ('$TEN', '$IND', 'industry_measure', 3, 1, 'a v3 prompt (verification fixture)', encode(sha256(convert_to('a v3 prompt (verification fixture)', 'UTF8')), 'hex'), '$S') RETURNING id" | head -1)"
-q "INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
-  VALUES ('$TEN', 'industry_measure', '$IND', 'A v3-era pending result (walk)', true, '$(mk 'A v3-era pending result (walk)' | sed 's/,"caveats":\[\]//')'::jsonb, 'q', 'qe', 't', '$S', '$P_V3', 3)" > /dev/null
+# P2: a result written by SQL after the cutover names its import (with its own act; scripts/lib/acts.sh).
+V3_RAW="$(mk 'A v3-era pending result (walk)' | sed 's/,"caveats":\[\]//')"; IMP_V3="$(newid)"
+q "$(import_sql "$IMP_V3" "$P_V3" "$S" "$V3_RAW"); INSERT INTO research_results (tenant_id, result_kind, industry_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id)
+  VALUES ('$TEN', 'industry_measure', '$IND', 'A v3-era pending result (walk)', true, '$V3_RAW'::jsonb, 'q', 'qe', 't', '$S', '$P_V3', 3, '$IMP_V3')" > /dev/null
 
 step "7. The page, in a browser"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) &

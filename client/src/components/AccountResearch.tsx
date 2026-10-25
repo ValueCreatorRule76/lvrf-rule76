@@ -291,7 +291,7 @@ function ParseCard({ institutionId, onParsed }: { institutionId: string; onParse
           </label>
         }
         canSubmit={parsed?.ok === true}
-        buildBody={() => (parsed?.ok ? parsed.value : {})}
+        buildBody={() => ({ raw_text: text })} /* P2 (P2-D5): the text itself; the server parses it and keeps it, hashed. */
         submitLabel="Parse"
         onSuccess={() => { setDone(true); onParsed(); }}
         renderSuccess={(d) => (

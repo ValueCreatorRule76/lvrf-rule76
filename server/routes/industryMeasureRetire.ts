@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -160,6 +161,9 @@ export function industryMeasureRetireRouter(pool: Pool): Router {
         res.status(409).json({ message: `"${entry.name}" was retired or superseded by another request just now` });
         return;
       }
+      await recordAct(client, req, 'POST /api/industry-measures/:id/retire', {
+        act: 'withdraw', tenantId: entry.tenant_id, subjectTable: 'industry_measures', subjectId: measureId, reason: String(reason),
+      });
 
       res.status(200).json({
         industry_measure_id: entry.id,

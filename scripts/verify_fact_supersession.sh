@@ -14,6 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -158,7 +159,8 @@ OUT="$(qerr "UPDATE institution_facts SET superseded_by_id = '$X2', supersession
 case "$OUT" in *institution_facts_supersession_reason*) ok "a reason under 12 characters, by SQL -> refused by the CHECK" ;; *) bad "short reason UPDATE: $OUT" ;; esac
 OUT="$(qerr "UPDATE institution_facts SET supersession_reason = 'A reason with no successor.' WHERE id = '$X1'")"
 case "$OUT" in *institution_facts_supersession_reason*) ok "a reason on a current fact, by SQL -> refused by the CHECK" ;; *) bad "reason without successor: $OUT" ;; esac
-OUT="$(qerr "UPDATE institution_facts SET superseded_by_id = '$X2', supersession_reason = 'Verification: a stated reason.' WHERE id = '$X1'")"
+# P2: the valid supersession, written by SQL on the clone, carries its act (scripts/lib/acts.sh).
+OUT="$(qerr "UPDATE institution_facts SET superseded_by_id = '$X2', supersession_reason = 'Verification: a stated reason.' WHERE id = '$X1'; $(act_sql supersede institution_facts "$X1" "$STAFF" 'POST /api/institutions/:institutionId/facts/:factId/supersede' institution_facts "$X2")")"
 case "$OUT" in UPDATE\ 1*) ok "  ...and the same UPDATE WITH a reason is accepted (the CHECK refuses only what it should)" ;; *) bad "valid UPDATE refused: $OUT" ;; esac
 OUT="$(qerr "DELETE FROM institution_facts WHERE id = '$F1'")"
 case "$OUT" in *ERROR*) ok "the superseded row cannot be deleted" ;; *) bad "delete: $OUT" ;; esac

@@ -12,6 +12,8 @@ import { healthRouter } from './routes/health.js';
 import { personsRouter } from './routes/persons.js';
 import { engagementsRouter } from './routes/engagements.js';
 import { runsRouter } from './routes/runs.js';
+import { lineageRouter } from './routes/lineage.js';
+import { jsonBodies } from './lib/jsonBodies.js';
 import { runsIndexRouter } from './routes/runsIndex.js';
 import { accountInputsRouter } from './routes/accountInputs.js';
 import { institutionFactsRouter } from './routes/institutionFacts.js';
@@ -77,7 +79,8 @@ if (actorHeader === 'on') {
 // session y/n; never a value). First, so a refusal before routing — a 401,
 // a bad body, a foreign origin — is logged too (lib/requestLog.ts).
 app.use(requestLog(app));
-app.use(express.json());
+// P2 (P2-D5): a research import's body may be larger (lib/jsonBodies.ts).
+app.use(jsonBodies());
 // Every mutating /api request, sign-in included: JSON only, and no
 // cross-site or foreign-origin write (lib/origin.ts).
 app.use('/api', originGuard(origins));
@@ -93,6 +96,8 @@ app.use('/api/persons', personsRouter(pool));
 app.use('/api/engagements', engagementsRouter(pool));
 app.use('/api/runs', runsIndexRouter(pool));
 app.use('/api/runs', runsRouter(pool));
+// P2: where a figure came from (read-only).
+app.use('/api/lineage', lineageRouter(pool));
 app.use('/api/account-inputs', accountInputsRouter(pool));
 app.use('/api/institutions', institutionsIndexRouter(pool));
 app.use('/api/institutions', offeringAttachmentRouter(pool));

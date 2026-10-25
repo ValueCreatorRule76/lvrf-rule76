@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -343,6 +344,19 @@ export function validateMetricRouter(pool: Pool): Router {
           actorPersonId,
         ],
       );
+
+      // P2: the metric's supersession, and each outcome's it carried with it, as acts.
+      const route = 'POST /api/business-metrics/:metricId/validate';
+      await recordAct(client, req, route, {
+        act: 'supersede', tenantId: oldMetric.tenant_id, subjectTable: 'business_metrics', subjectId: metricId,
+        resultTable: 'business_metrics', resultId: newMetric.id, evidenceIds: [evidence.id], reason: supersessionReason,
+      });
+      for (const o of outcomes) {
+        await recordAct(client, req, route, {
+          act: 'supersede', tenantId: oldMetric.tenant_id, subjectTable: 'value_outcomes', subjectId: o.old_outcome_id,
+          resultTable: 'value_outcomes', resultId: o.new_outcome_id, evidenceIds: [evidence.id], reason: supersessionReason,
+        });
+      }
 
       res.status(201).json({
         new_metric_id: newMetric.id,

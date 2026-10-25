@@ -12,6 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/raw_text.sh
 # The expected trigger total is read from db/hardening.sql's Verification
 # block — the one place it is declared (CLAUDE.md: no file restates a
 # canonical value). A migration that adds triggers updates that line, and
@@ -83,7 +84,7 @@ post() {  # PATH BODY EXPECTED LABEL [MESSAGE_SUBSTRING]
   # name THIS refusal, so a 409 for some other reason cannot pass for it.
   local code msg
   code="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -X POST -H 'content-type: application/json' \
-    -H "x-actor-person-id: $ACTOR" -d "$2" "$BASE$1")"
+    -H "x-actor-person-id: $ACTOR" -d "$(asraw "$1" "$2")" "$BASE$1")"
   msg="$(node -e 'try{const b=require("/tmp/lvrf_r.json");console.log(b.message??JSON.stringify(b))}catch{console.log("")}')"
   if [ "$code" = "$3" ] && { [ -z "${5:-}" ] || printf '%s' "$msg" | grep -qF -- "$5"; }; then
     ok "$4 -> $code  $msg"

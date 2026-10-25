@@ -2664,7 +2664,7 @@ a missed reader fails.
 
 ---
 
-## 10. P2: acts and lineage (planned 25 Oct 2026; **plan for Brad's review, not built**)
+## 10. P2: acts and lineage (planned 25 Oct 2026; **approved by Brad, 25 Oct 2026, with P2-D1–D8 ruled (conditions on D3–D6); Step 0 passed; built, Gate A passed 25 Oct 2026 — BUILD_STATUS "P2"; not deployed**)
 
 **Source:** `docs/LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md`, ratified 24 Oct 2026, §2.4 (audit),
 §5.1 (`governance_acts`, `research_imports`, `research_results.import_id`,
@@ -2740,6 +2740,9 @@ came from.
   - **an act written inside a rolled-back savepoint → refused**;
   - **an act for another row → refused.**
 - **If any of these fails, P2 stops and the mechanism goes back to Brad.**
+- **Brad's condition on D4:** the "another row" and "another transaction" cases above
+  each pass only if the change is **refused**. An act for a different row, or one written in
+  a different transaction, must never satisfy the check.
 
 **Migration 0041 (`acts_and_lineage`).** It adds tables, an enum and one nullable column. It
 orphans nothing: no row is changed or deleted, and every existing research result keeps
@@ -2803,16 +2806,45 @@ orphans nothing: no row is changed or deleted, and every existing research resul
     labelled `source = 'record'`, "recorded before governance acts (<cutover>)"; no act is
     invented (P2-D2).
   - **Outcome evidence in a sealed run** is matched by kind, summary and provenance, and
-    labelled so, because snapshots carry no evidence id (P2-D7).
+    labelled **"matched by kind, summary and source; not sealed by id"**, because
+    snapshots carry no evidence id (P2-D7).
 
 **Routes:**
 - **Every route in P2-D3's mapping writes its `governance_acts` row in the same
   transaction,** through one helper, `server/lib/governanceAct.ts`.
+- **The coverage guard** (Brad's condition on D3), like `MUTATING_ROUTE_CLASS`:
+  - `server/lib/governanceAct.ts` holds `ROUTE_ACTS`, which classes **every** mutating route
+    as either its act(s) or `'create-only'`;
+  - **`verify_acts_lineage.sh` fails any mutating route in the source that is not
+    classed,** any class naming a route that doesn't exist, and any route classed with an
+    act that doesn't call the helper;
+  - a create-only route found writing a governed transition is caught by the presence
+    trigger in the regression.
+- **Create-only routes, left out of P2 by name** (16): these create rows, or set a field,
+  that carry their own who/when and make none of P2-D3's governed transitions.
+  `POST /api/account-inputs` · `POST /api/business-metrics/:metricId/pack-basis` ·
+  `POST /api/capabilities/:capabilityId/industry-measures` ·
+  `POST /api/engagements/:engagementId/produce-run` ·
+  `POST /api/industries/:industryId/research-prompts` ·
+  `POST /api/institutions/:institutionId/research-prompts` ·
+  `POST /api/institutions/:institutionId/analyst-of-record` ·
+  `POST /api/institutions/:institutionId/executive-summaries` ·
+  `POST /api/institutions/:institutionId/facts` ·
+  `POST /api/institutions/:institutionId/hypotheses` ·
+  `POST /api/institutions/:institutionId/industry` ·
+  `POST /api/institutions/:institutionId/inputs` ·
+  `POST /api/institutions/:institutionId/offerings` ·
+  `POST /api/institutions/:institutionId/value-outcomes` ·
+  `POST /api/value-outcomes/:outcomeId/evidence` ·
+  `POST /api/value-runs/:runId/record-document`.
+  The other **29** mutating routes write acts.
 - **The two research POSTs** take `{ raw_text }` and parse it on the server, with the
   existing parser unchanged (P2-D5).
   - The 100 KB limit is raised to 512 KB for those two routes only.
   - The import is inserted, then each result with its `import_id`, then the `import` act.
-  - An unparseable paste is refused (422) and recorded as today; no import row is kept.
+  - **A paste the parser refuses** (422) is recorded in `refusals` with source `parser`.
+    Its `attempted_payload` holds the paste's **SHA-256 and byte length, never its text**
+    (Brad's condition on D5). No import row is kept.
   - The clients send the text, no longer the parsed object.
 - **`GET /api/lineage/:table/:id`:**
   - for an authorized user, tenant-scoped (another tenant's id → 404, logged, like every
@@ -2895,6 +2927,9 @@ invented fixtures ("Fixture Valley Electric Cooperative (invented)").
    - ownership clean;
    - run hashes 25 of 25;
    - **0 results parsed since the cutover literal** (P2-D6);
+   - **the pre-check, before paste 1** (Brad's condition on D6): read-only over ssh, I
+     confirm no research result was parsed between Gate A and the deploy, and give the last
+     `parsed_at` on prod;
    - `governance_acts` 0, `research_imports` 0.
 3. **Deploy.**
 
@@ -2907,9 +2942,11 @@ invented fixtures ("Fixture Valley Electric Cooperative (invented)").
 - **The lineage of Scotts' revenue fact and TRIR baseline** read on prod as Gate A
   predicted.
 
-### Decisions for Brad
+### Decisions (decided by Brad, 25 Oct 2026)
 
-| # | Decision | Recommendation |
+D1, D2 and D8 as recommended. D7 with the label "matched by kind, summary and source; not sealed by id". D3–D6 with the conditions written into the sections above: D3 lists the create-only routes and adds the coverage guard; D4's Step 0 proves that another row's act or another transaction's does not satisfy the check; D5 records a refused paste by hash and size, not text; D6's Gate B pre-check confirms no research between Gate A and the deploy.
+
+| # | Decision | Ruled |
 |---|---|---|
 | **P2-D1** | §7's acceptance test (Scotts' TRIR baseline traced prompt → import → result → accept → evidence → fact → run 2) can't be met: the baseline was never researched, and no import or act predates P2 | **Test the full chain on a fixture made after P2; on the real record, trace Scotts' revenue fact (prompt → result → accept → evidence → fact → run 2) with "no import (before research imports)" stated, and Scotts' TRIR baseline as it really is.** The test proves the function; the real records prove it tells the truth about history |
 | **P2-D2** | Backfill `governance_acts` for history from the who/when columns and `audit_log`? | **No backfill.** An act row says the act was recorded as an act at the time; writing them now from other columns would manufacture that. Lineage reads history from the columns, labelled "recorded before governance acts" |

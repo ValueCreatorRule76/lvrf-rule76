@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
+import { Router, type Request } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
+import { readImportText, ImportTextError, type ImportText } from '../research/importText.js';
 import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
 import {
@@ -162,6 +164,21 @@ function validateExclusionList(body: Record<string, unknown>, issues: string[]):
 // Does not create industry_measures rows; see the file comment. Also
 // POST /api/industries/:industryId/research-prompts (Q4b), and
 // GET /api/industries/:slug/research (Q4c1), below it.
+/** P2 (P2-D5): a parser's 422, recorded through the pool (the request rolls back) by the paste's hash and size. */
+async function recordPackParseRefusal(pool: Pool, req: Request, tenantId: string, issues: string[], attemptedPayload: Record<string, unknown>): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table, subject_id,
+                             source, sqlstate, constraint_name, message, attempted_payload)
+       VALUES ($1, NULL, $2, 'POST /api/industries/:industryId/research-results', 'research_results', NULL,
+               'parser', NULL, NULL, $3, $4)`,
+      [tenantId, req.actor!.personId, `${issues.length} issue(s) found; nothing was written. ${issues.join(' | ')}`, attemptedPayload],
+    );
+  } catch (err) {
+    console.error('LVRF: failed to record a parse refusal. The 422 still stands.', err);
+  }
+}
+
 export function industryResearchRouter(pool: Pool): Router {
   const router = Router();
 
@@ -225,6 +242,8 @@ export function industryResearchRouter(pool: Pool): Router {
 
     // Captured for handleGovernanceError's refusal record as soon as known.
     let refusalTenantId: string | null = null;
+    // P2 (P2-D5): what a refusal records of the paste — its hash and size, never its text.
+    let parserPayload: Record<string, unknown> = {};
 
     try {
       const actorPersonId = req.actor?.personId;
@@ -260,11 +279,16 @@ export function industryResearchRouter(pool: Pool): Router {
       );
       const validDirections = directionRows.map((r) => r.enumlabel);
 
-      const body = req.body;
-      if (!isRecord(body)) {
-        res.status(422).json({ message: 'body is required', issues: ['body is required'] });
-        return;
+      // P2 (P2-D5): the pasted text, parsed here; the import stores exactly this text.
+      let imported: ImportText;
+      try {
+        imported = readImportText(req.body);
+      } catch (e) {
+        if (e instanceof ImportTextError) { parserPayload = e.parserPayload; throw new ValidationError(e.issues); }
+        throw e;
       }
+      parserPayload = { raw_sha256: imported.sha256, byte_length: imported.bytes };
+      const body = imported.body;
 
       const issues: string[] = [];
 
@@ -346,27 +370,39 @@ export function industryResearchRouter(pool: Pool): Router {
 
       // Reached only once every measure validated — nothing above this
       // line has written anything.
+      // P2: the import first — the whole text, hashed — then each result naming it, then the act.
+      const { rows: [importRow] } = await client.query<{ id: string }>(
+        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [industry.tenant_id, promptId as string, imported.text, imported.sha256, imported.bytes, actorPersonId],
+      );
       const results: { id: string; field_name: string }[] = [];
       for (const measure of parsedMeasures) {
         const { rows: [inserted] } = await client.query<{ id: string; field_name: string }>(
           `INSERT INTO research_results (
              tenant_id, result_kind, industry_id, field_name, found,
              raw_response, research_query, query_as_executed, research_tool,
-             parsed_by_person_id, prompt_id, contract_version
-           ) VALUES ($1, 'industry_measure', $2, $3, true, $4, $5, $6, $7, $8, $9, $10)
+             parsed_by_person_id, prompt_id, contract_version, import_id
+           ) VALUES ($1, 'industry_measure', $2, $3, true, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id, field_name`,
           [
             industry.tenant_id, industryId, measure.name, measure.raw,
             researchQuery!, queryAsExecuted!, researchTool!, actorPersonId,
-            promptId as string, INDUSTRY_MEASURE_CONTRACT.version,
+            promptId as string, INDUSTRY_MEASURE_CONTRACT.version, importRow.id,
           ],
         );
         results.push(inserted);
       }
 
-      res.status(201).json({ count: results.length, results });
+      await recordAct(client, req, 'POST /api/industries/:industryId/research-results', {
+        act: 'import', tenantId: industry.tenant_id, subjectTable: 'research_imports', subjectId: importRow.id,
+      });
+
+      res.status(201).json({ count: results.length, results, import_id: importRow.id, raw_sha256: imported.sha256 });
     } catch (err) {
       if (err instanceof ValidationError) {
+        // P2 (P2-D5, Brad's condition): the parser's refusal is recorded, with the paste's hash and size, not its text.
+        if (refusalTenantId) await recordPackParseRefusal(pool, req, refusalTenantId, err.issues, parserPayload);
         res.status(422).json({
           message: `${err.issues.length} issue(s) found; nothing was written.`,
           issues: err.issues,
@@ -383,7 +419,7 @@ export function industryResearchRouter(pool: Pool): Router {
         subjectId: null,
         tenantId: refusalTenantId,
         institutionId: null,
-        attemptedPayload: req.body,
+        attemptedPayload: parserPayload,
       })) {
         return;
       }
@@ -694,6 +730,10 @@ export function researchResultsReviewRouter(pool: Pool): Router {
           WHERE id = $1`,
         [resultId, actorPersonId, reviewNote!, insertedMeasure.id],
       );
+      await recordAct(client, req, 'POST /api/research-results/:id/accept', {
+        act: 'accept', tenantId: candidate.tenantId, subjectTable: 'research_results', subjectId: resultId,
+        resultTable: 'industry_measures', resultId: insertedMeasure.id, reason: reviewNote,
+      });
 
       res.status(200).json({
         id: resultId,
@@ -789,6 +829,9 @@ export function researchResultsReviewRouter(pool: Pool): Router {
           WHERE id = $1`,
         [resultId, actorPersonId, reviewNote!],
       );
+      await recordAct(client, req, 'POST /api/research-results/:id/reject', {
+        act: 'reject', tenantId: candidate.tenantId, subjectTable: 'research_results', subjectId: resultId, reason: reviewNote,
+      });
 
       res.status(200).json({ id: resultId, review_state: 'rejected' });
     } catch (err) {

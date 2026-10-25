@@ -80,7 +80,7 @@ psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_harde
 
 TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$TRIGGERS" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "expected $EXPECT_TRIGGERS distinct triggers, found $TRIGGERS"
-FACT_TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_facts'")"
+FACT_TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_facts' AND trigger_name NOT LIKE '%\_act\_present'")"  # P2's _act_present: verify_acts_lineage.sh
 [ "$FACT_TRIGGERS" = "institution_facts_audit,institution_facts_form_kept,institution_facts_no_delete,institution_facts_supersession_sane,institution_facts_touch" ] \
   && ok "institution_facts has _audit, _form_kept (P1, 0039), _no_delete, _supersession_sane, _touch" \
   || bad "institution_facts triggers: $FACT_TRIGGERS"

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
@@ -249,6 +250,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
         });
         return;
       }
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/commit', {
+        act: 'commit', tenantId: outcome.tenant_id, subjectTable: 'value_outcomes', subjectId: outcomeId,
+        evidenceIds: [evidence.id], reason: commitmentNote,
+      });
 
       // HB-0014 Value Target Committed. healthState is 'healthy' — the
       // committer check above already guarantees a real, non-simulated
@@ -430,6 +435,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
           RETURNING realization, value_stage`,
         [actualValue, actualMeasuredAt, outcomeId],
       );
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/measure', {
+        act: 'measure', tenantId: outcome.tenant_id, subjectTable: 'value_outcomes', subjectId: outcomeId,
+      });
 
       // HB-0015 Value Realized. healthState mirrors buildHeartbeatPlan's
       // actualSimulated branch exactly, derived here from the same evidence
@@ -623,6 +631,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
           RETURNING realization, value_stage`,
         [verifiedByPersonId, verifiedAt, outcomeId],
       );
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/verify', {
+        act: 'verify', tenantId: outcome.tenant_id, subjectTable: 'value_outcomes', subjectId: outcomeId,
+        evidenceIds: [evidence.id], reason: attestationNote,
+      });
 
       // HB-0016 Value Verified — CONSTITUTIONAL. The seventh and last health
       // dimension LVRF can measure today; Security stays UNMEASURED until

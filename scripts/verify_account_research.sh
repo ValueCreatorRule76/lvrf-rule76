@@ -18,6 +18,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/raw_text.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -60,7 +61,7 @@ start_server() {
 }
 req() {  # METHOD PATH [BODY] [ACTOR]
   if [ "$1" = GET ]; then CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -H "x-actor-person-id: ${4:-$X}" "$BASE$2")"
-  else CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$X}" -d "$3" "$BASE$2")"; fi
+  else CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$X}" -d "$(asraw "$2" "${3:-}")" "$BASE$2")"; fi
 }
 rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }
 said() { node -e "try{const b=require('$W/r.json');console.log(b.message!==undefined?[b.message,...(b.issues??[])].join(' | '):JSON.stringify(b))}catch{console.log('')}"; }
@@ -83,7 +84,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated: 0033 (enum v
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening"; exit 1; }
 N_TRIG="$(q "SELECT count(DISTINCT trigger_name || '.' || event_object_table) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 # By name, not a pinned total: later migrations add triggers of their own.
-ENT_TRIG="$(q "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_entities'")"
+ENT_TRIG="$(q "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_entities' AND trigger_name NOT LIKE '%\_act\_present'")"  # P2's _act_present: verify_acts_lineage.sh
 [ "$N_TRIG" = "$EXPECT_TRIGGERS" ] && [ "$ENT_TRIG" = "institution_entities_audit,institution_entities_no_delete,institution_entities_one_current,institution_entities_supersession_sane,institution_entities_touch" ] \
   && ok "$N_TRIG distinct triggers, as hardening.sql declares; institution_entities: _audit, _touch, _no_delete, _supersession_sane, one_current" || bad "triggers: $N_TRIG, expected $EXPECT_TRIGGERS; institution_entities: $ENT_TRIG"
 OUT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs || true)"
@@ -334,7 +335,7 @@ stop_server; start_server
 expect POST "/api/account-research-results/$RB3/accept" '{"review_note":"Verification: B3, no citation opened."}' 200 "B3: without the server's H1 rule, a fact is accepted with no citation opened — the rule is what requires it"
 restore "$ROUTE"; stop_server; start_server
 # B4 — L8's writer removed: a parse refusal leaves no record.
-edit "$ROUTE" "        if (refusalTenantId) await recordParseRefusal(pool, req, refusalTenantId, institutionId, err.issues);" "        void recordParseRefusal;"
+edit "$ROUTE" "        if (refusalTenantId) await recordParseRefusal(pool, req, refusalTenantId, institutionId, err.issues, parserPayload);" "        void recordParseRefusal;"
 stop_server; start_server
 RB4="$(REF0 "$INST")"
 expect POST "$PARSE" "$(envb "$PB" "\"entity\":$ENTITY2,\"facts\":[{\"kind\":\"revenue\"}],\"not_found\":[]")" 422 "B4: a refused parse without the L8 writer"

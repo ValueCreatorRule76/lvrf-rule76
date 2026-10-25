@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LineageLink } from '../components/LineageLink';
 import { Link, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
@@ -158,12 +159,12 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         <span className={KICKER}>{o.metric_name}</span>
         <table className="mt-1 w-full border-collapse text-[13px]">
           <tbody>
-            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)}</td></tr>
+            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)} <LineageLink table="value_outcomes" id={o.id} figure="baseline" /></td></tr>
             <tr><td className="py-1 text-ink-45">Target</td>{o.target_value !== null && o.committed_by
               ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}</td></>
               : <td className="py-1" colSpan={2} data-testid="no-target">No target: a hypothesis.</td>}</tr>
             <tr><td className="py-1 text-ink-45">Actual</td>{o.actual_value !== null
-              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'}</td></>
+              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'} <LineageLink table="value_outcomes" id={o.id} figure="actual" /></td></>
               : <td className="py-1 text-ink-45" colSpan={2}>Not measured yet.</td>}</tr>
           </tbody>
         </table>
@@ -329,7 +330,7 @@ export function PovPage() {
                     <td className="px-3 py-1.5 text-ink-45" data-testid="fact-kind">{label(FACT_KIND, f.kind)}</td>
                     <td className="px-3 py-1.5 text-ink"><span data-testid="fact-value">{f.value_text !== null && f.kind === 'disclosure_regime' ? label(DISCLOSURE_REGIME, f.value_text) : f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</span>
                       <EvidenceRestsOn e={f} /><FigureCheckLine check={f.figure_check} /></td>
-                    <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {day(f.as_of)}</span></td>
+                    <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {day(f.as_of)}</span><LineageLink table="institution_facts" id={f.id} /></td>
                   </tr>))}</tbody>
               </table>
             )}

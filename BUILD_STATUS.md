@@ -11982,3 +11982,171 @@ CONFIDENCE_MODEL ruling for later, with no change in C1.
    but the document row does not. `record_documents` is provisional until the Repository
    Constitution ratifies. A candidate loose end: does a document of record need to name
    later errata?
+
+## P2: acts and lineage — 25 October 2026 (UTC)
+
+LVRF_PLAN §10, approved by Brad (25 Oct 2026): D1, D2 and D8 as recommended; D7 with the label
+"matched by kind, summary and source; not sealed by id"; D3–D6 with his conditions. Value spine
+stages served: `verify` and `return`.
+
+**Step 0, before any migration** (`scripts/step0_act_presence.sh`, on a scratch database made
+by `createdb`, dropped after): **8 passed, 0 failed.**
+- the act then the change, same transaction: commits;
+- the change then the act (deferred): commits;
+- no act: refused at COMMIT;
+- **the act committed in an earlier transaction: refused (D4's condition)**;
+- the act written in a savepoint that was rolled back: refused;
+- **an act for another row: refused (D4's condition)**;
+- a change outside the governed transition: commits with no act;
+- `txid_current()` in the deferred trigger equals the act's.
+
+**Migration 0041 (`acts_and_lineage`).** It orphans nothing: no row is changed or deleted, and
+all 34 existing research results keep `import_id` NULL.
+- **enum `governance_act`:** the design's 15 values, plus `measure`, `lock`, `retire`,
+  `exclude`, `mark`, `link`, `correct` and `record_erratum` (D3).
+- **`governance_acts`:** the act, its subject, its result, `evidence_ids`, the actor, the
+  route's own reason, the route pattern, `txid` and `at`. Three CHECKs: the result is both or
+  neither; the reason is not blank; the route is a pattern.
+- **`research_imports`:** the prompt, the raw text, its SHA-256 (CHECK: the hash is the text's)
+  and its byte length (CHECK: it matches the text, at most 524,288), with who and when.
+- **`research_results.import_id`:** CHECK `research_results_import_after_cutover`, with the
+  cutover at 25 Oct 2026 00:00 UTC (D6). Prod's last parse was 12 Oct.
+- **Hardening section 27** adds 26 triggers, taking the count from 141 to 167:
+  - `governance_acts_audit`, `_no_delete`, `_immutable` and `_guard`. The guard forces this
+    transaction's `txid`, and refuses an actor who is not the session's, and a subject or
+    result that doesn't exist in the act's tenant;
+  - `research_imports_audit`, `_no_delete` and `_immutable`;
+  - `research_results_import_matches`: the import answered the result's prompt; `import_id`
+    never changes;
+  - **`<table>_act_present` on 18 tables**, deferred constraint triggers through one function,
+    `lvrf_require_act()`:
+    - **the transitions:** a retirement or supersession on every governed table; a review on
+      `research_results`; a citation opened on `evidence`; a commitment, measurement or
+      verification on `value_outcomes`; a lock on `value_runs`; a withdrawal or correcting
+      link on `value_outcome_evidence`; the creation of a lever, link, exclusion, marker,
+      erratum or import;
+    - **the refusal:** "LVRF: <table> <id>: <transition> with no governance act recorded in
+      this transaction."
+  - **Section 24** refuses UPDATE on `governance_acts` and `research_imports`.
+  - **`ownership.sql`:** INSERT on both (35 tables).
+- **Plain sentences:** six for the new CHECKs.
+- **`lvrf_lineage(table, id, figure)`,** read-only, plus six helpers. It returns numbered steps,
+  each with its source, `act`, `record` or `seal` (D2, D7).
+
+**Routes:**
+- **`server/lib/governanceAct.ts`** is the one writer of acts. Its **`ROUTE_ACTS` classes all
+  45 mutating routes**: 29 with their acts, and 16 create-only, named in §10 (D3).
+- **Metric validation** writes one supersede act for the metric and one for each outcome it
+  carries: their supersession is governed too.
+- **The two research POSTs take `{ raw_text }` and parse it on the server** (D5):
+  - the existing parser, unchanged, reads the parsed envelope;
+  - the import is written first, then the results naming it, then the `import` act;
+  - a parser refusal is recorded (source `parser`) with `raw_sha256` and `byte_length`, never
+    the text. The pack route now records its parse refusals too; it recorded none before;
+  - the body limit is 1 MB on those two routes only (`server/lib/jsonBodies.ts`); a paste over
+    512 KB is refused in words.
+  - **The clients** keep their JSON preview but send the text.
+- **`GET /api/lineage/:table/:id`** covers facts, entities, pack measures, evidence and an
+  outcome with `?figure=`. It is tenant-scoped, and an unknown row or another tenant's is 404.
+- **CLAUDE.md** now names `research_imports` in the research boundary (D8).
+
+**The display:** `/lineage/:table/:id` gives the steps in order, each with what, who, when and
+its source in words. It works at phone width and prints, with a footer.
+- **"Where this came from"** links (screen only) appear on the account facts card, the POV's
+  facts and the POV's baseline and actual.
+- **The run page's sealed evidence** links to its outcome's figure, because the sealed item
+  carries no id.
+
+**Gate A:**
+- **`verify_acts_lineage.sh`: 166 passed, 0 failed,** on a clone of the restored, neutralised
+  prod copy, with invented fixtures ("Fixture Valley Electric Cooperative (invented)"). It
+  covers:
+  - **Step 0 re-run:** 8 of 8.
+  - **The schema:** 167 triggers; drift none (42 migrations, 1050 objects); 34 results with
+    `import_id` NULL; acts and imports empty after the migration (no backfill); 18 deferred
+    `_act_present` triggers.
+  - **The coverage guard (D3's condition):** all 45 mutating routes classed; every class names
+    a real route; all 29 act routes call `recordAct` with their own pattern.
+  - **Every one of the 29 act routes, exercised:** each writes exactly its act or acts, with
+    the steward as actor, the route as a pattern and no value in it. Create-only routes write
+    none.
+  - **Research:** the import holds the pasted text byte for byte, its SHA-256 is recomputed in
+    the script, and every result names the import and its prompt.
+  - **Lineage on a fixture:**
+    - the researched fact: prompt > import (act) > result > accept (act) > evidence > citation
+      opened (in the accept act) > figure check > fact > superseded (act) > a run's seal;
+    - its correction: recorded directly > evidence > figure check > fact > supersedes (act)
+      > a later run's seal;
+    - corrected evidence: evidence > figure check > link > withdrawn (act) > corrected link
+      (act) > the run's seal, labelled "matched by kind, summary and source; not sealed by id"
+      > erratum;
+    - the actual: ... > verify (act).
+  - **Lineage on the real record (D1):**
+    - **Scotts' revenue fact:** prompt > "no import (before research imports, 25 Oct 2026)"
+      > result > accept, labelled "recorded before governance acts (25 Oct 2026)" > evidence >
+      citation > fact > runs 1 and 2, every pre-P2 step `record`;
+    - **Scotts' TRIR baseline:** recorded directly as outcome evidence, with no research step;
+      its two evidence rows and links; runs 1 and 2;
+    - **Curia** has no facts on record. Its outcome's baseline (21 steps) and an evidence row
+      (18 steps) trace;
+    - the prod copy predates C1's acts on prod, so Gate C reads Scotts' corrected link and
+      errata from the real record.
+  - **The display:** the page at 1280 and 390 with no sideways scroll, and in print; Scotts'
+    baseline page; the links on the POV, the run page and the account facts card; signed out,
+    401.
+  - **Breaks:**
+    - **B1:** a review with no act, refused at COMMIT;
+    - **B2:** a tampered import;
+    - **B3:** an import edited;
+    - **B4:** an act for another actor;
+    - **B5:** an UPDATE or DELETE of an act;
+    - **B6:** an act from an earlier transaction;
+    - **B7:** a result after the cutover with no import;
+    - **B8:** another prompt's import;
+    - **B9:** the accept route's act removed: a 500 carrying the plain sentence, with nothing
+      written;
+    - **B10:** lineage's supersession steps removed on the clone, so the chain loses
+      "superseded_by", then restored;
+    - **B11:** a 530,061-byte paste refused in words. It and a non-JSON paste are recorded by
+      hash and size, never by text.
+
+    `accountResearch.ts` was restored byte-identical. Run hashes are 27 of 27 after every act.
+- **The other scripts:**
+  - **SQL fixture writes on throwaway clones now write their act in the same transaction**
+    (`scripts/lib/acts.sh`; a research result also writes its import). The scripts are
+    `verify_runs_list`, `verify_drift`, `verify_fact_supersession`,
+    `verify_research_contract`, `verify_pack_entry_retire`, `verify_evidence_form`,
+    `verify_value_levers` and `verify_tenant_scope`;
+  - **the research scripts post the text** (`scripts/lib/raw_text.sh`);
+  - **trigger-name lists** set aside the `_act_present` triggers, which this script checks by
+    name;
+  - **counts** go to 167;
+  - **`verify_corrections`' code grep** names P2's exemptions: the act guard, and lineage,
+    which shows withdrawn links;
+  - **`verify_research_contract`:**
+    - B3 now meets the import's refusal first;
+    - B5 and B6 supply an import;
+    - its review-router comparison sets aside P2's two `recordAct` calls;
+  - **`list_api_routes`** accepts `jsonBodies()`;
+  - **`verify_tenant_scope`** has a case for `GET /api/lineage/:table/:id` (212 cases).
+- **The regression:** all **39** scripts reached their tallies and passed. The build, tsc and
+  oxlint are clean (the 1 pre-existing warning). The bundle is `index-BgbLMsJ7.js` /
+  `index-DrNmLaoH.css`.
+- **The prod copy:** against the deployed `feab0ad`, **76 of 76 GETs identical, with nothing
+  allowed.** P2 adds no field to any existing read.
+- **For Brad's review:** in `~/lvrf-backups/p2-screens/` (600): the fixture fact's lineage at
+  1280 and 390 and its PDF, Scotts' TRIR baseline lineage, and the fixture POV with its links.
+
+**Departures from §10, named:**
+1. **An act's reason** is CHECKed non-blank, not at least 12 characters. It is the route's own
+   note, verbatim, and the routes take review notes of any length; a longer minimum would
+   refuse acts their subject tables accept.
+2. **`research_results_import_matches` passes a result with no prompt** to
+   `research_results_prompt_named`. Postgres tests CHECKs in name order, so this keeps that
+   CHECK's refusal reachable.
+3. **A citation opened at accept** (the evidence is written with it opened, under H1) is
+   attributed to the accept act, through its `evidence_ids`. There is no separate
+   `open_citation` act.
+4. **The JSON parser moved to `server/lib/jsonBodies.ts`,** and `list_api_routes` accepts it.
+5. **B9's refusal is a 500.** `actorContext` answers a failed COMMIT that way, with the
+   database's sentence, and records no `refusals` row, as for every commit-time failure.

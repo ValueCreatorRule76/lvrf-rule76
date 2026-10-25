@@ -31,6 +31,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -121,31 +122,40 @@ SLUG_A="$(q "SELECT slug FROM industries WHERE id = '$IND_A'")"
 # fields, so accept needs no citation), for the account review routes' cases.
 ARP_A="$(q "INSERT INTO research_prompts (tenant_id, institution_id, result_kind, phase, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
   VALUES ('$TENANT_A', '$INST_A', 'institution_fact', 'entity', 1, 1, 'tenant scope fixture', encode(sha256(convert_to('tenant scope fixture', 'UTF8')), 'hex'), '$STAFF_A') RETURNING id" | head -1)"
-ARR_A="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
-  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'entity', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"entity\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1) RETURNING id" | head -1)"
-ARR_A2="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
-  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'disclosure_regime', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"disclosure_regime\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1) RETURNING id" | head -1)"
+# P2: results written by SQL after the cutover name an import (with its act); levers, links and
+# markers written by SQL carry their acts (scripts/lib/acts.sh). Throwaway clone only.
+IMP_A="$(newid)"
+q "$(import_sql "$IMP_A" "$ARP_A" "$STAFF_A" '{"tenant scope fixture":true}')" > /dev/null
+ARR_A="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id)
+  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'entity', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"entity\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1, '$IMP_A') RETURNING id" | head -1)"
+ARR_A2="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id)
+  VALUES ('$TENANT_A', 'institution_fact', '$INST_A', 'disclosure_regime', false, 'Verification fixture.', '{\"subject\":\"not_found\",\"item\":{\"kind\":\"disclosure_regime\",\"reason\":\"Verification fixture.\"},\"ai_sourced\":false}'::jsonb, 'q', 'qe', 't', '$STAFF_A', '$ARP_A', 1, '$IMP_A') RETURNING id" | head -1)"
 MEASURE_A="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)
   VALUES ('$TENANT_A', '$IND_A', 'Tenant A measure (verification $TS)', 'count', 'increase', 'Verification fixture.', 'Verification fixture.', true, 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.') RETURNING id" | head -1)"
 # O1: a lever on that entry and a link on it, for the lever routes' cases.
 # Proposed and linked by tenant A's steward: the database refuses anyone
 # else (value_levers_steward_only, lever_offerings_steward_only).
-LEVER_A="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
-  SELECT '$TENANT_A', '$MEASURE_A', 'Tenant A lever (verification $TS)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', steward_person_id FROM tenants WHERE id = '$TENANT_A' RETURNING id" | head -1)"
-LINK_A="$(q "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id)
-  SELECT '$TENANT_A', '$LEVER_A', o.id, 'Verification fixture link.', t.steward_person_id FROM offerings o JOIN tenants t ON t.id = o.tenant_id
-   WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1 RETURNING id" | head -1)"
+STEW_A="$(q "SELECT steward_person_id FROM tenants WHERE id = '$TENANT_A'")"
+LEVER_A="$(newid)"
+q "INSERT INTO value_levers (id, tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
+  VALUES ('$LEVER_A', '$TENANT_A', '$MEASURE_A', 'Tenant A lever (verification $TS)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$STEW_A'); $(act_sql ratify value_levers "$LEVER_A" "$STEW_A" 'POST /api/industry-measures/:id/levers')" > /dev/null
+LINK_A="$(newid)"
+q "INSERT INTO lever_offerings (id, tenant_id, value_lever_id, offering_id, basis, linked_by_person_id)
+  SELECT '$LINK_A', '$TENANT_A', '$LEVER_A', o.id, 'Verification fixture link.', t.steward_person_id FROM offerings o JOIN tenants t ON t.id = o.tenant_id
+   WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1; $(act_sql link lever_offerings "$LINK_A" "$STEW_A" 'POST /api/value-levers/:id/offerings')" > /dev/null
 # The account OUTCOME_A belongs to (not necessarily INST_A), for the body-id case.
 OUTCOME_A_INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME_A'")"
-MARKER_A="$(q "INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
-  SELECT '$TENANT_A', '$INST_A', 'demonstration', 'Verification fixture citation.', 'Verification fixture marker.', steward_person_id FROM tenants WHERE id = '$TENANT_A' RETURNING id" | head -1)"
+MARKER_A="$(newid)"
+q "INSERT INTO reference_example_markers (id, tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
+  VALUES ('$MARKER_A', '$TENANT_A', '$INST_A', 'demonstration', 'Verification fixture citation.', 'Verification fixture marker.', '$STEW_A'); $(act_sql mark reference_example_markers "$MARKER_A" "$STEW_A" 'POST /api/institutions/:institutionId/reference-example')" > /dev/null
 # W1 fix: tenant A's staff named analyst of record on A's account (the
 # guard admits it: A's own staff, linked by A's staff).
 APL_A="$(q "INSERT INTO account_person_links (tenant_id, institution_id, person_id, role, title, linked_by_person_id)
   VALUES ('$TENANT_A', '$INST_A', '$STAFF_A', 'analyst_of_record', 'Verification analyst of record', '$STAFF_A') RETURNING id" | head -1)"
 # Tenant B's own lever and summary, for the body-id cases.
-LEVER_B="$(q "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
-  SELECT tenant_id, id, 'Tenant B lever (verification)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$STAFF_B' FROM industry_measures WHERE id = '$MEASURE_OTHER' RETURNING id" | head -1)"
+LEVER_B="$(newid)"
+q "INSERT INTO value_levers (id, tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id)
+  SELECT '$LEVER_B', tenant_id, id, 'Tenant B lever (verification)', 'Verification fixture.', 'Verification fixture.', 'Verification fixture, not a source.', '$STAFF_B' FROM industry_measures WHERE id = '$MEASURE_OTHER'; $(act_sql ratify value_levers "$LEVER_B" "$STAFF_B" 'POST /api/industry-measures/:id/levers')" > /dev/null
 SUMMARY_B="$(q "INSERT INTO executive_summaries (tenant_id, institution_id, lens, body, author_person_id, drafted_with_ai)
   VALUES ('$TENANT_B', '$INST_B', 'general', 'Tenant B summary, a verification fixture of sufficient length.', '$STAFF_B', false) RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"

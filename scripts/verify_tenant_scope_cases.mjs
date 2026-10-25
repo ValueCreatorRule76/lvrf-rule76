@@ -129,6 +129,9 @@ const CASES = [
     notFound: [404, `no current link of evidence ${E.LINKEV_A} to value outcome ${E.OUTCOME_A}`], target: ['value_outcomes', E.OUTCOME_A] },
   { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
     notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
+  // P2: where a figure came from (read-only).
+  { route: 'GET /api/lineage/:table/:id', kind: 'id', path: `/api/lineage/institution_facts/${E.FACT_A}`,
+    notFound: [404, `institution_facts ${E.FACT_A} not found`], target: ['institution_facts', E.FACT_A] },
   { route: 'GET /api/persons', kind: 'list', path: '/api/persons', aIds: [E.STAFF_A, E.CUST_A], bIds: [E.STAFF_B, E.CUST_B] },
   { route: 'GET /api/runs', kind: 'list', path: '/api/runs', aIds: [E.RUN_A], bIds: [] },
   { route: 'GET /api/runs/:id', kind: 'id', path: `/api/runs/${E.RUN_A}`,

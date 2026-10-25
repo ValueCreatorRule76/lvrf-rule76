@@ -49,7 +49,7 @@ const routes = [];
 const factoriesSeen = new Set();
 for (const line of index.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('app.use('))) {
   if (!line.startsWith("app.use('/api")) {
-    if (/^app\.use\((express\.json\(\)|actorContext\(pool\)|requestLog\(app\))\);$/.test(line)) continue;
+    if (/^app\.use\((express\.json\(\)|jsonBodies\(\)|actorContext\(pool\)|requestLog\(app\))\);$/.test(line)) continue;
     fail(`unrecognised mount: ${line}`);
   }
   if (MIDDLEWARE.some((re) => re.test(line))) continue;

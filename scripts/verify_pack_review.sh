@@ -16,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/raw_text.sh
 
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -83,7 +84,7 @@ JSON
 
 step "4. Parse and accept with a review note"
 C="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $ACTOR" \
-  -d "$PAYLOAD" "$BASE/api/industries/$IND/research-results")"
+  -d "$(asraw /research-results "$PAYLOAD")" "$BASE/api/industries/$IND/research-results")"
 [ "$C" = "201" ] && ok "parsed -> 201" || { bad "parse -> $C $(cat /tmp/lvrf_r.json)"; exit 1; }
 # The id comes from the parse response, NOT from a read-back. actorContext
 # commits on res 'finish', after the 201 is sent, so an immediate SELECT on

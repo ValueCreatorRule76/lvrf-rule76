@@ -22,6 +22,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/raw_text.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -68,7 +69,7 @@ req() {  # METHOD PATH [BODY] [ACTOR] — status in $CODE, body in $W/r.json
   if [ "$1" = GET ]; then
     CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -H "x-actor-person-id: ${4:-$S}" "$BASE$2")"
   else
-    CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$3" "$BASE$2")"
+    CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$(asraw "$2" "${3:-}")" "$BASE$2")"
   fi
 }
 rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }

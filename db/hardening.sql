@@ -1842,7 +1842,7 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2183,6 +2183,545 @@ CREATE TRIGGER run_errata_steward_only
   FOR EACH ROW EXECUTE FUNCTION lvrf_run_erratum_steward_only();
 
 -- ------------------------------------------------------------------
+-- 27. P2 (0041, 25 Oct 2026) — governance acts, research imports, and the
+--     presence check (LVRF_PLAN §10; design §2.4/§5.1; P2-D1–D8; Step 0
+--     proved the mechanism on a scratch database: scripts/step0_act_presence.sh;
+--     placed before section 14 so the manifest includes these)
+-- ------------------------------------------------------------------
+--   governance_acts_audit, _no_delete, _immutable, _guard — an act is the
+--     session actor's, names a subject (and any result) that exists in its
+--     tenant, and carries THIS transaction's txid (forced: it cannot be
+--     written for another transaction).
+--   research_imports_audit, _no_delete, _immutable — the pasted text and its
+--     hash are final.
+--   research_results_import_matches — a result's import answered the
+--     result's own prompt, in its tenant; import_id never changes.
+--   <t>_act_present on 18 governed tables (P2-D3) — a DEFERRED constraint
+--     trigger: at COMMIT, a governed transition of a row with no act naming
+--     it (subject or result) in the same transaction is refused.
+--
+-- CONSEQUENCE: trigger count goes 141 -> 167 (4 + 3 + 1 + 18).
+
+CREATE OR REPLACE FUNCTION lvrf_governed_row_tenant(p_table text, p_id uuid) RETURNS uuid
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  t text := CASE WHEN p_table = 'value_outcome_evidence' THEN 'value_outcomes' ELSE p_table END;
+  j jsonb;
+BEGIN
+  IF t NOT IN ('research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
+               'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
+               'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
+               'industry_measure_exclusions', 'run_errata') THEN
+    RETURN NULL;
+  END IF;
+  EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
+  IF j IS NULL THEN RETURN NULL; END IF;
+  IF j ? 'tenant_id' AND j->>'tenant_id' IS NOT NULL THEN RETURN (j->>'tenant_id')::uuid; END IF;
+  IF j ? 'institution_id' AND j->>'institution_id' IS NOT NULL THEN
+    RETURN (SELECT i.tenant_id FROM institutions i WHERE i.id = (j->>'institution_id')::uuid);
+  END IF;
+  IF j ? 'industry_id' AND j->>'industry_id' IS NOT NULL THEN
+    RETURN (SELECT d.tenant_id FROM industries d WHERE d.id = (j->>'industry_id')::uuid);
+  END IF;
+  RETURN NULL;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_governance_act_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  st uuid;
+  rt uuid;
+BEGIN
+  -- The transaction's own id, always: an act cannot be written for another transaction.
+  NEW.txid := txid_current();
+  NEW.at := now();
+  IF lvrf_current_actor() IS NOT NULL AND NEW.actor_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: governance_acts: an act is recorded by the person acting; % is not the actor of this request.', NEW.actor_person_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+  END IF;
+  st := lvrf_governed_row_tenant(NEW.subject_table, NEW.subject_id);
+  IF st IS NULL THEN
+    RAISE EXCEPTION 'LVRF: governance_acts: the act''s subject %.% does not exist, or is not a governed table.', NEW.subject_table, NEW.subject_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+  END IF;
+  IF st IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: governance_acts: the act''s subject is not of tenant %.', NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+  END IF;
+  IF NEW.subject_table = 'value_outcome_evidence'
+     AND NOT EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = NEW.subject_id AND l.evidence_id = NEW.result_id) THEN
+    RAISE EXCEPTION 'LVRF: governance_acts: an act on a link names its outcome and its evidence; there is no such link.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+  END IF;
+  IF NEW.result_table IS NOT NULL AND NEW.subject_table <> 'value_outcome_evidence' THEN
+    rt := lvrf_governed_row_tenant(NEW.result_table, NEW.result_id);
+    IF rt IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: governance_acts: the act''s result %.% does not exist in tenant %.', NEW.result_table, NEW.result_id, NEW.tenant_id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_governance_act_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'LVRF: % % is final. An act records who did what, when and why; it is never edited.', TG_TABLE_NAME, OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+DROP TRIGGER IF EXISTS governance_acts_audit ON governance_acts;
+CREATE TRIGGER governance_acts_audit AFTER INSERT OR UPDATE ON governance_acts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS governance_acts_no_delete ON governance_acts;
+CREATE TRIGGER governance_acts_no_delete BEFORE DELETE ON governance_acts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('An act records who did what, when and why. It cannot be deleted.');
+DROP TRIGGER IF EXISTS governance_acts_immutable ON governance_acts;
+CREATE TRIGGER governance_acts_immutable BEFORE UPDATE ON governance_acts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+DROP TRIGGER IF EXISTS governance_acts_guard ON governance_acts;
+CREATE TRIGGER governance_acts_guard BEFORE INSERT ON governance_acts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_guard();
+
+DROP TRIGGER IF EXISTS research_imports_audit ON research_imports;
+CREATE TRIGGER research_imports_audit AFTER INSERT OR UPDATE ON research_imports
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS research_imports_no_delete ON research_imports;
+CREATE TRIGGER research_imports_no_delete BEFORE DELETE ON research_imports
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A research import is the text a result was parsed from. It cannot be deleted.');
+DROP TRIGGER IF EXISTS research_imports_immutable ON research_imports;
+CREATE TRIGGER research_imports_immutable BEFORE UPDATE ON research_imports
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+
+CREATE OR REPLACE FUNCTION lvrf_research_result_import_matches() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  imp record;
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.import_id IS DISTINCT FROM OLD.import_id THEN
+    RAISE EXCEPTION 'LVRF: research_results: a result''s import is recorded when it is parsed and never changes.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_results_import_matches';
+  END IF;
+  -- A result with no prompt is research_results_prompt_named's to refuse, not this trigger's.
+  IF NEW.import_id IS NOT NULL AND NEW.prompt_id IS NOT NULL THEN
+    SELECT prompt_id, tenant_id INTO imp FROM research_imports WHERE id = NEW.import_id;
+    IF imp.prompt_id IS DISTINCT FROM NEW.prompt_id OR imp.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
+      RAISE EXCEPTION 'LVRF: research_results: this result''s import answered another prompt; a result is parsed from the import of its own prompt.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_results_import_matches';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_results_import_matches ON research_results;
+CREATE TRIGGER research_results_import_matches BEFORE INSERT OR UPDATE ON research_results
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_result_import_matches();
+
+-- The presence check. One function; each table's governed transitions are
+-- named here (P2-D3). Runs at COMMIT (deferred), so the act may be written
+-- before or after the change, but in the same transaction (Step 0, S1–S8).
+CREATE OR REPLACE FUNCTION lvrf_require_act() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  o jsonb := CASE WHEN TG_OP = 'UPDATE' THEN to_jsonb(OLD) ELSE '{}'::jsonb END;
+  n jsonb := to_jsonb(NEW);
+  what text;
+  k uuid;
+  r uuid;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    -- Common to every governed table: a retirement or a supersession.
+    IF o ? 'deleted_at' AND o->>'deleted_at' IS NULL AND n->>'deleted_at' IS NOT NULL THEN what := 'a retirement';
+    ELSIF o ? 'retired_at' AND o->>'retired_at' IS NULL AND n->>'retired_at' IS NOT NULL THEN what := 'a retirement';
+    ELSIF o ? 'superseded_by_id' AND o->>'superseded_by_id' IS NULL AND n->>'superseded_by_id' IS NOT NULL THEN what := 'a supersession';
+    END IF;
+    IF what IS NULL THEN
+      CASE TG_TABLE_NAME
+        WHEN 'research_results' THEN
+          IF o->>'review_state' = 'pending' AND n->>'review_state' <> 'pending' THEN what := 'a review (' || (n->>'review_state') || ')'; END IF;
+        WHEN 'evidence' THEN
+          IF NOT (o->>'citation_resolved')::boolean AND (n->>'citation_resolved')::boolean THEN what := 'a citation opened'; END IF;
+        WHEN 'value_outcomes' THEN
+          IF (o->'committed_at') IS DISTINCT FROM (n->'committed_at') OR (o->'target_value') IS DISTINCT FROM (n->'target_value') THEN what := 'a commitment';
+          ELSIF (o->'actual_value') IS DISTINCT FROM (n->'actual_value') OR (o->'actual_measured_at') IS DISTINCT FROM (n->'actual_measured_at') THEN what := 'a measurement';
+          ELSIF (o->'verified_by_person_id') IS DISTINCT FROM (n->'verified_by_person_id') OR (o->'verified_at') IS DISTINCT FROM (n->'verified_at') THEN what := 'a verification';
+          END IF;
+        WHEN 'value_runs' THEN
+          IF o->>'locked_at' IS NULL AND n->>'locked_at' IS NOT NULL THEN what := 'a lock'; END IF;
+        WHEN 'value_outcome_evidence' THEN
+          IF o->>'withdrawn_at' IS NULL AND n->>'withdrawn_at' IS NOT NULL THEN what := 'a withdrawal'; END IF;
+        ELSE NULL;
+      END CASE;
+    END IF;
+  ELSE
+    CASE TG_TABLE_NAME
+      WHEN 'value_levers' THEN what := 'a lever ratified';
+      WHEN 'lever_offerings' THEN what := 'a solution linked';
+      WHEN 'industry_measure_exclusions' THEN what := 'an exclusion';
+      WHEN 'reference_example_markers' THEN what := 'a marker';
+      WHEN 'run_errata' THEN what := 'an erratum';
+      WHEN 'research_imports' THEN what := 'an import';
+      WHEN 'value_outcome_evidence' THEN
+        IF n->>'corrects_supports' IS NOT NULL THEN what := 'a correcting link'; END IF;
+      ELSE NULL;
+    END CASE;
+  END IF;
+  IF what IS NULL THEN RETURN NULL; END IF;
+
+  IF TG_TABLE_NAME = 'value_outcome_evidence' THEN
+    k := (n->>'value_outcome_id')::uuid;
+    r := (n->>'evidence_id')::uuid;
+    IF EXISTS (SELECT 1 FROM governance_acts a
+                WHERE a.txid = txid_current() AND a.subject_table = TG_TABLE_NAME AND a.subject_id = k AND a.result_id = r) THEN
+      RETURN NULL;
+    END IF;
+    RAISE EXCEPTION 'LVRF: value_outcome_evidence (outcome %, evidence %): % with no governance act recorded in this transaction.', k, r, what
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_act_present';
+  END IF;
+  k := (n->>'id')::uuid;
+  IF EXISTS (SELECT 1 FROM governance_acts a
+              WHERE a.txid = txid_current()
+                AND ((a.subject_table = TG_TABLE_NAME AND a.subject_id = k)
+                  OR (a.result_table = TG_TABLE_NAME AND a.result_id = k))) THEN
+    RETURN NULL;
+  END IF;
+  RAISE EXCEPTION 'LVRF: % %: % with no governance act recorded in this transaction.', TG_TABLE_NAME, k, what
+    USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_act_present';
+END $$;
+
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY[
+    'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
+    'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
+    'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
+    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata']
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
+    EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
+                   'FOR EACH ROW EXECUTE FUNCTION lvrf_require_act()', t || '_act_present', t);
+  END LOOP;
+END $$;
+
+-- lvrf_lineage(table, id[, figure]) — "where did this come from" (P2, design
+-- §2.4; P2-D1, D2, D7). Read-only. Each step: what, the row, who, when, and
+-- its source: 'act' (a governance act recorded at the time), 'record' (the
+-- row's own who/when columns or the audit log — history before governance
+-- acts is labelled so, never turned into an act: P2-D2), 'seal' (a run's
+-- sealed payload). Outcome evidence in a run is matched by kind, summary and
+-- source, labelled so: snapshots carry no evidence id (P2-D7).
+CREATE OR REPLACE FUNCTION lvrf_lineage_act(p_table text, p_id uuid, p_acts text[])
+RETURNS TABLE (actor text, at timestamptz, reason text, act text, result_table text, result_id uuid)
+LANGUAGE sql STABLE AS $$
+  SELECT p.full_name, a.at, a.reason, a.act::text, a.result_table, a.result_id
+    FROM governance_acts a JOIN persons p ON p.id = a.actor_person_id
+   WHERE a.subject_table = p_table AND a.subject_id = p_id AND a.act::text = ANY (p_acts)
+   ORDER BY a.at LIMIT 1
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_research(p_result uuid)
+RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  rr record;
+  a record;
+BEGIN
+  SELECT r.*, pp.full_name AS parser INTO rr FROM research_results r JOIN persons pp ON pp.id = r.parsed_by_person_id WHERE r.id = p_result;
+  IF rr.id IS NULL THEN RETURN; END IF;
+  IF rr.prompt_id IS NULL THEN
+    RETURN QUERY SELECT 'prompt'::text, NULL::text, NULL::uuid, NULL::text, NULL::timestamptz, 'record'::text,
+      jsonb_build_object('note', 'untracked: parsed before research prompts were tracked (12 Oct 2026)');
+  ELSE
+    RETURN QUERY SELECT 'prompt'::text, 'research_prompts'::text, p.id, g.full_name, p.generated_at, 'record'::text,
+      jsonb_build_object('phase', p.phase, 'contract_version', p.contract_version, 'template_version', p.template_version,
+                         'prompt_sha256', encode(sha256(convert_to(p.prompt_text, 'UTF8')), 'hex'))
+      FROM research_prompts p JOIN persons g ON g.id = p.generated_by_person_id WHERE p.id = rr.prompt_id;
+  END IF;
+  IF rr.import_id IS NULL THEN
+    RETURN QUERY SELECT 'import'::text, NULL::text, NULL::uuid, NULL::text, NULL::timestamptz, 'record'::text,
+      jsonb_build_object('note', 'no import (before research imports, 25 Oct 2026)');
+  ELSE
+    SELECT * INTO a FROM lvrf_lineage_act('research_imports', rr.import_id, ARRAY['import']);
+    RETURN QUERY SELECT 'import'::text, 'research_imports'::text, i.id, coalesce(a.actor, ip.full_name), coalesce(a.at, i.imported_at),
+      CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+      jsonb_build_object('raw_sha256', i.raw_sha256, 'byte_length', i.byte_length)
+      FROM research_imports i JOIN persons ip ON ip.id = i.imported_by_person_id WHERE i.id = rr.import_id;
+  END IF;
+  RETURN QUERY SELECT 'result'::text, 'research_results'::text, rr.id, rr.parser, rr.parsed_at, 'record'::text,
+    jsonb_build_object('field', rr.field_name, 'found', rr.found, 'research_tool', rr.research_tool, 'contract_version', rr.contract_version);
+  SELECT * INTO a FROM lvrf_lineage_act('research_results', rr.id, ARRAY['accept', 'reject']);
+  IF a.actor IS NOT NULL THEN
+    RETURN QUERY SELECT a.act, 'research_results'::text, rr.id, a.actor, a.at, 'act'::text, jsonb_build_object('reason', a.reason);
+  ELSIF rr.review_state::text <> 'pending' THEN
+    RETURN QUERY SELECT (CASE WHEN rr.review_state::text = 'accepted' THEN 'accept' ELSE 'reject' END), 'research_results'::text, rr.id,
+      (SELECT full_name FROM persons WHERE id = rr.reviewed_by_person_id), rr.reviewed_at, 'record'::text,
+      jsonb_build_object('reason', rr.review_note, 'note',
+        CASE WHEN rr.reviewed_at < '2026-10-25 00:00:00+00' THEN 'recorded before governance acts (25 Oct 2026)' ELSE 'no act recorded' END);
+  ELSE
+    RETURN QUERY SELECT 'pending'::text, 'research_results'::text, rr.id, NULL::text, NULL::timestamptz, 'record'::text,
+      jsonb_build_object('note', 'not yet reviewed');
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_evidence(p_evidence uuid, p_with_research boolean)
+RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  e record;
+  a record;
+  rid uuid;
+BEGIN
+  SELECT ev.*, cp.full_name AS captured_by, lvrf_evidence_basis(ev) AS basis INTO e
+    FROM evidence ev JOIN persons cp ON cp.id = ev.captured_by_person_id WHERE ev.id = p_evidence;
+  IF e.id IS NULL THEN RETURN; END IF;
+  IF p_with_research THEN
+    SELECT r.id INTO rid FROM research_results r WHERE r.evidence_id = p_evidence ORDER BY r.parsed_at LIMIT 1;
+    IF rid IS NOT NULL THEN RETURN QUERY SELECT * FROM lvrf_lineage_research(rid); END IF;
+  END IF;
+  RETURN QUERY SELECT 'evidence'::text, 'evidence'::text, e.id, e.captured_by, e.created_at, 'record'::text,
+    jsonb_build_object('kind', e.kind, 'summary', e.summary, 'provenance', e.provenance, 'basis', e.basis,
+                       'evidence_form', e.evidence_form, 'quote_text', e.quote_text, 'locator', e.locator, 'how_read', e.how_read,
+                       'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified);
+  IF e.citation_resolved THEN
+    SELECT * INTO a FROM lvrf_lineage_act('evidence', e.id, ARRAY['open_citation']);
+    IF a.actor IS NULL THEN
+      -- Opened as part of an accept (H1): the accept act names this evidence.
+      SELECT p.full_name AS actor, g.at, g.reason, g.act::text AS act, g.result_table, g.result_id INTO a
+        FROM governance_acts g JOIN persons p ON p.id = g.actor_person_id
+       WHERE e.id = ANY (g.evidence_ids) AND g.act = 'accept' ORDER BY g.at LIMIT 1;
+    END IF;
+    RETURN QUERY SELECT 'open_citation'::text, 'evidence'::text, e.id,
+      coalesce(a.actor, (SELECT full_name FROM persons WHERE id = e.citation_resolved_by_person_id)), coalesce(a.at, e.citation_resolved_at),
+      CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+      CASE WHEN a.actor IS NOT NULL THEN jsonb_build_object('source_verified', e.source_verified, 'act', a.act)
+           WHEN e.citation_resolved_at < '2026-10-25 00:00:00+00' THEN jsonb_build_object('source_verified', e.source_verified, 'note', 'recorded before governance acts (25 Oct 2026)')
+           ELSE jsonb_build_object('source_verified', e.source_verified, 'note', 'no act recorded') END;
+  END IF;
+  IF e.attested_by_person_id IS NOT NULL THEN
+    RETURN QUERY SELECT 'attested'::text, 'evidence'::text, e.id, (SELECT full_name FROM persons WHERE id = e.attested_by_person_id), e.attested_at,
+      'record'::text, '{}'::jsonb;
+  END IF;
+  RETURN QUERY SELECT 'figure_check'::text, 'figure_checks'::text, f.id, (SELECT full_name FROM persons WHERE id = f.checked_by_person_id), f.checked_at,
+    'record'::text, jsonb_build_object('result', f.result, 'detail', f.detail, 'subject', f.subject_table || '.' || f.subject_field)
+    FROM figure_checks f WHERE f.evidence_id = p_evidence ORDER BY f.checked_at;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_links(p_evidence uuid, p_outcome uuid, p_supports text)
+RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  l record;
+  a record;
+BEGIN
+  FOR l IN
+    SELECT v.*, ins.at AS linked_at, (SELECT full_name FROM persons WHERE id = ins.actor_person_id) AS linked_by
+      FROM value_outcome_evidence v
+      LEFT JOIN LATERAL (SELECT x.at, x.actor_person_id FROM audit_log x
+                          WHERE x.table_name = 'value_outcome_evidence' AND x.operation = 'insert'
+                            AND x.new_row->>'value_outcome_id' = v.value_outcome_id::text AND x.new_row->>'evidence_id' = v.evidence_id::text
+                            AND x.new_row->>'supports' = v.supports ORDER BY x.at LIMIT 1) ins ON true
+     WHERE v.evidence_id = p_evidence AND (p_outcome IS NULL OR v.value_outcome_id = p_outcome)
+       AND (p_supports IS NULL OR v.supports = p_supports OR v.corrects_supports = p_supports)
+     ORDER BY ins.at NULLS FIRST
+  LOOP
+    SELECT * INTO a FROM lvrf_lineage_act('value_outcome_evidence', l.value_outcome_id, ARRAY['correct']);
+    RETURN QUERY SELECT CASE WHEN l.corrects_supports IS NOT NULL THEN 'correct' ELSE 'link' END, 'value_outcome_evidence'::text, l.value_outcome_id,
+      coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.actor END, l.linked_by), coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.at END, l.linked_at),
+      CASE WHEN l.corrects_supports IS NOT NULL AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+      jsonb_build_object('outcome', l.value_outcome_id, 'evidence', l.evidence_id, 'supports', l.supports,
+                         'corrects_supports', l.corrects_supports, 'reason', l.correction_reason, 'current', l.withdrawn_at IS NULL);
+    IF l.withdrawn_at IS NOT NULL THEN
+      RETURN QUERY SELECT 'withdrawn'::text, 'value_outcome_evidence'::text, l.value_outcome_id,
+        (SELECT full_name FROM persons WHERE id = l.withdrawn_by_person_id), l.withdrawn_at,
+        CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+        jsonb_build_object('supports', l.supports, 'reason', l.withdrawal_reason);
+    END IF;
+  END LOOP;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_seals(p_where text, p_value text)
+RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE sql STABLE AS $$
+  SELECT 'seal'::text, 'value_runs'::text, r.id, (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
+         coalesce(r.locked_at, r.walked_at), 'seal'::text,
+         jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL)
+           || CASE WHEN p_where = 'outcome' THEN jsonb_build_object('sealed_baseline', r.payload->'baselineValue', 'sealed_actual', r.payload->'actualValue') ELSE '{}'::jsonb END
+    FROM value_runs r
+   WHERE r.deleted_at IS NULL
+     AND ((p_where = 'fact' AND r.payload->'institutionFacts' @> jsonb_build_array(jsonb_build_object('id', p_value)))
+       OR (p_where = 'entity' AND r.payload->'entity'->>'id' = p_value)
+       OR (p_where = 'outcome' AND r.payload->>'valueOutcomeId' = p_value))
+   ORDER BY r.run_number
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_supersession(p_table text, p_id uuid)
+RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  j jsonb;
+  pred uuid;
+  a record;
+BEGIN
+  EXECUTE format('SELECT x.id FROM public.%I x WHERE x.superseded_by_id = $1', p_table) INTO pred USING p_id;
+  IF pred IS NOT NULL THEN
+    EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', p_table) INTO j USING pred;
+    SELECT * INTO a FROM lvrf_lineage_act(p_table, pred, ARRAY['supersede']);
+    RETURN QUERY SELECT 'supersedes'::text, p_table, pred, a.actor, a.at, CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+      jsonb_build_object('reason', j->>'supersession_reason', 'note', CASE WHEN a.actor IS NULL THEN 'recorded before governance acts (25 Oct 2026)' END);
+  END IF;
+  EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', p_table) INTO j USING p_id;
+  IF j->>'superseded_by_id' IS NOT NULL THEN
+    SELECT * INTO a FROM lvrf_lineage_act(p_table, p_id, ARRAY['supersede']);
+    RETURN QUERY SELECT 'superseded_by'::text, p_table, (j->>'superseded_by_id')::uuid, a.actor, a.at,
+      CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END, jsonb_build_object('reason', j->>'supersession_reason');
+  END IF;
+  IF j->>'deleted_at' IS NOT NULL THEN
+    SELECT * INTO a FROM lvrf_lineage_act(p_table, p_id, ARRAY['withdraw', 'retire']);
+    RETURN QUERY SELECT 'withdrawn'::text, p_table, p_id, coalesce(a.actor, (SELECT full_name FROM persons WHERE id = (j->>'retired_by_person_id')::uuid)),
+      coalesce(a.at, (j->>'deleted_at')::timestamptz), CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+      jsonb_build_object('reason', j->>'retirement_reason');
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage_rows(p_rows jsonb, p_kind text, p_table text, p_id uuid, p_actor text, p_at timestamptz, p_source text, p_detail jsonb)
+RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT p_rows || jsonb_build_array(jsonb_build_object('kind', p_kind, 'row_table', p_table, 'row_id', p_id, 'actor', p_actor,
+                                                        'at', p_at, 'source', p_source, 'detail', p_detail))
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_lineage(p_table text, p_id uuid, p_figure text DEFAULT NULL)
+RETURNS TABLE (step int, kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  st jsonb := '[]'::jsonb;
+  x record;
+  o record;
+  a record;
+  rid uuid;
+  ev uuid;
+  j jsonb;
+  k bigint;
+  matched constant text := 'matched by kind, summary and source; not sealed by id';
+BEGIN
+  IF p_table NOT IN ('institution_facts', 'institution_entities', 'industry_measures', 'evidence', 'value_outcomes') THEN
+    RAISE EXCEPTION 'LVRF: lineage is traced for facts, entities, pack measures, evidence and an outcome''s figure; not for %.', p_table
+      USING ERRCODE = 'check_violation';
+  END IF;
+  IF p_table = 'value_outcomes' AND coalesce(p_figure, '') NOT IN ('baseline', 'actual') THEN
+    RAISE EXCEPTION 'LVRF: an outcome''s lineage is of its baseline or its actual; name which.' USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF p_table IN ('institution_facts', 'institution_entities', 'industry_measures') THEN
+    IF p_table = 'institution_facts' THEN
+      SELECT f.id, f.evidence_id, f.created_at, p.full_name AS who,
+             jsonb_build_object('kind', f.kind, 'value_numeric', f.value_numeric, 'value_text', f.value_text, 'unit', f.unit, 'as_of', f.as_of) AS d
+        INTO x FROM institution_facts f JOIN persons p ON p.id = f.captured_by_person_id WHERE f.id = p_id;
+      SELECT r.id INTO rid FROM research_results r WHERE r.institution_fact_id = p_id;
+    ELSIF p_table = 'institution_entities' THEN
+      SELECT e.id, e.evidence_id, e.created_at, p.full_name AS who,
+             jsonb_build_object('legal_name', e.legal_name, 'identifier_type', e.identifier_type, 'identifier', e.identifier) AS d
+        INTO x FROM institution_entities e JOIN persons p ON p.id = e.captured_by_person_id WHERE e.id = p_id;
+      SELECT r.id INTO rid FROM research_results r WHERE r.institution_entity_id = p_id;
+    ELSE
+      SELECT m.id, NULL::uuid AS evidence_id, m.created_at, NULL::text AS who,
+             jsonb_build_object('name', m.name, 'unit', m.unit, 'direction', m.direction, 'citation', m.citation, 'status', m.status) AS d
+        INTO x FROM industry_measures m WHERE m.id = p_id;
+      SELECT r.id INTO rid FROM research_results r WHERE r.industry_measures_id = p_id;
+    END IF;
+    IF x.id IS NULL THEN RETURN; END IF;
+    IF rid IS NOT NULL THEN
+      st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_research(rid)
+                              WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    ELSE
+      st := lvrf_lineage_rows(st, 'origin', NULL, NULL, NULL, NULL, 'record', jsonb_build_object('note', 'recorded directly, not from a research result'));
+    END IF;
+    IF x.evidence_id IS NOT NULL THEN
+      st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_evidence(x.evidence_id, false)
+                              WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    END IF;
+    st := lvrf_lineage_rows(st, CASE p_table WHEN 'institution_facts' THEN 'fact' WHEN 'institution_entities' THEN 'entity' ELSE 'measure' END,
+                            p_table, x.id, x.who, x.created_at, 'record', x.d);
+    st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_supersession(p_table, p_id)
+                            WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    IF p_table <> 'industry_measures' THEN
+      st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord)
+                              FROM lvrf_lineage_seals(CASE WHEN p_table = 'institution_facts' THEN 'fact' ELSE 'entity' END, p_id::text)
+                              WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    END IF;
+
+  ELSIF p_table = 'evidence' THEN
+    IF NOT EXISTS (SELECT 1 FROM evidence WHERE id = p_id) THEN RETURN; END IF;
+    st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_evidence(p_id, true)
+                            WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_links(p_id, NULL, NULL)
+                            WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    -- Runs that sealed it, through each outcome it was linked to: matched (P2-D7).
+    st := st || coalesce((
+      SELECT jsonb_agg(jsonb_build_object('kind', 'seal', 'row_table', 'value_runs', 'row_id', r.id,
+               'actor', (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
+               'at', coalesce(r.locked_at, r.walked_at), 'source', 'seal',
+               'detail', jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL,
+                                            'sealed_supports', item->>'supports', 'matched', matched)) ORDER BY r.run_number)
+        FROM evidence e
+        JOIN (SELECT DISTINCT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = p_id) lo ON true
+        JOIN value_runs r ON r.payload->>'valueOutcomeId' = lo.value_outcome_id::text AND r.deleted_at IS NULL
+        CROSS JOIN LATERAL jsonb_array_elements(r.payload->'evidence') item
+       WHERE e.id = p_id AND item->>'kind' = e.kind::text AND item->>'summary' = e.summary AND item->>'provenance' = e.provenance), '[]'::jsonb);
+    st := st || coalesce((
+      SELECT jsonb_agg(jsonb_build_object('kind', 'erratum', 'row_table', 'run_errata', 'row_id', x2.id, 'actor', p.full_name, 'at', x2.recorded_at,
+               'source', 'act', 'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
+                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x2.id)))
+               ORDER BY r.run_number, x2.recorded_at)
+        FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
+       WHERE x2.evidence_id = p_id), '[]'::jsonb);
+
+  ELSE -- value_outcomes, one figure
+    SELECT vo.*, bm.name AS metric INTO o FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id WHERE vo.id = p_id;
+    IF o.id IS NULL THEN RETURN; END IF;
+    SELECT * INTO a FROM lvrf_lineage_act('value_outcomes', p_id, ARRAY['measure']);
+    st := lvrf_lineage_rows(st, p_figure, 'value_outcomes', o.id,
+            CASE WHEN p_figure = 'actual' AND a.actor IS NOT NULL THEN a.actor
+                 ELSE (SELECT pp.full_name FROM audit_log al JOIN persons pp ON pp.id = al.actor_person_id
+                        WHERE al.table_name = 'value_outcomes' AND al.record_id = o.id::text AND al.operation = 'insert' ORDER BY al.at LIMIT 1) END,
+            CASE WHEN p_figure = 'baseline' THEN o.created_at ELSE o.actual_measured_at END,
+            CASE WHEN p_figure = 'actual' AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
+            jsonb_build_object('metric', o.metric, 'value', CASE WHEN p_figure = 'baseline' THEN o.baseline_value ELSE o.actual_value END,
+                               'measured_at', CASE WHEN p_figure = 'baseline' THEN o.baseline_measured_at ELSE o.actual_measured_at END));
+    FOR ev IN SELECT v.evidence_id FROM value_outcome_evidence v JOIN evidence e ON e.id = v.evidence_id
+               WHERE v.value_outcome_id = p_id AND (v.supports = p_figure OR v.corrects_supports = p_figure)
+               GROUP BY v.evidence_id, e.created_at ORDER BY e.created_at, v.evidence_id LOOP
+      st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_evidence(ev, true)
+                              WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+      st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_links(ev, p_id, p_figure)
+                              WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    END LOOP;
+    IF p_figure = 'actual' AND o.verified_at IS NOT NULL THEN
+      SELECT * INTO a FROM lvrf_lineage_act('value_outcomes', p_id, ARRAY['verify']);
+      st := lvrf_lineage_rows(st, 'verify', 'value_outcomes', p_id,
+              coalesce(a.actor, (SELECT full_name FROM persons WHERE id = o.verified_by_person_id)), coalesce(a.at, o.verified_at),
+              CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END, jsonb_build_object('reason', a.reason));
+    END IF;
+    st := st || coalesce((SELECT jsonb_agg(to_jsonb(t) - 'ord' ORDER BY t.ord) FROM lvrf_lineage_seals('outcome', p_id::text)
+                            WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
+    st := st || coalesce((
+      SELECT jsonb_agg(jsonb_build_object('kind', 'erratum', 'row_table', 'run_errata', 'row_id', x2.id, 'actor', p.full_name, 'at', x2.recorded_at,
+               'source', 'act', 'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
+                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s2 WHERE s2.supersedes_id = x2.id)))
+               ORDER BY r.run_number, x2.recorded_at)
+        FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
+       WHERE x2.value_outcome_id = p_id), '[]'::jsonb);
+  END IF;
+
+  FOR j, k IN SELECT e.v, e.o FROM jsonb_array_elements(st) WITH ORDINALITY AS e(v, o) ORDER BY e.o LOOP
+    step := k::int; kind := j->>'kind'; row_table := j->>'row_table'; row_id := (j->>'row_id')::uuid; actor := j->>'actor';
+    at := (j->>'at')::timestamptz; source := j->>'source'; detail := j->'detail';
+    RETURN NEXT;
+  END LOOP;
+END $$;
+
+-- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -2287,7 +2826,11 @@ COMMIT;
 --   26: value_outcome_evidence_guard, value_outcome_evidence_vendor_impact_only,
 --   run_errata_audit, run_errata_no_delete, run_errata_immutable,
 --   run_errata_steward_only — 6
---   Total: 141 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   27: governance_acts_audit, _no_delete, _immutable, _guard,
+--   research_imports_audit, _no_delete, _immutable,
+--   research_results_import_matches, and <t>_act_present on 18 tables
+--   (deferred constraint triggers) — 26
+--   Total: 167 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -2298,15 +2841,16 @@ COMMIT;
 --   reference_example_markers' four each, section 22's seven.
 --   0037 (W1 fix) took it 126 -> 129: section 23's three.
 --   0039 (P1) took it 129 -> 135: section 25's six.
---   0040 (C1) took it 135 -> 141: section 26's six.)
+--   0040 (C1) took it 135 -> 141: section 26's six.
+--   0041 (P2) took it 141 -> 167: section 27's twenty-six.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 141.
+-- TRUNCATE in section 14 fail. Total stays 167.
 --
--- Expect 213 rows here: information_schema.triggers emits one row per event
+-- Expect 260 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -2328,7 +2872,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197; 0039's section 25 adds evidence_form_guard I+U, institution_facts_form_kept U, figure_checks audit I+U, no_delete D, immutable U, guard I: +8 = 205; 0040's section 26 adds the link guard I+U, vendor_impact_only I, run_errata audit I+U, no_delete D, immutable U, steward_only I: +8 = 213 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197; 0039's section 25 adds evidence_form_guard I+U, institution_facts_form_kept U, figure_checks audit I+U, no_delete D, immutable U, guard I: +8 = 205; 0040's section 26 adds the link guard I+U, vendor_impact_only I, run_errata audit I+U, no_delete D, immutable U, steward_only I: +8 = 213; 0041's section 27 adds governance_acts audit I+U, no_delete D, immutable U, guard I, research_imports audit I+U, no_delete D, immutable U, research_results_import_matches I+U, and 18 _act_present I+U: +47 = 260 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

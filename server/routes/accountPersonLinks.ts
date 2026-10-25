@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -150,6 +151,7 @@ export function accountPersonLinkRouter(pool: Pool): Router {
         'UPDATE account_person_links SET retired_at = now(), retired_by_person_id = $2, retirement_reason = $3 WHERE id = $1',
         [id, actor, reason],
       );
+      await recordAct(client, req, 'POST /api/account-person-links/:id/retire', { act: 'withdraw', tenantId: l.tenant_id, subjectTable: 'account_person_links', subjectId: id, reason });
       res.status(200).json({ account_person_link_id: id, retired: true });
     } catch (err) {
       await answer(pool, err, req, res, endpoint, id, tenantId, institutionId);

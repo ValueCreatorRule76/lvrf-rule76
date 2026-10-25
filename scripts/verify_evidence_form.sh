@@ -19,6 +19,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
+. scripts/lib/raw_text.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -63,7 +65,7 @@ sqlrefused() {  # LABEL SQL EXPECTED_SUBSTRING
 }
 req() {  # METHOD PATH [BODY] [ACTOR]
   if [ "$1" = GET ]; then CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -H "x-actor-person-id: ${4:-$S}" "$BASE$2")"
-  else CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$3" "$BASE$2")"; fi
+  else CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: ${4:-$S}" -d "$(asraw "$2" "${3:-}")" "$BASE$2")"; fi
 }
 rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }
 said() { node -e "try{const b=require('$W/r.json');console.log(b.message!==undefined?[b.message,...(b.issues??[])].join(' | '):JSON.stringify(b))}catch{console.log('')}"; }
@@ -86,7 +88,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "141" ] && ok "141 triggers by pg_trigger (129 + section 25's six + section 26's six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "167" ] && ok "167 triggers by pg_trigger (129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -195,10 +197,11 @@ expect POST "/api/account-research-results/$RG/accept" '{"review_note":"Verifica
 PE="$(q "SELECT id FROM institution_entities WHERE institution_id = '$INST_R' AND superseded_by_id IS NULL")"
 P_V1="$(q "INSERT INTO research_prompts (tenant_id, institution_id, phase, entity_id, result_kind, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
   VALUES ('$TEN', '$INST_R', 'facts', '$PE', 'institution_fact', 1, 1, 'v1 prompt (fixture)', encode(sha256(convert_to('v1 prompt (fixture)', 'UTF8')), 'hex'), '$S') RETURNING id" | head -1)"
-R_V1="$(q "INSERT INTO research_results (tenant_id, result_kind, institution_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version)
-  VALUES ('$TEN', 'institution_fact', '$INST_R', 'revenue', true,
-    '{\"subject\":\"fact\",\"ai_sourced\":true,\"item\":{\"kind\":\"revenue\",\"value\":4321500000,\"unit\":\"USD\",\"as_of\":\"2024-09-30\",\"period\":\"FY2024\",\"source_kind\":\"public_filing\",\"citation\":\"Fixture 10-K FY2024, Item 8\",\"quote\":\"Net sales were \$4,321.5 million.\",\"caveats\":[]}}',
-    'q', 'qe', 'Verification tool', '$S', '$P_V1', 1) RETURNING id" | head -1)"
+# P2: a result written by SQL after the cutover names its import (with its own act; scripts/lib/acts.sh).
+V1_RAW='{"subject":"fact","ai_sourced":true,"item":{"kind":"revenue","value":4321500000,"unit":"USD","as_of":"2024-09-30","period":"FY2024","source_kind":"public_filing","citation":"Fixture 10-K FY2024, Item 8","quote":"Net sales were $4,321.5 million.","caveats":[]}}'
+IMP_V1="$(newid)"; R_V1="$(newid)"
+q "$(import_sql "$IMP_V1" "$P_V1" "$S" "$V1_RAW"); INSERT INTO research_results (id, tenant_id, result_kind, institution_id, field_name, found, raw_response, research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id)
+  VALUES ('$R_V1', '$TEN', 'institution_fact', '$INST_R', 'revenue', true, '$V1_RAW', 'q', 'qe', 'Verification tool', '$S', '$P_V1', 1, '$IMP_V1')" > /dev/null || R_V1=""
 [ -n "$R_V1" ] && ok "a v1 fact result (quote, no how-read), as parsed before 0039" || bad "v1 fixture"
 expect POST "/api/account-research-results/$R_V1/accept" '{"review_note":"Verification: matches Item 8.","citation_opened":true}' 422 "accept the v1 fact without how-read: refused, in words" "which carried no how-read"
 expect POST "/api/account-research-results/$R_V1/accept" '{"review_note":"Verification: matches Item 8.","citation_opened":true,"how_read":"Net sales for FY2024 from Item 8, stated in millions."}' 200 "accept it with the reviewer's how-read (P1-D5)"

@@ -13,6 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -46,7 +47,8 @@ INST_R="$(q "SELECT i.name FROM engagements e JOIN institutions i ON i.id = e.in
 RUN_R="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG_R' ORDER BY run_number LIMIT 1")"
 RUN_C="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG_C' ORDER BY run_number LIMIT 1")"
 N_R="$(q "SELECT count(*) FROM value_runs WHERE engagement_id = '$ENG_R' AND deleted_at IS NULL")"
-q "UPDATE engagements SET deleted_at = now(), status = 'retired' WHERE id = '$ENG_R'" > /dev/null
+# P2: a governed transition written by SQL on the clone carries its act (scripts/lib/acts.sh).
+q "UPDATE engagements SET deleted_at = now(), status = 'retired' WHERE id = '$ENG_R'; $(act_sql retire engagements "$ENG_R" "$STAFF" 'POST /api/engagements/:id/retire')" > /dev/null
 [ -n "$RUN_R" ] && [ -n "$RUN_C" ] && ok "retired an engagement of '$INST_R' with $N_R runs; another engagement stays current" || { bad "fixtures"; exit 1; }
 
 step "3. Server"

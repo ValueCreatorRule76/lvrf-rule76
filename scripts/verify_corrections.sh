@@ -109,8 +109,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "141" ] \
-    && ok "  ...hardening.sql re-applied: the function as declared, 141 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "167" ] \
+    && ok "  ...hardening.sql re-applied: the function as declared, 167 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 seals() { q "SELECT string_agg(r.id || ':' || md5(r::text), ' ' ORDER BY r.run_number) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -134,7 +134,7 @@ HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | t
 printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before 0040: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0040_corrections)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "141" ] && ok "141 triggers by pg_trigger (135 + section 26's six)" || bad "triggers: $(trig)"
+[ "$(trig)" = "167" ] && ok "167 triggers by pg_trigger (135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0040 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE withdrawn_at IS NULL AND corrects_supports IS NULL) FROM value_outcome_evidence")" = "$LINKS0|$LINKS0" ] \
@@ -151,6 +151,12 @@ files = sorted(glob.glob('server/**/*.ts', recursive=True)) + ['db/hardening.sql
 # Reads that are meant to see every link, whatever its state — named, each with its reason.
 EXEMPT = {
   ('db/hardening.sql', 'l.supports = NEW.corrects_supports'): 'the guard: a correction names a predecessor in any state',
+  # P2 (0041): lineage shows withdrawn links on purpose (struck through, with who and why); the act
+  # guard asks only whether the link named exists, in any state.
+  ('db/hardening.sql', 'l.evidence_id = NEW.result_id'): 'the act guard: the link an act names exists',
+  ('db/hardening.sql', 'v.evidence_id = p_evidence'): 'lineage: every link of the evidence, withdrawn ones shown as withdrawn',
+  ('db/hardening.sql', 'WHERE evidence_id = p_id) lo'): 'lineage: every outcome the evidence was ever linked to, for the runs that sealed it',
+  ('db/hardening.sql', 'v.supports = p_figure OR v.corrects_supports = p_figure'): "lineage: every link of the outcome's figure, withdrawn ones shown as withdrawn",
 }
 bad = []; n = 0
 for f in files:
@@ -168,7 +174,7 @@ for f in files:
 print(n, ' '.join(bad))
 PY
 read -r NREADS UNFILTERED < <(cat "$W/grep.txt"; echo) || true
-[ -z "${UNFILTERED:-}" ] && [ "${NREADS:-0}" -ge 15 ] && ok "$NREADS reads of value_outcome_evidence in server/ and hardening.sql: every one filters on withdrawn_at (one named exemption: the guard's predecessor check)" \
+[ -z "${UNFILTERED:-}" ] && [ "${NREADS:-0}" -ge 15 ] && ok "$NREADS reads of value_outcome_evidence in server/ and hardening.sql: every one filters on withdrawn_at, or is a named exemption (C1's guard; P2's act guard and lineage, which show withdrawn links)" \
   || bad "a reader without the filter: ${UNFILTERED:-} (of $NREADS)"
 
 step "4. Fixtures and the server"

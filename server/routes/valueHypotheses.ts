@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
@@ -289,6 +290,9 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
         [tenantId, institutionId, m.kind, m.sourceCitation, m.note, actor],
       );
+      await recordAct(client, req, 'POST /api/institutions/:institutionId/reference-example', {
+        act: 'mark', tenantId: inst.tenant_id, subjectTable: 'reference_example_markers', subjectId: row.id, reason: m.note,
+      });
       res.status(201).json({ reference_example_marker_id: row.id });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'reference_example_markers', null, tenantId, institutionId);
@@ -389,6 +393,9 @@ export function valueHypothesisRouter(pool: Pool): Router {
         `UPDATE value_hypotheses SET superseded_by_id = $2, supersession_reason = $3, status = 'superseded' WHERE id = $1`,
         [id, n.id, reason],
       );
+      await recordAct(client, req, 'POST /api/value-hypotheses/:id/supersede', {
+        act: 'supersede', tenantId: h.tenant_id, subjectTable: 'value_hypotheses', subjectId: id, resultTable: 'value_hypotheses', resultId: n.id, reason,
+      });
       res.status(201).json({ value_hypothesis_id: n.id, supersedes: id });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'value_hypotheses', id, tenantId, institutionId);
@@ -429,6 +436,7 @@ export function valueHypothesisRouter(pool: Pool): Router {
         `UPDATE value_hypotheses SET deleted_at = now(), status = 'retired', retired_by_person_id = $2, retirement_reason = $3 WHERE id = $1`,
         [id, actor, reason],
       );
+      await recordAct(client, req, 'POST /api/value-hypotheses/:id/withdraw', { act: 'withdraw', tenantId: h.tenant_id, subjectTable: 'value_hypotheses', subjectId: id, reason });
       res.status(200).json({ value_hypothesis_id: id, verdict: 'withdrawn' });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'value_hypotheses', id, tenantId, institutionId);
@@ -490,6 +498,9 @@ export function referenceExampleRouter(pool: Pool): Router {
         `UPDATE reference_example_markers SET superseded_by_id = $2, supersession_reason = $3, status = 'superseded' WHERE id = $1`,
         [id, n.id, reason],
       );
+      await recordAct(client, req, 'POST /api/reference-examples/:id/supersede', {
+        act: 'supersede', tenantId: m.tenant_id, subjectTable: 'reference_example_markers', subjectId: id, resultTable: 'reference_example_markers', resultId: n.id, reason,
+      });
       res.status(201).json({ reference_example_marker_id: n.id, supersedes: id });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'reference_example_markers', id, tenantId, institutionId);
@@ -527,6 +538,7 @@ export function referenceExampleRouter(pool: Pool): Router {
         `UPDATE reference_example_markers SET deleted_at = now(), status = 'retired', retired_by_person_id = $2, retirement_reason = $3 WHERE id = $1`,
         [id, actor, reason],
       );
+      await recordAct(client, req, 'POST /api/reference-examples/:id/retire', { act: 'withdraw', tenantId: m.tenant_id, subjectTable: 'reference_example_markers', subjectId: id, reason });
       res.status(200).json({ reference_example_marker_id: id, retired: true });
     } catch (err) {
       await answerError(pool, err, req, res, endpoint, 'reference_example_markers', id, tenantId, institutionId);

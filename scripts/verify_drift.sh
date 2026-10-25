@@ -15,6 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/acts.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -107,9 +108,11 @@ INST="$(q "SELECT id FROM institutions WHERE deleted_at IS NULL ORDER BY created
 fact() { local ev; ev="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'D4 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
   q "INSERT INTO institution_facts (institution_id, kind, value_text, as_of, evidence_id, captured_by_person_id) VALUES ('$INST', 'system', '$1', '2026-10-01', '$ev', '$STAFF') RETURNING id" | head -1; }
 FA="$(fact 'D4 old')"; FB="$(fact 'D4 new')"; FC="$(fact 'D4 other')"
-q "UPDATE institution_facts SET superseded_by_id = '$FB', supersession_reason = 'Verification: a D4 fixture chain.' WHERE id = '$FA'" > /dev/null
+# P2: each governed transition written by SQL on the clone carries its act (scripts/lib/acts.sh).
+SUP='POST /api/institutions/:institutionId/facts/:factId/supersede'
+q "UPDATE institution_facts SET superseded_by_id = '$FB', supersession_reason = 'Verification: a D4 fixture chain.' WHERE id = '$FA'; $(act_sql supersede institution_facts "$FA" "$STAFF" "$SUP" institution_facts "$FB")" > /dev/null
 baseline_ok && ok "a sound chain (A -> B) -> no D4" || bad "sound chain: $(report)"
-q "UPDATE institution_facts SET deleted_at = now() WHERE id = '$FB'" > /dev/null
+q "UPDATE institution_facts SET deleted_at = now() WHERE id = '$FB'; $(act_sql supersede institution_facts "$FB" "$STAFF" "$SUP")" > /dev/null
 R="$(report)"; echo "$R" | grep -q "^D4 warning: superseded rows whose successor has since been retired: institution_facts (1)" && ok "the successor retired -> D4 warning names institution_facts (1)" || bad "retired successor: $R"
 q "UPDATE institution_facts SET deleted_at = NULL WHERE id = '$FB'" > /dev/null
 q "ALTER TABLE institution_facts DROP CONSTRAINT institution_facts_superseded_by_fk" > /dev/null
@@ -119,7 +122,7 @@ q "ALTER TABLE institution_facts ADD CONSTRAINT institution_facts_superseded_by_
 # A fork can only exist if _supersession_sane was bypassed; bypass it as
 # the superuser to prove D4 sees what the trigger would have refused.
 q "ALTER TABLE institution_facts DISABLE TRIGGER institution_facts_supersession_sane" > /dev/null
-q "UPDATE institution_facts SET superseded_by_id = '$FB', supersession_reason = 'Verification: a forked chain.' WHERE id = '$FC'" > /dev/null
+q "UPDATE institution_facts SET superseded_by_id = '$FB', supersession_reason = 'Verification: a forked chain.' WHERE id = '$FC'; $(act_sql supersede institution_facts "$FC" "$STAFF" "$SUP" institution_facts "$FB")" > /dev/null
 q "ALTER TABLE institution_facts ENABLE TRIGGER institution_facts_supersession_sane" > /dev/null
 R="$(report)"; echo "$R" | grep -q "forked supersession chains (one successor claimed by two rows): institution_facts (1)" && ok "a fork (trigger bypassed) -> D4 critical names it" || bad "fork: $R"
 

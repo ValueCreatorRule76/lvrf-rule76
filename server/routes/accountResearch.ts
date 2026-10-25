@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { recordAct } from '../lib/governanceAct.js';
+import { readImportText, ImportTextError, type ImportText } from '../research/importText.js';
 import { Router, type Request } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
@@ -156,14 +158,16 @@ const UNDER_PREVIOUS_ENTITY_SQL = `
    ORDER BY f.kind, f.as_of, f.id`;
 
 /** L8 — a parser's 422, recorded through the pool (the request rolls back). */
-async function recordParseRefusal(pool: Pool, req: Request, tenantId: string, institutionId: string, issues: string[]): Promise<void> {
+async function recordParseRefusal(pool: Pool, req: Request, tenantId: string, institutionId: string, issues: string[],
+  // P2 (P2-D5, Brad's condition): the paste's hash and size, never its text.
+  attemptedPayload: Record<string, unknown>): Promise<void> {
   try {
     await pool.query(
       `INSERT INTO refusals (tenant_id, institution_id, actor_person_id, endpoint, subject_table, subject_id,
                              source, sqlstate, constraint_name, message, attempted_payload)
        VALUES ($1, $2, $3, 'POST /api/institutions/:institutionId/research-results', 'research_results', NULL,
                'parser', NULL, NULL, $4, $5)`,
-      [tenantId, institutionId, req.actor!.personId, `${issues.length} issue(s) found; nothing was written. ${issues.join(' | ')}`, req.body ?? {}],
+      [tenantId, institutionId, req.actor!.personId, `${issues.length} issue(s) found; nothing was written. ${issues.join(' | ')}`, attemptedPayload],
     );
   } catch (err) {
     // A failure to record must never change the answer — the 422 stands.
@@ -310,6 +314,8 @@ export function accountResearchRouter(pool: Pool): Router {
       return;
     }
     let refusalTenantId: string | null = null;
+    // P2 (P2-D5): what a refusal records of the paste — its hash and size, never its text.
+    let parserPayload: Record<string, unknown> = {};
     try {
       const actorPersonId = req.actor?.personId;
       if (!actorPersonId) throw new Error('req.actor missing on a request past requireActor');
@@ -320,9 +326,17 @@ export function accountResearchRouter(pool: Pool): Router {
       }
       refusalTenantId = institution.tenant_id;
 
-      const body = req.body;
+      // P2 (P2-D5): the pasted text, parsed here; the import stores exactly this text.
+      let imported: ImportText;
+      try {
+        imported = readImportText(req.body);
+      } catch (e) {
+        if (e instanceof ImportTextError) { parserPayload = e.parserPayload; throw new ValidationError(e.issues); }
+        throw e;
+      }
+      parserPayload = { raw_sha256: imported.sha256, byte_length: imported.bytes };
+      const body = imported.body;
       const issues: string[] = [];
-      if (!isRecord(body)) throw new ValidationError(['body is required']);
 
       const env = (k: string) => {
         const v = body[k];
@@ -406,30 +420,39 @@ export function accountResearchRouter(pool: Pool): Router {
 
       if (issues.length > 0) throw new ValidationError(issues);
 
+      // P2: the import first — the whole text, hashed — then each result naming it, then the act.
+      const { rows: [importRow] } = await client.query<{ id: string }>(
+        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [institution.tenant_id, promptId, imported.text, imported.sha256, imported.bytes, actorPersonId],
+      );
       const results: { id: string; field_name: string; found: boolean }[] = [];
       for (const r of rows) {
         const { rows: [inserted] } = await client.query<{ id: string; field_name: string; found: boolean }>(
           `INSERT INTO research_results (
              tenant_id, result_kind, institution_id, field_name, found, not_found_reason, raw_response,
-             research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version
-           ) VALUES ($1, 'institution_fact', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             research_query, query_as_executed, research_tool, parsed_by_person_id, prompt_id, contract_version, import_id
+           ) VALUES ($1, 'institution_fact', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
            RETURNING id, field_name, found`,
           [institution.tenant_id, institutionId, r.fieldName, r.found, r.reason,
             { subject: r.subject, item: r.item, ai_sourced: aiSourced },
-            researchQuery!, queryAsExecuted!, researchTool!, actorPersonId, promptId, INSTITUTION_FACT_CONTRACT_VERSION],
+            researchQuery!, queryAsExecuted!, researchTool!, actorPersonId, promptId, INSTITUTION_FACT_CONTRACT_VERSION, importRow.id],
         );
         results.push(inserted);
       }
-      res.status(201).json({ count: results.length, results });
+      await recordAct(client, req, 'POST /api/institutions/:institutionId/research-results', {
+        act: 'import', tenantId: institution.tenant_id, subjectTable: 'research_imports', subjectId: importRow.id,
+      });
+      res.status(201).json({ count: results.length, results, import_id: importRow.id, raw_sha256: imported.sha256 });
     } catch (err) {
       if (err instanceof ValidationError) {
-        if (refusalTenantId) await recordParseRefusal(pool, req, refusalTenantId, institutionId, err.issues);
+        if (refusalTenantId) await recordParseRefusal(pool, req, refusalTenantId, institutionId, err.issues, parserPayload);
         res.status(422).json({ message: `${err.issues.length} issue(s) found; nothing was written.`, issues: err.issues });
         return;
       }
       if (await handleGovernanceError(pool, err, req, res, {
         endpoint: 'POST /api/institutions/:institutionId/research-results', subjectTable: 'research_results',
-        subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
+        subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: parserPayload,
       })) return;
       respondServerError(res, err);
     }
@@ -520,6 +543,10 @@ export function accountResearchRouter(pool: Pool): Router {
         res.status(409).json({ message: 'the entity was corrected by another request just now; reload to see the current one.' });
         return;
       }
+      await recordAct(client, req, 'POST /api/institutions/:institutionId/entity/supersede', {
+        act: 'supersede', tenantId: institution.tenant_id, subjectTable: 'institution_entities', subjectId: old.id,
+        resultTable: 'institution_entities', resultId: created.id, evidenceIds: [evidenceId], reason: String(reason),
+      });
       const { rows: underPrevious } = await client.query(UNDER_PREVIOUS_ENTITY_SQL, [institutionId, old.id]);
       res.status(201).json({
         entity_id: created.id,
@@ -723,6 +750,11 @@ export function accountResearchReviewRouter(pool: Pool): Router {
           WHERE id = $1`,
         [resultId, actorPersonId, note, evidenceId, factId, entityId],
       );
+      await recordAct(client, req, 'POST /api/account-research-results/:id/accept', {
+        act: 'accept', tenantId: c.tenant_id, subjectTable: 'research_results', subjectId: resultId,
+        ...(factId ? { resultTable: 'institution_facts', resultId: factId } : entityId ? { resultTable: 'institution_entities', resultId: entityId } : {}),
+        evidenceIds: evidenceId ? [evidenceId] : [], reason: note,
+      });
       res.status(200).json({
         id: resultId, review_state: 'accepted', subject,
         evidence_id: evidenceId, institution_fact_id: factId, institution_entity_id: entityId,
@@ -773,6 +805,9 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         `UPDATE research_results SET review_state = 'rejected', reviewed_by_person_id = $2, review_note = $3 WHERE id = $1`,
         [resultId, actorPersonId, note],
       );
+      await recordAct(client, req, 'POST /api/account-research-results/:id/reject', {
+        act: 'reject', tenantId: c.tenant_id, subjectTable: 'research_results', subjectId: resultId, reason: note,
+      });
       res.status(200).json({ id: resultId, review_state: 'rejected' });
     } catch (err) {
       if (err instanceof ValidationError) {

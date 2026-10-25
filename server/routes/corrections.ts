@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
@@ -115,6 +116,11 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [outcomeId, evidenceId, supports, link.supports, actor, reason],
       );
+      // P2: the withdrawal and the correcting link, as one act (the link is named by its outcome and evidence).
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support', {
+        act: 'correct', tenantId: link.tenant_id, subjectTable: 'value_outcome_evidence', subjectId: outcomeId,
+        resultTable: 'evidence', resultId: evidenceId, reason,
+      });
       // The corrected link's figure check (P1), as outcome evidence's: a statement is not checkable;
       // a quote or a locator is checked when the figure exists; legacy evidence is not checked.
       const field = supports === 'baseline' ? 'baseline_value' : supports === 'actual' ? 'actual_value' : 'claimed_currency_impact';
@@ -220,6 +226,10 @@ export function erratumRouter(pool: Pool): Router {
           String(texts.wrong).trim(), String(texts.right).trim(), String(texts.reason).trim(),
           r.modelVersion, r.modelFingerprint, r.sealedScore, r.sealedBand, r.score, r.band, r.method, actor],
       );
+      await recordAct(client, req, 'POST /api/value-runs/:runId/errata', {
+        act: 'record_erratum', tenantId: tenantId!, subjectTable: 'run_errata', subjectId: row.id, evidenceIds: [b.evidence_id],
+        reason: String(texts.reason).trim(),
+      });
       res.status(201).json({ erratum_id: row.id, supersedes_erratum_id: supersedes ?? null, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId });

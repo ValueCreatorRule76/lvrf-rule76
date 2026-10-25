@@ -1,4 +1,5 @@
 import type { Run } from '../../types/run';
+import { LineageLink } from '../LineageLink';
 import { Badge } from './Card';
 import { label, EVIDENCE_KIND, SUPPORTS } from '../../lib/labels';
 import { EvidenceRestsOn, FigureCheckLine } from '../EvidenceRestsOn';
@@ -45,6 +46,10 @@ export function EvidenceCard({ run }: { run: Run }) {
               {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
             </p>
             <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]" data-record>Source: {e.provenance}</p>
+            {/* P2: the sealed item carries no evidence id (P2-D7); its outcome's figure is traced instead. */}
+            {(e.supports === 'baseline' || e.supports === 'actual') && typeof run.payload.valueOutcomeId === 'string' && (
+              <LineageLink table="value_outcomes" id={run.payload.valueOutcomeId} figure={e.supports} />
+            )}
             {/* P1-D4: sealed from payloadVersion 2 — what it rested on, and a check that flagged. */}
             {e.evidence_form && (
               <span data-record>

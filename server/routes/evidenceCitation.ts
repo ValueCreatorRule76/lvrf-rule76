@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -98,6 +99,7 @@ export function evidenceCitationRouter(pool: Pool): Router {
           RETURNING source_verified, lvrf_evidence_basis(evidence.*) AS basis`,
         [id, actor, body.source_verified],
       );
+      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id });
       res.status(200).json({ evidence_id: id, citation_resolved: true, ai_sourced: true, source_verified: u.source_verified, basis: u.basis });
     } catch (err) {
       if (err instanceof ValidationError) {

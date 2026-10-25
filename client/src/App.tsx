@@ -6,6 +6,7 @@ import { PacksIndexPage } from './pages/PacksIndexPage';
 import { IndustryPackPage } from './pages/IndustryPackPage';
 import { InstitutionPage } from './pages/InstitutionPage';
 import { PovPage } from './pages/PovPage';
+import { LineagePage } from './pages/LineagePage';
 import { ActorProvider, useActor } from './actor/ActorContext';
 import { SignInOverlay, SignInPage } from './actor/SignIn';
 import { ChangePasswordPage } from './actor/ChangePassword';
@@ -31,6 +32,7 @@ function SignedInRoutes() {
         <Route path="/packs/:slug" element={<IndustryPackPage />} />
         <Route path="/accounts/:id" element={<InstitutionPage />} />
         <Route path="/accounts/:id/pov" element={<PovPage />} />
+        <Route path="/lineage/:table/:id" element={<LineagePage />} />
       </Routes>
       {status === 'expired' && <SignInOverlay />}
     </>

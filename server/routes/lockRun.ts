@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
@@ -141,6 +142,7 @@ export function lockRunRouter(pool: Pool): Router {
         });
         return;
       }
+      await recordAct(client, req, 'POST /api/value-runs/:runId/lock', { act: 'lock', tenantId: run.tenant_id, subjectTable: 'value_runs', subjectId: runId, reason: lockReason });
 
       // HB-0006 Object Locked. Same transaction as the UPDATE above: if this
       // throws, the whole transaction rolls back, the lock included. That is
