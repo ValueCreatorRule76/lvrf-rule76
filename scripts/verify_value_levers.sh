@@ -142,7 +142,7 @@ start_server && ok "API up on $PORT"
 expect POST /api/account-inputs "{\"institution\":{\"name\":\"Levers account $TS\",\"industry_slug\":\"$SLUG\",\"classification_note\":\"Verification: classified for O1.\"},\"persons\":[{\"full_name\":\"Customer owner (verification)\",\"email\":\"owner.$TS@levers.example\",\"title\":\"Verification owner\"}]}" 201 "an account with a customer-side person"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"
 SIM="$(q "INSERT INTO persons (institution_id, full_name, email, simulated) VALUES ('$INST', 'Simulated customer (verification)', 'sim.$TS@levers.example', true) RETURNING id" | head -1)"
-EV0="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'observation', 'Basis rule fixture', 'Verification fixture, not a source', 'low', '$S') RETURNING id" | head -1)"
+EV0="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'Basis rule fixture', 'Verification fixture, not a source', 'low', '$S') RETURNING id" | head -1)"
 [ -n "$SIM" ] && [ -n "$EV0" ] && ok "a simulated customer person; one evidence row for the in-memory basis cases" || { bad "basis fixtures"; exit 1; }
 
 step "4. The D2 basis: one function, ten rules, first match decides"
@@ -170,12 +170,12 @@ rule "9 observation, no source reference"                       '{"kind":"observ
 rule "9 observation, a blank source reference"                  '{"kind":"observation","source_reference":"   "}' assumed
 rule "10 assessment result: outside the vocabulary"             '{"kind":"assessment_result"}' NULL
 rule "source_verified does NOT raise the basis"                 '{"kind":"observation","source_reference":null,"source_verified":true}' assumed
-rule "self-declared high confidence does NOT raise it"          '{"kind":"observation","source_reference":null,"confidence":"high"}' assumed
+rule "self-declared high confidence does NOT raise it"          '{"kind":"observation","source_reference":null,"confidence":"high","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}' assumed
 [ "$(q "SELECT count(*) FROM evidence WHERE id = '$EV0' AND kind = 'observation' AND NOT simulated")" = "1" ] && ok "  ...the evidence row itself is unchanged (cases built in memory)" || bad "  ...EV0 changed"
 
 step "5. The basis where facts are read (/view) and walked (/walk)"
 FACT() {  # KIND TEXT EVIDENCE_KIND [EXTRA JSON]
-  printf '{"kind":"%s","value_text":"%s","as_of":"2026-09-30","evidence_kind":"%s","confidence":"medium","provenance":"Verification fixture, not a source"%s}' "$1" "$2" "$3" "${4:-}"
+  printf '{"kind":"%s","value_text":"%s","as_of":"2026-09-30","evidence_kind":"%s","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","provenance":"Verification fixture, not a source"%s}' "$1" "$2" "$3" "${4:-}"
 }
 expect POST "/api/institutions/$INST/facts" "$(FACT system 'Fixture HRIS (filing)' public_filing)" 201 "a fact on a public filing"
 expect POST "/api/institutions/$INST/facts" "$(FACT stated_priority 'Fixture priority (observed, cited)' observation ',"source_reference":"Fixture careers page"')" 201 "a fact on an observation with a source reference"
@@ -188,12 +188,12 @@ expect GET "/api/institutions/$INST/view" "" 200 "the account view"
   && ok "  ...the same answer as the function in SQL, row by row" || bad "  ...SQL disagrees"
 
 step "6. A run seals the account's facts and entity, with their basis, under its hash"
-EV_ENT="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'public_filing', 'Entity fixture', 'Verification fixture registry extract, not a source', 'medium', '$S') RETURNING id" | head -1)"
+EV_ENT="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST', 'public_filing', 'Entity fixture', 'Verification fixture registry extract, not a source', 'medium', '$S') RETURNING id" | head -1)"
 q "INSERT INTO institution_entities (institution_id, legal_name, identifier_type, identifier, evidence_id, captured_by_person_id) VALUES ('$INST', 'Levers Fixture Corp', 'sec_cik', '0000000042', '$EV_ENT', '$S')" > /dev/null
 expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Levers capability\",\"owner_person_id\":\"$OWNER\",\"is_primary\":false,\"basis\":\"Verification: attached for O1.\"}" 201 "an offering creates a capability"
 expect POST "/api/institutions/$INST/value-outcomes" "{\"engagement_name\":\"Levers engagement\",\"engagement_owner_person_id\":\"$OWNER\",\"capability_name\":\"Levers capability\",\"metric\":{\"name\":\"Levers TRIR $TS\",\"unit\":\"incidents per 200,000 hours\",\"direction\":\"decrease\",\"source_system\":\"verification system of record\",\"owner_person_id\":\"$OWNER\"},\"baseline_value\":0,\"baseline_measured_at\":\"2026-09-30T00:00:00Z\"}" 201 "an outcome, baseline 0 (zero is data)"
 OUTC="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"
-expect POST "/api/value-outcomes/$OUTC/evidence" '{"kind":"public_filing","provenance":"Fixture disclosures, page 21 (not a source)","summary":"Baseline fixture","supports":"baseline","confidence":"medium","source_verified":false,"ai_sourced":false,"simulated":false}' 201 "outcome evidence on a public filing"
+expect POST "/api/value-outcomes/$OUTC/evidence" '{"kind":"public_filing","provenance":"Fixture disclosures, page 21 (not a source)","summary":"Baseline fixture","supports":"baseline","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":false,"simulated":false}' 201 "outcome evidence on a public filing"
 expect POST "/api/engagements/$ENG/produce-run" '{"note":"Verification: O1 run one.","source_fixture":"verify_value_levers_1"}' 201 "produce run one"
 R1="$(rj b.value_run_id)"
 [ "$(q "SELECT payload->'entity'->>'legalName' || '|' || (payload->'entity'->>'identifier') || '|' || (payload->'entity'->>'basis') FROM value_runs WHERE id = '$R1'")" = "Levers Fixture Corp|0000000042|published" ] \

@@ -1,3 +1,4 @@
+import type { EvidenceFormShown, FigureCheckShown } from '../components/EvidenceRestsOn';
 /**
  * UX-1 — the account's six-step status, in ONE place (slice 2, 19 Oct 2026).
  * The account workspace (InstitutionPage) and the Accounts home both read it,
@@ -36,6 +37,11 @@ export interface WalkState {
         /** Q4k: the citation state, for "Open the citation…". */
         ai_sourced: boolean; source_verified: boolean; citation_resolved: boolean;
         citation_resolved_by: string | null; citation_resolved_at: string | null;
+        /** P1 (0039): what it rests on, who recorded it, and its latest figure check against this outcome. */
+        evidence_form: string; quote_text: string | null; locator: EvidenceFormShown['locator']; how_read: string | null;
+        /** The attester when there is one, otherwise the recorder. */
+  stated_by: string; stated_on: string;
+        figure_check: FigureCheckShown | null;
       }[];
     }[];
     runs: {

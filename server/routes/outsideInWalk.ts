@@ -96,7 +96,14 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                                             'ai_sourced', ev.ai_sourced, 'source_verified', ev.source_verified,
                                                                             'citation_resolved', ev.citation_resolved,
                                                                             'citation_resolved_by', (SELECT full_name FROM persons WHERE id = ev.citation_resolved_by_person_id),
-                                                                            'citation_resolved_at', to_char(ev.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY ev.created_at)
+                                                                            'citation_resolved_at', to_char(ev.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+                                                                            -- P1 (0039): what it rests on, and its latest figure check against this outcome.
+                                                                            'evidence_form', ev.evidence_form, 'quote_text', ev.quote_text, 'locator', ev.locator, 'how_read', ev.how_read,
+                                                                            'stated_by', (SELECT full_name FROM persons WHERE id = coalesce(ev.attested_by_person_id, ev.captured_by_person_id)),
+                                                                            'stated_on', to_char(coalesce(ev.attested_at, ev.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+                                                                            'figure_check', (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
+                                                                                               FROM figure_checks c WHERE c.evidence_id = ev.id AND c.subject_table = 'value_outcomes' AND c.subject_id = vo.id
+                                                                                              ORDER BY c.checked_at DESC, c.id DESC LIMIT 1)) ORDER BY ev.created_at)
                                             FROM value_outcome_evidence voe JOIN evidence ev ON ev.id = voe.evidence_id
                                            WHERE voe.value_outcome_id = vo.id), '[]'))
                     ORDER BY vo.created_at)

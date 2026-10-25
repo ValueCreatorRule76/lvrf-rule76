@@ -49,6 +49,12 @@ export interface InstitutionFact {
   basis: 'system_of_record' | 'published' | 'client_stated' | 'inferred' | 'assumed' | null;
   captured_by: string;
   created_at: string;
+  /** P1 (0039): what the evidence rests on, and the fact's latest figure check. */
+  evidence_form: 'quote' | 'locator' | 'statement' | 'legacy';
+  quote_text: string | null;
+  locator: { document: string; value: number; scale: string; table?: string; row?: string; column?: string } | null;
+  how_read: string | null;
+  figure_check: { result: 'pass' | 'flag' | 'not_checkable'; detail: string; rules_version: number } | null;
   /** Earlier values this fact replaced, newest first (fact supersession, 0028). */
   history: InstitutionFactHistoryEntry[];
 }

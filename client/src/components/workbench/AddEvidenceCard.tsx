@@ -3,6 +3,7 @@ import type { Run } from '../../types/run';
 import { Card, Badge } from './Card';
 import { GovernedForm, FOCUS_RING } from '../GovernedForm';
 import { label, EVIDENCE_KIND } from '../../lib/labels';
+import { useEvidenceForm } from '../EvidenceFormInput';
 
 // The supports options in words (the stored values are unchanged).
 const SUPPORTS_LABEL: Record<string, string> = { baseline: 'The baseline', actual: 'The actual', impact_basis: 'The impact basis' };
@@ -22,7 +23,7 @@ const KIND_OPTIONS = [
 // so a caller cannot even select a fourth.
 const SUPPORTS_OPTIONS = ['baseline', 'actual', 'impact_basis'] as const;
 
-const CONFIDENCE_OPTIONS = ['low', 'medium', 'high'] as const;
+// Q10, folded into P1 (P1-D3): the asserted confidence is no longer asked for or sent.
 
 const LABEL_CLASS = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const INPUT_CLASS =
@@ -67,12 +68,13 @@ export function AddEvidenceCard({
   const [sourceReference, setSourceReference] = useState('');
   const [summary, setSummary] = useState('');
   const [supports, setSupports] = useState('');
-  const [confidence, setConfidence] = useState('');
   const [sourceVerified, setSourceVerified] = useState<YesNo>('');
   const [aiSourced, setAiSourced] = useState<YesNo>('');
   const [researchQuery, setResearchQuery] = useState('');
   const [researchTool, setResearchTool] = useState('');
   const [simulated, setSimulated] = useState<YesNo>('');
+  // P1: called before any early return (a hook runs on every render).
+  const evidenceForm = useEvidenceForm({ allowed: ['quote', 'locator', 'statement'], kind, sourceReference });
 
   if (!outcomeId) {
     // Same pattern EvidenceCard.tsx already uses for a run walked before
@@ -108,11 +110,23 @@ export function AddEvidenceCard({
     kind !== '' &&
     summary.trim() !== '' &&
     supports !== '' &&
-    confidence !== '' &&
     effectiveVerified !== '' &&
     aiSourced !== '' &&
     simulated !== '' &&
-    aiFieldsValid;
+    aiFieldsValid &&
+    evidenceForm.unmet.length === 0;
+  // Every reason the submit waits, in words (Q4l: a silent failure is a bug).
+  const unmet = [
+    ...(!provenanceValid ? ['state the provenance, in at least 12 characters'] : []),
+    ...(kind === '' ? ['choose the kind'] : []),
+    ...evidenceForm.unmet,
+    ...(summary.trim() === '' ? ['write the summary'] : []),
+    ...(supports === '' ? ['choose what it supports'] : []),
+    ...(effectiveVerified === '' ? ['say whether the source was verified'] : []),
+    ...(aiSourced === '' ? ['say whether it was AI-sourced'] : []),
+    ...(aiSourced === 'true' && !aiFieldsValid ? ['name the research query and tool'] : []),
+    ...(simulated === '' ? ['say whether it is simulated'] : []),
+  ];
 
   return (
     <Card n={n} title="Add evidence">
@@ -121,12 +135,13 @@ export function AddEvidenceCard({
         onSuccess={() => onRecorded?.()}
         path={`/api/value-outcomes/${outcomeId}/evidence`}
         canSubmit={canSubmit}
+        unmet={unmet}
         buildBody={() => ({
           kind,
           summary,
           provenance,
           supports,
-          confidence,
+          ...evidenceForm.body(),
           ...(sourceReference.trim() !== '' ? { source_reference: sourceReference } : {}),
           source_verified: effectiveVerified === 'true',
           ai_sourced: aiSourced === 'true',
@@ -189,6 +204,8 @@ export function AddEvidenceCard({
                 className={INPUT_CLASS}
               />
             </label>
+            {/* P1: what the evidence rests on — a quote, a locator, or a person's statement. */}
+            {evidenceForm.fields}
           </>
         }
         fields={
@@ -223,24 +240,6 @@ export function AddEvidenceCard({
               </select>
             </label>
 
-            <label className="mb-3 block">
-              <span className={LABEL_CLASS}>Confidence (the server will not accept a default)</span>
-              <select
-                required
-                value={confidence}
-                onChange={(e) => setConfidence(e.target.value)}
-                className={INPUT_CLASS}
-              >
-                <option value="" disabled>
-                  — choose —
-                </option>
-                {CONFIDENCE_OPTIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c.charAt(0).toUpperCase() + c.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
 
             <label className="mb-3 block">
               <span className={LABEL_CLASS}>Source verified</span>

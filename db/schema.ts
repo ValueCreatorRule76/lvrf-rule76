@@ -66,6 +66,20 @@ export const evidenceKind = pgEnum('evidence_kind', [
 ]);
 
 /**
+ * P1 (0039, LVRF_PLAN §8): what an evidence row rests on.
+ *   quote     — the source's own words (at most 40), and how the value was read from them;
+ *   locator   — a located cell: document, value and scale (table, row, column optional);
+ *   statement — a named person's own word (P1-D1): an observation citing no source, or an attestation;
+ *   legacy    — recorded before evidence forms (24 Oct 2026). Only rows that existed before 0039
+ *               carry it: lvrf_evidence_form_guard refuses it on INSERT, and no row is ever backfilled
+ *               to another form by script (P1-D6).
+ */
+export const evidenceForm = pgEnum('evidence_form', ['quote', 'locator', 'statement', 'legacy']);
+
+/** P1: a figure check's result. not_checkable is a person's statement backing a figure — never a pass (Brad, 24 Oct 2026). */
+export const figureCheckResult = pgEnum('figure_check_result', ['pass', 'flag', 'not_checkable']);
+
+/**
  * Account workbench. What an institution_facts row states. Two numeric
  * kinds and two text kinds; the CHECKs on institution_facts hold each kind
  * to its shape. `system` is one row per system ("Workday (HRIS)"), not a
@@ -682,8 +696,36 @@ export const evidence = pgTable('evidence', {
   citationResolvedByPersonId: uuid('citation_resolved_by_person_id')
     .references(() => persons.id, { onDelete: 'restrict' }),
   citationResolvedAt: timestamp('citation_resolved_at', { withTimezone: true }),
+
+  /* ── P1 (0039) · the evidence form ─────────────────────────────── */
+  /** What the evidence rests on. Never changes after INSERT (lvrf_evidence_form_guard). */
+  evidenceForm: evidenceForm('evidence_form').notNull(),
+  /** form = quote: the source's words, at most 40. */
+  quoteText: text('quote_text'),
+  /** form = locator: { document, value, scale, table?, row?, column? }. */
+  locator: jsonb('locator'),
+  /** form = quote or locator: how the value was read from the source, not a restatement of it. */
+  howRead: text('how_read'),
   ...governance(),
 }, (t) => [
+  /** P1: one rule per form. A statement is an observation citing no source, or an attestation (Brad, 24 Oct 2026). */
+  check('evidence_form_shape',
+    sql`(${t.evidenceForm} = 'quote' AND ${t.locator} IS NULL AND ${t.quoteText} IS NOT NULL
+          AND btrim(${t.quoteText}) <> ''
+          AND array_length(regexp_split_to_array(btrim(${t.quoteText}), '[[:space:]]+'), 1) <= 40)
+        OR (${t.evidenceForm} = 'locator' AND ${t.quoteText} IS NULL AND ${t.locator} IS NOT NULL
+          AND coalesce(jsonb_typeof(${t.locator}), '') = 'object'
+          AND coalesce(jsonb_typeof(${t.locator} -> 'document'), '') = 'string' AND coalesce(btrim(${t.locator} ->> 'document'), '') <> ''
+          AND coalesce(jsonb_typeof(${t.locator} -> 'value'), '') = 'number'
+          AND coalesce(${t.locator} ->> 'scale', '') IN ('units', 'thousands', 'millions', 'billions', 'percent')
+          AND (${t.locator} - ARRAY['document', 'value', 'scale', 'table', 'row', 'column']) = '{}'::jsonb)
+        OR (${t.evidenceForm} = 'statement' AND ${t.quoteText} IS NULL AND ${t.locator} IS NULL
+          AND (${t.kind} = 'attestation' OR (${t.kind} = 'observation' AND ${t.sourceReference} IS NULL)))
+        OR (${t.evidenceForm} = 'legacy' AND ${t.quoteText} IS NULL AND ${t.locator} IS NULL)`),
+  /** P1: say how the value was read (at least 24 characters); a statement or a legacy row has no reading to state. */
+  check('evidence_how_read',
+    sql`(${t.evidenceForm} IN ('quote', 'locator') AND ${t.howRead} IS NOT NULL AND length(btrim(${t.howRead})) >= 24)
+        OR (${t.evidenceForm} IN ('statement', 'legacy') AND ${t.howRead} IS NULL)`),
   check('evidence_ai_requires_query',
     sql`${t.aiSourced} = false
         OR (${t.researchQuery} IS NOT NULL AND ${t.researchTool} IS NOT NULL)`),
@@ -2354,4 +2396,53 @@ export const accountPersonLinks = pgTable('account_person_links', {
     sql`(${t.retiredAt} IS NULL AND ${t.retiredByPersonId} IS NULL AND ${t.retirementReason} IS NULL)
         OR (${t.retiredAt} IS NOT NULL AND ${t.retiredByPersonId} IS NOT NULL
             AND char_length(btrim(${t.retirementReason})) >= 12)`),
+]);
+
+/* ================================================================== */
+/* P1 (0039, LVRF_PLAN §8) — the figure check, recorded               */
+/* ================================================================== */
+/**
+ * Every figure written with evidence is checked against that evidence
+ * (server/lib/figureCheck.ts, deterministic, rules_version 1): the numbers
+ * in the value must appear in the quote, or equal the locator's value at
+ * its scale; qualifiers in a text value the quote lacks are flagged. A
+ * check never blocks a write — it is recorded, and the figure shows it.
+ * Append-only: audit, no delete, no UPDATE (hardening.sql section 25).
+ */
+export const figureChecks = pgTable('figure_checks', {
+  id: id(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  /** What was checked: a fact's value, or an outcome's figure. */
+  subjectTable: text('subject_table').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  subjectField: text('subject_field').notNull(),
+  /** The value as checked; null only when the evidence is a statement and no figure is recorded yet. */
+  valueChecked: text('value_checked'),
+  numbersInValue: jsonb('numbers_in_value').notNull(),
+  numbersFound: jsonb('numbers_found').notNull(),
+  numbersMissing: jsonb('numbers_missing').notNull(),
+  wordingFlags: jsonb('wording_flags').notNull(),
+  result: figureCheckResult('result').notNull(),
+  /** The sentence shown beside the figure, on screen and in print. */
+  detail: text('detail').notNull(),
+  rulesVersion: integer('rules_version').notNull(),
+  checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
+  checkedByPersonId: uuid('checked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+}, (t) => [
+  index('figure_checks_evidence_idx').on(t.evidenceId),
+  index('figure_checks_subject_idx').on(t.subjectTable, t.subjectId),
+  check('figure_checks_subject_shape',
+    sql`(${t.subjectTable} = 'institution_facts' AND ${t.subjectField} IN ('value_numeric', 'value_text'))
+        OR (${t.subjectTable} = 'value_outcomes' AND ${t.subjectField} IN ('baseline_value', 'actual_value', 'claimed_currency_impact'))`),
+  check('figure_checks_rules_version_positive', sql`${t.rulesVersion} > 0`),
+  check('figure_checks_arrays',
+    sql`jsonb_typeof(${t.numbersInValue}) = 'array' AND jsonb_typeof(${t.numbersFound}) = 'array'
+        AND jsonb_typeof(${t.numbersMissing}) = 'array' AND jsonb_typeof(${t.wordingFlags}) = 'array'`),
+  /** pass: nothing missing, nothing flagged. flag: something missing or flagged. not_checkable: nothing compared. */
+  check('figure_checks_result_shape',
+    sql`(${t.result} = 'pass' AND ${t.valueChecked} IS NOT NULL AND ${t.numbersMissing} = '[]'::jsonb AND ${t.wordingFlags} = '[]'::jsonb)
+        OR (${t.result} = 'flag' AND ${t.valueChecked} IS NOT NULL AND (${t.numbersMissing} <> '[]'::jsonb OR ${t.wordingFlags} <> '[]'::jsonb))
+        OR (${t.result} = 'not_checkable' AND ${t.numbersFound} = '[]'::jsonb AND ${t.numbersMissing} = '[]'::jsonb AND ${t.wordingFlags} = '[]'::jsonb)`),
+  check('figure_checks_detail_present', sql`btrim(${t.detail}) <> ''`),
 ]);

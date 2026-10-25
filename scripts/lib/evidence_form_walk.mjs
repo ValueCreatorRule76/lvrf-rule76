@@ -142,7 +142,10 @@ if (MODE === 'form') {
   await setField(form, 'Kind', 'public_filing');
   await setField(form, 'Summary', 'Walk break-gate evidence');
   await setField(form, 'Supports', 'baseline');
-  await setField(form, 'Confidence', 'medium');
+  await setField(form, 'What it rests on', 'quote');
+  await sleep(250);
+  await setField(form, 'Quote (the source', 'Walk break-gate fixture quote, not a source.');
+  await setField(form, 'How it was read', 'Verification fixture: read from the fixture quote as written.');
   await setField(form, 'AI-sourced', 'true');
   await sleep(200);
   await setField(form, 'Source verified', 'true');

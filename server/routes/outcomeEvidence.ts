@@ -5,6 +5,8 @@ import { emitHeartbeat } from '../spine/emitHeartbeat.js';
 import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
+import { EvidenceFormError, parseEvidenceForm } from '../lib/evidenceFormBody.js';
+import { checkFigure, recordFigureCheck } from '../lib/figureCheck.js';
 
 /**
  * All writes here go through req.dbClient, never the pool. actorContext has
@@ -158,9 +160,10 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
           `body.supports must be one of: ${VALID_SUPPORTS.join(', ')}`,
         );
       }
-      // Required — the column default of 'medium' is a plausible value
-      // nobody stated. Validated against the enum below, not just typeof.
-      const confidence = requireString(body, 'confidence', 'body');
+      // Q10, folded into P1 (P1-D3): body.confidence is no longer read. The
+      // column is written 'medium' until it is retired (sealed payloads carry
+      // it), and every display labels it "stated by the analyst".
+      const confidence = 'medium';
       const sourceReference = optionalNullableString(body, 'source_reference', 'body');
       const sourceVerified = optionalBoolean(body, 'source_verified', 'body', false);
       const aiSourced = optionalBoolean(body, 'ai_sourced', 'body', false);
@@ -210,8 +213,12 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         engagement_id: string;
         tenant_id: string;
         engagement_retired: boolean;
+        baseline_value: string | null;
+        actual_value: string | null;
+        claimed_currency_impact: string | null;
       }>(
         `SELECT vo.id, vo.institution_id, vo.engagement_id, i.tenant_id,
+                vo.baseline_value, vo.actual_value, vo.claimed_currency_impact,
                 (eng.deleted_at IS NOT NULL OR eng.superseded_by_id IS NOT NULL) AS engagement_retired
            FROM value_outcomes vo
            JOIN institutions i ON i.id = vo.institution_id AND i.deleted_at IS NULL
@@ -266,19 +273,10 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         return;
       }
 
-      const { rows: confidenceRows } = await client.query<{ enumlabel: string }>(
-        `SELECT e.enumlabel FROM pg_enum e
-           JOIN pg_type t ON t.oid = e.enumtypid
-          WHERE t.typname = 'confidence_level'
-          ORDER BY e.enumsortorder`,
-      );
-      const validConfidenceLevels = confidenceRows.map((r) => r.enumlabel);
-      if (!validConfidenceLevels.includes(confidence)) {
-        res.status(422).json({
-          message: `body.confidence must be one of: ${validConfidenceLevels.join(', ')}`,
-        });
-        return;
-      }
+      // P1 (0039): what the evidence rests on. A person's statement is
+      // allowed for an observation citing no source, or an attestation
+      // (Brad, 24 Oct 2026); every other kind rests on a quote or a locator.
+      const form = parseEvidenceForm(body, { allowStatement: true, kind, sourceReference });
 
       // The attestor must be a real person of record at the OUTCOME's
       // institution — not simulated, not the vendor asserting on the
@@ -303,14 +301,16 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         `INSERT INTO evidence (
            institution_id, kind, summary, provenance, source_reference,
            confidence, source_verified, ai_sourced, research_query, research_tool,
-           simulated, captured_by_person_id, attested_by_person_id, attested_at
+           simulated, captured_by_person_id, attested_by_person_id, attested_at,
+           evidence_form, quote_text, locator, how_read
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
          RETURNING id`,
         [
           outcome.institution_id, kind, summary, provenance, sourceReference,
           confidence, sourceVerified, aiSourced, researchQuery, researchTool,
           simulated, actorPersonId, attestedByPersonId, attestedAt,
+          form.evidenceForm, form.quoteText, form.locator === null ? null : JSON.stringify(form.locator), form.howRead,
         ],
       );
       refusalEvidenceId = evidence.id;
@@ -326,6 +326,22 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
          VALUES ($1, $2, $3)`,
         [outcomeId, evidence.id, supports],
       );
+
+      // P1: the figure check — against the outcome's figure this evidence
+      // supports. A statement is "not checkable", never a pass (Brad, 24 Oct
+      // 2026), whether or not the figure is recorded yet. A quote or a
+      // locator is checked when the figure exists; with none recorded yet,
+      // there is nothing to compare, and nothing is recorded.
+      const field = supports === 'baseline' ? 'baseline_value' : supports === 'actual' ? 'actual_value' : 'claimed_currency_impact';
+      const figure = outcome[field];
+      if (form.evidenceForm === 'statement' || figure !== null) {
+        const checked = checkFigure({ numeric: figure === null ? null : Number(figure), text: null },
+          { form: form.evidenceForm, quoteText: form.quoteText, locator: form.locator });
+        await recordFigureCheck(client, {
+          institutionId: outcome.institution_id, evidenceId: evidence.id, subjectTable: 'value_outcomes', subjectId: outcome.id,
+          subjectField: field, valueChecked: figure, actorPersonId,
+        }, checked);
+      }
 
       // HB-0009 Evidence Attached — after BOTH inserts above: this records
       // evidence ATTACHED to an outcome, not evidence merely created. Same
@@ -352,6 +368,16 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       });
     } catch (err) {
       if (err instanceof ValidationError) {
+        res.status(422).json({ message: err.message });
+        return;
+      }
+      if (err instanceof EvidenceFormError) {
+        if (refusalTenantId) {
+          await recordRouteRefusal(pool, req, {
+            endpoint: 'POST /api/value-outcomes/:outcomeId/evidence', subjectTable: 'evidence', subjectId: null,
+            tenantId: refusalTenantId, institutionId: refusalInstitutionId, valueOutcomeId: refusalOutcomeId, attemptedPayload: req.body,
+          }, err.message);
+        }
         res.status(422).json({ message: err.message });
         return;
       }

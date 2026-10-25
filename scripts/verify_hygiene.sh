@@ -57,7 +57,7 @@ step "3. L3 — the CHECK holds outside the route"
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"
 OUTCOME="$(q "SELECT vo.id FROM value_outcomes vo JOIN engagements e ON e.id = vo.engagement_id WHERE vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL AND e.deleted_at IS NULL ORDER BY vo.created_at LIMIT 1")"
 INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME'")"
-ev() { q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'observation', 'Hygiene fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1; }
+ev() { q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'Hygiene fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1; }
 for bad_value in Actual actuals ''; do
   OUT="$(qerr "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OUTCOME', '$(ev)', '$bad_value')")"
   case "$OUT" in *value_outcome_evidence_supports_known*) ok "supports '$bad_value', by SQL -> refused by the CHECK" ;; *) bad "supports '$bad_value': $OUT" ;; esac
@@ -74,7 +74,7 @@ env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABAS
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
 curl -s -o /dev/null "$BASE/api/health" && ok "server up" || { bad "server did not start"; cat "$W/server.log"; exit 1; }
-C="$(code POST "/api/value-outcomes/$OUTCOME/evidence" "${JSON[@]}" -d '{"kind":"observation","summary":"x","provenance":"Verification run, not a real source","supports":"Actual","confidence":"low"}')"
+C="$(code POST "/api/value-outcomes/$OUTCOME/evidence" "${JSON[@]}" -d '{"kind":"observation","summary":"x","provenance":"Verification run, not a real source","supports":"Actual","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}')"
 [ "$C" = "422" ] && ok "the route still answers 'Actual' with its own 422: $(rj .message | cut -c1-60)…" || bad "route supports -> $C"
 
 step "5. L5 — compare: a payload without the confidence block is a 422, not a 500"

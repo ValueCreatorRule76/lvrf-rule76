@@ -11428,3 +11428,161 @@ regression on `710abca`: all 36 scripts passed, and every one reached its final 
 - **Slice 3's open journal item, now closed:** the `/pov` reads above are logged as `GET
   /api/institutions/:institutionId/pov`, with no value. Before Brad's visit, none had
   happened since that deploy.
+
+## P1: the evidence form and the figure check — 25 October 2026 (UTC)
+
+LVRF_PLAN §8, approved with P1-D1–D6 (24 Oct 2026). Two gaps in the plan were ruled by Brad
+before the build (24 Oct 2026):
+- **(1) The entity and the disclosure regime rest on a quote with `how_read`.**
+  `institution_fact` contract v2 asks for both. A v1 result carries neither, so it is
+  accepted only when the reviewer pastes the quote and states `how_read`.
+- **(2) Outcome evidence may be a `statement` for an observation or an attestation**, on two
+  conditions:
+  - an observation can be a statement only when it cites no source;
+  - a statement backing a figure records the figure check "not checkable: the evidence is
+    a person's statement", never a pass, and that line shows wherever the figure does.
+
+Value spine stages served: `baseline` and `measure`. No stage's gate changes; the
+verification state that acts on a figure check is P3.
+
+**Migration 0039 (`evidence_form`).** It changes `evidence` and adds `figure_checks`. It
+orphans nothing: no FK is dropped and no row is deleted.
+- **The columns:** enum `evidence_form` (quote · locator · statement · legacy), plus
+  `evidence.evidence_form`, `quote_text`, `locator` (jsonb) and `how_read`.
+- **How existing rows got `legacy`:** the column is added `DEFAULT 'legacy' NOT NULL`, then
+  the default is dropped.
+  - **Why not the plan's route** (nullable, backfill, then NOT NULL): the catalog fills
+    existing rows without an UPDATE. No audit or touch trigger fires, and no row's
+    `updated_at` changes. The end state is the plan's.
+- **The CHECKs:**
+  - **`evidence_form_shape`**, one rule per form:
+    - a quote is at most 40 words;
+    - a locator carries a document, a numeric value and a scale, and no other keys;
+    - a statement is an attestation, or an observation with no `source_reference`.
+  - **`evidence_how_read`:** at least 24 characters for a quote or a locator; none for a
+    statement or a legacy row.
+  - **Each locator key test uses `coalesce`.** A missing key otherwise leaves the CHECK
+    unknown, and Postgres passes an unknown CHECK. B3 caught this in the first build: a
+    locator with no scale was accepted.
+- **`figure_checks`:** append-only, with its CHECKs; `result` is pass · flag · not_checkable.
+- **Hardening section 25** adds six triggers, taking the count from 129 to 135:
+  - `evidence_form_guard`: "legacy" is refused on INSERT, and the form, quote, locator and
+    `how_read` are final once recorded;
+  - `institution_facts_form_kept`: a quote's correction rests on a quote and a locator's on
+    a locator; a legacy predecessor may move to either;
+  - `figure_checks_audit`, `_no_delete`, `_immutable` and `_guard`. The guard checks that
+    the evidence is the subject's and the account's, never legacy, and that "not
+    checkable" is the result exactly when the evidence is a statement.
+  - **Section 24** now also refuses UPDATE on `figure_checks`.
+  - **`ownership.sql`** grants `lvrf_app` INSERT on `figure_checks`, making 32 INSERT
+    tables.
+- **Plain sentences:** seven for the new CHECKs, in `plainChecks.ts`.
+
+**The writers** (P1-D1):
+- **The six act-recording sites write `statement`:** classification, offering attachment,
+  pack basis, metric validation, retirement, and commitment and verification.
+- **The fact writer** takes a quote or a locator with `how_read`, and records the figure
+  check after the fact. This covers typed facts and their corrections, and researched facts
+  on accept.
+- **An entity correction** rests on a quote.
+- **Outcome evidence** takes a quote, a locator or, per ruling (2), a statement. It records
+  the figure check against the outcome's figure for what the evidence supports. With no
+  figure recorded yet there is nothing to compare, and no row.
+- **Q10 is folded in (P1-D3):** `body.confidence` is no longer read; the column is written
+  `medium`. A fact's stated confidence now displays as "confidence stated by the analyst".
+- **Refusals:** a body with both a quote and a locator, or neither, gets a 422 in one plain
+  sentence (Q4k), recorded in `refusals`.
+- **`walkSpine`** (the fixture command-line tool, not a route) refuses fixture evidence that
+  states no form: none is invented for it.
+
+**Contract v2** (`institution_fact`, template v2):
+- an entity and a regime each carry `quote` and `how_read`;
+- a fact carries exactly one of `quote` or `locator`, plus `how_read`;
+- a facts-phase echo of the entity is read for identity only;
+- v1 is kept by number: a v1 result is accepted under v1, the reviewer stating what it lacks;
+- the quote is now the evidence's `quote_text`, and no longer appears in its provenance.
+
+**The figure check** (`server/lib/figureCheck.ts`, deterministic, rules v1), against the plan
+item by item:
+- **Numbers:** read with commas, scale words and percent ("3,413.1 million", "3.4B", "12%"),
+  and compared at the precision the source states. A locator compares value × scale.
+- **A missing number is named:** "1.4 is not in the quote (it states 1.42)".
+- **Wording flags:** the plan's eight qualifiers in a text value that the quote lacks.
+- **Never blocks a write.**
+
+**The display:**
+- **What the evidence rests on:**
+  - a quote in quotation marks, then "How it was read: …";
+  - a locator as "Document · table · row · column: value (scale)";
+  - a statement as "Stated by <name>, <date>" (the attester when there is one, on the day
+    attested);
+  - "Recorded before evidence forms (24 Oct 2026)".
+- **A flagged or not-checkable check** shows as one line, "Figure check (baseline): …",
+  beside the fact or the outcome's figures, on screen and in print. A pass adds no line.
+- **Where it shows:** the POV, the account facts card, the walk's outcome step and its
+  evidence list, and the run page (sealed).
+- **The read additions are read-only:** `/view`, `/pov` and `/walk` gain the form fields,
+  the latest figure check, and `stated_by` / `stated_on`.
+
+**Runs (P1-D4):** a run produced after 0039 seals `payloadVersion: 2`, with each fact's and
+each evidence item's form, quote or locator, `how_read` and latest figure check. Earlier runs
+keep their bytes, and `check_run_hashes` verifies both versions.
+
+**Also changed:**
+- **`scripts/lib/finish.sh`** keeps the script's own stdout and stderr (fds 8 and 9). A
+  script stopped by `set -e` inside a redirected function call (`q … > /dev/null`) ran its
+  EXIT trap with that redirection still in place. Its stop-early line went to `/dev/null`;
+  the exit was still 1.
+- **`verify_ownership`** compares its pinned-commit databases over the objects that existed
+  at that commit (`newer_than`). Section 25's functions and `figure_checks` postdate both
+  pinned commits.
+- **The other scripts:** fixture inserts and bodies name their form. The checks for the
+  contract version, the trigger list and where the quote is stored are updated to P1.
+
+**Gate A:**
+- **`verify_evidence_form.sh`: 99 passed, 0 failed.** It runs on a clone of the restored,
+  neutralised prod copy, migrated and hardened, with invented fixtures. It checks:
+  - **the database:** 135 triggers; drift none (40 migrations); all 34 pre-0039 rows
+    `legacy`, none blank, none carrying a form's fields;
+  - **the eight writers**, each with its form, and every statement being an attestation or
+    an observation with no source;
+  - **Q10:** `medium`;
+  - **research:** a v2 entity without a quote refused at parse; a v2 entity and regime
+    accepted with their own quote; a v1 fact refused without `how_read`, then accepted with
+    the reviewer's, its quote moved to `quote_text`;
+  - **the figure check:**
+    - Scotts' stored revenue against "$3,413.1 million": pass;
+    - 1.4 against 1.42: a flag naming 1.42;
+    - "approximately 5,200": the number passes, with one wording flag;
+    - a locator of 3,413.1 in millions: pass;
+    - a statement: not checkable;
+  - **corrections:** a quote's correction is a quote, arriving unverified, unattested and
+    unopened; Scotts' legacy revenue upgraded to a locator;
+  - **runs:** the run seals `payloadVersion` 2, and `check_run_hashes` passes;
+  - **refusals:** both a quote and a locator, or neither, refused in words and recorded;
+  - **the POV at 1280 and 390, and in print:** the quote with how it was read, the
+    qualifier flag, the baseline's flag and its not-checkable line, the attester's
+    statement, no line for a pass, Scotts' legacy and locator lines, and no sideways scroll.
+- **Breaks, all caught:**
+  - **B1:** legacy on INSERT;
+  - **B2:** a 41-word quote (route and database);
+  - **B3:** a locator missing its scale (route and database);
+  - **B4:** a statement on a public filing (route and database);
+  - **B5:** a 10-character `how_read` (route and database);
+  - **B6:** an UPDATE of `quote_text`;
+  - **B7:** a quote's correction resting on a locator;
+  - **B8:** the scale words ignored, so Scotts' revenue flags;
+  - **B9:** a missing number passed silently;
+  - **B10:** a DELETE or UPDATE on `figure_checks`.
+
+  `figureCheck.ts` was restored byte-identical after its two breaks.
+- **The regression:** all **37** scripts reached their tallies and passed (tenant scope 203).
+  The build, tsc and oxlint are clean (the 1 pre-existing warning). The bundle is
+  `index-BlOZQdpO.js` / `index-yzluhmTC.css`.
+- **The prod copy:** against the deployed `710abca`, 76 GETs. 65 are identical; the 11 that
+  differ are three accounts' `/view`, `/walk`, `/pov` and `/research`.
+  - **Allowing the added fields gives 76 of 76 identical.** Those fields are
+    `evidence_form`, `quote_text`, `locator`, `how_read`, `figure_check`, `stated_by` and
+    `stated_on`, plus `contract_version_now` 2.
+- **For Brad's review:** the fixture POV at 1280 and 390, the PDF and its pages, in
+  `~/lvrf-backups/p1-screens/` (600).

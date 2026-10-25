@@ -163,10 +163,10 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO lvrf_app;
 -- check_schema_drift.mjs, and Gate C read it as lvrf_app.)
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO lvrf_app;
 
--- INSERT on the 31 tables the code inserts into; UPDATE on the 20 it updates.
+-- INSERT on the 32 tables the code inserts into; UPDATE on the 20 it updates.
 -- audit_log is written by lvrf_audit() (SECURITY DEFINER, so as its owner);
 -- its INSERT grant is a backstop. Never UPDATE on audit_log, heartbeat_events
--- or refusals: section 24 of hardening.sql refuses the run if any is granted.
+-- refusals or figure_checks: section 24 of hardening.sql refuses the run if any is granted.
 -- A table not created yet (a clone behind the newest migration) is skipped;
 -- this file is re-run after migrating, so it is granted then.
 DO $$
@@ -175,7 +175,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'access_grants', 'account_person_links', 'assessments', 'audit_log', 'business_metrics',
     'capabilities', 'capability_industry_measures', 'engagements', 'evidence',
-    'executive_summaries', 'heartbeat_events', 'industry_measure_exclusions',
+    'executive_summaries', 'figure_checks', 'heartbeat_events', 'industry_measure_exclusions',
     'industry_measures', 'institution_entities', 'institution_facts', 'institutions',
     'lever_offerings', 'offering_capabilities', 'person_credentials', 'persons',
     'record_documents', 'reference_example_markers', 'refusals', 'research_prompts',

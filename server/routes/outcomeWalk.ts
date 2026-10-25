@@ -208,8 +208,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
         `INSERT INTO evidence (
            institution_id, kind, summary, provenance, confidence,
            source_verified, ai_sourced, simulated, captured_by_person_id,
+           evidence_form,
            attested_by_person_id, attested_at
-         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, $5, $6)
+         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6)
          RETURNING id`,
         [
           outcome.institution_id,
@@ -594,8 +595,9 @@ export function outcomeWalkRouter(pool: Pool): Router {
         `INSERT INTO evidence (
            institution_id, kind, summary, provenance, confidence,
            source_verified, ai_sourced, simulated, captured_by_person_id,
+           evidence_form,
            attested_by_person_id, attested_at
-         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, $5, $6)
+         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6)
          RETURNING id`,
         [
           outcome.institution_id,

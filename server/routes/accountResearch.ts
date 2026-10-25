@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Router, type Request } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
+import { EvidenceFormError, parseEvidenceForm, type EvidenceFormFields } from '../lib/evidenceFormBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { insertEvidence, insertFactWithEvidence } from '../lib/institutionFactWriter.js';
 import {
@@ -50,6 +51,41 @@ import { respondServerError } from '../lib/serverError.js';
 
 class ValidationError extends Error {
   constructor(public readonly issues: string[]) { super(issues.join('; ')); }
+}
+
+/** P1: a typed entity correction rests on a quote — the sentence naming the entity and its identifier, and how it was read. */
+function entityQuote(body: Record<string, unknown>): EvidenceFormFields {
+  const form = parseEvidenceForm(body, { allowStatement: false, kind: 'public_filing', sourceReference: null });
+  if (form.evidenceForm !== 'quote') {
+    throw new EvidenceFormError("An entity rests on a quote: the sentence in the source that names it and its identifier, and how you read it.");
+  }
+  return form;
+}
+
+/**
+ * P1: what an accepted researched field's evidence rests on, under the
+ * contract it was parsed with. v2: the result's own quote or locator and
+ * how_read. v1 (P1-D5 and Brad's ruling on the plan's gap): a fact keeps its
+ * researched quote and the reviewer says how it was read; an entity or a
+ * regime carried no quote, so the reviewer pastes it and says how it was
+ * read. Nothing is filled in by machine.
+ */
+function acceptForm(version: number, quote: string | null, locator: object | null, howRead: string | null,
+  rawBody: unknown, what: 'entity' | 'regime' | 'fact'): EvidenceFormFields {
+  const body = isRecord(rawBody) ? rawBody : {};
+  if (version >= 2) {
+    return parseEvidenceForm({ evidence_form: locator ? 'locator' : 'quote', quote_text: quote, locator, how_read: howRead },
+      { allowStatement: false, kind: 'public_filing', sourceReference: null });
+  }
+  const pasted = typeof body['quote_text'] === 'string' && body['quote_text'].trim() !== '' ? body['quote_text'] : null;
+  if (what !== 'fact' && !pasted) {
+    throw new EvidenceFormError(`This ${what === 'entity' ? 'entity' : 'disclosure regime'} was researched under contract v1, which carried no quote. Paste the sentence from the source that states it (quote_text), and say how you read it (how_read).`);
+  }
+  if (typeof body['how_read'] !== 'string' || body['how_read'].trim() === '') {
+    throw new EvidenceFormError('This result was researched under contract v1, which carried no how-read. Say how the value was read from the source (how_read), in at least 24 characters.');
+  }
+  return parseEvidenceForm({ evidence_form: 'quote', quote_text: pasted ?? quote, how_read: body['how_read'] },
+    { allowStatement: false, kind: 'public_filing', sourceReference: null });
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -345,7 +381,7 @@ export function accountResearchRouter(pool: Pool): Router {
         }
       } else if (prompt?.phase === 'facts') {
         // Phase FACTS: the response must be about the pinned entity.
-        const said = validateEntity(body['entity'], 'entity', 'parse', issues);
+        const said = validateEntity(body['entity'], 'entity', 'parse', issues, INSTITUTION_FACT_CONTRACT_VERSION, true);
         const promptEntity = prompt.entity_id;
         if (!pinned || pinned.id !== promptEntity) {
           issues.push('the account\'s entity was corrected since this prompt was generated; generate a new prompt.');
@@ -435,7 +471,9 @@ export function accountResearchRouter(pool: Pool): Router {
         { caveats: [], source_kind: body['source_kind'], citation, legal_name: body['legal_name'],
           identifier_type: body['identifier_type'], identifier: body['identifier'],
           registry_jurisdiction: body['registry_jurisdiction'] ?? null },
-        'body', 'parse', issues,
+        // P1: read as an echo — the corrected entity's quote and how-read come in
+        // the body's evidence form (quote_text, how_read), not in the entity.
+        'body', 'parse', issues, INSTITUTION_FACT_CONTRACT_VERSION, true,
       );
       const institution = await findInstitution(client, req, institutionId);
       if (!institution) {
@@ -455,6 +493,8 @@ export function accountResearchRouter(pool: Pool): Router {
       }
       if (entity && sameEntity(entity, old)) issues.push(`the corrected entity is the pinned one (${describe(old)}); nothing to correct.`);
       if (issues.length > 0 || !entity) throw new ValidationError(issues);
+      // P1 (0039): the corrected entity rests on a quote — the sentence naming it and its identifier.
+      const form = entityQuote(body);
 
       refusalTable = 'evidence';
       const evidenceId = await insertEvidence(client, institutionId,
@@ -462,6 +502,7 @@ export function accountResearchRouter(pool: Pool): Router {
         {
           evidenceKind: evidenceKindFor(entity.source_kind), provenance: entity.citation, confidence: 'medium',
           sourceReference: entity.citation, sourceVerified: false, aiSourced: false, researchQuery: null, researchTool: null,
+          ...form,
         }, actorPersonId);
       refusalTable = 'institution_entities';
       const { rows: [created] } = await client.query<{ id: string }>(
@@ -494,6 +535,12 @@ export function accountResearchRouter(pool: Pool): Router {
         res.status(422).json({ message: `${err.issues.length} issue(s) found; nothing was written.`, issues: err.issues });
         return;
       }
+      if (err instanceof EvidenceFormError) {
+        if (refusalTenantId) await recordRouteRefusal(pool, req, { endpoint: 'POST /api/institutions/:institutionId/entity/supersede',
+          subjectTable: 'evidence', subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body }, err.message);
+        res.status(422).json({ message: err.message });
+        return;
+      }
       if (await handleGovernanceError(pool, err, req, res, {
         endpoint: 'POST /api/institutions/:institutionId/entity/supersede', subjectTable: refusalTable,
         subjectId: null, tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
@@ -516,12 +563,14 @@ export function accountResearchReviewRouter(pool: Pool): Router {
     id: string; tenant_id: string; institution_id: string; field_name: string; found: boolean;
     review_state: string; reviewed_by: string | null; reviewed_at: string | null; raw_response: unknown;
     research_query: string; research_tool: string; prompt_phase: string | null; prompt_entity_id: string | null;
+    /** The contract the result was parsed under: it is accepted under the same one (P1-D5). */
+    contract_version: number;
   }
 
   async function findCandidate(client: PoolClient, req: Request, resultId: string): Promise<Candidate | null> {
     const { rows: [c] } = await client.query<Candidate>(
       `SELECT r.id, r.tenant_id, r.institution_id, r.field_name, r.found, r.review_state, rv.full_name AS reviewed_by,
-              r.reviewed_at, r.raw_response, r.research_query, r.research_tool,
+              r.reviewed_at, r.raw_response, r.research_query, r.research_tool, r.contract_version,
               p.phase AS prompt_phase, p.entity_id AS prompt_entity_id
          FROM research_results r
          LEFT JOIN persons rv ON rv.id = r.reviewed_by_person_id
@@ -606,8 +655,9 @@ export function accountResearchReviewRouter(pool: Pool): Router {
 
       if (subject === 'entity') {
         const issues: string[] = [];
-        const e = validateEntity(item, 'raw_response.item', mode, issues) as ResearchedEntity | null;
+        const e = validateEntity(item, 'raw_response.item', mode, issues, c.contract_version) as ResearchedEntity | null;
         if (!e) throw new ValidationError(issues);
+        const form = acceptForm(c.contract_version, e.quote ?? null, null, e.how_read ?? null, req.body, 'entity');
         const pinned = await currentEntity(client, c.institution_id);
         if (pinned) {
           res.status(409).json({ message: `this account's entity is already pinned (${describe(pinned)}); an entity is corrected by supersession, not a second accept.` });
@@ -615,7 +665,7 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         }
         refusalTable = 'evidence';
         evidenceId = await insertEvidence(client, c.institution_id, `Entity: ${describe(e)}`,
-          evidenceBase(e.source_kind, e.citation, ''), actorPersonId);
+          { ...evidenceBase(e.source_kind, e.citation, ''), ...form }, actorPersonId);
         refusalTable = 'institution_entities';
         ({ rows: [{ id: entityId }] } = await client.query<{ id: string }>(
           `INSERT INTO institution_entities (institution_id, legal_name, identifier_type, identifier, registry_jurisdiction,
@@ -631,8 +681,9 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         }
         const issues: string[] = [];
         if (subject === 'disclosure_regime') {
-          const r = validateRegime(item, 'raw_response.item', mode, issues) as ResearchedRegime | null;
+          const r = validateRegime(item, 'raw_response.item', mode, issues, c.contract_version) as ResearchedRegime | null;
           if (!r) throw new ValidationError(issues);
+          const form = acceptForm(c.contract_version, r.quote ?? null, null, r.how_read ?? null, req.body, 'regime');
           const existing = await currentRegime(client, c.institution_id);
           if (existing) {
             res.status(409).json({ message: `a disclosure regime is already recorded (${existing.value}, as of ${existing.as_of}); correct it by superseding that fact.` });
@@ -640,20 +691,22 @@ export function accountResearchReviewRouter(pool: Pool): Router {
           }
           ({ factId, evidenceId } = await insertFactWithEvidence(client, c.institution_id, 'disclosure_regime', {
             valueNumeric: null, valueText: r.value, unit: null, asOf: r.as_of,
-            ...evidenceBase(r.source_kind, r.citation, ` — ${r.basis}`),
+            ...evidenceBase(r.source_kind, r.citation, ` — ${r.basis}`), ...form,
           }, actorPersonId, (t) => { refusalTable = t; }));
         } else {
           if (c.prompt_phase !== 'facts' || c.prompt_entity_id !== pinned.id) {
             res.status(409).json({ message: `this fact was researched against an entity that is no longer the account's (${describe(pinned)} is current); re-run under a new prompt.` });
             return;
           }
-          const f = validateFact(item, 'raw_response.item', mode, issues) as ResearchedFact | null;
+          const f = validateFact(item, 'raw_response.item', mode, issues, c.contract_version) as ResearchedFact | null;
           if (!f) throw new ValidationError(issues);
+          const form = acceptForm(c.contract_version, f.quote ?? null, f.locator ?? null, f.how_read ?? null, req.body, 'fact');
           ({ factId, evidenceId } = await insertFactWithEvidence(client, c.institution_id, f.kind, {
             valueNumeric: typeof f.value === 'number' ? f.value : null,
             valueText: typeof f.value === 'string' ? f.value : null,
             unit: f.unit, asOf: f.as_of,
-            ...evidenceBase(f.source_kind, f.citation, ` — "${f.quote}" (${f.period})`),
+            // P1: the quote is the evidence's quote_text now, not prose in its provenance.
+            ...evidenceBase(f.source_kind, f.citation, ` (${f.period})`), ...form,
           }, actorPersonId, (t) => { refusalTable = t; }));
         }
       } else if (subject !== 'not_found') {
@@ -677,6 +730,12 @@ export function accountResearchReviewRouter(pool: Pool): Router {
     } catch (err) {
       if (err instanceof ValidationError) {
         res.status(422).json({ message: `${err.issues.length} issue(s) found; nothing was written.`, issues: err.issues });
+        return;
+      }
+      if (err instanceof EvidenceFormError) {
+        if (refusalTenantId) await recordRouteRefusal(pool, req, { endpoint: 'POST /api/account-research-results/:id/accept',
+          subjectTable: 'evidence', subjectId: null, tenantId: refusalTenantId, institutionId: null, attemptedPayload: req.body }, err.message);
+        res.status(422).json({ message: err.message });
         return;
       }
       if (await handleGovernanceError(pool, err, req, res, {

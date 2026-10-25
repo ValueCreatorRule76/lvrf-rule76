@@ -607,7 +607,12 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
     q<{ basis: string | null } & Record<string, unknown>>(`
       SELECT f.id, f.kind::text, f.value_numeric::text, f.value_text, f.unit, to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
              e.kind::text AS evidence_kind, e.provenance, e.source_verified, e.citation_resolved,
-             rp.full_name AS citation_resolved_by, lvrf_evidence_basis(e) AS basis
+             rp.full_name AS citation_resolved_by, lvrf_evidence_basis(e) AS basis,
+             -- P1 (0039): what the evidence rests on, and the fact's latest figure check.
+             e.evidence_form::text, e.quote_text, e.locator, e.how_read,
+             (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
+                FROM figure_checks c WHERE c.subject_table = 'institution_facts' AND c.subject_id = f.id
+               ORDER BY c.checked_at DESC, c.id DESC LIMIT 1) AS figure_check
         FROM institution_facts f JOIN evidence e ON e.id = f.evidence_id
         LEFT JOIN persons rp ON rp.id = e.citation_resolved_by_person_id
        WHERE f.institution_id = $1 AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
@@ -659,8 +664,18 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
        WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
        ORDER BY vo.created_at`),
     q<{ value_outcome_id: string; basis: string | null } & Record<string, unknown>>(`
-      SELECT voe.value_outcome_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis
+      SELECT voe.value_outcome_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis,
+             -- P1 (0039): what it rests on, and its latest figure check against this outcome.
+             e.evidence_form::text, e.quote_text, e.locator, e.how_read,
+             -- A statement is the attester's word when there is one, otherwise the recorder's.
+             coalesce(ap.full_name, cp.full_name) AS stated_by,
+             to_char(coalesce(e.attested_at, e.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS stated_on,
+             (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
+                FROM figure_checks c WHERE c.evidence_id = e.id AND c.subject_table = 'value_outcomes' AND c.subject_id = voe.value_outcome_id
+               ORDER BY c.checked_at DESC, c.id DESC LIMIT 1) AS figure_check
         FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id
+        JOIN persons cp ON cp.id = e.captured_by_person_id
+        LEFT JOIN persons ap ON ap.id = e.attested_by_person_id
         JOIN value_outcomes vo ON vo.id = voe.value_outcome_id
        WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
        ORDER BY voe.supports, e.created_at`),

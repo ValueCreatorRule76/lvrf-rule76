@@ -247,8 +247,12 @@ export function produceRunRouter(pool: Pool): Router {
         attester_tenant_id: string | null;
         attester_institution_id: string | null;
         attester_simulated: boolean | null;
+        evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
+        fc_result: string | null; fc_detail: string | null; fc_rules_version: number | null;
       }>(
         `SELECT
+           e.evidence_form::text, e.quote_text, e.locator, e.how_read,
+           fc.result::text AS fc_result, fc.detail AS fc_detail, fc.rules_version AS fc_rules_version,
            e.kind, e.summary, e.provenance, e.source_reference,
            e.confidence AS confidence_level, e.source_verified, e.ai_sourced,
            e.citation_resolved, e.simulated,
@@ -260,6 +264,12 @@ export function produceRunRouter(pool: Pool): Router {
          FROM value_outcome_evidence voe
          JOIN evidence e ON e.id = voe.evidence_id
          LEFT JOIN persons p ON p.id = e.attested_by_person_id
+         -- P1-D4: the latest figure check of this evidence against this outcome.
+         LEFT JOIN LATERAL (
+           SELECT c.result, c.detail, c.rules_version FROM figure_checks c
+            WHERE c.evidence_id = e.id AND c.subject_table = 'value_outcomes' AND c.subject_id = voe.value_outcome_id
+            ORDER BY c.checked_at DESC, c.id DESC LIMIT 1
+         ) fc ON true
         WHERE voe.value_outcome_id = $1
         ORDER BY e.created_at`,
         [vo.id],
@@ -295,6 +305,12 @@ export function produceRunRouter(pool: Pool): Router {
         // Q9 (O1): the D2 basis, DERIVED by lvrf_evidence_basis
         // (hardening.sql 21) at the moment the run is produced, and sealed.
         basis: r.basis,
+        // P1-D4 (payloadVersion 2): what it rests on, and its figure check, sealed.
+        evidence_form: r.evidence_form,
+        quote_text: r.quote_text,
+        locator: r.locator,
+        how_read: r.how_read,
+        figure_check: r.fc_result ? { result: r.fc_result, detail: r.fc_detail, rules_version: r.fc_rules_version } : null,
       }));
 
       // 3.0 ITEM 10 (O1): A RUN RENDERS FROM ITSELF. The account's current
@@ -307,10 +323,20 @@ export function produceRunRouter(pool: Pool): Router {
       const { rows: factRows } = await client.query<{
         id: string; kind: string; value_numeric: string | null; value_text: string | null; unit: string | null;
         as_of: string; evidence_id: string; evidence_kind: string; basis: string | null; citation_resolved: boolean;
+        evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
+        fc_result: string | null; fc_detail: string | null; fc_rules_version: number | null;
       }>(
         `SELECT f.id, f.kind::text, f.value_numeric::text, f.value_text, f.unit, to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
-                e.id AS evidence_id, e.kind::text AS evidence_kind, lvrf_evidence_basis(e) AS basis, e.citation_resolved
+                e.id AS evidence_id, e.kind::text AS evidence_kind, lvrf_evidence_basis(e) AS basis, e.citation_resolved,
+                e.evidence_form::text, e.quote_text, e.locator, e.how_read,
+                fc.result::text AS fc_result, fc.detail AS fc_detail, fc.rules_version AS fc_rules_version
            FROM institution_facts f JOIN evidence e ON e.id = f.evidence_id
+           -- P1-D4: the latest figure check of this fact.
+           LEFT JOIN LATERAL (
+             SELECT c.result, c.detail, c.rules_version FROM figure_checks c
+              WHERE c.subject_table = 'institution_facts' AND c.subject_id = f.id
+              ORDER BY c.checked_at DESC, c.id DESC LIMIT 1
+           ) fc ON true
           WHERE f.institution_id = $1 AND f.deleted_at IS NULL AND f.superseded_by_id IS NULL
           ORDER BY f.kind, f.as_of DESC, f.id`,
         [engagement.institution_id],
@@ -329,6 +355,9 @@ export function produceRunRouter(pool: Pool): Router {
         id: f.id, kind: f.kind, valueNumeric: f.value_numeric, valueText: f.value_text, unit: f.unit,
         asOf: f.as_of, evidenceId: f.evidence_id, evidenceKind: f.evidence_kind, basis: f.basis,
         citationResolved: f.citation_resolved,
+        // P1-D4 (payloadVersion 2): the evidence form, its quote or locator, how it was read, and the latest figure check.
+        evidenceForm: f.evidence_form, quoteText: f.quote_text, locator: f.locator, howRead: f.how_read,
+        figureCheck: f.fc_result ? { result: f.fc_result, detail: f.fc_detail, rulesVersion: f.fc_rules_version } : null,
       }));
       const entity = entityRow
         ? { id: entityRow.id, legalName: entityRow.legal_name, identifierType: entityRow.identifier_type,
@@ -537,6 +566,10 @@ export function produceRunRouter(pool: Pool): Router {
       // That is correct — a payload with more in it is a different payload —
       // not a sign that an older run's stored hash has been corrupted.
       const runPayloadBase = {
+        // P1-D4: version 2 seals each fact's and evidence item's form and figure
+        // check. A run without this key is version 1 and keeps its bytes;
+        // check_run_hashes recomputes both from whatever keys a run has.
+        payloadVersion: 2,
         valueRunId,
         runNumber,
         sourceFixture,

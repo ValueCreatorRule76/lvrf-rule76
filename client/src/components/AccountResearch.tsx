@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { researchStatus, type ResearchStatus } from '../lib/workspaceStatus';
-import { FACT_KIND as KIND, DISCLOSURE_REGIME as REGIME } from '../lib/labels';
+import { FACT_KIND as KIND, DISCLOSURE_REGIME as REGIME, locatorText } from '../lib/labels';
+import { useEvidenceForm } from './EvidenceFormInput';
+
 import {
   fetchAccountResearch,
   type AccountPendingResult,
@@ -69,6 +71,8 @@ function CorrectEntityForm({ institutionId, onCorrected }: { institutionId: stri
   const [open, setOpen] = useState(false);
   const [v, setV] = useState({ legal_name: '', identifier_type: 'sec_cik', identifier: '', registry_jurisdiction: '', source_kind: 'public_filing', citation: '', supersession_reason: '' });
   const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value });
+  // P1: the corrected entity rests on a quote — the sentence naming it and its identifier.
+  const evidenceForm = useEvidenceForm({ allowed: ['quote'] });
   if (!open) return <button type="button" className={SMALL_BUTTON + ' mt-3'} onClick={() => setOpen(true)}>Correct the entity…</button>;
   return (
     <div className="mt-3 border-t border-rule-soft pt-3" data-testid="correct-entity">
@@ -92,11 +96,19 @@ function CorrectEntityForm({ institutionId, onCorrected }: { institutionId: stri
                 <option value="public_filing">public_filing</option><option value="company_publication">company_publication</option><option value="third_party_publication">third_party_publication</option>
               </select></label>
             <label className="block sm:col-span-2"><span className={LABEL_CLASS}>Where it is established (citation)</span><input className={INPUT_CLASS} value={v.citation} onChange={set('citation')} /></label>
+            <div className="sm:col-span-2">{evidenceForm.fields}</div>
             <label className="block sm:col-span-2"><span className={LABEL_CLASS}>Why the pinned entity is wrong (required)</span><textarea rows={2} className={INPUT_CLASS} value={v.supersession_reason} onChange={set('supersession_reason')} /></label>
           </div>
         }
-        canSubmit={v.legal_name.trim() !== '' && v.identifier.trim() !== '' && v.citation.trim().length >= 12 && v.supersession_reason.trim().length >= 12}
-        buildBody={() => ({ ...v, registry_jurisdiction: v.identifier_type === 'registry' ? v.registry_jurisdiction : null })}
+        canSubmit={v.legal_name.trim() !== '' && v.identifier.trim() !== '' && v.citation.trim().length >= 12 && v.supersession_reason.trim().length >= 12 && evidenceForm.unmet.length === 0}
+        unmet={[
+          ...(v.legal_name.trim() === '' ? ['give the legal name'] : []),
+          ...(v.identifier.trim() === '' ? ['give the identifier'] : []),
+          ...(v.citation.trim().length < 12 ? ['name where it is established, in at least 12 characters'] : []),
+          ...evidenceForm.unmet,
+          ...(v.supersession_reason.trim().length < 12 ? ['say why the pinned entity is wrong, in at least 12 characters'] : []),
+        ]}
+        buildBody={() => ({ ...v, registry_jurisdiction: v.identifier_type === 'registry' ? v.registry_jurisdiction : null, ...evidenceForm.body() })}
         submitLabel="Correct the entity"
         onSuccess={onCorrected}
         renderSuccess={(d) => <>Corrected: now {d.entity}. {d.facts_accepted_under_previous_entity.length} fact(s) accepted under the previous entity are listed for review.</>}
@@ -305,17 +317,23 @@ function FieldBody({ r }: { r: AccountPendingResult }) {
       <dd className={mono ? 'm-0 font-mono text-[11.5px] text-ink' : 'm-0 text-[12.5px] text-ink'}>{value === null || value === undefined ? '—' : String(value)}</dd>
     </div>
   );
+  // P1: what the result says its value rests on (contract v2: a quote or a locator, and how it was read).
+  const restsOn = (x: Record<string, unknown>) => <>
+    {x['quote'] !== undefined && row('Quote', `“${String(x['quote'])}”`)}
+    {typeof x['locator'] === 'object' && x['locator'] !== null && row('Locator', locatorText(x['locator'] as Parameters<typeof locatorText>[0]))}
+    {x['how_read'] !== undefined && row('How it was read', x['how_read'])}
+  </>;
   return (
     <dl className="m-0 mt-2 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-[10rem_1fr]">
-      {r.raw_response.subject === 'entity' && <>{row('Entity', describeEntity(it))}{row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}</>}
+      {r.raw_response.subject === 'entity' && <>{row('Entity', describeEntity(it))}{row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}{restsOn(it)}</>}
       {r.raw_response.subject === 'disclosure_regime' && <>
         {row('Regime', REGIME[String(it['value'])] ?? it['value'])}{row('Basis', it['basis'])}{row('As of', it['as_of'])}
-        {row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}</>}
+        {row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}{restsOn(it)}</>}
       {r.raw_response.subject === 'fact' && <>
         {row('Value', `${String(it['value'])}${it['unit'] ? ` ${String(it['unit'])}` : ''}`)}
         {/* L6: the period the fact describes, as a date and as stated, side by side. */}
         {row('As of (period end)', it['as_of'])}{row('Period, as stated', it['period'])}
-        {row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}{row('Quote', it['quote'])}</>}
+        {row('Source kind', it['source_kind'])}{row('Citation', it['citation'], true)}{restsOn(it)}</>}
       {r.raw_response.subject === 'not_found' && row('Not found, because', it['reason'])}
     </dl>
   );
@@ -339,8 +357,18 @@ function ReviewForm({ r, onDecided }: { r: AccountPendingResult; onDecided: (d: 
   const [note, setNote] = useState('');
   const [caveatsRead, setCaveatsRead] = useState(false);
   const [opened, setOpened] = useState(false);
+  const [quote, setQuote] = useState('');
+  const [howRead, setHowRead] = useState('');
   const found = r.found;
-  const ready = note.trim() !== '' && (decision === 'reject' || !found || (caveatsRead && opened));
+  // P1-D5 and Brad's ruling: a result researched under contract v1 carried no how-read (and, for an
+  // entity or a regime, no quote). Accepting it needs the reviewer to state them; nothing is filled in.
+  const v1 = found && (r.contract_version ?? 1) < 2;
+  const needQuote = v1 && r.raw_response.subject !== 'fact';
+  const v1Unmet = decision === 'accept' && v1 ? [
+    ...(needQuote && quote.trim() === '' ? ["paste the source's sentence that states it (the quote)"] : []),
+    ...(howRead.trim().length < 24 ? [`say how it was read (${24 - howRead.trim().length} more characters)`] : []),
+  ] : [];
+  const ready = note.trim() !== '' && (decision === 'reject' || !found || (caveatsRead && opened)) && v1Unmet.length === 0;
   return (
     <div className="mt-3">
       <GovernedForm<{ review_state: string }>
@@ -375,6 +403,17 @@ function ReviewForm({ r, onDecided }: { r: AccountPendingResult; onDecided: (d: 
                 </label>
               </>
             )}
+            {decision === 'accept' && v1 && (
+              <div className="mb-3 border-l-[3px] border-rule pl-3" data-testid="v1-accept">
+                <p className="m-0 mb-2 text-[11.5px] text-ink-45">This result was researched before evidence forms: say what the contract did not ask for.</p>
+                {needQuote && (
+                  <label className="mb-2 block"><span className={LABEL_CLASS}>Quote (the source&apos;s sentence that states it, at most 40 words)</span>
+                    <textarea rows={2} value={quote} onChange={(e) => setQuote(e.target.value)} className={INPUT_CLASS} /></label>
+                )}
+                <label className="block"><span className={LABEL_CLASS}>How it was read (at least 24 characters)</span>
+                  <textarea rows={2} value={howRead} onChange={(e) => setHowRead(e.target.value)} className={INPUT_CLASS} /></label>
+              </div>
+            )}
             <label className="block">
               <span className={LABEL_CLASS}>Review note (required)</span>
               <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
@@ -382,7 +421,17 @@ function ReviewForm({ r, onDecided }: { r: AccountPendingResult; onDecided: (d: 
           </>
         }
         canSubmit={ready}
-        buildBody={() => ({ review_note: note, ...(decision === 'accept' && found ? { citation_opened: opened } : {}) })}
+        unmet={[
+          ...(note.trim() === '' ? ['write the review note'] : []),
+          ...(decision === 'accept' && found && !caveatsRead ? ["tick that you read the research's caveats"] : []),
+          ...(decision === 'accept' && found && !opened ? ['tick that you opened the citation'] : []),
+          ...v1Unmet,
+        ]}
+        buildBody={() => ({
+          review_note: note,
+          ...(decision === 'accept' && found ? { citation_opened: opened } : {}),
+          ...(decision === 'accept' && v1 ? { how_read: howRead.trim(), ...(needQuote ? { quote_text: quote.trim() } : {}) } : {}),
+        })}
         submitLabel={decision === 'accept' ? (found ? 'Accept' : 'Accept as not found') : 'Reject'}
         onSuccess={() => onDecided(`${KIND[r.field_name] ?? r.field_name}: ${decision === 'accept' ? (found ? 'accepted' : 'accepted as not found') : 'rejected'}`)}
         renderSuccess={(d) => <>Recorded as {d.review_state}.</>}

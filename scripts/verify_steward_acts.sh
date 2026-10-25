@@ -129,7 +129,7 @@ C="$(code "$W/s.jar" POST "/api/research-results/$RR1/accept" "${JSON[@]}" -d '{
 [ "$C" != "403" ] && ok "accept -> $C (past the steward check; the review rules decide the rest)" || bad "S accept -> 403"
 
 step "8. X on authorized routes: unaffected"
-C="$(code "$W/x.jar" POST "/api/institutions/$INST/facts" "${JSON[@]}" -d '{"kind":"system","value_text":"Steward check","as_of":"2026-10-01","evidence_kind":"observation","confidence":"low","provenance":"Verification run, not a real source"}')"
+C="$(code "$W/x.jar" POST "/api/institutions/$INST/facts" "${JSON[@]}" -d '{"kind":"system","value_text":"Steward check","as_of":"2026-10-01","evidence_kind":"observation","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","provenance":"Verification run, not a real source"}')"
 [ "$C" = "201" ] && ok "X records a fact -> 201" || bad "X fact -> $C $(cat "$W/r.json")"
 C="$(code "$W/x.jar" GET /api/cohort)"; [ "$C" = "200" ] && ok "X reads -> 200" || bad "X read -> $C"
 

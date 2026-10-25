@@ -133,7 +133,7 @@ E="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direc
 TEN_X="$(q "SELECT id FROM tenants WHERE id <> '$TEN' ORDER BY id LIMIT 1")"
 INST_X="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TEN_X', 'Other tenant (q4k $TS)') RETURNING id" | head -1)"
 P_X="$(q "INSERT INTO persons (institution_id, full_name, email) VALUES ('$INST_X', 'Other tenant person (q4k)', 'px.$TS@q4k.example') RETURNING id" | head -1)"
-EV_X="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id, ai_sourced, research_query, research_tool) VALUES ('$INST_X', 'public_filing', 'Other tenant AI evidence', 'Verification fixture, not a source', 'low', '$P_X', true, 'q', 't') RETURNING id" | head -1)"
+EV_X="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id, ai_sourced, research_query, research_tool) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST_X', 'public_filing', 'Other tenant AI evidence', 'Verification fixture, not a source', 'low', '$P_X', true, 'q', 't') RETURNING id" | head -1)"
 start_server && ok "API up on $PORT"
 N=0
 account() {  # NAME — sets INST, CAP, OUT (an outcome on the TRIR entry, baseline 1.4)
@@ -150,9 +150,9 @@ account() {  # NAME — sets INST, CAP, OUT (an outcome on the TRIR entry, basel
 }
 EVB() {  # KIND SUMMARY SUPPORTS AI VERIFIED
   if [ "$4" = true ]; then
-    printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","source_verified":%s,"ai_sourced":true,"simulated":false,"research_query":"q","research_tool":"t"}' "$1" "$2" "$3" "$5"
+    printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":%s,"ai_sourced":true,"simulated":false,"research_query":"q","research_tool":"t"}' "$1" "$2" "$3" "$5"
   else
-    printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","source_verified":%s,"ai_sourced":false,"simulated":false}' "$1" "$2" "$3" "$5"
+    printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":%s,"ai_sourced":false,"simulated":false}' "$1" "$2" "$3" "$5"
   fi
 }
 account "Q4k API account"; INST_API="$INST"; OUT_API="$OUT"; ENG_API="$ENG"
@@ -202,7 +202,7 @@ expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'Q4k AI
 EV_AI2="$(rj b.evidence_id)"
 expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'Q4k person-recorded (fixture)' baseline false false)" 201 "evidence recorded by a person from its source"
 EV_PLAIN="$(rj b.evidence_id)"
-expect POST "/api/institutions/$INST_API/facts" '{"kind":"system","value_text":"Q4k fact system","as_of":"2026-09-30","evidence_kind":"public_filing","confidence":"medium","provenance":"Verification fixture, not a source","ai_sourced":true,"research_query":"q","research_tool":"t"}' 201 "an AI-sourced account fact (its evidence is research's)"
+expect POST "/api/institutions/$INST_API/facts" '{"kind":"system","value_text":"Q4k fact system","as_of":"2026-09-30","evidence_kind":"public_filing","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","provenance":"Verification fixture, not a source","ai_sourced":true,"research_query":"q","research_tool":"t"}' 201 "an AI-sourced account fact (its evidence is research's)"
 EV_FACT="$(q "SELECT evidence_id FROM institution_facts WHERE institution_id = '$INST_API' AND value_text = 'Q4k fact system'")"
 expect POST "/api/engagements/$ENG_API/produce-run" '{"note":"Verification: Q4k run one, before the citation is opened.","source_fixture":"verify_q4k_1"}' 201 "run one, before the citation is opened"
 R1="$(rj b.value_run_id)"

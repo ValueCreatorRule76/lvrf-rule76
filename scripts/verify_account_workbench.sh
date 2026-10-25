@@ -81,8 +81,8 @@ psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /tmp/lvrf_harde
 TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$TRIGGERS" = "$EXPECT_TRIGGERS" ] && ok "$EXPECT_TRIGGERS distinct triggers (hardening.sql total)" || bad "expected $EXPECT_TRIGGERS distinct triggers, found $TRIGGERS"
 FACT_TRIGGERS="$(psql -At -d "$VERIFY_DB" -c "SELECT string_agg(DISTINCT trigger_name, ',' ORDER BY trigger_name) FROM information_schema.triggers WHERE event_object_table = 'institution_facts'")"
-[ "$FACT_TRIGGERS" = "institution_facts_audit,institution_facts_no_delete,institution_facts_supersession_sane,institution_facts_touch" ] \
-  && ok "institution_facts has _audit, _no_delete, _supersession_sane, _touch" \
+[ "$FACT_TRIGGERS" = "institution_facts_audit,institution_facts_form_kept,institution_facts_no_delete,institution_facts_supersession_sane,institution_facts_touch" ] \
+  && ok "institution_facts has _audit, _form_kept (P1, 0039), _no_delete, _supersession_sane, _touch" \
   || bad "institution_facts triggers: $FACT_TRIGGERS"
 
 # ---------------------------------------------------------------------
@@ -143,7 +143,7 @@ post "/api/institutions/$INST/industry" \
   "{\"industry_slug\":\"$SLUG\",\"classification_note\":\"Verification: second classification.\"}" \
   409 "classify endpoint still refuses a reclassification"
 
-FACT_EV='"evidence_kind":"public_filing","provenance":"Verification run, not a real source","confidence":"low","source_verified":false,"ai_sourced":false'
+FACT_EV='"evidence_kind":"public_filing","provenance":"Verification run, not a real source","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":false'
 
 post "/api/institutions/$INST/facts" \
   "{\"kind\":\"revenue\",\"value_numeric\":0,\"unit\":\"USD\",\"as_of\":\"2025-12-31\",$FACT_EV}" \
@@ -161,13 +161,13 @@ post "/api/institutions/$INST/facts" \
   "{\"kind\":\"revenue\",\"value_numeric\":10,\"unit\":\"usd\",\"as_of\":\"2025-12-31\",$FACT_EV}" \
   422 "non-ISO currency refused by CHECK"
 post "/api/institutions/$INST/facts" \
-  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"short\",\"confidence\":\"low\"}" \
+  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"short\",\"confidence\":\"low\",\"evidence_form\":\"quote\",\"quote_text\":\"Verification fixture quote, not a source.\",\"how_read\":\"Verification fixture: read from the fixture quote as written.\"}" \
   422 "provenance under 12 characters refused"
 post "/api/institutions/$INST/facts" \
-  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"Verification run, not a real source\",\"confidence\":\"low\",\"ai_sourced\":true}" \
+  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"Verification run, not a real source\",\"confidence\":\"low\",\"evidence_form\":\"quote\",\"quote_text\":\"Verification fixture quote, not a source.\",\"how_read\":\"Verification fixture: read from the fixture quote as written.\",\"ai_sourced\":true}" \
   422 "AI-sourced without research query refused"
 post "/api/institutions/$INST/facts" \
-  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"Verification run, not a real source\",\"confidence\":\"low\",\"ai_sourced\":true,\"research_query\":\"q\",\"research_tool\":\"t\",\"source_verified\":true}" \
+  "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2026-10-01\",\"evidence_kind\":\"observation\",\"provenance\":\"Verification run, not a real source\",\"confidence\":\"low\",\"evidence_form\":\"quote\",\"quote_text\":\"Verification fixture quote, not a source.\",\"how_read\":\"Verification fixture: read from the fixture quote as written.\",\"ai_sourced\":true,\"research_query\":\"q\",\"research_tool\":\"t\",\"source_verified\":true}" \
   422 "AI-sourced cannot self-verify (AMENDMENT-005)"
 
 CODE="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -H "x-actor-person-id: $ACTOR" "$BASE/api/institutions/$INST/view")"

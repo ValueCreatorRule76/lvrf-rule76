@@ -121,7 +121,7 @@ OUT="$(rj b.value_outcome_id)"; MET="$(rj b.business_metric_id)"; ENG="$(rj b.en
 expect POST "/api/business-metrics/$MET/pack-basis" "{\"industry_measure_id\":\"$E_O\",\"basis_note\":\"v\"}" 422 "W5: a basis on another industry's entry" "not Retail"
 expect POST "/api/business-metrics/$MET/pack-basis" "{\"industry_measure_id\":\"$E_M\",\"basis_note\":\"Verification: same rate.\"}" 201 "W5: the basis"
 expect POST "/api/business-metrics/$MET/pack-basis" "{\"industry_measure_id\":\"$E_M\",\"basis_note\":\"again\"}" 409 "W5: a second basis (final)" "a basis is not amended"
-EVB() { printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","source_verified":false,"ai_sourced":false,"simulated":false}' "$1" "$2" "$3"; }
+EVB() { printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":false,"simulated":false}' "$1" "$2" "$3"; }
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB vendor_publication 'A vendor claim offered as the actual' actual)" 422 "W6: a vendor publication as the actual: refused by the database" "vendor-published evidence may not support a measured actual"
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB public_filing 'TRIR FY25 0 (fixture)' baseline)" 201 "W6: the baseline evidence, before any run"
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB vendor_publication 'Vendor claim: 75% reduction, no period (fixture)' impact_basis)" 201 "W6: the vendor claim as impact_basis"

@@ -137,7 +137,10 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   await setField(evScope, 'Kind', 'public_filing');
   await setField(evScope, 'Summary', 'TRIR FY25 0 (fixture).');
   await setField(evScope, 'Supports', 'baseline');
-  await setField(evScope, 'Confidence', 'medium');
+  await setField(evScope, 'What it rests on', 'quote');
+  await sleep(250);
+  await setField(evScope, 'Quote (the source', 'TRIR for FY25 was 0 (fixture, not a source).');
+  await setField(evScope, 'How it was read', 'Verification fixture: read from the fixture quote as written.');
   await setField(evScope, 'Source verified', 'false');
   await setField(evScope, 'AI-sourced', 'false');
   await setField(evScope, 'Simulated', 'false');

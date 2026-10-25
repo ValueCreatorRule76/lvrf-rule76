@@ -104,10 +104,10 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 COMMIT_BODY="{\"target_value\":1,\"committed_by_person_id\":\"$ACTOR\",\"committed_at\":\"$NOW\",\"commitment_note\":\"Verification: frozen-outcome check.\"}"
 MEASURE_BODY="{\"actual_value\":1,\"actual_measured_at\":\"$NOW\",\"note\":\"Verification: frozen-outcome check.\"}"
 VERIFY_BODY="{\"verified_by_person_id\":\"$ACTOR\",\"verified_at\":\"$NOW\",\"attestation_note\":\"Verification: frozen-outcome check.\"}"
-EVIDENCE_BODY='{"kind":"observation","summary":"Verification","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low"}'
+EVIDENCE_BODY='{"kind":"observation","summary":"Verification","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}'
 # Passes the route's own validation, then fails evidence_ai_verify_requires_resolution
 # at INSERT, so handleGovernanceError records a refusal (supports = baseline).
-REFUSED_EVIDENCE_BODY='{"kind":"observation","summary":"Verification refusal","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","ai_sourced":true,"research_query":"q","research_tool":"t","source_verified":true}'
+REFUSED_EVIDENCE_BODY='{"kind":"observation","summary":"Verification refusal","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","ai_sourced":true,"research_query":"q","research_tool":"t","source_verified":true}'
 
 step "4. Before retirement"
 C="$(code GET "/api/value-outcomes/$OUTCOME/gaps")"

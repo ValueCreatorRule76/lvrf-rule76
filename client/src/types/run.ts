@@ -107,6 +107,12 @@ export interface EvidenceItem {
   // lvrf_block_ai_actual refuses an actual on.
   simulated: boolean;
   vendor_published: boolean;
+  /** P1-D4 (payloadVersion 2): what it rested on, and its figure check, as sealed. Absent on earlier runs. */
+  evidence_form?: string;
+  quote_text?: string | null;
+  locator?: { document: string; value: number; scale: string; table?: string; row?: string; column?: string } | null;
+  how_read?: string | null;
+  figure_check?: { result: string; detail: string; rules_version: number } | null;
 }
 
 export interface RunDeltaCurrency {
@@ -138,6 +144,8 @@ export type RunDelta =
 
 // value_runs.payload, as stored — the same object render_record.py reads.
 export interface RunPayload {
+  /** P1-D4: 2 for a run that seals evidence forms and figure checks; absent (version 1) before. */
+  payloadVersion?: number;
   engagement: string;
   capability: string;
   // Bare string on runs walked before businessMetric was enriched; an

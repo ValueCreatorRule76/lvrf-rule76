@@ -172,6 +172,8 @@ export function institutionViewRouter(pool: Pool): Router {
         basis: string | null;
         captured_by: string;
         created_at: string;
+        evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
+        figure_check: { result: string; detail: string; rules_version: number } | null;
       }>(
         // Q4i: citation_resolved — whether a named person opened the
         // citation (H1; AMENDMENT-005 Art. IV) — is selected as this comment
@@ -185,7 +187,12 @@ export function institutionViewRouter(pool: Pool): Router {
                 to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS citation_resolved_at,
                 -- Q9 (O1): the D2 basis, derived by the one function (hardening.sql 21).
                 lvrf_evidence_basis(e) AS basis,
-                p.full_name AS captured_by, f.created_at
+                p.full_name AS captured_by, f.created_at,
+                -- P1 (0039): what the evidence rests on, and the fact's latest figure check.
+                e.evidence_form, e.quote_text, e.locator, e.how_read,
+                (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
+                   FROM figure_checks c WHERE c.subject_table = 'institution_facts' AND c.subject_id = f.id
+                  ORDER BY c.checked_at DESC, c.id DESC LIMIT 1) AS figure_check
            FROM institution_facts f
            JOIN evidence e ON e.id = f.evidence_id
            JOIN persons p ON p.id = f.captured_by_person_id

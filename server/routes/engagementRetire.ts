@@ -128,8 +128,9 @@ export function engagementRetireRouter(pool: Pool): Router {
       const { rows: [evidenceRow] } = await client.query<{ id: string }>(
         `INSERT INTO evidence (
            institution_id, kind, summary, provenance, confidence,
-           source_verified, ai_sourced, simulated, captured_by_person_id
-         ) VALUES ($1, 'observation', $2, $3, 'low', false, false, false, $4)
+           source_verified, ai_sourced, simulated, captured_by_person_id,
+           evidence_form
+         ) VALUES ($1, 'observation', $2, $3, 'low', false, false, false, $4, 'statement')
          RETURNING id`,
         [
           engagement.institution_id,

@@ -1842,7 +1842,7 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -1867,6 +1867,145 @@ BEGIN
     RAISE EXCEPTION 'LVRF: OWN-1 ownership assertion failed (hardening.sql section 24; run db/ownership.sql first): %', array_to_string(v, '; ');
   END IF;
 END $$;
+
+-- ------------------------------------------------------------------
+-- 25. P1 (0039, 24 Oct 2026) — the evidence form and the figure check
+--     (LVRF_PLAN §8; placed before section 14 so the manifest includes these)
+-- ------------------------------------------------------------------
+-- evidence_form_shape and evidence_how_read (CHECKs, db/schema.ts) hold one
+-- row's shape. This section holds what a CHECK cannot:
+--   evidence_form_guard          BEFORE INSERT OR UPDATE — "legacy" only on
+--                                rows that existed before 0039 (refused on
+--                                INSERT); the form, quote, locator and
+--                                how-read never change after INSERT (the
+--                                discipline of evidence_resolution_is_final).
+--   institution_facts_form_kept  BEFORE UPDATE — a corrected fact keeps its
+--                                evidence form: a quote's successor rests on
+--                                a quote, a locator's on a locator. A legacy
+--                                or statement predecessor may move to either
+--                                (an upgrade, not a swap).
+--   figure_checks_audit, _no_delete, _immutable, _guard — the figure check is
+--                                append-only and names consistent rows: its
+--                                evidence is the subject's, of the same
+--                                account, never legacy, and "not checkable"
+--                                exactly when the evidence is a person's
+--                                statement (Brad, 24 Oct 2026).
+--
+-- CONSEQUENCE: trigger count goes 129 -> 135.
+
+CREATE OR REPLACE FUNCTION lvrf_evidence_form_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.evidence_form = 'legacy' THEN
+      RAISE EXCEPTION 'LVRF: evidence: "legacy" is the form of evidence recorded before evidence forms (24 Oct 2026). A new row states what it rests on: a quote, a locator, or a person''s statement.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_form_no_legacy';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.evidence_form IS DISTINCT FROM OLD.evidence_form
+     OR NEW.quote_text IS DISTINCT FROM OLD.quote_text
+     OR NEW.locator IS DISTINCT FROM OLD.locator
+     OR NEW.how_read IS DISTINCT FROM OLD.how_read THEN
+    RAISE EXCEPTION 'LVRF: evidence %: its form, quote, locator and how-read are final once recorded. Correct the fact it supports instead: the correction records new evidence.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_form_final';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS evidence_form_guard ON evidence;
+CREATE TRIGGER evidence_form_guard
+  BEFORE INSERT OR UPDATE ON evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_evidence_form_guard();
+
+CREATE OR REPLACE FUNCTION lvrf_fact_form_kept() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  old_form evidence_form;
+  new_form evidence_form;
+BEGIN
+  IF NEW.superseded_by_id IS NOT NULL AND OLD.superseded_by_id IS NULL THEN
+    SELECT e.evidence_form INTO old_form FROM evidence e WHERE e.id = OLD.evidence_id;
+    SELECT e.evidence_form INTO new_form
+      FROM institution_facts f JOIN evidence e ON e.id = f.evidence_id
+     WHERE f.id = NEW.superseded_by_id;
+    IF old_form IN ('quote', 'locator') AND new_form IS DISTINCT FROM old_form THEN
+      RAISE EXCEPTION 'LVRF: institution_facts: a correction keeps its evidence form. This fact rests on a %, so its correction must rest on a % too (it rests on a %).', old_form, old_form, coalesce(new_form::text, 'nothing')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'institution_facts_form_kept';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS institution_facts_form_kept ON institution_facts;
+CREATE TRIGGER institution_facts_form_kept
+  BEFORE UPDATE ON institution_facts
+  FOR EACH ROW EXECUTE FUNCTION lvrf_fact_form_kept();
+
+CREATE OR REPLACE FUNCTION lvrf_figure_check_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION
+    'LVRF: figure check % is final. It records what the evidence was compared with, and when. A new write records a new check.', OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_figure_check_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  ev record;
+  ok boolean;
+BEGIN
+  SELECT id, institution_id, evidence_form INTO ev FROM evidence WHERE id = NEW.evidence_id;
+  IF ev.id IS NULL OR ev.institution_id IS DISTINCT FROM NEW.institution_id THEN
+    RAISE EXCEPTION 'LVRF: figure_checks: evidence % is not this account''s.', NEW.evidence_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_checks_guard';
+  END IF;
+  IF ev.evidence_form = 'legacy' THEN
+    RAISE EXCEPTION 'LVRF: figure_checks: evidence % was recorded before evidence forms; it is not checked.', NEW.evidence_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_checks_guard';
+  END IF;
+  IF (NEW.result = 'not_checkable') IS DISTINCT FROM (ev.evidence_form = 'statement') THEN
+    RAISE EXCEPTION 'LVRF: figure_checks: "not checkable" is the result exactly when the evidence is a person''s statement (evidence % is a %, the result is %).', NEW.evidence_id, ev.evidence_form, NEW.result
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_checks_guard';
+  END IF;
+  IF NEW.subject_table = 'institution_facts' THEN
+    SELECT EXISTS (SELECT 1 FROM institution_facts f WHERE f.id = NEW.subject_id AND f.evidence_id = NEW.evidence_id) INTO ok;
+  ELSE
+    SELECT EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = NEW.subject_id AND l.evidence_id = NEW.evidence_id) INTO ok;
+  END IF;
+  IF NOT ok THEN
+    RAISE EXCEPTION 'LVRF: figure_checks: evidence % does not support % %.', NEW.evidence_id, NEW.subject_table, NEW.subject_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_checks_guard';
+  END IF;
+  IF lvrf_current_actor() IS NOT NULL AND NEW.checked_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: figure_checks: a check is recorded by the person whose write it checks.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_checks_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS figure_checks_audit ON figure_checks;
+CREATE TRIGGER figure_checks_audit
+  AFTER INSERT OR UPDATE ON figure_checks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS figure_checks_no_delete ON figure_checks;
+CREATE TRIGGER figure_checks_no_delete
+  BEFORE DELETE ON figure_checks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'A figure check records what a figure was compared with, and when. It cannot be deleted.'
+  );
+
+DROP TRIGGER IF EXISTS figure_checks_immutable ON figure_checks;
+CREATE TRIGGER figure_checks_immutable
+  BEFORE UPDATE ON figure_checks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_figure_check_is_final();
+
+DROP TRIGGER IF EXISTS figure_checks_guard ON figure_checks;
+CREATE TRIGGER figure_checks_guard
+  BEFORE INSERT ON figure_checks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_figure_check_guard();
 
 -- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
@@ -1967,7 +2106,10 @@ COMMIT;
 --   offering_capabilities, person_roles, reflection_evidence — 8
 --   18: research_prompts_audit, research_prompts_no_delete,
 --   research_prompts_immutable — 3
---   Total: 129 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   25: evidence_form_guard, institution_facts_form_kept,
+--   figure_checks_audit, figure_checks_no_delete, figure_checks_immutable,
+--   figure_checks_guard — 6
+--   Total: 135 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -1976,15 +2118,16 @@ COMMIT;
 --   0035 (O1) took it 103 -> 111: value_levers' four, section 20's four.
 --   0036 (O2) took it 111 -> 126: value_hypotheses' and
 --   reference_example_markers' four each, section 22's seven.
---   0037 (W1 fix) took it 126 -> 129: section 23's three.)
+--   0037 (W1 fix) took it 126 -> 129: section 23's three.
+--   0039 (P1) took it 129 -> 135: section 25's six.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 129.
+-- TRUNCATE in section 14 fail. Total stays 135.
 --
--- Expect 197 rows here: information_schema.triggers emits one row per event
+-- Expect 205 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -2006,7 +2149,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197; 0039's section 25 adds evidence_form_guard I+U, institution_facts_form_kept U, figure_checks audit I+U, no_delete D, immutable U, guard I: +8 = 205 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

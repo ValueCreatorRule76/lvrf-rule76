@@ -70,7 +70,7 @@ SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
 curl -s -o /dev/null "$BASE/api/health" && ok "server up" || { bad "server did not start"; cat /tmp/lvrf_facts_server.log; exit 1; }
 
-EV='"evidence_kind":"observation","confidence":"low"'
+EV='"evidence_kind":"observation","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."'
 P1='"provenance":"Recorded at the sign-in P2a verification write"'
 code POST "/api/institutions/$INST/facts" "{\"kind\":\"system\",\"value_text\":\"LVAF\",\"as_of\":\"2026-10-11\",$EV,$P1}" > /dev/null
 F1="$(rj .fact_id)"

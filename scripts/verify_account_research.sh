@@ -115,7 +115,7 @@ REF0() { q "SELECT count(*) FROM refusals WHERE source = 'parser' AND institutio
 
 step "4. Phase ENTITY"
 expect GET "/api/institutions/$INST/research" "" 200 "GET research"
-[ "$(rj "b.phase_now + '|' + b.entity + '|' + b.contract_version_now")" = "entity|null|1" ] && ok "  ...phase entity, no entity, contract v1" || bad "  ...$(head -c 300 "$W/r.json")"
+[ "$(rj "b.phase_now + '|' + b.entity + '|' + b.contract_version_now")" = "entity|null|2" ] && ok "  ...phase entity, no entity, contract v2 (P1)" || bad "  ...$(head -c 300 "$W/r.json")"
 expect GET "/api/institutions/$INST_X/research" "" 404 "another tenant's account" "institution $INST_X not found"
 expect POST "/api/institutions/$INST/research-prompts" '{}' 201 "generate: the entity-phase prompt"
 P1="$(rj b.prompt_id)"; rj b.prompt > "$W/p1.txt"
@@ -124,14 +124,14 @@ P1="$(rj b.prompt_id)"; rj b.prompt > "$W/p1.txt"
 [ "$(q "SELECT institution_id = '$INST' AND industry_id IS NULL AND phase = 'entity' AND entity_id IS NULL AND prompt_sha256 = encode(sha256(convert_to(prompt_text, 'UTF8')), 'hex') FROM research_prompts WHERE id = '$P1'")" = "t" ] \
   && ok "  ...stored: the account, no industry, phase entity, no entity, the hash is the text's" || bad "  ...stored row"
 expect POST "/api/institutions/$INST_X/research-prompts" '{}' 404 "generate for another tenant's account"
-ENTITY='{"legal_name":"Verification Filer Inc.","identifier_type":"sec_cik","identifier":"0000123456","registry_jurisdiction":null,"source_kind":"public_filing","citation":"EDGAR company record, CIK 0000123456 (fixture, not a source)","caveats":[]}'
-REGIME='{"value":"public_filer","basis":"Files a 10-K with the SEC.","as_of":"2024-09-30","source_kind":"public_filing","citation":"EDGAR filing index (fixture)","caveats":[]}'
+ENTITY='{"legal_name":"Verification Filer Inc.","identifier_type":"sec_cik","identifier":"0000123456","registry_jurisdiction":null,"source_kind":"public_filing","citation":"EDGAR company record, CIK 0000123456 (fixture, not a source)","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
+REGIME='{"value":"public_filer","basis":"Files a 10-K with the SEC.","as_of":"2024-09-30","source_kind":"public_filing","citation":"EDGAR filing index (fixture)","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
 # JSON lists with "{...,...}" are held in single-quoted variables: written
 # inline inside "$( ... )", bash brace-expands them.
 NF_ENTITY='[{"kind":"entity","reason":"x"}]'
 NF_SYSTEM='[{"kind":"system","reason":"Not disclosed in filings (fixture)."}]'
 NF_PRIV='[{"kind":"revenue","reason":"Private; no statutory filing discloses revenue (fixture)."},{"kind":"headcount","reason":"Private; not disclosed (fixture)."}]'
-FACT_NZD='{"kind":"revenue","value":1,"unit":"NZD","as_of":"2024-12-31","period":"FY2024","source_kind":"company_publication","citation":"x","quote":"x","caveats":[]}'
+FACT_NZD='{"kind":"revenue","value":1,"unit":"NZD","as_of":"2024-12-31","period":"FY2024","source_kind":"company_publication","citation":"x","quote":"x","caveats":[],"how_read":"Verification fixture: read from the fixture quote as written."}'
 envb() { printf '{"prompt_id":"%s","institution":"Verification Filer","research_query":"q","query_as_executed":"qe","research_tool":"Verification tool","ai_sourced":true,%s}' "$1" "$2"; }
 R0="$(REF0 "$INST")"
 expect POST "$PARSE" "$(envb 00000000-0000-4000-8000-000000000000 "\"entity\":$ENTITY,\"disclosure_regime\":$REGIME,\"facts\":[],\"not_found\":[]")" 422 "an unknown prompt" "is not a research prompt for institution"
@@ -143,7 +143,7 @@ expect POST "$PARSE" "$(envb "$P1" "\"entity\":$ENTITY,\"disclosure_regime\":$RE
 expect POST "$PARSE" "$(envb "$P1" "\"entity\":$ENTITY,\"disclosure_regime\":$REGIME,\"facts\":[],\"not_found\":[]" | sed 's/"ai_sourced":true,//')" 422 "ai_sourced missing" "body.ai_sourced must be true or false"
 P_OLD="$(q "INSERT INTO research_prompts (tenant_id, institution_id, result_kind, phase, contract_version, template_version, prompt_text, prompt_sha256, generated_by_person_id)
   VALUES ('$TEN', '$INST', 'institution_fact', 'entity', 99, 1, 'a v99 prompt', encode(sha256(convert_to('a v99 prompt', 'UTF8')), 'hex'), '$X') RETURNING id" | head -1)"
-expect POST "$PARSE" "$(envb "$P_OLD" "\"entity\":$ENTITY,\"disclosure_regime\":$REGIME,\"facts\":[],\"not_found\":[]")" 422 "a prompt of another contract version" "the prompt was generated against v99; the contract is now v1; generate a new prompt."
+expect POST "$PARSE" "$(envb "$P_OLD" "\"entity\":$ENTITY,\"disclosure_regime\":$REGIME,\"facts\":[],\"not_found\":[]")" 422 "a prompt of another contract version" "the prompt was generated against v99; the contract is now v2; generate a new prompt."
 R1="$(REF0 "$INST")"
 [ "$((R1 - R0))" = "8" ] && ok "L8: all 8 parse refusals are on record in refusals (source parser)" || bad "L8: $((R1 - R0)) parse refusals recorded, expected 8"
 [ "$(q "SELECT (sqlstate IS NULL) || '|' || endpoint || '|' || (message LIKE '%the prompt was generated against v99%') || '|' || (actor_person_id = '$X') FROM refusals WHERE source = 'parser' AND institution_id = '$INST' ORDER BY refused_at DESC LIMIT 1")" = "true|POST /api/institutions/:institutionId/research-results|true|true" ] \
@@ -173,9 +173,9 @@ E_ID="$(q "SELECT id FROM institution_entities WHERE institution_id = '$INST'")"
   && grep -qF "as_of: the LAST DAY OF THE PERIOD the fact describes" "$W/p2.txt" && grep -qF "ALREADY RECORDED (0)" "$W/p2.txt" \
   && ok "  ...phase facts, the pinned entity named and stored, as_of = the period end, nothing recorded yet" || bad "  ...facts prompt"
 FACTENV() { envb "$P2" "\"entity\":${1:-$ENTITY},$2"; }
-REV='{"kind":"revenue","value":0,"unit":"USD","as_of":"2024-09-30","period":"fiscal year ended 30 September 2024","source_kind":"public_filing","citation":"Form 10-K FY2024, Item 8 (fixture)","quote":"Net sales were nil (fixture).","caveats":[]}'
-PRI='{"kind":"stated_priority","value":"Operational excellence (fixture)","unit":null,"as_of":"2024-09-30","period":"FY2024","source_kind":"company_publication","citation":"Company annual review 2024, p. 3 (fixture)","quote":"Our priority is operational excellence.","caveats":["From the annual review of the company, not a filing."]}'
-HC='{"kind":"headcount","value":4200,"unit":"people","as_of":"2024-09-30","period":"as of 30 September 2024","source_kind":"public_filing","citation":"Form 10-K FY2024, Item 1 (fixture)","quote":"We had approximately 4,200 employees.","caveats":["Approximate."]}'
+REV='{"kind":"revenue","value":0,"unit":"USD","as_of":"2024-09-30","period":"fiscal year ended 30 September 2024","source_kind":"public_filing","citation":"Form 10-K FY2024, Item 8 (fixture)","quote":"Net sales were nil (fixture).","caveats":[],"how_read":"Verification fixture: read from the fixture quote as written."}'
+PRI='{"kind":"stated_priority","value":"Operational excellence (fixture)","unit":null,"as_of":"2024-09-30","period":"FY2024","source_kind":"company_publication","citation":"Company annual review 2024, p. 3 (fixture)","quote":"Our priority is operational excellence.","caveats":["From the annual review of the company, not a filing."],"how_read":"Verification fixture: read from the fixture quote as written."}'
+HC='{"kind":"headcount","value":4200,"unit":"people","as_of":"2024-09-30","period":"as of 30 September 2024","source_kind":"public_filing","citation":"Form 10-K FY2024, Item 1 (fixture)","quote":"We had approximately 4,200 employees.","caveats":["Approximate."],"how_read":"Verification fixture: read from the fixture quote as written."}'
 R2="$(REF0 "$INST")"
 expect POST "$PARSE" "$(FACTENV "${ENTITY/0000123456/0000999999}" "\"facts\":[$REV],\"not_found\":[]")" 422 "a response about another entity" "this response is about Verification Filer Inc., sec_cik 0000999999; the account's entity is Verification Filer Inc., sec_cik 0000123456; nothing was written."
 expect POST "$PARSE" "$(FACTENV "" "\"disclosure_regime\":$REGIME,\"facts\":[$REV],\"not_found\":[]")" 422 "a regime in a facts response" "the regime is recorded in the entity phase"
@@ -189,11 +189,11 @@ expect POST "$PARSE" "$(FACTENV "" "\"facts\":[$REV,$PRI,$HC],\"not_found\":$NF_
 RREV="$(rj "b.results.find(r=>r.field_name==='revenue').id")"; RPRI="$(rj "b.results.find(r=>r.field_name==='stated_priority').id")"
 RHC="$(rj "b.results.find(r=>r.field_name==='headcount').id")"; RSYS="$(rj "b.results.find(r=>r.field_name==='system').id")"
 expect POST "/api/account-research-results/$RREV/accept" '{"review_note":"Verification: matches Item 8.","citation_opened":true}' 200 "accept revenue 0 (zero is data)"
-[ "$(q "SELECT f.value_numeric::text || '|' || f.unit || '|' || f.as_of || '|' || ev.kind || '|' || ev.citation_resolved || '|' || (ev.provenance LIKE '%Net sales were nil (fixture).%fiscal year ended 30 September 2024%') FROM institution_facts f JOIN evidence ev ON ev.id = f.evidence_id WHERE f.institution_id = '$INST' AND f.kind = 'revenue'")" = "0|USD|2024-09-30|public_filing|true|true" ] \
-  && ok "  ...the fact: 0 USD, as_of = the period end (L6), public_filing, citation resolved, the quote and period in the provenance" || bad "  ...revenue fact: $(q "SELECT value_numeric, unit, as_of FROM institution_facts WHERE institution_id = '$INST' AND kind = 'revenue'")"
+[ "$(q "SELECT f.value_numeric::text || '|' || f.unit || '|' || f.as_of || '|' || ev.kind || '|' || ev.citation_resolved || '|' || (ev.quote_text = 'Net sales were nil (fixture).' AND ev.provenance LIKE '%fiscal year ended 30 September 2024%' AND ev.provenance NOT LIKE '%Net sales were nil%') FROM institution_facts f JOIN evidence ev ON ev.id = f.evidence_id WHERE f.institution_id = '$INST' AND f.kind = 'revenue'")" = "0|USD|2024-09-30|public_filing|true|true" ] \
+  && ok "  ...the fact: 0 USD, as_of = the period end (L6), public_filing, citation resolved, its quote in quote_text (P1), the period in the provenance" || bad "  ...revenue fact: $(q "SELECT value_numeric, unit, as_of FROM institution_facts WHERE institution_id = '$INST' AND kind = 'revenue'")"
 # Q4i: the account page's read carries citation_resolved, by whom, when —
 # apart from source_verified. A typed fact has none.
-expect POST "/api/institutions/$INST/facts" '{"kind":"system","value_text":"A typed system (fixture)","as_of":"2024-09-30","evidence_kind":"observation","provenance":"Typed by the verifier (fixture, not a source)","confidence":"low"}' 201 "Q4i: a typed fact, for contrast"
+expect POST "/api/institutions/$INST/facts" '{"kind":"system","value_text":"A typed system (fixture)","as_of":"2024-09-30","evidence_kind":"observation","provenance":"Typed by the verifier (fixture, not a source)","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}' 201 "Q4i: a typed fact, for contrast"
 expect GET "/api/institutions/$INST/view" "" 200 "Q4i: GET /view"
 [ "$(rj "(f=>[f.citation_resolved, f.citation_resolved_by, /^\\d{4}-\\d{2}-\\d{2}$/.test(f.citation_resolved_at), f.source_verified].join())(b.facts.find(f=>f.kind==='revenue'))")" = "true,Authorized X (verification),true,false" ] \
   && [ "$(rj "(f=>[f.citation_resolved, f.citation_resolved_by, f.citation_resolved_at].join())(b.facts.find(f=>f.value_text==='A typed system (fixture)'))")" = "false,," ] \
@@ -235,7 +235,7 @@ expect POST "$PARSE" "$(envb "$P3" "\"entity\":$ENTITY,\"facts\":[$HC],\"not_fou
 RLATE="$(rj b.results[0].id)"
 OLD_E="$(q "SELECT id FROM institution_entities WHERE institution_id = '$INST' AND superseded_by_id IS NULL")"
 FACTS_BEFORE="$(q "SELECT string_agg(id || ':' || coalesce(value_text, value_numeric::text) || ':' || (superseded_by_id IS NULL) || ':' || (deleted_at IS NULL), ',' ORDER BY id) FROM institution_facts WHERE institution_id = '$INST'")"
-CORR() { printf '{"legal_name":"%s","identifier_type":"sec_cik","identifier":"%s","source_kind":"public_filing","citation":"EDGAR company record, CIK %s (fixture, not a source)","supersession_reason":"%s"}' "$1" "$2" "$2" "$3"; }
+CORR() { printf '{"legal_name":"%s","identifier_type":"sec_cik","identifier":"%s","source_kind":"public_filing","citation":"EDGAR company record, CIK %s (fixture, not a source)","supersession_reason":"%s","evidence_form":"quote","quote_text":"Verification fixture sentence naming the entity, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}' "$1" "$2" "$2" "$3"; }
 expect POST "/api/institutions/$INST/entity/supersede" "$(CORR 'Verification Filer Holdings Inc.' 0000654321 'short')" 422 "a correction without a 12-character reason" "supersession_reason must state why"
 expect POST "/api/institutions/$INST/entity/supersede" "$(CORR 'Verification Filer Inc.' 0000123456 'Verification: the same entity again.')" 422 "a correction to the same entity" "nothing to correct"
 expect POST "/api/institutions/$INST_X/entity/supersede" "$(CORR 'X' 0000654321 'Verification: another tenant.')" 404 "a correction on another tenant's account" "institution $INST_X not found"
@@ -258,7 +258,7 @@ expect POST "/api/institutions/$INST/research-prompts" '{}' 201 "the next facts 
 PNEW="$(rj b.prompt_id)"; rj b.prompt > "$W/pnew.txt"
 grep -qF "ENTITY (pinned): Verification Filer Holdings Inc. — sec_cik 0000654321." "$W/pnew.txt" && [ "$(q "SELECT entity_id FROM research_prompts WHERE id = '$PNEW'")" = "$NEW_E" ] \
   && ok "  ...research now targets the corrected entity" || bad "  ...prompt entity"
-ENTITY2='{"legal_name":"Verification Filer Holdings Inc.","identifier_type":"sec_cik","identifier":"0000654321","registry_jurisdiction":null,"source_kind":"public_filing","citation":"EDGAR company record (fixture)","caveats":[]}'
+ENTITY2='{"legal_name":"Verification Filer Holdings Inc.","identifier_type":"sec_cik","identifier":"0000654321","registry_jurisdiction":null,"source_kind":"public_filing","citation":"EDGAR company record (fixture)","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
 expect POST "$PARSE" "$(envb "$PNEW" "\"entity\":$ENTITY,\"facts\":[$HC],\"not_found\":[]")" 422 "a response about the OLD entity under the new prompt" "this response is about Verification Filer Inc., sec_cik 0000123456; the account's entity is Verification Filer Holdings Inc., sec_cik 0000654321"
 TWO="$(printf "BEGIN;\nINSERT INTO institution_entities (institution_id, legal_name, identifier_type, identifier, evidence_id, captured_by_person_id) SELECT '%s', 'A second current entity', 'ticker', 'ZZZ', id, '%s' FROM evidence WHERE institution_id = '%s' AND NOT EXISTS (SELECT 1 FROM institution_entities ie WHERE ie.evidence_id = evidence.id) LIMIT 1;\nCOMMIT;\n" "$INST" "$X" "$INST" | psql -X -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
 printf '%s' "$TWO" | grep -qF "would have 2 current entities" && ok "two current entities by direct SQL: refused at COMMIT by institution_entities_one_current (the deferred trigger)" || bad "two current: $TWO"
@@ -269,8 +269,8 @@ expect POST "/api/research-results/$RLATE/accept" '{"review_note":"v"}' 422 "the
 step "7. A private company"
 expect POST "/api/institutions/$PRIV/research-prompts" '{}' 201 "entity prompt for the private company"
 PP1="$(rj b.prompt_id)"
-PENT='{"legal_name":"Verification Private Limited","identifier_type":"registry","identifier":"1234567","registry_jurisdiction":"NZ","source_kind":"public_filing","citation":"NZ Companies Office record (fixture)","caveats":[]}'
-PREG='{"value":"private","basis":"Privately held; no securities filings.","as_of":"2024-12-31","source_kind":"public_filing","citation":"NZ Companies Office record (fixture)","caveats":[]}'
+PENT='{"legal_name":"Verification Private Limited","identifier_type":"registry","identifier":"1234567","registry_jurisdiction":"NZ","source_kind":"public_filing","citation":"NZ Companies Office record (fixture)","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
+PREG='{"value":"private","basis":"Privately held; no securities filings.","as_of":"2024-12-31","source_kind":"public_filing","citation":"NZ Companies Office record (fixture)","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
 expect POST "/api/institutions/$PRIV/research-results" "$(envb "$PP1" "\"entity\":${PENT/\"NZ\"/null},\"disclosure_regime\":$PREG,\"facts\":[],\"not_found\":[]")" 422 "a registry number without its jurisdiction" "registry_jurisdiction is required for a registry number"
 expect POST "/api/institutions/$PRIV/research-results" "$(envb "$PP1" "\"entity\":$PENT,\"disclosure_regime\":$PREG,\"facts\":[],\"not_found\":[]")" 201 "parse the private entity and regime"
 for id in $(rj "b.results.map(r=>r.id).join(' ')"); do req POST "/api/account-research-results/$id/accept" '{"review_note":"Verification: the registry record.","citation_opened":true}'; done
@@ -344,9 +344,9 @@ restore "$ROUTE"; stop_server; start_server
 expect POST "/api/institutions/$WALK_INST/research-prompts" '{}' 201 "a facts prompt for the walk account"
 PW5="$(rj b.prompt_id)"
 # The walk corrected its account's entity: B5's fact names the corrected one.
-WENT='{"legal_name":"Walk Fictional Holdings Inc.","identifier_type":"sec_cik","identifier":"0000777002","registry_jurisdiction":null,"source_kind":"public_filing","citation":"x","caveats":[]}'
+WENT='{"legal_name":"Walk Fictional Holdings Inc.","identifier_type":"sec_cik","identifier":"0000777002","registry_jurisdiction":null,"source_kind":"public_filing","citation":"x","caveats":[],"quote":"Verification fixture sentence naming it, not a source.","how_read":"Verification fixture: read from the fixture sentence as written."}'
 expect POST "/api/institutions/$WALK_INST/research-results" "$(envb "$PW5" "\"entity\":$WENT,\"facts\":[$HC],\"not_found\":[]")" 201 "a pending headcount on the walk account"
-edit "$CARDS" "const ready = note.trim() !== '' && (decision === 'reject' || !found || (caveatsRead && opened));" "const ready = note.trim() !== '';"
+edit "$CARDS" "const ready = note.trim() !== '' && (decision === 'reject' || !found || (caveatsRead && opened)) && v1Unmet.length === 0;" "const ready = note.trim() !== '';"
 sleep 5; walk break-h1; restore "$CARDS"
 # B6 — the correction's listing removed: the response no longer names the
 # facts accepted under the previous entity.

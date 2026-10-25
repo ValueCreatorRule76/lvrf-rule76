@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
+import { EvidenceFormError, parseEvidenceForm } from '../lib/evidenceFormBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { type FactFields, insertFactWithEvidence, pointFactAtSuccessor } from '../lib/institutionFactWriter.js';
 import { respondServerError } from '../lib/serverError.js';
@@ -169,9 +170,11 @@ function parseFactFields(body: Record<string, unknown>): FactFields {
     researchQuery = requireString(body, 'research_query', 'body');
     researchTool = requireString(body, 'research_tool', 'body');
   }
+  // P1 (0039): a fact's evidence rests on a quote or a locator, never a statement.
+  const form = parseEvidenceForm(body, { allowStatement: false, kind: evidenceKind, sourceReference });
   return {
     valueNumeric, valueText, unit, asOf, evidenceKind, provenance, confidence,
-    sourceReference, sourceVerified, aiSourced, researchQuery, researchTool,
+    sourceReference, sourceVerified, aiSourced, researchQuery, researchTool, ...form,
   };
 }
 
@@ -197,8 +200,6 @@ export function institutionFactsRouter(pool: Pool): Router {
     try {
       const body = requireObject(req.body, 'body');
       const kind = requireOneOf(body, 'kind', 'body', FACT_KINDS);
-      const fields = parseFactFields(body);
-
       const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         // actorContext already refused any mutating request without this
@@ -220,6 +221,8 @@ export function institutionFactsRouter(pool: Pool): Router {
         return;
       }
       refusalTenantId = institution.tenant_id;
+      // Read once the account is known, so a refused evidence form is recorded against it.
+      const fields = parseFactFields(body);
 
       const written = await insertFactWithEvidence(client, institutionId, kind, fields, actorPersonId, (t) => {
         refusalSubjectTable = t;
@@ -228,6 +231,16 @@ export function institutionFactsRouter(pool: Pool): Router {
       res.status(201).json({ fact_id: written.factId, evidence_id: written.evidenceId });
     } catch (err) {
       if (err instanceof ValidationError) {
+        res.status(422).json({ message: err.message });
+        return;
+      }
+      if (err instanceof EvidenceFormError) {
+        if (refusalTenantId) {
+          await recordRouteRefusal(pool, req, {
+            endpoint: 'POST /api/institutions/:institutionId/facts', subjectTable: 'evidence', subjectId: null,
+            tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
+          }, err.message);
+        }
         res.status(422).json({ message: err.message });
         return;
       }
@@ -279,8 +292,6 @@ export function institutionFactsRouter(pool: Pool): Router {
           `body.supersession_reason must state why the fact is being corrected, in at least ${MIN_REASON_LENGTH} characters`,
         );
       }
-      const fields = parseFactFields(body);
-
       const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
         throw new Error('req.actor missing on a request past requireActor');
@@ -308,6 +319,7 @@ export function institutionFactsRouter(pool: Pool): Router {
         return;
       }
       refusalTenantId = old.tenant_id;
+      const fields = parseFactFields(body);
 
       // Only the current fact is corrected. Correcting an ancestor would
       // fork the chain (_supersession_sane refuses that too); naming the
@@ -348,6 +360,16 @@ export function institutionFactsRouter(pool: Pool): Router {
       });
     } catch (err) {
       if (err instanceof ValidationError) {
+        res.status(422).json({ message: err.message });
+        return;
+      }
+      if (err instanceof EvidenceFormError) {
+        if (refusalTenantId) {
+          await recordRouteRefusal(pool, req, {
+            endpoint: 'POST /api/institutions/:institutionId/facts/:factId/supersede', subjectTable: 'evidence', subjectId: null,
+            tenantId: refusalTenantId, institutionId, attemptedPayload: req.body,
+          }, err.message);
+        }
         res.status(422).json({ message: err.message });
         return;
       }

@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import type { InstitutionFact, InstitutionFactHistoryEntry, InstitutionFactKind } from '../api/institution';
+import { useEvidenceForm, type EvidenceFormChoice } from './EvidenceFormInput';
+import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
+import { label, EVIDENCE_KIND } from '../lib/labels';
 
 const LABEL_CLASS = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const INPUT_CLASS =
@@ -104,6 +107,12 @@ function FactForm({
   const [aiSourced, setAiSourced] = useState<YesNo>('');
   const [researchQuery, setResearchQuery] = useState('');
   const [researchTool, setResearchTool] = useState('');
+  // P1: a fact's evidence rests on a quote or a locator. A correction keeps
+  // the form of the evidence it corrects (institution_facts_form_kept); a
+  // legacy fact may move to either.
+  const keep = correcting && (correcting.evidence_form === 'quote' || correcting.evidence_form === 'locator') ? correcting.evidence_form : null;
+  const allowed: EvidenceFormChoice[] = keep ? [keep] : ['quote', 'locator'];
+  const evidenceForm = useEvidenceForm({ allowed, kind: evidenceKind, sourceReference });
 
   const numeric = kind !== '' && NUMERIC_KINDS.includes(kind);
   // '' is unset; '0' is a real value and passes — zero is data.
@@ -128,7 +137,23 @@ function FactForm({
     sourceVerified !== '' &&
     aiSourced !== '' &&
     aiFieldsValid &&
+    evidenceForm.unmet.length === 0 &&
     (!correcting || reason.trim().length >= 12);
+  // Every reason the submit waits, in words (Q4l).
+  const unmet = [
+    ...(kind === '' ? ['choose the fact'] : []),
+    ...(kind !== '' && !valueValid ? ['give the value'] : []),
+    ...(!unitValid ? ['give the currency code'] : []),
+    ...(asOf === '' ? ['give the as-of date'] : []),
+    ...(correcting && reason.trim().length < 12 ? ['say why it is being corrected, in at least 12 characters'] : []),
+    ...(provenance.trim().length < 12 ? ['state the provenance, in at least 12 characters'] : []),
+    ...(evidenceKind === '' ? ['choose the evidence kind'] : []),
+    ...evidenceForm.unmet,
+    ...(confidence === '' ? ['choose the confidence you state'] : []),
+    ...(sourceVerified === '' ? ['say whether the source was opened and confirmed'] : []),
+    ...(aiSourced === '' ? ['say whether a model located it'] : []),
+    ...(aiSourced === 'true' && !aiFieldsValid ? ['name the research query and tool'] : []),
+  ];
 
   return (
     <GovernedForm<AddFactResponse>
@@ -142,8 +167,10 @@ function FactForm({
       }
       submitLabel={correcting ? 'Record correction' : 'Record fact'}
       canSubmit={canSubmit}
+      unmet={unmet}
       buildBody={() => ({
         ...(correcting ? { supersession_reason: reason } : { kind }),
+        ...evidenceForm.body(),
         ...(numeric
           ? {
               value_numeric: Number(valueNumeric),
@@ -192,12 +219,12 @@ function FactForm({
               <select value={evidenceKind} onChange={(e) => setEvidenceKind(e.target.value)} className={INPUT_CLASS}>
                 <option value="" disabled>— choose —</option>
                 {EVIDENCE_KIND_OPTIONS.map((k) => (
-                  <option key={k} value={k}>{k}</option>
+                  <option key={k} value={k}>{label(EVIDENCE_KIND, k)}</option>
                 ))}
               </select>
             </label>
             <label className="block">
-              <span className={LABEL_CLASS}>Confidence</span>
+              <span className={LABEL_CLASS}>Confidence (as you state it)</span>
               <select value={confidence} onChange={(e) => setConfidence(e.target.value)} className={INPUT_CLASS}>
                 <option value="" disabled>— choose —</option>
                 {CONFIDENCE_OPTIONS.map((c) => (
@@ -215,6 +242,7 @@ function FactForm({
               />
               <p className={HELP_CLASS}>Citation, filing reference, export ID or URL.</p>
             </label>
+            <div className="sm:col-span-2">{evidenceForm.fields}</div>
             <label className="block">
               <span className={LABEL_CLASS}>Source opened and confirmed?</span>
               <select value={sourceVerified} onChange={(e) => setSourceVerified(e.target.value as YesNo)} className={INPUT_CLASS}>
@@ -418,8 +446,11 @@ export function AccountFactsCard({
                         Citation opened by {f.citation_resolved_by ?? 'an unnamed reviewer'}, {f.citation_resolved_at}
                       </span>
                     )}
-                    <span className="block font-mono text-[10.5px] text-ink-45">
-                      {f.evidence_kind} · {f.confidence} confidence · {f.captured_by}
+                    {/* P1: what it rests on, and a figure check that flagged. */}
+                    <EvidenceRestsOn e={f} statedBy={f.captured_by} statedOn={f.created_at} />
+                    <FigureCheckLine check={f.figure_check} />
+                    <span className="block text-[10.5px] text-ink-45">
+                      {label(EVIDENCE_KIND, f.evidence_kind)} · confidence stated by the analyst: {f.confidence} · {f.captured_by}
                     </span>
                     <span className="mt-1.5 flex flex-wrap items-center gap-2">
                       {f.history.length > 0 && (

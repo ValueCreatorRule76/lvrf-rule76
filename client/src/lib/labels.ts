@@ -40,3 +40,8 @@ export const SUPPORTS: Record<string, string> = { baseline: 'the baseline', actu
 
 /** The label for a stored value; an unknown value is shown as stored, never guessed. */
 export const label = (map: Record<string, string>, v: string) => map[v] ?? v;
+
+/** P1: a locator as read: "Document · table · row · column: value (scale)". */
+export function locatorText(l: { document: string; value: number; scale: string; table?: string; row?: string; column?: string }): string {
+  return `${[l.document, l.table, l.row, l.column].filter(Boolean).join(' · ')}: ${l.value} (${l.scale})`;
+}

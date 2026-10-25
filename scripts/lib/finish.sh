@@ -8,12 +8,18 @@
 # even when the trap saves $? and exits with it. A script that stopped half-way
 # therefore exited 0. With this trap, a script passes only if it reached its
 # own tally and that tally passed.
+#
+# The script's own stdout and stderr are kept here (fds 8 and 9), because a
+# script stopped by `set -e` inside a redirected function call (`q … > /dev/null`)
+# runs its EXIT trap with that redirection still in place: the stop-early line
+# would go to /dev/null while the exit stayed 1 (found 25 Oct 2026, P1).
+exec 8>&1 9>&2
 REACHED_TALLY=0
 finish() {
   local rc=$?
-  cleanup
+  cleanup >&8 2>&9
   if [ "$REACHED_TALLY" != 1 ]; then
-    echo "  FAIL  stopped before its final tally (a crash, an unset variable or an early exit); exit 1"
+    echo "  FAIL  stopped before its final tally (a crash, an unset variable or an early exit); exit 1" >&8
     exit 1
   fi
   exit "$rc"

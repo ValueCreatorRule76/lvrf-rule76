@@ -100,7 +100,7 @@ step "4. A refusal on A names A"
 BEFORE_A="$(gap_state "$A" baseline_evidence_verified)"; BEFORE_B="$(gap_state "$B" baseline_evidence_verified)"
 echo "  before: A baseline=$BEFORE_A · B baseline=$BEFORE_B"
 C="$(curl -s -o /tmp/lvrf_r.json -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $ACTOR" \
-  -d '{"kind":"observation","summary":"Verification","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","ai_sourced":true,"research_query":"q","research_tool":"t","source_verified":true}' \
+  -d '{"kind":"observation","summary":"Verification","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","ai_sourced":true,"research_query":"q","research_tool":"t","source_verified":true}' \
   "$BASE/api/value-outcomes/$A/evidence")"
 [ "$C" = "422" ] && ok "refusal provoked on A -> 422" || { bad "expected 422 provoking a refusal on A, got $C"; exit 1; }
 [ "$(q "SELECT value_outcome_id FROM refusals ORDER BY refused_at DESC LIMIT 1")" = "$A" ] && ok "the new refusal row records value_outcome_id = A" || bad "refusal row does not name A"

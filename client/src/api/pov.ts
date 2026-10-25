@@ -1,3 +1,4 @@
+import type { EvidenceFormShown, FigureCheckShown } from '../components/EvidenceRestsOn';
 // GET /api/institutions/:id/pov — O2's one read for the account POV and the
 // account page's hypothesis, summary and reference-example cards. snake_case,
 // exactly the shape server/routes/valueHypotheses.ts assembles. Every
@@ -45,6 +46,9 @@ export interface PovFact {
   citation_resolved: boolean;
   citation_resolved_by: string | null;
   basis: Basis | null;
+  /** P1 (0039): what the evidence rests on, and the fact's latest figure check. */
+  evidence_form: string; quote_text: string | null; locator: EvidenceFormShown['locator']; how_read: string | null;
+  figure_check: FigureCheckShown | null;
 }
 
 export interface PovEngagement {
@@ -77,6 +81,11 @@ export interface PovEvidence {
   summary: string;
   provenance: string;
   basis: Basis | null;
+  /** P1 (0039): what it rests on, who recorded it, and its latest figure check against this outcome. */
+  evidence_form: string; quote_text: string | null; locator: EvidenceFormShown['locator']; how_read: string | null;
+  /** The attester when there is one, otherwise the recorder. */
+  stated_by: string; stated_on: string;
+  figure_check: FigureCheckShown | null;
 }
 
 export interface PackEntryRef {

@@ -1,6 +1,7 @@
 import type { Run } from '../../types/run';
 import { Badge } from './Card';
 import { label, EVIDENCE_KIND, SUPPORTS } from '../../lib/labels';
+import { EvidenceRestsOn, FigureCheckLine } from '../EvidenceRestsOn';
 
 // payload.evidence is a snapshot taken at walk time, not a live join —
 // walkSpine.ts's comment explains why: evidence mutates after a walk
@@ -44,6 +45,13 @@ export function EvidenceCard({ run }: { run: Run }) {
               {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
             </p>
             <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]" data-record>Source: {e.provenance}</p>
+            {/* P1-D4: sealed from payloadVersion 2 — what it rested on, and a check that flagged. */}
+            {e.evidence_form && (
+              <span data-record>
+                <EvidenceRestsOn e={{ evidence_form: e.evidence_form, quote_text: e.quote_text ?? null, locator: e.locator ?? null, how_read: e.how_read ?? null }} className="mt-0.5" />
+                <FigureCheckLine check={e.figure_check} />
+              </span>
+            )}
             {/*
               Same tone as an unopened AI citation, same reason: both are facts
               lvrf_block_ai_actual refuses an actual on (AMENDMENT-005 Article I).

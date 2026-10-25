@@ -7,6 +7,7 @@ import { label, DISCLOSURE, REALIZATION, STAGE_LABEL } from '../../lib/labels';
 import { GovernedAction } from '../GovernedAction';
 import { FOCUS_RING } from '../GovernedForm';
 import { ConfidenceBadge } from './Workspace';
+import { FigureCheckLine } from '../EvidenceRestsOn';
 import { EvidenceCard } from './EvidenceCard';
 import { AddEvidenceCard } from './AddEvidenceCard';
 import { GapListCard } from './GapListCard';
@@ -148,6 +149,10 @@ function Figures({ run }: { run: Run }) {
           </div>
         ))}
       </dl>
+      {/* P1-D4: a sealed figure check that flagged, or a statement backing a figure (payloadVersion 2). */}
+      {(p.evidence ?? []).map((e, i) => (
+        <span key={i} data-record><FigureCheckLine check={e.figure_check} of={e.supports === 'impact_basis' ? 'impact basis' : e.supports} className="mt-1" /></span>
+      ))}
       <p className="m-0 mt-3 border-t border-rule-soft pt-3 text-[12.5px] text-ink-70" data-testid="verify-state">
         {p.realization === 'verified'
           ? 'Verified by a named person. Attested evidence earns partial credit, so a record of this shape cannot exceed 80 without independent verification.'

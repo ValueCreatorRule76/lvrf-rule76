@@ -6,6 +6,7 @@ import { useActor } from '../actor/ActorContext';
 import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
+import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
 /**
@@ -304,6 +305,8 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
               target {outcome.target_value === null ? 'none (a hypothesis)' : Number(outcome.target_value)} · {outcome.realization}, {outcome.confidence}
             </p>
           )}
+          {/* P1: a figure check that flagged, or a statement backing a figure, beside the figures. */}
+          {outcome?.evidence.map((e) => <FigureCheckLine key={e.id} check={e.figure_check} of={e.supports === 'impact_basis' ? 'impact basis' : e.supports} className="mb-1" />)}
           {s4 === 'next' && (
             <GovernedForm<{ value_outcome_id: string }>
               path={`/api/institutions/${institutionId}/value-outcomes`} provenanceLabel="What this records"
@@ -352,7 +355,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><OpenCitation e={e} onOpened={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} /></li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>

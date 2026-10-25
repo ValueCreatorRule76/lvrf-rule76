@@ -35,6 +35,16 @@ export interface EvidenceFixture {
   /** Key into `persons` (e.g. "metric_owner") when this evidence is an attestation. */
   attested_by?: string | null;
   attested_at?: string | null;
+  /**
+   * P1 (0039): what the evidence rests on. A fixture states its own form —
+   * nothing is invented for it: quote (quote_text, how_read), locator
+   * (locator, how_read), or statement (an observation citing no source, or
+   * an attestation). walkSpine refuses an item that states none.
+   */
+  evidence_form?: 'quote' | 'locator' | 'statement';
+  quote_text?: string;
+  locator?: { document: string; value: number; scale: 'units' | 'thousands' | 'millions' | 'billions' | 'percent'; table?: string; row?: string; column?: string };
+  how_read?: string;
 }
 
 export interface CustomerZeroFixture {

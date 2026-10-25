@@ -157,6 +157,18 @@ REAL_AFTER="$(q lvrf "SELECT datdba::regrole FROM pg_database WHERE datname = 'l
 # database, schemas, every relation (lvrf_app's privileges on each), types,
 # functions (lvrf_ownership_violations excluded: OWN-1's, the superuser's,
 # harmless after a rollback), and what PUBLIC may create.
+# Objects this checkout adds after COMMIT (tables in db/drizzle, functions in
+# hardening.sql): a database built with COMMIT's files cannot hold them, so a
+# comparison with one is made over the objects that existed then (P1, 25 Oct
+# 2026: section 25's functions and figure_checks postdate both pinned commits).
+newer_than() {  # COMMIT -> an extended regex of snapshot lines to leave out
+  local t f
+  t="$(comm -13 <(git ls-tree --name-only "$1" db/drizzle/ | grep '\.sql$' | while read -r x; do git show "$1:$x"; done | grep -oE 'CREATE TABLE "[a-z_]+"' | sort -u) \
+               <(cat db/drizzle/*.sql | grep -oE 'CREATE TABLE "[a-z_]+"' | sort -u) | sed -E 's/CREATE TABLE "([a-z_]+)"/\1/' | paste -sd'|' -)"
+  f="$(comm -13 <(git show "$1:db/hardening.sql" | grep -oE 'CREATE OR REPLACE FUNCTION [a-z_]+' | sort -u) \
+               <(grep -oE 'CREATE OR REPLACE FUNCTION [a-z_]+' db/hardening.sql | sort -u) | sed -E 's/CREATE OR REPLACE FUNCTION //' | paste -sd'|' -)"
+  printf '%s' "^(rel\\|public\\.(${t:-__none__})\\||func\\|(${f:-__none__})\\()"
+}
 snapshot() {  # DB
   psql -X -At -d "$1" <<'SQL'
 SELECT 'db|' || d.datdba::regrole || '|' || has_database_privilege('lvrf_app', d.datname, 'CREATE') || has_database_privilege('lvrf_app', d.datname, 'CONNECT') || has_database_privilege('lvrf_app', d.datname, 'TEMP') || '|public:' || has_database_privilege('public', d.datname, 'CREATE')
@@ -187,7 +199,8 @@ createdb -T lvrf -O lvrf_app "$PRE_DB" \
   && ok "a pre-OWN-1 database, built as prod is today: cloned by lvrf_app, migrated as lvrf_app, hardened with $PRE_OWN1_COMMIT's hardening.sql" \
   || { bad "pre-OWN-1 build: $(tail -3 "$W/premig.log")"; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership_rollback.sql > "$W/rollback.log" 2>&1 && ok "db/ownership_rollback.sql applied to the converted clone" || bad "rollback: $(grep -m1 ERROR "$W/rollback.log")"
-snapshot "$PRE_DB" | sed "s/$PRE_DB/DB/g" > "$W/snap_pre.txt"; snapshot "$VERIFY_DB" | sed "s/$VERIFY_DB/DB/g" > "$W/snap_rolled.txt"
+NEWER_PRE="$(newer_than "$PRE_OWN1_COMMIT")"
+snapshot "$PRE_DB" | sed "s/$PRE_DB/DB/g" | { grep -vE "$NEWER_PRE" || true; } > "$W/snap_pre.txt"; snapshot "$VERIFY_DB" | sed "s/$VERIFY_DB/DB/g" | { grep -vE "$NEWER_PRE" || true; } > "$W/snap_rolled.txt"
 if cmp -s "$W/snap_pre.txt" "$W/snap_rolled.txt"; then
   ok "  ...identical to the pre-OWN-1 database: owners, and lvrf_app's privileges on every one of $(grep -c '^rel|' "$W/snap_pre.txt") relations, the schemas and the database ($(wc -l < "$W/snap_pre.txt" | tr -d ' ') lines compared)"
 else
@@ -227,7 +240,8 @@ REAPPLY_COMMIT=a88c071   # the ownership.sql on the box when the rollback was ru
 git show "$REAPPLY_COMMIT:db/ownership.sql" > "$W/ownership_box.sql"
 D10=lvrf_verifyown1re
 dropdb --if-exists "$D10"; make_clone "$D10" lvrf_prodcopy && migrate_clone "$D10" > /dev/null 2>&1 && harden "$D10" && ok "a converted, hardened prod copy (prod after OWN-1's deploy)" || bad "D10 build"
-snapshot "$D10" | sed "s/$D10/DB/g" > "$W/snap_converted.txt"
+NEWER_RE="$(newer_than "$REAPPLY_COMMIT")"
+snapshot "$D10" | sed "s/$D10/DB/g" | { grep -vE "$NEWER_RE" || true; } > "$W/snap_converted.txt"
 HB="$(hash_now)"
 psql -X -q -v ON_ERROR_STOP=1 -d "$D10" -f db/ownership_rollback.sql > /dev/null 2>&1 && [ "$(q postgres "SELECT rolcanlogin FROM pg_roles WHERE rolname = 'lvrf_migrate'")" = "f" ] && ok "rolled back (prod's state now): lvrf_migrate NOLOGIN" || bad "rollback"
 # The reapply paste, as given: LOGIN back, the box's ownership.sql (no \set), harden, the checks.
@@ -238,7 +252,7 @@ harden "$D10" && ok "  ...hardening: section 24 passes" || bad "  ...hardening: 
 owncheck "${LOCAL_URL%/*}/$D10" && ok "  ...check_ownership (step 5d), as lvrf_app: no violations" || bad "  ...$(cat "$W/own.log")"
 DATABASE_URL="${MURL%/*}/$D10" npx tsx scripts/check_migrate_role.ts > "$W/role.log" 2>&1 && ok "  ...check_migrate_role with the ORIGINAL password: $(cat "$W/role.log")" || bad "  ...login: $(cat "$W/role.log")"
 [ "$(hash_now)" = "$HB" ] && ok "  ...the password hash is unchanged through rollback and reapply (no reset needed)" || bad "  ...the password hash changed"
-snapshot "$D10" | sed "s/$D10/DB/g" > "$W/snap_reapplied.txt"
+snapshot "$D10" | sed "s/$D10/DB/g" | { grep -vE "$NEWER_RE" || true; } > "$W/snap_reapplied.txt"
 cmp -s "$W/snap_converted.txt" "$W/snap_reapplied.txt" && ok "  ...identical to before the rollback: $(wc -l < "$W/snap_reapplied.txt" | tr -d ' ') owner and privilege lines" || bad "  ...differs: $(diff "$W/snap_converted.txt" "$W/snap_reapplied.txt" | head -6 | tr '\n' ' ')"
 PGT="SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
 [ "$(psql -X -At "${LOCAL_URL%/*}/$D10" -c "$PGT")" = "$EXPECT_TRIGGERS" ] && ok "  ...$EXPECT_TRIGGERS triggers counted from pg_trigger AS lvrf_app (information_schema shows lvrf_app $(psql -X -At "${LOCAL_URL%/*}/$D10" -c "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'"): it hides triggers on SELECT-only tables)" || bad "  ...pg_trigger count as lvrf_app"

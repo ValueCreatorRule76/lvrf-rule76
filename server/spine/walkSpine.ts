@@ -288,6 +288,25 @@ function resolveAttestation(seeded: SeedResult, ev: EvidenceFixture): ResolvedAt
   return { attestedByPersonId: seeded.persons[key].id, attestedAt: new Date(ev.attested_at) };
 }
 
+/**
+ * P1 (0039): a fixture's evidence states its own form; none is invented
+ * here. The database's evidence_form_shape and evidence_how_read CHECKs
+ * judge what the fixture says.
+ */
+function fixtureEvidenceForm(ev: EvidenceFixture): {
+  evidenceForm: 'quote' | 'locator' | 'statement'; quoteText: string | null; locator: EvidenceFixture['locator'] | null; howRead: string | null;
+} {
+  if (!ev.evidence_form) {
+    throw new Error(`fixture evidence "${ev.summary.slice(0, 60)}" states no evidence_form (P1, 0039): give quote_text or locator with how_read, or statement for an observation citing no source or an attestation`);
+  }
+  return {
+    evidenceForm: ev.evidence_form,
+    quoteText: ev.evidence_form === 'quote' ? ev.quote_text ?? null : null,
+    locator: ev.evidence_form === 'locator' ? ev.locator ?? null : null,
+    howRead: ev.evidence_form === 'statement' ? null : ev.how_read ?? null,
+  };
+}
+
 export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
   const fixtureFile = opts?.fixtureFile ?? 'customer_zero.json';
   // Stem only, no extension — e.g. 'customer_b'. Stamped on the run so a
@@ -407,6 +426,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
           capturedByPersonId: seeded.persons.valueEngineer.id,
           attestedByPersonId: attestation.attestedByPersonId,
           attestedAt: attestation.attestedAt,
+          ...fixtureEvidenceForm(ev),
         })
         .returning();
       rowsWritten.evidence += 1;
@@ -512,6 +532,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
           capturedByPersonId: seeded.persons.valueEngineer.id,
           attestedByPersonId: attestation.attestedByPersonId,
           attestedAt: attestation.attestedAt,
+          ...fixtureEvidenceForm(ev),
         })
         .returning();
       rowsWritten.evidence += 1;
@@ -625,6 +646,7 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
           capturedByPersonId: seeded.persons.valueEngineer.id,
           attestedByPersonId: attestation.attestedByPersonId,
           attestedAt: attestation.attestedAt,
+          ...fixtureEvidenceForm(ev),
         })
         .returning();
       rowsWritten.evidence += 1;

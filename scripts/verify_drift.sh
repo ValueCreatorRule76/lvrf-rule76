@@ -104,7 +104,7 @@ baseline_ok && ok "  ...restored (hardening.sql re-run): no findings" || bad "D3
 step "7. D4 — supersession pointers"
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND NOT simulated AND deleted_at IS NULL ORDER BY created_at LIMIT 1")"
 INST="$(q "SELECT id FROM institutions WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1")"
-fact() { local ev; ev="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'observation', 'D4 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
+fact() { local ev; ev="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'D4 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
   q "INSERT INTO institution_facts (institution_id, kind, value_text, as_of, evidence_id, captured_by_person_id) VALUES ('$INST', 'system', '$1', '2026-10-01', '$ev', '$STAFF') RETURNING id" | head -1; }
 FA="$(fact 'D4 old')"; FB="$(fact 'D4 new')"; FC="$(fact 'D4 other')"
 q "UPDATE institution_facts SET superseded_by_id = '$FB', supersession_reason = 'Verification: a D4 fixture chain.' WHERE id = '$FA'" > /dev/null
@@ -134,7 +134,7 @@ CODES="$(q "SELECT string_agg(f->>'code', ',' ORDER BY f->>'code') FROM value_ru
 [ "$C" = "201" ] && echo ",$CODES," | grep -q ",D4," && ! echo ",$CODES," | grep -q ",D3," && ok "a run produced now carries the D4 fork on its findings, and no D3 ($CODES)" || bad "run findings: $C '$CODES'"
 
 step "9. L16 — the four link tables are audited and never deleted"
-EV="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST', 'observation', 'L16 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
+EV="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'L16 fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1)"
 VO="$(q "SELECT id FROM value_outcomes WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1")"
 psql -At -d "$VERIFY_DB" -c "SELECT set_config('lvrf.actor_person_id', '$STAFF', false); INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$VO', '$EV', 'baseline')" > /dev/null
 A="$(q "SELECT record_id || '|' || operation || '|' || (actor_person_id = '$STAFF')::text || '|' || (new_row->>'supports') FROM audit_log WHERE table_name = 'value_outcome_evidence' ORDER BY id DESC LIMIT 1")"

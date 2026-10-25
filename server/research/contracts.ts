@@ -338,8 +338,20 @@ export function buildIndustryMeasurePrompt(contract: ResearchContract, inputs: I
  * inferred), until a ruling adds a kind.
  */
 
-export const INSTITUTION_FACT_CONTRACT_VERSION = 1;
-export const INSTITUTION_PROMPT_TEMPLATE_VERSION = 1;
+/**
+ * v2 (P1, 0039, 24 Oct 2026): every entity, regime and fact says what its
+ * evidence rests on and how the value was read — an entity and a regime a
+ * `quote` (Brad's ruling on the P1 plan's gap); a fact a `quote` OR a
+ * `locator`; each with `how_read` (at least 24 characters). v1 is kept by
+ * number: a result parsed under it is accepted under it, the reviewer
+ * stating what it lacks (P1-D5).
+ */
+export const INSTITUTION_FACT_CONTRACT_VERSION = 2;
+export const INSTITUTION_PROMPT_TEMPLATE_VERSION = 2; // 2: quote / locator / how_read (P1)
+export const QUOTE_MAX_WORDS = 40;
+export const HOW_READ_MIN = 24;
+export const LOCATOR_SCALES = ['units', 'thousands', 'millions', 'billions', 'percent'] as const;
+export interface ResearchedLocator { document: string; value: number; scale: (typeof LOCATOR_SCALES)[number]; table?: string; row?: string; column?: string }
 
 export const RESEARCHABLE_FACT_KINDS = ['revenue', 'headcount', 'stated_priority', 'system'] as const;
 export type ResearchableFactKind = (typeof RESEARCHABLE_FACT_KINDS)[number];
@@ -358,14 +370,20 @@ export function evidenceKindFor(sourceKind: SourceKind): 'public_filing' | 'obse
 export interface ResearchedEntity {
   legal_name: string; identifier_type: (typeof IDENTIFIER_TYPES)[number]; identifier: string;
   registry_jurisdiction: string | null; source_kind: SourceKind; citation: string; caveats: string[];
+  /** v2: the sentence naming the entity and its identifier, and how it was read. Absent under v1 and on a facts-phase echo. */
+  quote?: string; how_read?: string;
 }
 export interface ResearchedRegime {
   value: (typeof DISCLOSURE_REGIMES)[number]; basis: string; as_of: string;
   source_kind: SourceKind; citation: string; caveats: string[];
+  /** v2: the sentence stating the regime, and how it was read. Absent under v1. */
+  quote?: string; how_read?: string;
 }
 export interface ResearchedFact {
   kind: ResearchableFactKind; value: number | string; unit: string | null; as_of: string; period: string;
-  source_kind: SourceKind; citation: string; quote: string; caveats: string[];
+  source_kind: SourceKind; citation: string; caveats: string[];
+  /** v1: always a quote. v2: exactly one of quote or locator, with how_read. */
+  quote?: string; locator?: ResearchedLocator; how_read?: string;
 }
 export interface NotFound { kind: (typeof NOT_FOUND_SUBJECTS)[number]; reason: string }
 
@@ -410,10 +428,44 @@ function reader(raw: Record<string, unknown>, path: string, mode: GateMode, know
   };
 }
 
-export function validateEntity(raw: unknown, path: string, mode: GateMode, issues: Issues): ResearchedEntity | null {
+/** v2: a quote of at most 40 words, the source's own words. */
+function readQuote(raw: Record<string, unknown>, path: string, mode: GateMode, issues: Issues, required: boolean): string | undefined {
+  const v = raw['quote'];
+  if (v === undefined) { if (required) issues.push(missingMessage(mode, `${path}.quote`)); return undefined; }
+  if (typeof v !== 'string' || v.trim() === '') { issues.push(`${path}.quote must be a non-empty string`); return undefined; }
+  const n = v.trim().split(/\s+/).length;
+  if (n > QUOTE_MAX_WORDS) { issues.push(`${path}.quote is ${n} words; a quote is at most ${QUOTE_MAX_WORDS}: the sentence the value is in (or a locator, for a fact)`); return undefined; }
+  return v.trim();
+}
+/** v2: how the value was read from the source — at least 24 characters, not a restatement of it. */
+function readHowRead(raw: Record<string, unknown>, path: string, mode: GateMode, issues: Issues): string | undefined {
+  const v = raw['how_read'];
+  if (v === undefined) { issues.push(missingMessage(mode, `${path}.how_read`)); return undefined; }
+  if (typeof v !== 'string' || v.trim().length < HOW_READ_MIN) { issues.push(`${path}.how_read must say how the value was read from the source, in at least ${HOW_READ_MIN} characters`); return undefined; }
+  return v.trim();
+}
+/** v2: a locator — the document, the value as it appears there, and its scale. */
+function readLocator(raw: unknown, path: string, issues: Issues): ResearchedLocator | undefined {
+  if (!isRec(raw)) { issues.push(`${path} must be an object: { document, table, row, column, value, scale }`); return undefined; }
+  const before = issues.length;
+  for (const k of Object.keys(raw)) if (!['document', 'value', 'scale', 'table', 'row', 'column'].includes(k)) issues.push(`${path}.${k} is not a locator field (document, table, row, column, value, scale)`);
+  if (typeof raw['document'] !== 'string' || raw['document'].trim() === '') issues.push(`${path}.document must name the document`);
+  if (typeof raw['value'] !== 'number' || !Number.isFinite(raw['value'])) issues.push(`${path}.value must be the value as it appears in the document, as a number`);
+  if (!LOCATOR_SCALES.includes(raw['scale'] as (typeof LOCATOR_SCALES)[number])) issues.push(`${path}.scale must be one of: ${LOCATOR_SCALES.join(', ')}`);
+  for (const k of ['table', 'row', 'column']) if (raw[k] !== undefined && (typeof raw[k] !== 'string' || (raw[k] as string).trim() === '')) issues.push(`${path}.${k}, when given, must name it`);
+  if (issues.length !== before) return undefined;
+  const l: ResearchedLocator = { document: (raw['document'] as string).trim(), value: raw['value'] as number, scale: raw['scale'] as ResearchedLocator['scale'] };
+  for (const k of ['table', 'row', 'column'] as const) if (typeof raw[k] === 'string') l[k] = (raw[k] as string).trim();
+  return l;
+}
+
+/** `version` is the contract the result was parsed under; `echo` is a facts-phase response's entity, checked for identity only. */
+export function validateEntity(raw: unknown, path: string, mode: GateMode, issues: Issues,
+  version: number = INSTITUTION_FACT_CONTRACT_VERSION, echo = false): ResearchedEntity | null {
   const before = issues.length;
   if (!isRec(raw)) { issues.push(`${path} must be an object`); return null; }
-  const r = reader(raw, path, mode, ['legal_name', 'identifier_type', 'identifier', 'registry_jurisdiction', 'source_kind', 'citation', 'caveats'], issues);
+  const v2 = version >= 2;
+  const r = reader(raw, path, mode, ['legal_name', 'identifier_type', 'identifier', 'registry_jurisdiction', 'source_kind', 'citation', 'caveats', ...(v2 ? ['quote', 'how_read'] : [])], issues);
   const legal_name = r.str('legal_name');
   const identifier_type = r.oneOf('identifier_type', IDENTIFIER_TYPES);
   const identifier = r.str('identifier');
@@ -431,30 +483,40 @@ export function validateEntity(raw: unknown, path: string, mode: GateMode, issue
   const source_kind = r.oneOf('source_kind', SOURCE_KINDS);
   const citation = r.str('citation');
   const caveats = r.list('caveats');
+  const quote = v2 ? readQuote(raw, path, mode, issues, !echo) : undefined;
+  const how_read = v2 && !echo ? readHowRead(raw, path, mode, issues) : undefined;
   return issues.length === before
-    ? { legal_name: legal_name!, identifier_type: identifier_type!, identifier: identifier!, registry_jurisdiction, source_kind: source_kind!, citation: citation!, caveats: caveats! }
+    ? { legal_name: legal_name!, identifier_type: identifier_type!, identifier: identifier!, registry_jurisdiction, source_kind: source_kind!, citation: citation!, caveats: caveats!,
+        ...(quote !== undefined ? { quote } : {}), ...(how_read !== undefined ? { how_read } : {}) }
     : null;
 }
 
-export function validateRegime(raw: unknown, path: string, mode: GateMode, issues: Issues): ResearchedRegime | null {
+export function validateRegime(raw: unknown, path: string, mode: GateMode, issues: Issues,
+  version: number = INSTITUTION_FACT_CONTRACT_VERSION): ResearchedRegime | null {
   const before = issues.length;
   if (!isRec(raw)) { issues.push(`${path} must be an object`); return null; }
-  const r = reader(raw, path, mode, ['value', 'basis', 'as_of', 'source_kind', 'citation', 'caveats'], issues);
+  const v2 = version >= 2;
+  const r = reader(raw, path, mode, ['value', 'basis', 'as_of', 'source_kind', 'citation', 'caveats', ...(v2 ? ['quote', 'how_read'] : [])], issues);
   const value = r.oneOf('value', DISCLOSURE_REGIMES);
   const basis = r.str('basis');
   const as_of = r.date('as_of');
   const source_kind = r.oneOf('source_kind', SOURCE_KINDS);
   const citation = r.str('citation');
   const caveats = r.list('caveats');
+  const quote = v2 ? readQuote(raw, path, mode, issues, true) : undefined;
+  const how_read = v2 ? readHowRead(raw, path, mode, issues) : undefined;
   return issues.length === before
-    ? { value: value!, basis: basis!, as_of: as_of!, source_kind: source_kind!, citation: citation!, caveats: caveats! }
+    ? { value: value!, basis: basis!, as_of: as_of!, source_kind: source_kind!, citation: citation!, caveats: caveats!,
+        ...(quote !== undefined ? { quote } : {}), ...(how_read !== undefined ? { how_read } : {}) }
     : null;
 }
 
-export function validateFact(raw: unknown, path: string, mode: GateMode, issues: Issues): ResearchedFact | null {
+export function validateFact(raw: unknown, path: string, mode: GateMode, issues: Issues,
+  version: number = INSTITUTION_FACT_CONTRACT_VERSION): ResearchedFact | null {
   const before = issues.length;
   if (!isRec(raw)) { issues.push(`${path} must be an object`); return null; }
-  const r = reader(raw, path, mode, ['kind', 'value', 'unit', 'as_of', 'period', 'source_kind', 'citation', 'quote', 'caveats'], issues);
+  const v2 = version >= 2;
+  const r = reader(raw, path, mode, ['kind', 'value', 'unit', 'as_of', 'period', 'source_kind', 'citation', 'quote', 'caveats', ...(v2 ? ['locator', 'how_read'] : [])], issues);
   const kind = r.oneOf('kind', RESEARCHABLE_FACT_KINDS);
   const v = raw['value'];
   const u = raw['unit'];
@@ -480,10 +542,23 @@ export function validateFact(raw: unknown, path: string, mode: GateMode, issues:
   const period = r.str('period');
   const source_kind = r.oneOf('source_kind', SOURCE_KINDS);
   const citation = r.str('citation');
-  const quote = r.str('quote');
   const caveats = r.list('caveats');
+  let quote: string | undefined;
+  let locator: ResearchedLocator | undefined;
+  let how_read: string | undefined;
+  if (!v2) quote = r.str('quote');
+  else {
+    // Exactly one of a quote or a locator, then how it was read.
+    const hasQ = raw['quote'] !== undefined, hasL = raw['locator'] !== undefined;
+    if (hasQ && hasL) issues.push(`${path}: give a quote or a locator, not both`);
+    else if (!hasQ && !hasL) issues.push(missingMessage(mode, `${path}.quote (or ${path}.locator)`));
+    else if (hasQ) quote = readQuote(raw, path, mode, issues, true);
+    else locator = readLocator(raw['locator'], `${path}.locator`, issues);
+    how_read = readHowRead(raw, path, mode, issues);
+  }
   return issues.length === before
-    ? { kind: kind!, value: value!, unit, as_of: as_of!, period: period!, source_kind: source_kind!, citation: citation!, quote: quote!, caveats: caveats! }
+    ? { kind: kind!, value: value!, unit, as_of: as_of!, period: period!, source_kind: source_kind!, citation: citation!, caveats: caveats!,
+        ...(quote !== undefined ? { quote } : {}), ...(locator !== undefined ? { locator } : {}), ...(how_read !== undefined ? { how_read } : {}) }
     : null;
 }
 
@@ -527,6 +602,8 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
     identifier: '<an SEC CIK as 10 digits, zero-padded; or the ticker; or the registry number>',
     registry_jurisdiction: '<e.g. "NZ" for a registry number; otherwise null>',
     source_kind: '<public_filing | company_publication | third_party_publication>', citation: '<where it says so>', caveats: ['<a caveat; or [] if none>'],
+    quote: '<the sentence that names the legal entity and its identifier, in the source\'s own words, at most 40 words>',
+    how_read: '<how you read the entity from that sentence, in one sentence>',
   };
   const lines = [
     `LVRF account research — ${institution.name}`,
@@ -545,6 +622,8 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
       `- entity: the legal entity, with ONE unambiguous identifier. ${sourceRule}`,
       '- disclosure_regime.value: "public_filer" (files with a securities regulator), "private", "subsidiary_of_filer" (owned by a filer, not filing itself), or "public_sector".',
       '  basis: why, in a sentence. as_of: the date that status was true (YYYY-MM-DD).',
+      `- quote: for the entity and for the regime, the sentence it comes from, in the source's own words (at most ${QUOTE_MAX_WORDS} words). Never paraphrase into a quote.`,
+      `- how_read: for each, how you read it from that sentence, in one sentence of at least ${HOW_READ_MIN} characters (what you read and where, not a restatement of the source).`,
       '',
       'Return ONE JSON object of exactly this shape, and nothing else:',
       JSON.stringify({
@@ -552,7 +631,7 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
         research_query: '<this prompt\'s task, in one sentence>', query_as_executed: '<the searches you actually ran>',
         research_tool: '<your name and version>', ai_sourced: '<true if an AI system did the research>',
         entity: entityShape,
-        disclosure_regime: { value: '<public_filer | private | subsidiary_of_filer | public_sector>', basis: '<why>', as_of: '<YYYY-MM-DD>', source_kind: '<…>', citation: '<…>', caveats: ['<…; or []>'] },
+        disclosure_regime: { value: '<public_filer | private | subsidiary_of_filer | public_sector>', basis: '<why>', as_of: '<YYYY-MM-DD>', source_kind: '<…>', citation: '<…>', caveats: ['<…; or []>'], quote: '<the sentence stating it, at most 40 words>', how_read: '<how you read it>' },
         facts: [],
         not_found: [{ kind: '<entity | disclosure_regime>', reason: '<why it could not be established>' }],
       }, null, 2),
@@ -578,7 +657,9 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
       '- as_of: the LAST DAY OF THE PERIOD the fact describes (e.g. the fiscal year end), NOT the date it was published.',
       '- period: the period as the source states it (e.g. "fiscal year ended 30 September 2024").',
       `- ${sourceRule}`,
-      '- citation: specific enough to locate without searching. quote: the sentence the figure comes from.',
+      '- citation: specific enough to locate without searching.',
+      `- quote: the sentence the value comes from, in the source's own words (at most ${QUOTE_MAX_WORDS} words); OR, for a figure read from a table, locator: { document, table, row, column, value, scale } with the value exactly as the table shows it and its scale (units, thousands, millions, billions or percent). Exactly one of quote or locator.`,
+      `- how_read: how you read the value from that quote or cell, in one sentence of at least ${HOW_READ_MIN} characters (e.g. "Net sales for fiscal 2025, in the 10-K income statement, stated in millions").`,
       '- caveats: what a reviewer must check before relying on it; [] states there is nothing to check.',
       '',
       'Return ONE JSON object of exactly this shape, and nothing else:',
@@ -587,7 +668,7 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
         research_query: '<this prompt\'s task, in one sentence>', query_as_executed: '<the searches you actually ran>',
         research_tool: '<your name and version>', ai_sourced: '<true if an AI system did the research>',
         entity: { legal_name: entity!.legal_name, identifier_type: entity!.identifier_type, identifier: entity!.identifier, registry_jurisdiction: entity!.registry_jurisdiction, source_kind: '<…>', citation: '<…>', caveats: [] },
-        facts: [{ kind: '<revenue | headcount | stated_priority | system>', value: '<…>', unit: '<…>', as_of: '<YYYY-MM-DD>', period: '<as stated>', source_kind: '<…>', citation: '<…>', quote: '<…>', caveats: ['<…; or []>'] }],
+        facts: [{ kind: '<revenue | headcount | stated_priority | system>', value: '<…>', unit: '<…>', as_of: '<YYYY-MM-DD>', period: '<as stated>', source_kind: '<…>', citation: '<…>', quote: '<the sentence; or omit and give locator>', locator: '<{ document, table, row, column, value, scale }; or omit and give quote>', how_read: '<how you read it>', caveats: ['<…; or []>'] }],
         not_found: [{ kind: '<revenue | headcount | stated_priority | system>', reason: '<why research cannot reach it>' }],
       }, null, 2),
     );

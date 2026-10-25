@@ -76,7 +76,7 @@ async function parse(obj) {
   await click(card('Parse a research response'), 'Parse');
 }
 const ENTITY = { legal_name: 'Walk Fictional Filer Inc.', identifier_type: 'sec_cik', identifier: '0000777001', registry_jurisdiction: null,
-  source_kind: 'public_filing', citation: 'EDGAR company record, CIK 0000777001 (verification fixture, not a source)', caveats: [] };
+  source_kind: 'public_filing', citation: 'EDGAR company record, CIK 0000777001 (verification fixture, not a source)', caveats: [], quote: 'Verification fixture sentence naming it, not a source.', how_read: 'Verification fixture: read from the fixture sentence as written.' };
 const env = (prompt, extra) => ({ prompt_id: prompt, institution: 'Walk Fictional Filer', research_query: 'Walk verification query',
   query_as_executed: 'As asked', research_tool: 'Walk verification tool', ai_sourced: true, ...extra });
 
@@ -112,11 +112,11 @@ if (MODE === 'walk') {
   check(await waitFor(`document.body.textContent.includes('Copy prompt')`), 'generate: the entity-phase prompt appears with Copy');
   const P1 = latestPrompt();
   // An entity-phase response that carries facts: refused, and named.
-  await parse(env(P1, { entity: ENTITY, disclosure_regime: { value: 'public_filer', basis: 'Files a 10-K.', as_of: '2024-09-30', source_kind: 'public_filing', citation: 'EDGAR filing index (fixture)', caveats: [] },
-    facts: [{ kind: 'revenue', value: 1, unit: 'USD', as_of: '2024-09-30', period: 'FY2024', source_kind: 'public_filing', citation: 'x', quote: 'x', caveats: [] }], not_found: [] }));
+  await parse(env(P1, { entity: ENTITY, disclosure_regime: { value: 'public_filer', basis: 'Files a 10-K.', as_of: '2024-09-30', source_kind: 'public_filing', citation: 'EDGAR filing index (fixture)', caveats: [], quote: 'Verification fixture sentence naming it, not a source.', how_read: 'Verification fixture: read from the fixture sentence as written.' },
+    facts: [{ kind: 'revenue', value: 1, unit: 'USD', as_of: '2024-09-30', period: 'FY2024', source_kind: 'public_filing', citation: 'x', quote: 'x', how_read: 'Verification fixture: read from the fixture quote as written.', caveats: [] }], not_found: [] }));
   check(await waitFor(has(card('Parse a research response'), 'facts are refused until the entity is pinned')), 'A4: facts in an entity-phase response are refused, named');
   await shot('q4h_1_entity_phase_refused', '#account-parse-card');
-  await parse(env(P1, { entity: ENTITY, disclosure_regime: { value: 'public_filer', basis: 'Files a 10-K with the SEC.', as_of: '2024-09-30', source_kind: 'public_filing', citation: 'EDGAR filing index (fixture)', caveats: [] }, facts: [], not_found: [] }));
+  await parse(env(P1, { entity: ENTITY, disclosure_regime: { value: 'public_filer', basis: 'Files a 10-K with the SEC.', as_of: '2024-09-30', source_kind: 'public_filing', citation: 'EDGAR filing index (fixture)', caveats: [], quote: 'Verification fixture sentence naming it, not a source.', how_read: 'Verification fixture: read from the fixture sentence as written.' }, facts: [], not_found: [] }));
   check(await waitFor(has(card('Parse a research response'), '2 results pending review')), 'A4: the entity-phase response parses into 2 pending fields');
   await waitFor(`!!${field('Entity')}`);
   await setField(field('Entity'), 'Review note', 'Verification: the CIK matches the EDGAR record.');
@@ -153,7 +153,7 @@ if (MODE === 'walk') {
   await shot('q4h_3_entity_mismatch', '#account-parse-card');
   await parse(env(P2, { entity: ENTITY,
     facts: [{ kind: 'revenue', value: 4321.5, unit: 'USD', as_of: '2024-09-30', period: 'fiscal year ended 30 September 2024',
-      source_kind: 'public_filing', citation: 'Form 10-K FY2024, Item 8 (fixture)', quote: 'Net sales were $4,321.5 million.', caveats: ['Figure in millions; confirm the scale in Item 8.'] }],
+      source_kind: 'public_filing', citation: 'Form 10-K FY2024, Item 8 (fixture)', quote: 'Net sales were $4,321.5 million.', how_read: 'Verification fixture: read from the fixture quote as written.', caveats: ['Figure in millions; confirm the scale in Item 8.'] }],
     not_found: [{ kind: 'system', reason: 'Not disclosed in filings.' }] }));
   check(await waitFor(has(card('Parse a research response'), '2 results pending review')), 'A4: the facts response parses (a fact and a not-found)');
   await waitFor(`!!${field('Revenue')}`);
@@ -189,6 +189,9 @@ if (MODE === 'walk') {
   await setField(a1, 'Identifier', '0000777002');
   await setField(a1, 'Where it is established', 'EDGAR company record, CIK 0000777002 (fixture, not a source)');
   await setField(a1, 'Why the pinned entity is wrong', 'Verification: the filer is the holding company.');
+  // P1: the corrected entity rests on a quote, and how it was read.
+  await setField(a1, 'Quote (the source', 'Walk Fictional Holdings Inc. (CIK 0000777002) files annual reports on Form 10-K.');
+  await setField(a1, 'How it was read', 'The registrant name and CIK on the fixture cover page.');
   await sleep(300);
   await click(a1, 'Correct the entity');
   check(await waitFor(`!!document.querySelector('[data-testid=under-previous-entity]')`), 'A1: correcting the entity shows "Accepted under the previous entity: review"');

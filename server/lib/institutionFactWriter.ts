@@ -1,4 +1,6 @@
 import type { PoolClient } from 'pg';
+import type { EvidenceFormFields } from './evidenceFormBody.js';
+import { checkFigure, recordFigureCheck } from './figureCheck.js';
 
 /**
  * THE ONE WRITER OF institution_facts (Q4h moved it here from
@@ -27,8 +29,12 @@ export const KIND_LABEL: Record<WritableFactKind, string> = {
   disclosure_regime: 'Disclosure regime',
 };
 
-/** Everything a fact carries except its kind — shared by every caller. */
-export interface FactFields {
+/**
+ * Everything a fact carries except its kind — shared by every caller.
+ * P1 (0039): what its evidence rests on (EvidenceFormFields) — for a fact, a
+ * quote or a locator, never a person's statement.
+ */
+export interface FactFields extends EvidenceFormFields {
   valueNumeric: number | null;
   valueText: string | null;
   unit: string | null;
@@ -64,14 +70,17 @@ export async function insertEvidence(
        institution_id, kind, summary, provenance, source_reference,
        confidence, source_verified, ai_sourced, research_query, research_tool,
        simulated, captured_by_person_id,
-       citation_resolved, citation_resolved_by_person_id, citation_resolved_at
+       citation_resolved, citation_resolved_by_person_id, citation_resolved_at,
+       evidence_form, quote_text, locator, how_read
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11,
-               $12::uuid IS NOT NULL, $12::uuid, CASE WHEN $12::uuid IS NULL THEN NULL ELSE now() END)
+               $12::uuid IS NOT NULL, $12::uuid, CASE WHEN $12::uuid IS NULL THEN NULL ELSE now() END,
+               $13, $14, $15, $16)
      RETURNING id`,
     [
       institutionId, f.evidenceKind, summary, f.provenance, f.sourceReference,
       f.confidence, f.sourceVerified, f.aiSourced, f.researchQuery, f.researchTool,
       actorPersonId, resolvedBy,
+      f.evidenceForm, f.quoteText, f.locator === null ? null : JSON.stringify(f.locator), f.howRead,
     ],
   );
   return evidenceRow.id;
@@ -107,6 +116,16 @@ export async function insertFactWithEvidence(
      RETURNING id`,
     [institutionId, kind, f.valueNumeric, f.valueText, f.unit, f.asOf, evidenceId, actorPersonId],
   );
+
+  // P1: the figure check, recorded beside the fact. It never blocks the write.
+  onTable('figure_checks');
+  const checked = checkFigure({ numeric: f.valueNumeric, text: f.valueNumeric === null ? f.valueText : null },
+    { form: f.evidenceForm, quoteText: f.quoteText, locator: f.locator });
+  await recordFigureCheck(client, {
+    institutionId, evidenceId, subjectTable: 'institution_facts', subjectId: fact.id,
+    subjectField: f.valueNumeric === null ? 'value_text' : 'value_numeric',
+    valueChecked: f.valueNumeric === null ? f.valueText : String(f.valueNumeric), actorPersonId,
+  }, checked);
   return { factId: fact.id, evidenceId };
 }
 

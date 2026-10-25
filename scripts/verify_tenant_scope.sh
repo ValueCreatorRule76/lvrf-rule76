@@ -98,7 +98,7 @@ INST_A="$(A1 "SELECT id FROM institutions WHERE tenant_id = '$TENANT_A' AND NOT 
 INST_A_NAME="$(q "SELECT name FROM institutions WHERE id = '$INST_A'")"
 INST_A_UNCLASSIFIED="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TENANT_A', 'Unclassified A (verification $TS)') RETURNING id" | head -1)"
 CUST_A="$(A1 "SELECT id FROM persons WHERE institution_id = '$INST_A' AND NOT simulated AND deleted_at IS NULL ORDER BY created_at")"
-EV_A="$(q "INSERT INTO evidence (institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('$INST_A', 'observation', 'System: Fact A (verification)', 'Verification fixture, not a source', 'low', '$STAFF_A') RETURNING id" | head -1)"
+EV_A="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST_A', 'observation', 'System: Fact A (verification)', 'Verification fixture, not a source', 'low', '$STAFF_A') RETURNING id" | head -1)"
 FACT_A="$(q "INSERT INTO institution_facts (institution_id, kind, value_text, as_of, evidence_id, captured_by_person_id) VALUES ('$INST_A', 'system', 'Fact A (verification)', '2026-10-01', '$EV_A', '$STAFF_A') RETURNING id" | head -1)"
 CAPNAME_A="$(A1 "SELECT name FROM capabilities WHERE institution_id = '$INST_A' AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at")"
 ENG_A="$(A1 "SELECT e.id FROM engagements e WHERE e.tenant_id = '$TENANT_A' AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND (SELECT count(*) FROM value_runs v WHERE v.engagement_id = e.id AND v.locked_at IS NOT NULL) >= 2 ORDER BY e.created_at")"

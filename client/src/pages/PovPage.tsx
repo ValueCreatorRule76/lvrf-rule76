@@ -6,6 +6,7 @@ import { ConfidenceBadge } from '../components/workbench/Workspace';
 import { day, unitText } from '../lib/workspaceStatus';
 import { label, STAGE_LABEL, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
 import { formatQuantity } from '../lib/format';
+import { EvidenceRestsOn, FigureCheckLine } from '../components/EvidenceRestsOn';
 
 // UX-1 standard 4: the value spine in plain labels; the enum keeps its values.
 import { fetchGaps, type GapEntry } from '../api/gaps';
@@ -166,9 +167,14 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
               : <td className="py-1 text-ink-45" colSpan={2}>Not measured yet.</td>}</tr>
           </tbody>
         </table>
+        {/* P1: a figure check that flagged, or a statement backing a figure, beside the outcome's figures. */}
+        {o.evidence.map((e, i) => <FigureCheckLine key={i} check={e.figure_check} of={e.supports === 'impact_basis' ? 'impact basis' : e.supports} className="mt-1" />)}
         {other.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
-            {other.map((e, i) => <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {e.supports}: {e.summary} <span className="text-ink-45">— {e.provenance}</span></li>)}
+            {other.map((e, i) => (
+              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {e.supports}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
+                <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
+              </li>))}
           </ul>
         )}
       </div>
@@ -313,7 +319,8 @@ export function PovPage() {
                 <tbody>{pov.facts.map((f) => (
                   <tr key={f.id} className="border-b border-rule-soft align-top">
                     <td className="px-3 py-1.5 text-ink-45" data-testid="fact-kind">{label(FACT_KIND, f.kind)}</td>
-                    <td className="px-3 py-1.5 text-ink" data-testid="fact-value">{f.value_text !== null && f.kind === 'disclosure_regime' ? label(DISCLOSURE_REGIME, f.value_text) : f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</td>
+                    <td className="px-3 py-1.5 text-ink"><span data-testid="fact-value">{f.value_text !== null && f.kind === 'disclosure_regime' ? label(DISCLOSURE_REGIME, f.value_text) : f.value_text ?? formatQuantity(f.value_numeric, f.unit)}</span>
+                      <EvidenceRestsOn e={f} /><FigureCheckLine check={f.figure_check} /></td>
                     <td className="px-3 py-1.5"><BasisBadge basis={f.basis} />{f.citation_resolved && <span className="ml-1 text-[11px] text-ink-45">citation opened by {f.citation_resolved_by}</span>}<span className="block text-[11px] text-ink-45">as of {day(f.as_of)}</span></td>
                   </tr>))}</tbody>
               </table>
