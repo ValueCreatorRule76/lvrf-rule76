@@ -12531,3 +12531,30 @@ Scotts run recomputed to exactly its own sealed score, so this case was never ex
 - **`verify_corrections`: 210 passed, 0 failed.**
 - **The pages:** `~/lvrf-backups/l39-screens/`: `l39_run1.pdf`, its page PNGs, and
   `l39_run1_score_1280.png` and `_390.png`.
+
+### L39 deployed — 25 October 2026 (UTC)
+
+**Brad deployed L39 at `b6de1de`.** The client and test changes only; no migration.
+
+**Gate C, read-only over ssh:**
+- **HEAD and service:** HEAD `b6de1de`, the tree clean. `lvrf-api` has been active since
+  20:52:58 UTC.
+- **The bundle:** `client/dist` (served directly by Caddy) holds `index-CXc2-nRr.js` and
+  `index-C9WVm_9W.css`, the Gate A bundle. The JS carries the POV's `pov-corrected` note.
+- **The record's checks:**
+  - `check_run_hashes`: 25/25.
+  - `check_ownership` is clean.
+  - `check_plain_refusals`: 90/90.
+  - `drift_report`: no findings.
+  - Schema drift: none (journal 42 migrations, newest 0041; 1050 objects match).
+- **The database:** 167 triggers, 0 disabled. 0 governance acts, 0 research imports. 25 runs,
+  all locked. 3 errata, 2 current.
+- **Since the restart:**
+  - 0 refusals, and nothing in the audit log;
+  - the journal has the listen line (actor header off), the health check and the deploy's two
+    header probes (401);
+  - nothing was written.
+
+**The old dump is removed, at Brad's word.** `~/lvrf-backups/lvrf-pre-ux1s2-20261019T171542Z.dump`
+is deleted. That leaves the latest prod dump (`lvrf-pre-p2-20261025T162141Z.dump`) and the six
+pre-migration backups, as the retention rule says. L39 is done.
