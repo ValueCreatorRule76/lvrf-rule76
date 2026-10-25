@@ -91,6 +91,7 @@ export function outsideInWalkRouter(pool: Pool): Router {
                     'metric', json_build_object('id', bm.id, 'name', bm.name, 'unit', bm.unit, 'direction', bm.direction,
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
+                                                                            'corrects_supports', voe.corrects_supports, 'correction_reason', voe.correction_reason,
                                                                             'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),
                                                                             -- Q4k: the citation state, for "Open the citation…"
                                                                             'ai_sourced', ev.ai_sourced, 'source_verified', ev.source_verified,
@@ -105,7 +106,14 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                                                                FROM figure_checks c WHERE c.evidence_id = ev.id AND c.subject_table = 'value_outcomes' AND c.subject_id = vo.id
                                                                                               ORDER BY c.checked_at DESC, c.id DESC LIMIT 1)) ORDER BY ev.created_at)
                                             FROM value_outcome_evidence voe JOIN evidence ev ON ev.id = voe.evidence_id
-                                           WHERE voe.value_outcome_id = vo.id), '[]'))
+                                           WHERE voe.value_outcome_id = vo.id AND voe.withdrawn_at IS NULL), '[]'),
+                    -- C1: links withdrawn by a correction, shown apart (struck through, with who and why).
+                    'withdrawn_links', coalesce((SELECT json_agg(json_build_object('evidence_id', w.evidence_id, 'supports', w.supports,
+                                                   'summary', we.summary, 'withdrawn_by', wp.full_name,
+                                                   'withdrawn_on', to_char(w.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), 'reason', w.withdrawal_reason)
+                                                   ORDER BY w.withdrawn_at)
+                                            FROM value_outcome_evidence w JOIN evidence we ON we.id = w.evidence_id JOIN persons wp ON wp.id = w.withdrawn_by_person_id
+                                           WHERE w.value_outcome_id = vo.id AND w.withdrawn_at IS NOT NULL), '[]'))
                     ORDER BY vo.created_at)
                    FROM value_outcomes vo
                    JOIN business_metrics bm ON bm.id = vo.business_metric_id

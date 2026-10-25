@@ -2450,7 +2450,7 @@ verifies both versions.
 
 ---
 
-## 9. C1: correcting the Scotts vendor-publication link (planned 25 Oct 2026; **ruled by Brad, 25 Oct 2026; plan for his review, not built**)
+## 9. C1: correcting the Scotts vendor-publication link (planned 25 Oct 2026; **ruled by Brad, 25 Oct 2026; built, Gate A passed 25 Oct 2026 — BUILD_STATUS "C1"; not deployed**)
 
 **Runs before P2.** A correction slice, with its own Gate A, B and C.
 

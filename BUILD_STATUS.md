@@ -11646,3 +11646,196 @@ recorded as `supports = baseline`.**
   - **The outcome is frozen:** its engagement is retired, so outcome evidence is refused
     (409).
   - **The sealed record stays:** runs 1 and 2 keep "baseline" as sealed.
+
+## C1: correcting what a link supports; errata on sealed runs — 25 October 2026 (UTC)
+
+LVRF_PLAN §9, after Brad's ruling (points 1–5) and C1-D1–D4 with his conditions (25 Oct
+2026):
+- **D1:** the route withdraws, then inserts, in one transaction; a Gate A break tries the
+  insert first and is refused by the one-current index.
+- **D2:** Gate A proves the other legitimate acts on a retired engagement still succeed.
+- **D3:** the recompute runs under the model the run was sealed with; that version is stored
+  on the erratum, and the erratum is refused if the seal can't be reproduced.
+- **D4:** errata on runs 1 and 2.
+
+Value spine stages served: `baseline` (what the baseline rests on) and `verify` (what a
+sealed record is now known to have got wrong).
+
+**Migration 0040 (`corrections`).** It orphans nothing: no row is deleted, and every link
+stays current until a steward's act.
+- **`value_outcome_evidence`:**
+  - **the primary key widens** to (outcome, evidence, `supports`);
+  - **a partial unique index, `value_outcome_evidence_one_current`,** allows one current
+    link per (outcome, evidence);
+  - **new columns:** `withdrawn_by_person_id`, `withdrawn_at` and `withdrawal_reason`, all
+    or none, the reason at least 12 characters; and `corrects_supports`,
+    `corrected_by_person_id` and `correction_reason`, all or none, where
+    `corrects_supports` differs from `supports`.
+- **`run_errata`, append-only:**
+  - the run, its outcome and the evidence;
+  - what was wrong, what is right and why, each at least 12 characters;
+  - `model_version` and `model_fingerprint`;
+  - the sealed and the recomputed score and band, and the method (at least 24 characters);
+  - who recorded it, and when.
+- **Hardening section 26** adds six triggers, taking the count from 135 to 141:
+  - **`value_outcome_evidence_guard`:**
+    - a link is inserted current;
+    - a correcting link is the steward's, and names an existing link of that `supports`;
+    - any other insert on a retired engagement's outcome is refused, so **the freeze is now
+      in the database** (C1-D2);
+    - the only UPDATE is the withdrawal, once, by the steward.
+  - **`value_outcome_evidence_vendor_impact_only`:** a `vendor_publication` about an
+    account that is not the tenant's own supports the impact basis only.
+  - **`run_errata_audit`, `_no_delete`, `_immutable` and `_steward_only`.** The steward
+    check also requires the run's tenant, a locked run, and the outcome the run sealed.
+  - **Section 24** refuses UPDATE on `run_errata`.
+  - **The figure-check guard** reads only current links.
+- **`ownership.sql`:** INSERT on `run_errata` (33 tables); UPDATE on
+  `value_outcome_evidence` for the withdrawal (21 tables).
+- **Plain sentences:**
+  - six for the new CHECKs;
+  - two for the unique violations: one current link, and a withdrawn link that is not
+    recorded again.
+
+**Readers exclude withdrawn links** (`withdrawn_at IS NULL`): produce-run, `/pov`, `/walk`,
+the gap register (both reads), outcome measure and verify, the citation route, `walkSpine`
+and the figure-check guard. `/view` reads no links.
+- `/pov` and `/walk` list `withdrawn_links` separately.
+- Their evidence carries `corrects_supports` and `correction_reason`; `/pov` also carries
+  `evidence_id` and `corrected_by`.
+- `GET /api/runs/:id` adds `errata`.
+
+**Routes** (steward-only; refusals in plain words, recorded):
+- **`POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support`**,
+  `{supports, reason}`.
+  - It locks the current link, withdraws it, then inserts the corrected one (D1).
+  - It refuses the same support, an unknown support or field, and a reason under 12
+    characters.
+  - A figure check is recorded for the new link as for outcome evidence.
+- **`POST /api/value-runs/:runId/errata`**, `{evidence_id, what_was_wrong,
+  what_is_right, reason}`.
+  - A field naming a score, band, recompute or model is refused: "the recompute is the
+    server's".
+  - It refuses an unlocked run (409), evidence with no current link to the run's outcome,
+    and evidence the run sealed as it is linked now ("there is no correction to state").
+  - **The recompute** is `server/lib/recomputeRun.ts` (D3):
+    - it refuses unless the run's sealed `modelVersion` and fingerprint are this server's;
+    - it first reproduces the sealed score from the sealed evidence, or refuses;
+    - it then recomputes with the corrected link applied to the sealed snapshot.
+
+**The display:**
+- **The run page:**
+  - the erratum sits beneath the disclosure banner, on screen and in the printed `<thead>`,
+    so on every printed page;
+  - it reads "ERRATUM — recorded after sealing, <date>, by <name>. What was wrong … What is
+    right … Why …. The sealed record below is unchanged. Recomputed under model 1.0.0, the
+    one it was sealed with, with the correction: n / 100 · Band (sealed: n / 100 · Band)";
+  - a steward-only "Record an erratum…" button; its choices are the corrected links.
+- **The walk (W6):**
+  - a steward-only "Correct what it supports…" button;
+  - the current link reads "corrected from <x>: <reason>";
+  - the withdrawn link is struck through, with who withdrew it, the date and the reason.
+- **The POV:**
+  - the withdrawn link is struck through under its outcome;
+  - the vendor card reads "Corrected by <name> from baseline to impact basis: <reason>".
+- **For anyone but the steward,** both buttons are disabled, each with its reason naming
+  the steward.
+
+**Gate A:**
+- **`verify_corrections.sh`: 160 passed, 0 failed.** It runs on a clone of the restored,
+  neutralised prod copy, with Brad's two acts done in a browser signed in as the steward:
+  - **the database:** 141 triggers; drift none (41 migrations); all 10 links kept and
+    current; runs 1 and 2 byte-identical after 0040 (md5 of each row);
+  - **a code grep:** all 15 reads of the link table in `server/` and `hardening.sql` filter
+    on `withdrawn_at`, with one named exemption (the guard's predecessor check);
+  - **the vendor trigger:** on a customer account, refused for the baseline and the actual
+    (route and database) and accepted for the impact basis; on the tenant's own account,
+    accepted for the baseline;
+  - **C1-D1:** insert-before-withdraw refused by `value_outcome_evidence_one_current`, on
+    Scotts' link and on a fixture. Also refused: a correction by a non-steward, one naming
+    a support the link never had, a link inserted already withdrawn, a withdrawal by a
+    non-steward, an edit of `supports`, and a DELETE;
+  - **the correction route:**
+    - refused: a non-steward (403), an unknown field, the same support, a short reason,
+      an unknown support, and no such link;
+    - a fixture correction succeeds: the old link withdrawn (who, today, why), the new one
+      current, two rows for one piece of evidence;
+    - correcting back to a withdrawn support: 409, in words;
+  - **the readers:** `/pov` and `/walk` list the evidence once, as the impact basis, with
+    the withdrawn link apart. A new run seals it once, as the impact basis, and its
+    baseline factor earns 0. The gap register names the baseline gap;
+  - **the freeze:** a new link on Scotts' outcome is refused, at the route (409) and in the
+    database;
+  - **Brad's acts, in the browser:**
+    - the Scotts link corrected from W6 (the choices are actual and impact basis; the form
+      closes once recorded), then withdrawn and struck through with the reason;
+    - an erratum on run 2 from the run page (one choice, no score field);
+    - a second correction of the same link is refused (the vendor trigger);
+  - **the errata:**
+    - refused: a non-steward (403), a typed score or model (B9), evidence never corrected,
+      an unlocked run, and a short text;
+    - **run 1 gives 10 → 10 Low, and run 2 gives 35 → 35 Low.** Each equals the script's
+      own computation from the sealed payload *without* the vendor row (ruling point 4),
+      under model 1.0.0 (`d4cf8f31472a`), which each erratum stores;
+    - refused in the database: an erratum by a non-steward, and one naming an outcome the
+      run did not seal;
+  - **D2:** engagement retirement and the reference-example marker succeed under the new
+    guard, the errata are on a retired engagement's runs, and a new link on that retired
+    outcome is still refused;
+  - **the seals:** `check_run_hashes` gives 25 of 25 before 0040 and 27 of 27 after every
+    act. Runs 1 and 2 are byte-identical to before 0040;
+  - **the display:** at 1280 and 390, the erratum is beneath the disclosure banner, with no
+    sideways scroll. In print, it is **on every one of the 6 pages, read page by page**,
+    with "35 / 100 · Low (sealed: 35 / 100 · Low)". The POV's withdrawn line and corrected
+    line show. A non-steward sees both buttons disabled, with reasons, and sees the erratum.
+- **Breaks, all caught; every file restored byte-identical, and every function restored by
+  re-applying `hardening.sql` (141 triggers):**
+  - **B1:** the erratum route's steward check removed, so the database refuses (422);
+  - **B2:** an UPDATE or DELETE of an erratum;
+  - **B3:** an 11-character withdrawal reason;
+  - **B4:** a withdrawal with who but no when;
+  - **B5:** produce-run's filter removed, so the run seals the withdrawn link beside the
+    current one;
+  - **B6:** the vendor check's condition replaced on the clone, so a vendor baseline is
+    accepted;
+  - **B7:** the frozen-outcome check replaced on the clone, so a new link on Scotts'
+    outcome is accepted;
+  - **B8:** the erratum out of the printed header, so 5 of 5 pages lack it;
+  - **B9:** a typed score;
+  - **B10 (D1):** the route inserting before it withdraws, refused 409 by the one-current
+    index, with nothing written;
+  - **B11 (D3):** a payload sealed under model 0.9.0 is refused. With the server's model
+    bumped to 1.0.1, run 2's recompute is refused.
+
+  B6 and B7 follow `verify_value_levers` B1's method: the function is replaced on the
+  throwaway clone only, then `hardening.sql` is re-applied.
+- **The other scripts:**
+  - **`verify_steward_acts`:** 14 steward routes, with 403s for both new ones;
+  - **`verify_tenant_scope`:** cases for both routes (209 cases);
+  - **`verify_hygiene`:** the guard now refuses an edit of `supports` before the CHECK;
+  - **`verify_evidence_form`:** 141 triggers;
+  - **`verify_ownership`'s `newer_than`** also leaves out a table that `ownership.sql`
+    grants INSERT or UPDATE after the pinned commit (`scripts/lib/grants_added.py`). This
+    applies only when that commit has an `ownership.sql`.
+- **The regression:** all **38** scripts reached their tallies and passed. The build, tsc
+  and oxlint are clean (the 1 pre-existing warning). The bundle is `index-DV0K_ltv.js` /
+  `index-CXf26yGQ.css`.
+- **The prod copy:** against the deployed `9c179ac`, 76 GETs. Allowing `errata`,
+  `withdrawn_links`, `corrects_supports`, `corrected_by`, `correction_reason` and
+  `evidence_id` gives 76 of 76 identical. Without `evidence_id`, the three `/pov` reads
+  differ only by it, newly added to outcome evidence.
+- **For Brad's review:** the run page at 1280 and 390 and its PDF, the walk before and
+  after (steward and non-steward), the POV, and B8's PDF, in `~/lvrf-backups/c1-screens/`
+  (600).
+
+**Departures from §9, named:**
+1. **Ruling point 4 says "without the vendor row"; §9 and D3 say "with the corrected link
+   applied".** The server does the latter, and its method says so. For Scotts the two are
+   equal (the baseline factor takes the best item, and the impact basis is full with no
+   currency claimed), and Gate A computes the former independently. They could differ for
+   a run that claimed a currency figure.
+2. **The banner wording** is "Recomputed under model 1.0.0, the one it was sealed with,
+   with the correction", not §9's "Recomputed without it", for the same reason.
+3. **Added refusals:** an erratum about evidence the run sealed as it is linked now, and a
+   plain sentence for re-linking a withdrawn support.
+4. **B10 and B11 are added**, for D1 and D3.

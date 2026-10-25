@@ -42,7 +42,11 @@ export interface WalkState {
         /** The attester when there is one, otherwise the recorder. */
   stated_by: string; stated_on: string;
         figure_check: FigureCheckShown | null;
+        /** C1: set when this link replaced a withdrawn one — what it used to support, and why. */
+        corrects_supports: string | null; correction_reason: string | null;
       }[];
+      /** C1: links withdrawn by a correction, kept and shown struck through. */
+      withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
     }[];
     runs: {
       id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;

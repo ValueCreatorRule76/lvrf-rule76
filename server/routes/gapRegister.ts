@@ -214,7 +214,7 @@ async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Pro
        FROM value_outcome_evidence voe
        JOIN evidence e ON e.id = voe.evidence_id
        LEFT JOIN assessments a ON a.id = e.assessment_id
-      WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual'`,
+      WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual' AND voe.withdrawn_at IS NULL`,
     [outcomeId],
   );
   if (rows.length === 0) return false; // nobody has attached anything — path is 'viable' by default.
@@ -404,7 +404,7 @@ export function gapRegisterRouter(pool: Pool): Router {
            FROM value_outcome_evidence voe
            JOIN evidence e ON e.id = voe.evidence_id
            LEFT JOIN persons p ON p.id = e.attested_by_person_id
-          WHERE voe.value_outcome_id = $1
+          WHERE voe.value_outcome_id = $1 AND voe.withdrawn_at IS NULL
           ORDER BY e.created_at`,
         [vo.id],
       );

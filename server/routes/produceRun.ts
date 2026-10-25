@@ -270,7 +270,7 @@ export function produceRunRouter(pool: Pool): Router {
             WHERE c.evidence_id = e.id AND c.subject_table = 'value_outcomes' AND c.subject_id = voe.value_outcome_id
             ORDER BY c.checked_at DESC, c.id DESC LIMIT 1
          ) fc ON true
-        WHERE voe.value_outcome_id = $1
+        WHERE voe.value_outcome_id = $1 AND voe.withdrawn_at IS NULL  -- C1: a withdrawn link supports nothing
         ORDER BY e.created_at`,
         [vo.id],
       );

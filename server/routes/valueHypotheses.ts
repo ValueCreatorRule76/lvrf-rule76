@@ -664,7 +664,9 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
        WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
        ORDER BY vo.created_at`),
     q<{ value_outcome_id: string; basis: string | null } & Record<string, unknown>>(`
-      SELECT voe.value_outcome_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis,
+      SELECT voe.value_outcome_id, voe.evidence_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis,
+             -- C1: a link that corrects what an earlier one supported, with who and why.
+             voe.corrects_supports, (SELECT full_name FROM persons WHERE id = voe.corrected_by_person_id) AS corrected_by, voe.correction_reason,
              -- P1 (0039): what it rests on, and its latest figure check against this outcome.
              e.evidence_form::text, e.quote_text, e.locator, e.how_read,
              -- A statement is the attester's word when there is one, otherwise the recorder's.
@@ -678,6 +680,7 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
         LEFT JOIN persons ap ON ap.id = e.attested_by_person_id
         JOIN value_outcomes vo ON vo.id = voe.value_outcome_id
        WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
+         AND voe.withdrawn_at IS NULL  -- C1: a withdrawn link supports nothing; it is listed apart
        ORDER BY voe.supports, e.created_at`),
     q<{ metric_name: string; unit: string | null; direction: 'increase' | 'decrease'; falsifier_reference: string; reference_value: string;
         reference_recorded_on: string; falsifier_due: string; falsifier_conditions: string } & Record<string, unknown>>(`
@@ -727,6 +730,20 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
     `SELECT enum_range(NULL::value_stage)::text[] AS spine`,
   );
   const entity = entityRows[0] ?? null;
+  // C1: links withdrawn by a correction, listed apart under their outcome (who, when, why).
+  const withdrawn = await q<{ value_outcome_id: string } & Record<string, unknown>>(`
+    SELECT w.value_outcome_id, w.supports, e.summary, wp.full_name AS withdrawn_by,
+           to_char(w.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS withdrawn_on, w.withdrawal_reason AS reason
+      FROM value_outcome_evidence w JOIN evidence e ON e.id = w.evidence_id
+      JOIN persons wp ON wp.id = w.withdrawn_by_person_id
+      JOIN value_outcomes vo ON vo.id = w.value_outcome_id
+     WHERE vo.institution_id = $1 AND w.withdrawn_at IS NOT NULL
+     ORDER BY w.withdrawn_at`);
+  const withdrawnOf = new Map<string, unknown[]>();
+  for (const w of withdrawn) {
+    const { value_outcome_id: oid, ...rest } = w;
+    withdrawnOf.set(oid, [...(withdrawnOf.get(oid) ?? []), rest]);
+  }
   const evidenceOf = new Map<string, unknown[]>();
   for (const e of evidence) {
     const list = evidenceOf.get(e.value_outcome_id) ?? [];
@@ -750,7 +767,7 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
     entity,
     facts,
     engagements,
-    outcomes: outcomes.map((o) => ({ ...o, evidence: evidenceOf.get(o.id) ?? [] })),
+    outcomes: outcomes.map((o) => ({ ...o, evidence: evidenceOf.get(o.id) ?? [], withdrawn_links: withdrawnOf.get(o.id) ?? [] })),
     hypotheses: hypotheses.map((h) => ({
       ...h,
       direction_label: h.direction === 'decrease' ? 'lower is better' : 'higher is better',

@@ -22,7 +22,7 @@ export type ConfidenceLevel = 'low' | 'medium' | 'high';
  */
 export const ATTESTATION_CREDIT = 0.6;
 
-const CONFIDENCE_FACTOR_WEIGHTS = {
+export const CONFIDENCE_FACTOR_WEIGHTS = {
   metric_definition_confirmed: 20,
   baseline_evidence_verified: 25,
   actual_evidence_verified: 25,

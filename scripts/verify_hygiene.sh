@@ -67,7 +67,8 @@ for good in baseline impact_basis; do
   case "$OUT" in "INSERT 0 1"*) ok "supports '$good' -> accepted" ;; *) bad "supports '$good': $OUT" ;; esac
 done
 OUT="$(qerr "UPDATE value_outcome_evidence SET supports = 'Actual' WHERE value_outcome_id = '$OUTCOME' AND supports = 'baseline'")"
-case "$OUT" in *value_outcome_evidence_supports_known*) ok "an UPDATE to 'Actual' -> refused" ;; *) bad "update: $OUT" ;; esac
+# C1 (0040): the link guard now refuses any edit of supports first ("a link is never edited"); the CHECK stays behind it.
+case "$OUT" in *value_outcome_evidence_supports_known*|*"a link is never edited"*) ok "an UPDATE to 'Actual' -> refused" ;; *) bad "update: $OUT" ;; esac
 
 step "4. Server"
 env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 &

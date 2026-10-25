@@ -122,6 +122,13 @@ const CASES = [
   { route: 'POST /api/reference-examples/:id/retire', kind: 'id', path: `/api/reference-examples/${E.MARKER_A}/retire`,
     body: { retirement_reason: note('Verification: P3 tenant scope checks.') },
     notFound: [404, `reference example marker ${E.MARKER_A} not found`], target: ['reference_example_markers', E.MARKER_A] },
+  // C1: correcting what a link supports, and an erratum on a sealed run. A's
+  // controls are refused before any write (an unknown field; texts missing).
+  { route: 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support', kind: 'id',
+    path: `/api/value-outcomes/${E.OUTCOME_A}/evidence/${E.LINKEV_A}/correct-support`, body: {}, controlBody: { x: 1 },
+    notFound: [404, `no current link of evidence ${E.LINKEV_A} to value outcome ${E.OUTCOME_A}`], target: ['value_outcomes', E.OUTCOME_A] },
+  { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
+    notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
   { route: 'GET /api/persons', kind: 'list', path: '/api/persons', aIds: [E.STAFF_A, E.CUST_A], bIds: [E.STAFF_B, E.CUST_B] },
   { route: 'GET /api/runs', kind: 'list', path: '/api/runs', aIds: [E.RUN_A], bIds: [] },
   { route: 'GET /api/runs/:id', kind: 'id', path: `/api/runs/${E.RUN_A}`,

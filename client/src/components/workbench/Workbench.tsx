@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { businessMetricName, isEnrichedBusinessMetric, type Run } from '../../types/run';
+import { businessMetricName, isEnrichedBusinessMetric, type Run, type RunErratum } from '../../types/run';
 import { MARKER_KIND, type Pov } from '../../api/pov';
 import { day, unitText, STEP_TITLES } from '../../lib/workspaceStatus';
 import { label, DISCLOSURE, REALIZATION, STAGE_LABEL } from '../../lib/labels';
 import { GovernedAction } from '../GovernedAction';
-import { FOCUS_RING } from '../GovernedForm';
+import { FOCUS_RING, GovernedForm } from '../GovernedForm';
+import { useActor } from '../../actor/ActorContext';
 import { ConfidenceBadge } from './Workspace';
 import { FigureCheckLine } from '../EvidenceRestsOn';
 import { EvidenceCard } from './EvidenceCard';
@@ -61,6 +62,23 @@ function RunBanners({ run, account }: { run: Run; account: AccountRead }) {
         : <div className="border-b border-warning bg-white px-4 py-2 font-mono text-[12px] tracking-[.04em] text-warning sm:px-6" data-testid="banner-unverified">
             UNVERIFIED — this run&apos;s outcome has no verified actual
           </div>}
+      {/* C1 (LVRF_PLAN §9): an erratum, recorded after sealing, beneath the disclosure banner, on screen and on every printed page. */}
+      {(run.errata ?? []).map((x) => <ErratumBanner key={x.id} x={x} />)}
+    </div>
+  );
+}
+
+const band = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
+const sentence = (s: string) => s.trim().replace(/[.\s]+$/, '');
+
+/** C1 (LVRF_PLAN §9): what the sealed run got wrong — beside it, never in it. */
+function ErratumBanner({ x }: { x: RunErratum }) {
+  return (
+    <div className="border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink [overflow-wrap:anywhere] sm:px-6" data-testid="banner-erratum">
+      <span className="font-semibold">ERRATUM</span> — recorded after sealing, {day(x.recorded_at)}, by {x.recorded_by}.
+      {' '}What was wrong: {sentence(x.what_was_wrong)}. What is right: {sentence(x.what_is_right)}. Why: {sentence(x.reason)}.
+      {' '}<span className="font-semibold">The sealed record below is unchanged.</span>
+      {' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).
     </div>
   );
 }
@@ -195,6 +213,70 @@ function Actions({ run }: { run: Run }) {
   );
 }
 
+/**
+ * C1: the steward records an erratum on this sealed run, about a link since
+ * corrected on its outcome. The recompute is the server's, under the model the
+ * run was sealed with; nothing here types a score.
+ */
+function RecordErratum({ run, account, onChanged }: { run: Run; account: AccountRead; onChanged: () => void }) {
+  const { actor } = useActor();
+  const [open, setOpen] = useState(false);
+  const [evidenceId, setEvidenceId] = useState('');
+  const [wrong, setWrong] = useState('');
+  const [right, setRight] = useState('');
+  const [why, setWhy] = useState('');
+  if (run.locked_at === null) return null;
+  const outcome = account.status === 'ok' ? account.pov.outcomes.find((o) => o.id === run.payload.valueOutcomeId) : undefined;
+  const corrected = (outcome?.evidence ?? []).filter((e) => e.corrects_supports !== null);
+  const notSteward = actor?.is_steward ? undefined : `Recording an erratum is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const noCorrection = corrected.length === 0 ? 'No link on this run\'s outcome has been corrected since it was sealed: an erratum records one.' : undefined;
+  const reason = notSteward ?? noCorrection;
+  if (!open) {
+    return (
+      <div className="flex flex-col gap-1 print:hidden" data-testid="record-erratum">
+        <button type="button" disabled={Boolean(reason)} onClick={() => setOpen(true)}
+          className="self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent" data-testid="record-erratum-open">
+          Record an erratum…
+        </button>
+        {reason && <span className="max-w-[46ch] text-[11px] text-ink-45" data-testid="erratum-reason">{reason}</span>}
+      </div>
+    );
+  }
+  const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
+  const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
+  const unmet = [
+    ...(evidenceId === '' ? ['choose the corrected link'] : []),
+    ...(wrong.trim().length < 12 ? ['say what was wrong, in at least 12 characters'] : []),
+    ...(right.trim().length < 12 ? ['say what is right, in at least 12 characters'] : []),
+    ...(why.trim().length < 12 ? ['say why, in at least 12 characters'] : []),
+  ];
+  return (
+    <div className="border-t border-rule-soft pt-3 print:hidden" data-testid="record-erratum">
+      <GovernedForm<{ erratum_id: string; recomputed_score: number; recomputed_band: string }>
+        path={`/api/value-runs/${run.id}/errata`}
+        provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">An erratum beside this sealed run, by you, dated. <strong>The sealed run is not changed.</strong> The server recomputes its confidence with the correction, under the model it was sealed with, and states both scores.</p>}
+        fields={<div className="flex flex-col gap-3">
+          <label className="block"><span className={L}>The corrected link</span>
+            <select className={I} value={evidenceId} onChange={(e) => setEvidenceId(e.target.value)}>
+              <option value="" disabled>— choose —</option>
+              {corrected.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — now supports {e.supports.replace('_', ' ')}, not {e.corrects_supports?.replace('_', ' ')}</option>)}
+            </select></label>
+          <label className="block"><span className={L}>What was wrong</span><textarea rows={2} className={I} value={wrong} onChange={(e) => setWrong(e.target.value)} /></label>
+          <label className="block"><span className={L}>What is right</span><textarea rows={2} className={I} value={right} onChange={(e) => setRight(e.target.value)} /></label>
+          <label className="block"><span className={L}>Why it is recorded</span><textarea rows={2} className={I} value={why} onChange={(e) => setWhy(e.target.value)} /></label>
+        </div>}
+        canSubmit={unmet.length === 0}
+        unmet={unmet}
+        buildBody={() => ({ evidence_id: evidenceId, what_was_wrong: wrong.trim(), what_is_right: right.trim(), reason: why.trim() })}
+        submitLabel="Record the erratum"
+        onSuccess={() => { setOpen(false); onChanged(); }}
+        renderSuccess={(d) => <>Recorded. Recomputed: {Number(d.recomputed_score)} / 100.</>}
+      />
+    </div>
+  );
+}
+
 function AddEvidence({ run }: { run: Run }) {
   const [open, setOpen] = useState(false);
   if (run.engagement_retired) {
@@ -257,7 +339,7 @@ function PrintFooter({ run }: { run: Run }) {
   );
 }
 
-export function Workbench({ run, account }: { run: Run; account: AccountRead }) {
+export function Workbench({ run, account, onChanged }: { run: Run; account: AccountRead; onChanged: () => void }) {
   const p = run.payload;
   const bm = p.businessMetric;
   const direction = isEnrichedBusinessMetric(bm) ? `, ${bm.direction === 'decrease' ? 'lower' : 'higher'} is better` : '';
@@ -298,6 +380,7 @@ export function Workbench({ run, account }: { run: Run; account: AccountRead }) 
                 {' · '}{run.locked_at ? 'a locked run never changes' : 'not locked: this run can still be replaced'}
               </p>
               <Actions run={run} />
+              <RecordErratum run={run} account={account} onChanged={onChanged} />
             </header>
 
             <Figures run={run} />

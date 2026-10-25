@@ -217,4 +217,23 @@ export interface Run {
   /** L26: the run's engagement has been retired or superseded. */
   engagement_retired: boolean;
   payload: RunPayload;
+  /** C1: errata recorded beside this sealed run, by the steward (never part of the seal). */
+  errata?: RunErratum[];
+}
+
+/** C1 (LVRF_PLAN §9): what a sealed run got wrong, and the server's recompute under the model it was sealed with. */
+export interface RunErratum {
+  id: string;
+  what_was_wrong: string;
+  what_is_right: string;
+  reason: string;
+  model_version: string;
+  model_fingerprint: string;
+  sealed_score: string;
+  sealed_band: string;
+  recomputed_score: string;
+  recomputed_band: string;
+  recompute_method: string;
+  recorded_by: string;
+  recorded_at: string;
 }

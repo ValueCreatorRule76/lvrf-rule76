@@ -81,6 +81,11 @@ export interface PovEvidence {
   summary: string;
   provenance: string;
   basis: Basis | null;
+  /** C1: the link's evidence, and what it corrects (a withdrawn link's supports), with who and why. */
+  evidence_id: string;
+  corrects_supports: string | null;
+  corrected_by: string | null;
+  correction_reason: string | null;
   /** P1 (0039): what it rests on, who recorded it, and its latest figure check against this outcome. */
   evidence_form: string; quote_text: string | null; locator: EvidenceFormShown['locator']; how_read: string | null;
   /** The attester when there is one, otherwise the recorder. */
@@ -118,6 +123,8 @@ export interface PovOutcome {
   industry_measure_id: string | null;
   pack_entry: PackEntryRef | null;
   evidence: PovEvidence[];
+  /** C1: links withdrawn by a correction, listed apart. */
+  withdrawn_links: { supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
 }
 
 export interface PovHypothesis {

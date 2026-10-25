@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import { withActorTransaction, type Db } from '../db/withActorTransaction.js';
@@ -857,7 +857,8 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       .from(schema.valueOutcomeEvidence)
       .innerJoin(schema.evidence, eq(schema.valueOutcomeEvidence.evidenceId, schema.evidence.id))
       .leftJoin(schema.persons, eq(schema.evidence.attestedByPersonId, schema.persons.id))
-      .where(eq(schema.valueOutcomeEvidence.valueOutcomeId, valueOutcomeId))
+      // C1: a withdrawn link supports nothing.
+      .where(and(eq(schema.valueOutcomeEvidence.valueOutcomeId, valueOutcomeId), isNull(schema.valueOutcomeEvidence.withdrawnAt)))
       .orderBy(schema.evidence.createdAt);
 
     // No kind-based inference. attested_by_person_id is either populated

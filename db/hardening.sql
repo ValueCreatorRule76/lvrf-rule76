@@ -1842,7 +1842,7 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -1972,7 +1972,7 @@ BEGIN
   IF NEW.subject_table = 'institution_facts' THEN
     SELECT EXISTS (SELECT 1 FROM institution_facts f WHERE f.id = NEW.subject_id AND f.evidence_id = NEW.evidence_id) INTO ok;
   ELSE
-    SELECT EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = NEW.subject_id AND l.evidence_id = NEW.evidence_id) INTO ok;
+    SELECT EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = NEW.subject_id AND l.evidence_id = NEW.evidence_id AND l.withdrawn_at IS NULL) INTO ok;
   END IF;
   IF NOT ok THEN
     RAISE EXCEPTION 'LVRF: figure_checks: evidence % does not support % %.', NEW.evidence_id, NEW.subject_table, NEW.subject_id
@@ -2006,6 +2006,165 @@ DROP TRIGGER IF EXISTS figure_checks_guard ON figure_checks;
 CREATE TRIGGER figure_checks_guard
   BEFORE INSERT ON figure_checks
   FOR EACH ROW EXECUTE FUNCTION lvrf_figure_check_guard();
+
+-- ------------------------------------------------------------------
+-- 26. C1 (0040, 25 Oct 2026) — correcting what a link supports; errata on
+--     sealed runs (LVRF_PLAN §9; Brad's ruling, C1-D1–D4; placed before
+--     section 14 so the manifest includes these)
+-- ------------------------------------------------------------------
+--   value_outcome_evidence_guard      BEFORE INSERT OR UPDATE —
+--     INSERT: a link is inserted current. A correcting link (corrects_supports
+--       set) is the steward's, and names a link of the same outcome and
+--       evidence with that supports — withdrawn first: inserting it before the
+--       withdrawal is refused by value_outcome_evidence_one_current (C1-D1).
+--       Any other insert on a retired engagement's outcome is refused: the
+--       freeze, in the database (C1-D2).
+--     UPDATE: the only change is the withdrawal — once, by the steward. A
+--       link's outcome, evidence, supports and correction never change.
+--   value_outcome_evidence_vendor_impact_only  BEFORE INSERT — a
+--     vendor_publication about an account that is not the tenant's own may
+--     support the impact basis only (Brad's ruling, point 3).
+--   run_errata_audit, _no_delete, _immutable, _steward_only — an erratum is
+--     the steward's, on a locked run of their tenant, about that run's
+--     outcome; and it is final.
+--
+-- CONSEQUENCE: trigger count goes 135 -> 141.
+
+CREATE OR REPLACE FUNCTION lvrf_outcome_evidence_link_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  o record;
+  steward uuid;
+BEGIN
+  SELECT i.tenant_id, (g.deleted_at IS NOT NULL OR g.superseded_by_id IS NOT NULL) AS retired
+    INTO o
+    FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id JOIN engagements g ON g.id = vo.engagement_id
+   WHERE vo.id = NEW.value_outcome_id;
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = o.tenant_id;
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.withdrawn_at IS NOT NULL OR NEW.withdrawn_by_person_id IS NOT NULL OR NEW.withdrawal_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcome_evidence: a link is recorded current; its withdrawal is a later act.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+    END IF;
+    IF NEW.corrects_supports IS NOT NULL THEN
+      IF steward IS NULL OR NEW.corrected_by_person_id IS DISTINCT FROM steward THEN
+        RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the tenant''s steward corrects what a link supports.'
+          USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
+                      WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id = NEW.evidence_id AND l.supports = NEW.corrects_supports) THEN
+        RAISE EXCEPTION 'LVRF: value_outcome_evidence: a correction replaces a link of the same outcome and evidence; none supports %.', NEW.corrects_supports
+          USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+      END IF;
+      RETURN NEW;
+    END IF;
+    IF o.retired THEN
+      RAISE EXCEPTION 'LVRF: value_outcome_evidence: this outcome belongs to a retired engagement: its outcomes are frozen. Only a correction of what a link supports is recorded on it.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_frozen';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.value_outcome_id IS DISTINCT FROM OLD.value_outcome_id OR NEW.evidence_id IS DISTINCT FROM OLD.evidence_id
+     OR NEW.supports IS DISTINCT FROM OLD.supports OR NEW.corrects_supports IS DISTINCT FROM OLD.corrects_supports
+     OR NEW.corrected_by_person_id IS DISTINCT FROM OLD.corrected_by_person_id OR NEW.correction_reason IS DISTINCT FROM OLD.correction_reason THEN
+    RAISE EXCEPTION 'LVRF: value_outcome_evidence: a link is never edited. Withdraw it; correct what it supports with a new link.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+  END IF;
+  IF OLD.withdrawn_at IS NOT NULL AND (NEW.withdrawn_at IS DISTINCT FROM OLD.withdrawn_at
+     OR NEW.withdrawn_by_person_id IS DISTINCT FROM OLD.withdrawn_by_person_id OR NEW.withdrawal_reason IS DISTINCT FROM OLD.withdrawal_reason) THEN
+    RAISE EXCEPTION 'LVRF: value_outcome_evidence: this link is already withdrawn; a withdrawal is final.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+  END IF;
+  IF OLD.withdrawn_at IS NULL AND NEW.withdrawn_at IS NOT NULL
+     AND (steward IS NULL OR NEW.withdrawn_by_person_id IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the tenant''s steward withdraws a link.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcome_evidence_guard ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_guard
+  BEFORE INSERT OR UPDATE ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_outcome_evidence_link_guard();
+
+CREATE OR REPLACE FUNCTION lvrf_vendor_impact_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  ev_kind text;
+  own boolean;
+BEGIN
+  SELECT e.kind::text INTO ev_kind FROM evidence e WHERE e.id = NEW.evidence_id;
+  SELECT i.is_tenant_self INTO own FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id WHERE vo.id = NEW.value_outcome_id;
+  IF ev_kind = 'vendor_publication' AND NOT coalesce(own, false) AND NEW.supports IN ('baseline', 'actual') THEN
+    RAISE EXCEPTION 'LVRF: a vendor publication about another company is not evidence of this account''s %: it may support the impact basis only.', NEW.supports
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_vendor_impact_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcome_evidence_vendor_impact_only ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_vendor_impact_only
+  BEFORE INSERT ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_vendor_impact_only();
+
+CREATE OR REPLACE FUNCTION lvrf_run_erratum_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION
+    'LVRF: erratum % is final. It records what a sealed run got wrong, who said so and when. A further finding is a further erratum.', OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_run_erratum_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  r record;
+  steward uuid;
+BEGIN
+  SELECT tenant_id, locked_at, payload->>'valueOutcomeId' AS outcome INTO r FROM value_runs WHERE id = NEW.value_run_id;
+  IF r.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: run_errata: run % is not of tenant %.', NEW.value_run_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  IF r.locked_at IS NULL THEN
+    RAISE EXCEPTION 'LVRF: run_errata: an erratum is recorded on a locked run; an unlocked run is replaced, not corrected.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  IF r.outcome IS DISTINCT FROM NEW.value_outcome_id::text THEN
+    RAISE EXCEPTION 'LVRF: run_errata: the erratum''s outcome is not the one run % sealed.', NEW.value_run_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF steward IS NULL OR NEW.recorded_by_person_id IS DISTINCT FROM steward
+     OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: only the tenant''s steward records an erratum.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS run_errata_audit ON run_errata;
+CREATE TRIGGER run_errata_audit
+  AFTER INSERT OR UPDATE ON run_errata
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+
+DROP TRIGGER IF EXISTS run_errata_no_delete ON run_errata;
+CREATE TRIGGER run_errata_no_delete
+  BEFORE DELETE ON run_errata
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+    'An erratum records what a sealed run got wrong. It cannot be deleted.'
+  );
+
+DROP TRIGGER IF EXISTS run_errata_immutable ON run_errata;
+CREATE TRIGGER run_errata_immutable
+  BEFORE UPDATE ON run_errata
+  FOR EACH ROW EXECUTE FUNCTION lvrf_run_erratum_is_final();
+
+DROP TRIGGER IF EXISTS run_errata_steward_only ON run_errata;
+CREATE TRIGGER run_errata_steward_only
+  BEFORE INSERT ON run_errata
+  FOR EACH ROW EXECUTE FUNCTION lvrf_run_erratum_steward_only();
 
 -- ------------------------------------------------------------------
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
@@ -2109,7 +2268,10 @@ COMMIT;
 --   25: evidence_form_guard, institution_facts_form_kept,
 --   figure_checks_audit, figure_checks_no_delete, figure_checks_immutable,
 --   figure_checks_guard — 6
---   Total: 135 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   26: value_outcome_evidence_guard, value_outcome_evidence_vendor_impact_only,
+--   run_errata_audit, run_errata_no_delete, run_errata_immutable,
+--   run_errata_steward_only — 6
+--   Total: 141 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -2119,15 +2281,16 @@ COMMIT;
 --   0036 (O2) took it 111 -> 126: value_hypotheses' and
 --   reference_example_markers' four each, section 22's seven.
 --   0037 (W1 fix) took it 126 -> 129: section 23's three.
---   0039 (P1) took it 129 -> 135: section 25's six.)
+--   0039 (P1) took it 129 -> 135: section 25's six.
+--   0040 (C1) took it 135 -> 141: section 26's six.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 135.
+-- TRUNCATE in section 14 fail. Total stays 141.
 --
--- Expect 205 rows here: information_schema.triggers emits one row per event
+-- Expect 213 rows here: information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents
@@ -2149,7 +2312,7 @@ COMMIT;
 -- only (+4); research_prompts_audit on INSERT and UPDATE (+2),
 -- research_prompts_no_delete on DELETE only (+1),
 -- research_prompts_immutable on UPDATE only (+1).
--- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197; 0039's section 25 adds evidence_form_guard I+U, institution_facts_form_kept U, figure_checks audit I+U, no_delete D, immutable U, guard I: +8 = 205 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
+-- 68 + 2 + 1 + 4 + 3 + 6 + 36 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2 + 4 + 1 + 8 + 4 + 2 + 1 + 1 + 1 + 2 + 3 + 4 = 168 before 0036; 0036 adds the two governed tables (+8), their 5e triggers (+4) and section 22's (guard I+U, verifier U, marker steward_only I+U, one_current I+U, summaries audit I+U, no_delete D, guard I+U: +12) = 192; 0037's section 23 adds audit I+U, no_delete D, guard I+U: +5 = 197; 0039's section 25 adds evidence_form_guard I+U, institution_facts_form_kept U, figure_checks audit I+U, no_delete D, immutable U, guard I: +8 = 205; 0040's section 26 adds the link guard I+U, vendor_impact_only I, run_errata audit I+U, no_delete D, immutable U, steward_only I: +8 = 213 (the governed 68 and the 5e 36 include 0034's institution_entities and 0035's value_levers; then Q4b's research_results_touch on INSERT, +1; section 19's one_current on INSERT and UPDATE, +2; section 20's lever_offerings _audit on INSERT and UPDATE and _no_delete on DELETE, +3; section 20's two _steward_only triggers on INSERT and UPDATE, +4).
 SELECT event_object_table AS tbl, trigger_name, event_manipulation
 FROM information_schema.triggers
 WHERE trigger_schema = 'public'

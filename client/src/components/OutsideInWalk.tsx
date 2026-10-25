@@ -88,6 +88,54 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
   );
 }
 
+const SUPPORTS = ['baseline', 'actual', 'impact_basis'] as const;
+
+/**
+ * C1 (LVRF_PLAN §9): the steward corrects what a link supports. The old link
+ * is withdrawn (who, when, why) and a new one recorded, in one transaction;
+ * allowed on a retired engagement's frozen outcome. A sealed run is unchanged
+ * — an erratum on the run page records what it sealed wrongly.
+ */
+function CorrectSupport({ e, outcomeId, onDone }: { e: WalkEvidence; outcomeId: string; onDone: () => void }) {
+  const { actor } = useActor();
+  const [open, setOpen] = useState(false);
+  const [supports, setSupports] = useState('');
+  const [reason, setReason] = useState('');
+  const notSteward = actor?.is_steward ? undefined : `Correcting what a link supports is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  if (!open) {
+    return (
+      <span className="ml-1 inline-flex items-center gap-2 text-[11px] text-ink-45">
+        <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} data-testid="correct-support-open"
+          className={'border border-silver px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink disabled:cursor-not-allowed disabled:hover:border-silver disabled:hover:text-ink-45 ' + FOCUS_RING}>
+          Correct what it supports…
+        </button>
+        {notSteward && <span data-testid="correct-support-reason">{notSteward}</span>}
+      </span>
+    );
+  }
+  const unmet = [...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])];
+  return (
+    <div className="mt-1.5 border-t border-rule-soft pt-2" data-testid="correct-support">
+      <GovernedForm<{ supports: string }>
+        path={`/api/value-outcomes/${outcomeId}/evidence/${e.id}/correct-support`} provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">This link, supporting <strong>{e.supports.replace('_', ' ')}</strong>, is <strong>withdrawn</strong> with your name, the date and your reason, and stays shown struck through. A new link records what it supports instead. <strong>A sealed run is not changed</strong>; record an erratum on it.</p>}
+        fields={<div className="flex flex-col gap-3">
+          <label className="block"><span className={LABEL_CLASS}>What it supports</span>
+            <select className={INPUT_CLASS} value={supports} onChange={(ev) => setSupports(ev.target.value)}>
+              <option value="" disabled>— choose —</option>
+              {SUPPORTS.filter((s) => s !== e.supports).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+            </select></label>
+          <label className="block"><span className={LABEL_CLASS}>Why</span>
+            <textarea rows={2} className={INPUT_CLASS} value={reason} onChange={(ev) => setReason(ev.target.value)} />
+            <p className={HELP_CLASS}>At least 12 characters. Kept with the withdrawn link and the new one.</p></label>
+        </div>}
+        canSubmit={unmet.length === 0} unmet={unmet}
+        buildBody={() => ({ supports, reason: reason.trim() })}
+        submitLabel="Withdraw and correct" onSuccess={() => { setOpen(false); setSupports(''); setReason(''); onDone(); }} renderSuccess={() => <>Corrected.</>} />
+    </div>
+  );
+}
+
 /**
  * Q4l: a second (or later) run, once the latest is locked — e.g. after an
  * AI-sourced citation is opened, so the new run seals the opened state.
@@ -355,7 +403,10 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} onDone={reload} /></li>)}</ul>
+          )}
+          {outcome && outcome.withdrawn_links.length > 0 && (
+            <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {l.supports.replace('_', ' ')} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>

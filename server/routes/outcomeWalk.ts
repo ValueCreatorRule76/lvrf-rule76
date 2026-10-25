@@ -402,7 +402,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         `SELECT e.simulated
            FROM value_outcome_evidence voe
            JOIN evidence e ON e.id = voe.evidence_id
-          WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual'`,
+          WHERE voe.value_outcome_id = $1 AND voe.supports = 'actual' AND voe.withdrawn_at IS NULL`,
         [outcomeId],
       );
       if (actualEvidenceRows.length === 0) {
@@ -576,7 +576,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
       // introduce, check what the table actually contains and prefer it
       // only if some other write has already established it as real.
       const { rows: supportsRows } = await client.query<{ supports: string }>(
-        'SELECT DISTINCT supports FROM value_outcome_evidence',
+        'SELECT DISTINCT supports FROM value_outcome_evidence WHERE withdrawn_at IS NULL',
       );
       const existingSupportsValues = new Set(supportsRows.map((r) => r.supports));
       const supportsValue = existingSupportsValues.has('attestation') ? 'attestation' : 'impact_basis';

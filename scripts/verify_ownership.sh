@@ -162,11 +162,18 @@ REAL_AFTER="$(q lvrf "SELECT datdba::regrole FROM pg_database WHERE datname = 'l
 # comparison with one is made over the objects that existed then (P1, 25 Oct
 # 2026: section 25's functions and figure_checks postdate both pinned commits).
 newer_than() {  # COMMIT -> an extended regex of snapshot lines to leave out
-  local t f
+  local t f g
   t="$(comm -13 <(git ls-tree --name-only "$1" db/drizzle/ | grep '\.sql$' | while read -r x; do git show "$1:$x"; done | grep -oE 'CREATE TABLE "[a-z_]+"' | sort -u) \
                <(cat db/drizzle/*.sql | grep -oE 'CREATE TABLE "[a-z_]+"' | sort -u) | sed -E 's/CREATE TABLE "([a-z_]+)"/\1/' | paste -sd'|' -)"
   f="$(comm -13 <(git show "$1:db/hardening.sql" | grep -oE 'CREATE OR REPLACE FUNCTION [a-z_]+' | sort -u) \
                <(grep -oE 'CREATE OR REPLACE FUNCTION [a-z_]+' db/hardening.sql | sort -u) | sed -E 's/CREATE OR REPLACE FUNCTION //' | paste -sd'|' -)"
+  # C1 (0040): a table ownership.sql grants INSERT or UPDATE after COMMIT (value_outcome_evidence's
+  # UPDATE, for the withdrawal) cannot hold that grant in a database built with COMMIT's file.
+  # (Only when COMMIT has an ownership.sql: before OWN-1, lvrf_app owned every table and held every grant.)
+  if git cat-file -e "$1:db/ownership.sql" 2>/dev/null; then
+    g="$(python3 scripts/lib/grants_added.py <(git show "$1:db/ownership.sql") db/ownership.sql)"
+    [ -n "$g" ] && t="${t:+$t|}$g"
+  fi
   printf '%s' "^(rel\\|public\\.(${t:-__none__})\\||func\\|(${f:-__none__})\\()"
 }
 snapshot() {  # DB

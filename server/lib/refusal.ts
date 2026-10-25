@@ -35,6 +35,12 @@ const PLAIN_UNIQUE: Record<string, (detail: string | undefined) => string> = {
     const name = detail?.match(/=\([^,]*, (.*)\) already exists/)?.[1];
     return `${name ? `"${name}" is` : 'That measure is'} already excluded from this pack; an exclusion is not repeated.`;
   },
+  // C1-D1: one current link per outcome and evidence. A correction withdraws the old link first.
+  value_outcome_evidence_one_current: () =>
+    'This evidence already has a current link to this outcome; withdraw that link before recording another.',
+  // C1-D1: the widened key. A withdrawn link is kept, never restored by a second link of the same support.
+  value_outcome_evidence_value_outcome_id_evidence_id_supports_pk: () =>
+    'This evidence was already linked to this outcome with that support, and that link was withdrawn; a withdrawn link is not recorded again.',
   persons_email_key: (detail) => {
     const email = detail?.match(/\(email\)=\(([^)]*)\)/)?.[1];
     return `${email ? `${email} is` : 'That person is'} already in LVRF; select them instead of adding them again.`;

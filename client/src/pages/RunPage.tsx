@@ -8,6 +8,8 @@ export function RunPage() {
   const { id } = useParams<{ id: string }>();
   const [result, setResult] = useState<FetchRunResult | null>(null);
   const [account, setAccount] = useState<AccountRead>({ status: 'loading' });
+  // C1: bumped after an erratum is recorded, to read the run (and its errata) again.
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,10 +32,10 @@ export function RunPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reload]);
 
   if (!result) return <p className="p-8 text-ink-45">loading</p>;
   if (result.status === 'not_found') return <p className="p-8 text-ink-45">This run was not found.</p>;
   if (result.status === 'error') return <p className="p-8 text-ink-70">Couldn&apos;t load this run. Reload the page to try again.</p>;
-  return <Workbench run={result.run} account={account} />;
+  return <Workbench run={result.run} account={account} onChanged={() => setReload((n) => n + 1)} />;
 }

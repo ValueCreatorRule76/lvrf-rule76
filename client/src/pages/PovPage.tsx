@@ -177,6 +177,13 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
               </li>))}
           </ul>
         )}
+        {/* C1: a link withdrawn by a correction stays shown, struck through, with who, when and why. */}
+        {o.withdrawn_links.length > 0 && (
+          <ul className="m-0 mt-2 list-none p-0">
+            {o.withdrawn_links.map((l, i) => (
+              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{l.supports.replace('_', ' ')}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}</li>))}
+          </ul>
+        )}
       </div>
       <div className="flex flex-col gap-3">
         {vendorClaims.map((e, i) => (
@@ -184,6 +191,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             <span className={KICKER}>Vendor publication — a claim, not an actual</span>
             <p className="m-0 mt-1 text-[14px] font-semibold text-ink">{e.summary}</p>
             <p className="m-0 mt-1 text-[12px] text-ink-45">{e.provenance}. Never applied to this account's baseline, never a target.</p>
+            {e.corrects_supports && <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {e.corrects_supports.replace('_', ' ')} to {e.supports.replace('_', ' ')}: {e.correction_reason}</p>}
           </div>
         ))}
         {o.pack_entry && (

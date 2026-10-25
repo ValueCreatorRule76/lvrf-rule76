@@ -59,7 +59,7 @@ export function evidenceCitationRouter(pool: Pool): Router {
       }>(
         `SELECT e.id, e.institution_id, i.tenant_id, e.ai_sourced, e.citation_resolved, rp.full_name AS resolved_by,
                 e.citation_resolved_at AS resolved_at, e.deleted_at, e.superseded_by_id,
-                EXISTS (SELECT 1 FROM value_outcome_evidence voe WHERE voe.evidence_id = e.id) AS on_outcome
+                EXISTS (SELECT 1 FROM value_outcome_evidence voe WHERE voe.evidence_id = e.id AND voe.withdrawn_at IS NULL) AS on_outcome
            FROM evidence e JOIN institutions i ON i.id = e.institution_id
            LEFT JOIN persons rp ON rp.id = e.citation_resolved_by_person_id
           WHERE e.id = $1 FOR UPDATE OF e`,

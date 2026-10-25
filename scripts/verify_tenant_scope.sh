@@ -106,6 +106,8 @@ ENG_A_RETIRE="$(q "INSERT INTO engagements (tenant_id, institution_id, name, own
 RUN_A="$(A1 "SELECT id FROM value_runs WHERE engagement_id = '$ENG_A' AND locked_at IS NOT NULL AND deleted_at IS NULL ORDER BY run_number DESC")"
 RUN_A2="$(A1 "SELECT id FROM value_runs WHERE engagement_id = '$ENG_A' AND locked_at IS NOT NULL AND deleted_at IS NULL AND id <> '$RUN_A' ORDER BY run_number DESC")"
 OUTCOME_A="$(A1 "SELECT vo.id FROM value_outcomes vo JOIN engagements e ON e.id = vo.engagement_id WHERE e.id = '$ENG_A' AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL ORDER BY vo.created_at")"
+# C1: a current evidence link of OUTCOME_A, for the correct-support route.
+LINKEV_A="$(A1 "SELECT evidence_id FROM value_outcome_evidence WHERE value_outcome_id = '$OUTCOME_A' AND withdrawn_at IS NULL ORDER BY evidence_id")"
 # Uncommitted, so a commit reaches its committed_by check.
 OUTCOME_A_OPEN="$(A1 "SELECT vo.id FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id WHERE i.tenant_id = '$TENANT_A' AND vo.committed_at IS NULL AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL ORDER BY vo.created_at")"
 CAP_A="$(A1 "SELECT c.id FROM capabilities c JOIN institutions i ON i.id = c.institution_id WHERE i.tenant_id = '$TENANT_A' AND c.deleted_at IS NULL AND c.superseded_by_id IS NULL ORDER BY c.created_at")"
@@ -148,7 +150,7 @@ SUMMARY_B="$(q "INSERT INTO executive_summaries (tenant_id, institution_id, lens
   VALUES ('$TENANT_B', '$INST_B', 'general', 'Tenant B summary, a verification fixture of sufficient length.', '$STAFF_B', false) RETURNING id" | head -1)"
 RR_A="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' ORDER BY id")"
 RR_A2="$(A1 "SELECT id FROM research_results WHERE tenant_id = '$TENANT_A' AND id <> '$RR_A' ORDER BY id")"
-for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2; do
+for v in STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B MEASURE_OTHER INST_A INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A; do
   [ -n "${!v}" ] || { bad "fixture $v is empty"; exit 1; }
 done
 [ "$(q "SELECT count(*) FROM industries WHERE tenant_id = '$TENANT_B' AND slug = '$SLUG_A'")" = "0" ] || { bad "tenant B unexpectedly has slug $SLUG_A"; exit 1; }
@@ -199,7 +201,7 @@ curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

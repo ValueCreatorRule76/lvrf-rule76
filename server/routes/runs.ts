@@ -44,7 +44,16 @@ export function runsRouter(pool: Pool): Router {
         res.status(404).json({ message: `run ${req.params.id} not found` });
         return;
       }
-      res.json(run);
+      // C1: the errata recorded beside this sealed run (never part of it).
+      const { rows: errata } = await pool.query(
+        `SELECT x.id, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
+                x.sealed_score, x.sealed_band, x.recomputed_score, x.recomputed_band, x.recompute_method,
+                p.full_name AS recorded_by, x.recorded_at
+           FROM run_errata x JOIN persons p ON p.id = x.recorded_by_person_id
+          WHERE x.value_run_id = $1 ORDER BY x.recorded_at`,
+        [req.params.id],
+      );
+      res.json({ ...run, errata });
     } catch (err) {
       respondServerError(res, err);
     }

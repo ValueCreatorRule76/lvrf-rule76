@@ -1007,10 +1007,32 @@ export const valueOutcomeEvidence = pgTable('value_outcome_evidence', {
    * to skip the gate silently; the route validated it, the database did not.
    */
   supports: text('supports').notNull().default('baseline'),
+
+  /* ── C1 (0040) · withdrawal and correction ───────────────────────── */
+  /** A link is withdrawn, never deleted or edited: who, when, why — all or none. Steward-only. */
+  withdrawnByPersonId: uuid('withdrawn_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+  withdrawalReason: text('withdrawal_reason'),
+  /** A correcting link names the `supports` it replaces, who corrected it and why — all or none. */
+  correctsSupports: text('corrects_supports'),
+  correctedByPersonId: uuid('corrected_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  correctionReason: text('correction_reason'),
 }, (t) => [
-  primaryKey({ columns: [t.valueOutcomeId, t.evidenceId] }),
+  /** C1-D1: the key includes `supports`, so a corrected link sits beside its withdrawn predecessor. */
+  primaryKey({ columns: [t.valueOutcomeId, t.evidenceId, t.supports] }),
+  /** C1-D1: one current link per outcome and evidence. */
+  uniqueIndex('value_outcome_evidence_one_current').on(t.valueOutcomeId, t.evidenceId).where(sql`${t.withdrawnAt} IS NULL`),
   check('value_outcome_evidence_supports_known',
     sql`${t.supports} IN ('baseline', 'actual', 'impact_basis')`),
+  check('value_outcome_evidence_withdrawal_complete',
+    sql`(${t.withdrawnByPersonId} IS NULL AND ${t.withdrawnAt} IS NULL AND ${t.withdrawalReason} IS NULL)
+        OR (${t.withdrawnByPersonId} IS NOT NULL AND ${t.withdrawnAt} IS NOT NULL AND ${t.withdrawalReason} IS NOT NULL
+            AND length(btrim(${t.withdrawalReason})) >= 12)`),
+  check('value_outcome_evidence_correction_complete',
+    sql`(${t.correctsSupports} IS NULL AND ${t.correctedByPersonId} IS NULL AND ${t.correctionReason} IS NULL)
+        OR (${t.correctsSupports} IS NOT NULL AND ${t.correctedByPersonId} IS NOT NULL AND ${t.correctionReason} IS NOT NULL
+            AND ${t.correctsSupports} IN ('baseline', 'actual', 'impact_basis') AND ${t.correctsSupports} <> ${t.supports}
+            AND length(btrim(${t.correctionReason})) >= 12)`),
 ]);
 
 /* ================================================================== */
@@ -2445,4 +2467,46 @@ export const figureChecks = pgTable('figure_checks', {
         OR (${t.result} = 'flag' AND ${t.valueChecked} IS NOT NULL AND (${t.numbersMissing} <> '[]'::jsonb OR ${t.wordingFlags} <> '[]'::jsonb))
         OR (${t.result} = 'not_checkable' AND ${t.numbersFound} = '[]'::jsonb AND ${t.numbersMissing} = '[]'::jsonb AND ${t.wordingFlags} = '[]'::jsonb)`),
   check('figure_checks_detail_present', sql`btrim(${t.detail}) <> ''`),
+]);
+
+/* ================================================================== */
+/* C1 (0040, LVRF_PLAN §9) — errata on sealed runs                    */
+/* ================================================================== */
+/**
+ * A sealed run is never edited. When it is found to have sealed something
+ * wrong, the steward records an erratum beside it: what was wrong, what is
+ * right, why, who, when — and the server's recompute of its confidence under
+ * the MODEL_VERSION it was sealed with (C1-D3), with the sealed score beside
+ * it, unchanged. Append-only (hardening.sql section 26). The run page shows
+ * it on screen and on every printed page.
+ */
+export const runErrata = pgTable('run_errata', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  valueRunId: uuid('value_run_id').notNull().references(() => valueRuns.id, { onDelete: 'restrict' }),
+  /** The corrected link this erratum reflects: its outcome and evidence. */
+  valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  whatWasWrong: text('what_was_wrong').notNull(),
+  whatIsRight: text('what_is_right').notNull(),
+  reason: text('reason').notNull(),
+  /** The model the run was sealed with, and under which the recompute ran (C1-D3). */
+  modelVersion: text('model_version').notNull(),
+  modelFingerprint: text('model_fingerprint').notNull(),
+  sealedScore: numeric('sealed_score', { precision: 5, scale: 1 }).notNull(),
+  sealedBand: text('sealed_band').notNull(),
+  recomputedScore: numeric('recomputed_score', { precision: 5, scale: 1 }).notNull(),
+  recomputedBand: text('recomputed_band').notNull(),
+  recomputeMethod: text('recompute_method').notNull(),
+  recordedByPersonId: uuid('recorded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('run_errata_run_idx').on(t.valueRunId),
+  check('run_errata_texts_stated',
+    sql`length(btrim(${t.whatWasWrong})) >= 12 AND length(btrim(${t.whatIsRight})) >= 12 AND length(btrim(${t.reason})) >= 12`),
+  check('run_errata_scores_in_range',
+    sql`${t.sealedScore} BETWEEN 0 AND 100 AND ${t.recomputedScore} BETWEEN 0 AND 100`),
+  check('run_errata_bands_known',
+    sql`${t.sealedBand} IN ('low', 'medium', 'high') AND ${t.recomputedBand} IN ('low', 'medium', 'high')`),
+  check('run_errata_method_stated', sql`length(btrim(${t.recomputeMethod})) >= 24`),
 ]);
