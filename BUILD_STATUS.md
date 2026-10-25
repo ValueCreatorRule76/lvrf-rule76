@@ -12417,3 +12417,28 @@ prod since C1.**
 - **An observation, not changed in C1b:** at true scale, Scotts run 2's page break falls
   between "How the score was made" and its composition bar, so the bar opens page 3. It is
   cosmetic, and it is how the page broke before C1b.
+
+### C1b deployed — 25 October 2026 (UTC)
+
+**Brad deployed C1b at `cdd1b61`.** Client and test changes only; no migration.
+
+**Gate C, read-only over ssh:**
+- **HEAD and service:** HEAD `cdd1b61`, the tree clean. `lvrf-api` has been active since
+  19:23:33 UTC.
+- **The bundle:** Caddy serves `client/dist` directly, and it holds `index-DtBPwnYU.js` and
+  `index-C9WVm_9W.css`, the Gate A bundle. Its CSS carries `table-layout:fixed`.
+- **The record's checks:**
+  - `check_run_hashes`: 25 runs, recompute and embedded hash 25/25.
+  - `check_ownership` is clean.
+  - `check_plain_refusals`: 90/90.
+  - `drift_report`: no findings.
+  - Schema drift: none (journal 42 migrations, newest 0041; 1050 objects match).
+- **The database:** 167 triggers, 0 disabled. 0 governance acts, 0 research imports. 25 runs,
+  all locked. 3 errata, 2 current (run 1's first erratum superseded, as Brad recorded).
+- **Since the restart:**
+  - 0 refusals, and nothing in the audit log;
+  - the journal has the listen line (origin check configured, actor header off), one
+    `GET /api/health 200` and two `GET /api/runs/:id 401`, the deploy's header probe;
+  - nothing was written.
+- **Still to do:** Brad prints Scotts run 2 from prod and looks at every page. At true scale
+  it prints 6 pages, each with the disclosure banner, the marker line and the erratum line.
