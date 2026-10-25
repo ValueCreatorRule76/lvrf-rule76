@@ -12256,3 +12256,36 @@ check and L39.
   build its own fixture links and errata. To be fixed right after P2; the older dump is dropped
   once no script needs it.
 - **C2 written** as LVRF_PLAN §11, as ruled. It is not to be built until P2's Gate C is clean.
+
+### Deployed — 25 October 2026 (UTC): P2 (`5b4e928`, migration 0041); Gate C clean
+
+`feab0ad..5b4e928`: the C1 Gate C docs, P2 (`19f6a04`) and its reviews (`d18ec55`, `5b4e928`).
+**Migration 0041; hardening re-run; no re-exec.**
+- **Gate B** (Brad):
+  - **Paste 1:** `~/lvrf-pre-p2-20261025T162141Z.dump`, 949,491 bytes, 600, **677 TOC
+    entries, as predicted**.
+  - **Paste 2:** every expectation met: HEAD `5b4e928`; 167 triggers; `0|0|34/34`; 0 parsed
+    since the cutover; drift none (42 migrations); ownership clean; 90/90 plain sentences; run
+    hashes 25/25.
+  - **Paste 3:** deployed at `5b4e928`, bundle `index-C-Tu7UkD.js` / `index-DrNmLaoH.css`.
+- **Gate C** (read-only, by me over ssh):
+  - **the deploy:** HEAD `5b4e928`, clean tree; the bundle as above; the API up since 17:24:55
+    UTC; the hardening log from 17:22 with 0 ERROR lines;
+  - **the standard checks:** run hashes **25/25**; ownership clean; **90/90 plain sentences**;
+    drift D1/D3/D4 no findings; schema drift none (42 migrations, 1050 objects); **167 triggers,
+    0 disabled; 18 deferred `_act_present` triggers**;
+  - **P2's state:** `governance_acts` 0 and `research_imports` 0, until Brad's first act; 34
+    results, all `import_id` NULL;
+  - **lineage on prod:**
+    - **Scotts' TRIR baseline:** 14 steps, as on the fresh copy. The vendor link reads
+      `current=false`, withdrawn 25 Oct 11:26 by Brad Piver; the `impact_basis` link is its
+      correction; runs 1 and 2 each note 1 erratum; **steps 12–14 (errata), 8 and 9 (withdrawal
+      and correction) read `record`, "recorded before governance acts (25 Oct 2026)"**;
+    - **Scotts' revenue fact:** prompt > import ("no import (before research imports, 25 Oct
+      2026)") > result > accept > evidence > citation > fact > runs 1 and 2, every step `record`
+      or `seal`;
+  - **since the restart:** 0 refusals, no audit rows, **0 COMMIT failures**;
+  - **the journal:** 3 request lines (health, and the deploy's two 401 smoke checks), **no
+    values, and no id anywhere in it**.
+- **L40 recorded:** the bundle crossed Vite's 500 KB warning (510.27 kB, 136.39 kB gzipped).
+  Code-splitting by route is for a later slice.
