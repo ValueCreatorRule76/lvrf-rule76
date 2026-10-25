@@ -11231,16 +11231,33 @@ tally.
   The build, tsc and oxlint are clean (the 1 pre-existing warning). The bundle is
   unchanged: `index-BEtOnLYY.js` / `index--mKXtxKN.css`.
 
-### Deployed — 24 October 2026 (UTC): UX-1 slice 3 (`16ebe57`), Gate C pending
+### Deployed — 24 October 2026 (UTC): UX-1 slice 3 (`16ebe57`); Gate C clean
 
 Brad deployed slice 3. The box is at `16ebe57`: the audit fix plus two docs commits (the
-ratified design and P1's plan), with no server or client change after `b5a3588`.
-- **Gate C has not run yet.** The box refused the LVRF key ("Permission denied
-  (publickey)") because the ssh agent was empty after a session restart. I tried no other
-  key.
-- **What's needed:** Brad runs the read-only Gate C paste, or adds the key to the agent with
-  `ssh-add ~/.ssh/id_ed25519_lvrf`.
-- **This note is completed** when Gate C has run.
+ratified design and P1's plan), with no server or client change after `b5a3588`. **No
+migration, no hardening change, no re-exec.**
+- **The backup:** `~/lvrf-pre-ux1s3-20261024T225051Z.dump`, 874,662 bytes, `-rw-------`,
+  **630 TOC entries** (as predicted).
+- **The deploy:** bundle **`index-BEtOnLYY.js`** / `index--mKXtxKN.css`. The API has been up
+  since 22:51:40 UTC, with the origin check configured and the actor header off.
+- **Gate C** (read-only, by me over ssh, once Brad had loaded the key; the first attempt
+  was refused because the agent was empty, and no other key was tried):
+  - **the standard checks:**
+    - run hashes 25/25 (recomputed and embedded);
+    - ownership clean;
+    - plain sentences 69/69;
+    - drift D1/D3/D4 no findings;
+    - **129 triggers by `pg_trigger`, 0 disabled**;
+  - **since the restart:** **0 refusals**, 0 audit rows;
+  - **the lever:** Scotts' lever "Safe-work behaviour through EHS procedural training" has
+    **proposed_by Brad Piver** and **proposed_at 19 Oct 2026** in the rows the read joins.
+    The deployed route builds the lever with `proposed_by` and `proposed_at`.
+    - **Not checked:** the `/pov` response itself. Production refuses the actor header, and
+      I hold no session there.
+  - **the journal:** 3 request lines, **none carrying a value**. They are the deploy's two
+    `GET /api/runs/:id` 401 smoke checks and its own health check.
+    - **Also not checked:** a `/pov` read logged by its pattern. **No `/pov` read had
+      happened since the restart**, so there was nothing to show it.
 
 ## UX-1 slice 4: the run page — 24 October 2026 (UTC)
 
