@@ -11962,9 +11962,20 @@ CONFIDENCE_MODEL ruling for later, with no change in C1.
     deploy's two smoke checks.
 
 **Two things for Brad (no change made):**
-1. **Run 1's erratum names the wrong run.** Its "what was wrong" reads "Run 2 sealed the
-   vendor publication…" (the same texts as run 2's erratum). The supersession route is the
-   correction: a new erratum on run 1 that supersedes it, with a reason.
+1. **Run 1's erratum named the wrong run** ("Run 2 sealed the vendor publication…"). **Brad
+   superseded it at 11:32:38. Gate C, re-run read-only:**
+   - **the chain:**
+     - the 11:30:31 erratum is kept and superseded;
+     - the 11:32:38 erratum supersedes it, naming it, with the reason "Supersedes the
+       erratum of 25 Oct 2026 on this run, which named run 2 in error. The correction itself
+       is unchanged.";
+     - its "what was wrong" now reads "Run 1 sealed…";
+   - **its recompute:** 10 Low under model 1.0.0 (`d4cf8f31472a`);
+   - **one current erratum per run and correction:** run 1 = 1, run 2 = 1;
+   - **everything else unchanged:** 3 errata rows in all, run hashes 25/25, 141 triggers,
+     84/84 sentences, drift none, 0 refusals;
+   - **the audit since the restart:** `run_errata` insert ×3 plus the earlier acts;
+   - **the journal:** 93 lines, with errata 201 ×3 and no values.
 2. **Run 2's record document v1 (11:20) predates the erratum and does not refer to it.** A
    record document holds the sealed payload and its hash, by design. Nothing links it to
    errata recorded later on its run. The printed run page carries the erratum on every page,
