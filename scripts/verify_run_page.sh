@@ -94,6 +94,8 @@ expect() {  # NAME RUN_ID -> $W/x.NAME.json
     console.log(JSON.stringify({ n: p.runNumber, inst: r.institution_id, instName: r.institution_name, hash: r.payload_hash, retired: r.engagement_retired,
       stage: r.terminal_value_stage, confidence: Number(p.confidence.score) + ' / 100 · ' + band, low: p.confidence.band === 'low',
       verified: p.realization === 'verified', sealed: p.bannerTitle ?? null, marker: pov.reference_example ? KIND[pov.reference_example.kind] : null,
+      citation: pov.reference_example ? pov.reference_example.source_citation : null,
+      errata: (r.errata ?? []).filter((x) => x.superseded_by_id === null).length,
       evidence: p.evidence ? p.evidence.length : null, outcome: typeof p.valueOutcomeId === 'string', baseline: String(p.baselineValue),
       unit: typeof p.businessMetric === 'object' ? p.businessMetric.unit : null, engagementId: r.engagement_id }));
   " > "$W/x.$1.json"
@@ -216,6 +218,7 @@ JS
 pages_check() {  # NAME PDF XFILE
   local name="$1" pdf="$2" n p txt flat bad_pages="" hash marker
   hash="$(node -e "console.log(require('$3').hash)")"; marker="$(node -e "console.log(require('$3').marker ?? '')")"
+  local citation errata; citation="$(node -e "console.log((require('$3').citation ?? '').replace(/\\s+/g, ''))")"; errata="$(node -e "console.log(require('$3').errata ?? 0)")"
   n="$(pdfinfo "$pdf" 2>/dev/null | awk '/^Pages:/{print $2}')"
   [ -n "$n" ] && [ "$n" -ge 1 ] || { bad "$name: the PDF has no pages"; return; }
   for p in $(seq 1 "$n"); do
@@ -223,6 +226,13 @@ pages_check() {  # NAME PDF XFILE
     flat="$(printf '%s' "$txt" | tr -d ' ')"
     printf '%s' "$txt" | grep -qF "UNVERIFIED — this run's outcome has no verified actual" || bad_pages="$bad_pages p$p:disclosure"
     [ -z "$marker" ] || printf '%s' "$txt" | grep -qF "$marker" || bad_pages="$bad_pages p$p:marker"
+    # C1b: the header's lines are bounded — the marker points to page 1 for its source; an erratum is one line.
+    [ -z "$marker" ] || printf '%s' "$flat" | grep -qF "·Sourceonpage1" || bad_pages="$bad_pages p$p:marker-line"
+    [ "$errata" = "0" ] || printf '%s' "$flat" | grep -qE "ERRATUMrecordedaftersealing|ERRATArecordedaftersealing" || bad_pages="$bad_pages p$p:erratum-line"
+    if [ "$p" = "1" ]; then
+      [ -z "$citation" ] || printf '%s' "$flat" | grep -qF -- "$citation" || bad_pages="$bad_pages p1:full-citation"
+      [ "$errata" = "0" ] || printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || bad_pages="$bad_pages p1:full-erratum"
+    fi
     printf '%s' "$flat" | grep -qF "recordhash$hash" || bad_pages="$bad_pages p$p:hash"
     printf '%s' "$txt" | grep -qE "Printed [0-9]{1,2} [A-Z][a-z]{2} [0-9]{4}" || bad_pages="$bad_pages p$p:date"
     printf '%s' "$txt" | grep -qF "rendered from the record as it stands" || bad_pages="$bad_pages p$p:rendered"
@@ -230,7 +240,7 @@ pages_check() {  # NAME PDF XFILE
     if printf '%s' "$txt" | grep -qF "Signed in as"; then bad_pages="$bad_pages p$p:app-header"; fi
     if printf '%s' "$txt" | grep -qE "Add evidence…|Render record|Share with customer|Run and lock ›|▸|▾"; then bad_pages="$bad_pages p$p:screen-control"; fi
   done
-  [ -z "$bad_pages" ] && ok "$name: printed, $n page(s); EVERY page carries the disclosure banner${marker:+, the marker}, the full record hash, the print date, \"rendered from the record as it stands\" and \"Page n of $n\"; no app header, no screen-only control" || bad "$name: printed pages missing:$bad_pages"
+  [ -z "$bad_pages" ] && ok "$name: printed, $n page(s); EVERY page carries the disclosure banner${marker:+, the bounded marker line}$([ "$errata" = "0" ] || echo ", the bounded erratum line"), the full record hash, the print date, \"rendered from the record as it stands\" and \"Page n of $n\"; no app header, no screen-only control" || bad "$name: printed pages missing:$bad_pages"
   local all; all="$(pdftotext "$pdf" - 2>/dev/null)"
   printf '%s' "$all" | grep -qF "How the score was made" && printf '%s' "$all" | grep -qF "Findings" && printf '%s' "$all" | grep -qF "What it takes to raise confidence" \
     && ok "$name: the folded sections print in full" || bad "$name: a folded section is missing from the print"
@@ -258,6 +268,64 @@ look curia21 "$R_CURIA21" "$W/x.curia21.json"
 step "6. Skillsoft run 1 (before the outcome link; no marker)"
 look skill "$R_SKILL" "$W/x.skill.json"
 [ -f "$SHOTS/ux1s4_run_skill.pdf" ] && pages_check skill "$SHOTS/ux1s4_run_skill.pdf" "$W/x.skill.json"
+
+step "6b. C1b: a fixture run with real-length errata and a long-citation marker (built here; L39)"
+# The texts are copies of the real ones (Scotts run 2's erratum; Curia's marker citation), held
+# here so the check depends on no row of prod's (L39). Written through the routes.
+CITE_LONG='Skillsoft customer case study, "From the Ground Up: How Curia Built a Popular Learning and Development Program From Scratch" (Skillsoft, published 2023; results cited for January–June 2023). https://skillsoft.com/de/fallstudien/from-the-ground-up-how-curia-built-a-popular-learning-and-development-program-from-scratch'
+E_WRONG='Run 2 sealed the vendor publication about another company as supporting the TRIR baseline.'
+E_RIGHT='It supports the impact basis only. It is a vendor claim about another company and is no evidence of Scotts’ baseline.'
+E_WHY='The link was corrected on 25 Oct 2026. A sealed run is never changed, so the correction is recorded beside it.'
+api() {  # PATH BODY EXPECTED -> $W/a.json; clears C1B_OK on another status
+  local code; code="$(curl -s -o "$W/a.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $S" --data-binary "$2" "$BASE$1")"
+  [ "$code" = "$3" ] || { C1B_OK=0; echo "  (C1b fixture: $1 -> $code: $(head -c 200 "$W/a.json"))"; }
+}
+aj() { node -e "console.log(require('$W/a.json').$1 ?? '')"; }
+J() { node -e 'const o = {}; for (let i = 1; i < process.argv.length; i += 2) { const k = process.argv[i], v = process.argv[i + 1]; let x = v; try { x = JSON.parse(v); } catch {} o[k] = x; } process.stdout.write(JSON.stringify(o));' "$@"; }
+TS="$(date +%s)"; C1B_OK=1
+api /api/account-inputs "$(J institution "$(J name "C1b print fixture (invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for C1b.')" persons "[$(J full_name 'Fixture owner (invented)' email "owner.$TS@c1b.example" title Owner)]")" 201
+FINST="$(aj institution_id)"; FOWN="$(node -e "console.log((require('$W/a.json').person_ids ?? [])[0] ?? '')")"
+api "/api/institutions/$FINST/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'C1b capability' owner_person_id "$FOWN" is_primary false basis 'Verification: attached for C1b.')" 201
+api "/api/institutions/$FINST/value-outcomes" "$(J engagement_name 'C1b engagement' engagement_owner_person_id "$FOWN" capability_name 'C1b capability' metric "$(J name 'C1b TRIR' unit 'incidents per 200,000 hours.' direction decrease source_system 'verification system of record' owner_person_id "$FOWN")" baseline_value 1.4 baseline_measured_at 2025-09-30T00:00:00Z)" 201
+FO="$(aj value_outcome_id)"; FENG="$(aj engagement_id)"
+api "/api/value-outcomes/$FO/evidence" "$(J kind public_filing provenance 'Fixture filing (not a source)' summary 'C1b TRIR FY25 (fixture)' supports baseline source_verified true ai_sourced false simulated false evidence_form quote quote_text 'Our total recordable incident rate was 1.4 in FY25.' how_read 'The FY25 TRIR, from the fixture report, read as published.')" 201
+FEV="$(aj evidence_id)"
+api "/api/engagements/$FENG/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note 'Verification: a run for the print check.' source_fixture c1b)" 201
+FRUN="$(aj value_run_id)"
+api "/api/value-runs/$FRUN/lock" "$(J lock_reason 'Verification: sealed for the print check.')" 200
+api "/api/value-outcomes/$FO/evidence/$FEV/correct-support" "$(J supports impact_basis reason 'Verification: the filing bases the impact, for the print check.')" 201
+api "/api/value-runs/$FRUN/errata" "$(J evidence_id "$FEV" what_was_wrong "$E_WRONG" what_is_right "$E_RIGHT" reason "$E_WHY")" 201
+api "/api/institutions/$FINST/reference-example" "$(J kind published_case_study source_citation "$CITE_LONG" note 'Verification: a long-citation marker for the print check.')" 201
+[ "$C1B_OK" = "1" ] && ok "the C1b fixture: a locked run, its link corrected, an erratum with Scotts run 2's real texts ($(( ${#E_WRONG} + ${#E_RIGHT} + ${#E_WHY} )) characters), the account marked with Curia's citation (${#CITE_LONG} characters)" || bad "the C1b fixture was not built (see above)"
+expect c1b "$FRUN"
+look c1b "$FRUN" "$W/x.c1b.json"
+[ -f "$SHOTS/ux1s4_run_c1b.pdf" ] && pages_check c1b "$SHOTS/ux1s4_run_c1b.pdf" "$W/x.c1b.json"
+C1B_PAGES="${PAGES_N:-0}"
+# C1b (Brad): every printed header line is bounded — measured in print emulation, each line of the
+# printed header is one line tall, whatever its text (the marker, the sealed banner, the disclosure, the erratum).
+cat > "$W/header.mjs" <<'JS'
+const [CDP, VITE, TOKEN, ID] = process.argv.slice(2);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const t = await (await fetch(`http://127.0.0.1:${CDP}/json/new?about:blank`, { method: 'PUT' })).json();
+const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener('open', r));
+let n = 0; const pend = new Map();
+ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
+const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+const ev = async (x) => (await send('Runtime.evaluate', { expression: x, returnByValue: true })).result?.result?.value;
+await send('Network.setCookie', { name: 'lvrf_session', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true });
+await send('Emulation.setDeviceMetricsOverride', { width: 794, height: 1123, deviceScaleFactor: 1, mobile: false });
+await send('Page.navigate', { url: `http://localhost:${VITE}/runs/${ID}` });
+for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=run-page] h1')`)) break; }
+await sleep(900);
+await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
+const rows = await ev(`[...document.querySelectorAll('[data-testid=print-header] [data-testid=banners] > div')].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5; const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth); return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line) }; })`);
+console.log(JSON.stringify(rows)); ws.close(); process.exit(0);
+JS
+header_lines() { node "$W/header.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$FRUN" 2>/dev/null; }
+HL="$(header_lines)"
+[ -n "$HL" ] && [ "$(node -e "const r=JSON.parse(process.argv[1]); console.log(r.length >= 4 && r.every(x => x.lines === 1))" "$HL")" = "true" ] \
+  && ok "  ...in print emulation, every printed header line is one line tall: $HL" || bad "  ...printed header lines: $HL"
+[ "$C1B_PAGES" -ge 2 ] && ok "  ...it prints on $C1B_PAGES pages, so the repeating header is tested past page 1" || bad "  ...the C1b fixture printed on $C1B_PAGES page(s): the check needs 2+"
 
 step "7. Deliberate breaks"
 restore() { cp "$W/$(basename "$1").orig" "$1"; cmp -s "$W/$(basename "$1").orig" "$1" && ok "  ...$1 restored byte-identical" || bad "  ...$1 restore differs"; }
@@ -313,6 +381,35 @@ restore "$EVC"
 # B7 — the stage strip in the enum's own values.
 edit "$WB" "                {label(STAGE_LABEL, stage)}{state === 'gap'" "                {stage}{state === 'gap'"
 brk "B7: the stage strip in enum values" curia1 "$R_CURIA1" "$W/x.curia1.json" "the stage strip in plain labels"
+restore "$WB"
+# B9 (C1b) — the erratum's full text back in the printed header: Chrome stops repeating it; pages 2 onward lose the disclosure.
+c1b_break() {  # LABEL NAME [note: report the pages, do not judge them]
+  local d="$B/c1b.$RANDOM"; mkdir -p "$d"; sleep 5
+  node "$W/run.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$d" c1b "$FRUN" "$W/x.c1b.json" one > /dev/null 2>&1 || true
+  if [ ! -f "$d/ux1s4_run_c1b.pdf" ]; then bad "$1: the break's walk printed no PDF"; return; fi
+  local n p miss=""; n="$(pdfinfo "$d/ux1s4_run_c1b.pdf" | awk '/^Pages:/{print $2}')"
+  for p in $(seq 2 "$n"); do pdftotext -f "$p" -l "$p" -layout "$d/ux1s4_run_c1b.pdf" - | tr '\n' ' ' | tr -s ' ' | grep -qF "UNVERIFIED — this run's outcome has no verified actual" || miss="$miss p$p"; done
+  pdftotext -f 1 -l 1 -layout "$d/ux1s4_run_c1b.pdf" - | tr '\n' ' ' | tr -s ' ' | grep -qF "UNVERIFIED — this run's outcome has no verified actual" || miss="$miss p1(control)"
+  cp "$d/ux1s4_run_c1b.pdf" "$SHOTS/ux1s4_run_c1b_$2.pdf" 2>/dev/null || true
+  if [ "${3:-}" = note ]; then echo "  NOTE  $1: every page still carries the disclosure ($n pages): at ${#CITE_LONG} characters with the erratum bounded, Chrome still repeats the header; the header-line bound below is what catches it"; return; fi
+  case "$miss" in *control*) bad "$1: page 1 lost the banner too — the control failed" ;; "") bad "$1: not caught — every page still carries the disclosure ($n pages)" ;; *) ok "$1 → caught: pages without the disclosure banner:$miss (of $n)" ;; esac
+}
+# B9 (C1b) — the header as it was before C1b: the erratum's full text AND the marker's full citation,
+# unclipped. Scotts' real header failed this way on prod (25 Oct 2026); pages 2 onward must lose the disclosure.
+edit "$WB" '      {compact
+        ? errata.length > 0 && (' '      {false
+        ? errata.length > 0 && ('
+edit "$WB" "{MARKER_KIND[marker.kind].banner} · {compact ? 'Source on page 1' : <>Source: {marker.source_citation}</>}" "{MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}"
+edit "$WB" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6' + line} data-testid=\"banner-reference\">" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6'} data-testid=\"banner-reference\">"
+c1b_break "B9: the pre-C1b header back (the erratum's full text and the full citation, unclipped)" b9
+restore "$WB"
+# B10 (C1b) — the marker's full citation back in the printed header, unclipped, the erratum still bounded.
+edit "$WB" "{MARKER_KIND[marker.kind].banner} · {compact ? 'Source on page 1' : <>Source: {marker.source_citation}</>}" "{MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}"
+edit "$WB" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6' + line} data-testid=\"banner-reference\">" "        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6'} data-testid=\"banner-reference\">"
+c1b_break "B10: the marker's full citation back in the printed header, unclipped" b10 note
+sleep 3; HL10="$(header_lines)"
+[ "$(node -e "const r=JSON.parse(process.argv[1] || '[]'); const m=r.find(x => x.id === 'banner-reference'); console.log(!!m && m.lines > 1)" "$HL10")" = "true" ] \
+  && ok "B10 → caught: the marker's header line is no longer bounded ($HL10)" || bad "B10: the header-line bound did not catch it: $HL10"
 restore "$WB"
 # B8 — the findings' sealed messages without their mark.
 edit "$FND" '        <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Messages as recorded at sealing.</p>' ''

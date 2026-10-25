@@ -12289,3 +12289,68 @@ check and L39.
     values, and no id anywhere in it**.
 - **L40 recorded:** the bundle crossed Vite's 500 KB warning (510.27 kB, 136.39 kB gzipped).
   Code-splitting by route is for a later slice.
+
+## C1b: every printed header line bounded — 25 October 2026 (UTC)
+
+**The defect (found at L39's first run, on the fresh prod copy, 25 Oct 2026). It is live on
+prod since C1.**
+- On the printed Scotts run 2, page 1 carried every banner, but **pages 2–5 carried none: no
+  disclosure banner and no reference marker.** The footer (hash, print date, page number) printed
+  on every page.
+- **The cause:** C1 put the erratum's full text in the repeating print header. With Scotts' real
+  erratum (317 characters) under the marker, the header grew too tall for Chrome to repeat it.
+- **Why Gate A missed it:** C1's Gate A used a short fixture erratum, and checked only the
+  erratum on every page, not the disclosure and the marker beside it.
+- **Only the print** was affected: not the screen, not the record.
+- It breaks CLAUDE.md rule 6.
+
+**Brad's ruling:** C1b before L39, as proposed, with two additions:
+1. every print-header line is bounded, the marker included ("Source on page 1", the citation in
+   full in page 1's body);
+2. the hard check, that any printed page without the disclosure banner fails, applies to
+   `verify_pov_print` as well as `verify_run_page`, on every page.
+
+**The fix (client only; no migration, no server change):**
+- **`Workbench.tsx`:** `RunBanners compact` in the printed `<thead>`. Every line is one line,
+  clipped:
+  - the marker reads its kind and "Source on page 1";
+  - an erratum reads "ERRATUM recorded after sealing, <date>, by <name>: recomputed n / 100
+    (sealed m / 100). Full text on page 1." Two or more current errata print as one count line.
+  - **`PrintPageOne`** prints the full citation, the sealed banner and the full errata once, at
+    the top of page 1 (print only).
+- **`PovPage.tsx`:** `Banners compact`, the same way; the full citation on page 1.
+- **The screen is unchanged.**
+
+**Gate A:**
+- **`verify_run_page`: 261 passed, 0 failed.** Run on the fresh copy, it reads Scotts' real
+  errata; on the older copy, the fixture's.
+  - **A new fixture, built through the routes (L39),** holds copies of Scotts run 2's erratum
+    texts (317 characters) and Curia's marker citation (318 characters). It is a locked run,
+    its link corrected, its erratum recorded, its account marked a published case study.
+    - **It prints 3 pages.** Each carries the disclosure banner, the bounded marker line, the
+      bounded erratum line, the full hash, the date and "Page n of 3". Page 1 has the full
+      citation and the full erratum.
+    - **In print emulation, every printed header line is one line tall:** the marker, the
+      sealed banner, the disclosure and the erratum.
+  - **Scotts run 2 on the fresh copy** (Brad's real errata) prints **4 pages, every one with the
+    disclosure banner**, the marker line and the erratum line.
+  - **B9, the pre-C1b header back** (the full erratum and the full citation, unclipped): caught,
+    pages 2–4 without the disclosure banner. This is the defect, reproduced.
+  - **B10, the full citation back, unclipped, with the erratum still bounded:** caught by the
+    header-line bound (the marker 4 lines tall).
+    - **Not by the pages:** at 318 characters with the erratum bounded, Chrome still repeats the
+      header, and the script says so as a NOTE.
+    - **The bound is the requirement,** and it holds for any length.
+  - `Workbench.tsx` is restored byte-identical after each break.
+- **`verify_pov_print`: 116 passed, 0 failed.**
+  - **Every printed page must carry "UNVERIFIED — …" in full,** and, where there is a marker,
+    "· Source on page 1". Page 1 carries the full citation.
+  - **Curia's POV prints 4 pages.** In print emulation, every printed header line is one line
+    tall.
+- **`verify_corrections`:** the erratum's bounded line and the disclosure on every printed page;
+  its full text on page 1. B8 now edits the compact header.
+- **The regression on the older copy:** all 39 scripts pass. The build and lint are clean (the
+  1 pre-existing warning). The bundle is `index-CAbRpKAp.js` / `index-D2bKCo4y.css`.
+- **The printed pages for Brad's review:** `~/lvrf-backups/c1b-screens/` (700; files 600).
+  Scotts run 2 (4 pages), the fixture (3 pages), Curia's POV (4 pages), each as a PDF and
+  per-page PNGs; B9's PDF and pages; B10's PDF.

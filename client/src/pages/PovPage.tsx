@@ -41,21 +41,25 @@ function BasisBadge({ basis }: { basis: string | null }) {
   return <Badge tone={basis ? BASIS_TONE[basis] ?? 'neutral' : 'neutral'}>{basis ? basis.replace(/_/g, ' ') : 'no basis'}</Badge>;
 }
 
-function Banners({ pov }: { pov: Pov }) {
+/** C1b (Brad, 25 Oct 2026): in the printed header (`compact`) every line is bounded, so it repeats on every page; the citation prints in full on page 1. */
+const HEADER_LINE = 'print:overflow-hidden print:text-ellipsis print:whitespace-nowrap';
+
+function Banners({ pov, compact = false }: { pov: Pov; compact?: boolean }) {
+  const line = compact ? ' ' + HEADER_LINE : '';
   return (
     <div data-testid="banners">
       {pov.reference_example && (
-        <div className="bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere]" data-testid="banner-reference">
-          {MARKER_KIND[pov.reference_example.kind].banner} · Source: {pov.reference_example.source_citation}
+        <div className={'bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere]' + line} data-testid="banner-reference">
+          {MARKER_KIND[pov.reference_example.kind].banner} · {compact ? 'Source on page 1' : <>Source: {pov.reference_example.source_citation}</>}
         </div>
       )}
       {pov.banners.outside_in && (
-        <div className="bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite" data-testid="banner-outside-in">
+        <div className={'bg-ink px-6 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite' + line} data-testid="banner-outside-in">
           OUTSIDE-IN HYPOTHESIS — no figure on this page has customer-side evidence behind it
         </div>
       )}
       {pov.banners.unverified && (
-        <div className="border-b border-warning bg-white px-6 py-2 font-mono text-[12px] tracking-[.04em] text-warning" data-testid="banner-unverified">
+        <div className={'border-b border-warning bg-white px-6 py-2 font-mono text-[12px] tracking-[.04em] text-warning' + line} data-testid="banner-unverified">
           UNVERIFIED — {pov.outcomes.length === 0 ? 'no outcome is recorded' : 'not every outcome on this page has a verified actual'}
         </div>
       )}
@@ -270,10 +274,16 @@ export function PovPage() {
     <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="pov">
       <div className="print:hidden"><Banners pov={pov} /></div>
       <table className="block w-full border-collapse print:table">
-      <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><Banners pov={pov} /></td></tr></thead>
+      <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><Banners pov={pov} compact /></td></tr></thead>
       <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter pov={pov} /></td></tr></tfoot>
       <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
       <div className="mx-auto flex max-w-5xl flex-col gap-10 px-4 pb-16 pt-8 sm:px-[30px] print:gap-6 print:px-0 print:pb-4 print:pt-4">
+        {/* C1b: the marker's full citation, printed once on page 1 (the header line points here). */}
+        {pov.reference_example && (
+          <p className="m-0 hidden font-mono text-[10.5px] text-ink [overflow-wrap:anywhere] print:block" data-testid="print-marker-full">
+            {MARKER_KIND[pov.reference_example.kind].banner} · Source: {pov.reference_example.source_citation}
+          </p>
+        )}
         <header className="flex flex-col gap-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div className="flex flex-col gap-1">

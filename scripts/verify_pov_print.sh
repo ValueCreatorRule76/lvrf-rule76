@@ -199,14 +199,20 @@ hashes_check() {  # NAME PDF POV_JSON
   local r; r="$(python3 "$W/hashes.py" "$2" "$3" 2>&1)"
   case "$r" in OK*) ok "$1: ${r#OK }" ;; *) bad "$1: record hashes — ${r#BAD }" ;; esac
 }
-pages_check() {  # NAME PDF BANNER SEAL
-  local name="$1" pdf="$2" banner="$3" seal="$4" n p txt bad_pages=""
+pages_check() {  # NAME PDF BANNER SEAL [POV_JSON]
+  local name="$1" pdf="$2" banner="$3" seal="$4" n p txt flat bad_pages="" citation=""
+  # C1b (Brad, 25 Oct 2026): the marker's line is bounded in the header; its full citation prints on page 1.
+  [ -n "${5:-}" ] && citation="$(node -e "const p=require('$5');console.log(p.reference_example ? p.reference_example.source_citation.replace(/\s+/g,'') : '')")"
   n="$(pdfinfo "$pdf" 2>/dev/null | awk '/^Pages:/{print $2}')"
   [ -n "$n" ] && [ "$n" -ge 1 ] || { bad "$name: the PDF has no pages"; return; }
   for p in $(seq 1 "$n"); do
     txt="$(pdftotext -f "$p" -l "$p" -layout "$pdf" - 2>/dev/null | tr '\n' ' ' | tr -s ' ')"
+    flat="$(printf '%s' "$txt" | tr -d ' ')"
     printf '%s' "$txt" | grep -qF "$banner" || bad_pages="$bad_pages p$p:banner"
-    printf '%s' "$txt" | grep -qF "UNVERIFIED" || bad_pages="$bad_pages p$p:unverified"
+    # The hard check (C1b): any printed page without the disclosure sentence fails.
+    printf '%s' "$txt" | grep -qE "UNVERIFIED — (not every outcome on this page has a verified actual|no outcome is recorded)" || bad_pages="$bad_pages p$p:disclosure"
+    [ -z "$citation" ] || printf '%s' "$flat" | grep -qF "·Sourceonpage1" || bad_pages="$bad_pages p$p:marker-line"
+    [ -z "$citation" ] || [ "$p" != "1" ] || printf '%s' "$flat" | grep -qF -- "$citation" || bad_pages="$bad_pages p1:full-citation"
     printf '%s' "$txt" | grep -qF "$seal" || bad_pages="$bad_pages p$p:seal"
     printf '%s' "$txt" | grep -qE "Printed [0-9]{1,2} [A-Z][a-z]{2} [0-9]{4}" || bad_pages="$bad_pages p$p:date"
     printf '%s' "$txt" | grep -qF "rendered from the record as it stands" || bad_pages="$bad_pages p$p:rendered"
@@ -224,7 +230,7 @@ look() {  # NAME ID EXPECT_JSON BANNER SEAL [OUTDIR]
   node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$outdir" "$1" "$2" "$3" > "$W/look.$1.log" 2>&1 || bad "the $1 walk crashed: $(tail -3 "$W/look.$1.log")"
   while IFS= read -r line; do case "$line" in PASS*) ok "${line#PASS  }" ;; FAIL*) bad "${line#FAIL  }" ;; esac; done < "$W/look.$1.log"
   curl -s -H "x-actor-person-id: $S" "$BASE/api/institutions/$2/pov" > "$W/pov.$1.json"
-  [ -f "$outdir/ux1s3_pov_$1.pdf" ] && pages_check "$1" "$outdir/ux1s3_pov_$1.pdf" "$4" "$5" && hashes_check "$1" "$outdir/ux1s3_pov_$1.pdf" "$W/pov.$1.json"
+  [ -f "$outdir/ux1s3_pov_$1.pdf" ] && pages_check "$1" "$outdir/ux1s3_pov_$1.pdf" "$4" "$5" "$W/pov.$1.json" && hashes_check "$1" "$outdir/ux1s3_pov_$1.pdf" "$W/pov.$1.json"
 }
 
 step "3. Scotts (locked runs, a hypothesis, a lever, published facts)"
@@ -232,6 +238,29 @@ look scotts "$SCOTTS" '{"confidence":"35 / 100 · Low","falsifiers":1,"lever":"r
 SCOTTS_PAGES="$PAGES_N"
 step "4. Curia (a locked run, no hypothesis)"
 look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 21"],"buttons":["Show all 21 runs"],"total":22}}' "REFERENCE EXAMPLE" "record hash"
+# C1b (Brad, 25 Oct 2026): every printed header line is bounded — in print emulation each line of the
+# printed header is one line tall; Curia's marker carries a 318-character citation.
+cat > "$W/header.mjs" <<'JS'
+const [CDP, VITE, TOKEN, ID] = process.argv.slice(2);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const t = await (await fetch(`http://127.0.0.1:${CDP}/json/new?about:blank`, { method: 'PUT' })).json();
+const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => ws.addEventListener('open', r));
+let n = 0; const pend = new Map();
+ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } });
+const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+const ev = async (x) => (await send('Runtime.evaluate', { expression: x, returnByValue: true })).result?.result?.value;
+await send('Network.setCookie', { name: 'lvrf_session', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true });
+await send('Emulation.setDeviceMetricsOverride', { width: 794, height: 1123, deviceScaleFactor: 1, mobile: false });
+await send('Page.navigate', { url: `http://localhost:${VITE}/accounts/${ID}/pov` });
+for (let i = 0; i < 80; i++) { await sleep(200); if (await ev(`!!document.querySelector('[data-testid=pov] h1')`)) break; }
+await sleep(900);
+await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(400);
+const rows = await ev(`[...document.querySelectorAll('[data-testid=print-header] [data-testid=banners] > div')].map(d => { const cs = getComputedStyle(d); const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5; const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth); return { id: d.dataset.testid, lines: Math.round((d.getBoundingClientRect().height - pad) / line) }; })`);
+console.log(JSON.stringify(rows)); ws.close(); process.exit(0);
+JS
+HL="$(node "$W/header.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$CURIA" 2>/dev/null)"
+[ -n "$HL" ] && [ "$(node -e "const r=JSON.parse(process.argv[1]); console.log(r.length >= 2 && r.every(x => x.lines === 1))" "$HL")" = "true" ] \
+  && ok "curia: in print emulation, every printed header line is one line tall: $HL" || bad "curia: printed header lines: $HL"
 step "5. A new account (no locked run): every printed page says nothing is sealed"
 look unsealed "$NEW" '{"noStages":true}' "UNVERIFIED" "No locked run: nothing on this page is sealed."
 

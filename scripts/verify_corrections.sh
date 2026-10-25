@@ -388,9 +388,11 @@ pages() {  # NAME PDF WANT(yes|no)
   [ -n "$n" ] && [ "$n" -ge 2 ] || { bad "$1: the PDF has $n page(s); the per-page check needs at least 2"; return; }
   for p in $(seq 1 "$n"); do
     flat="$(pdftotext -f "$p" -l "$p" "$2" - 2>/dev/null | tr -d '[:space:]')"
-    printf '%s' "$flat" | grep -qF "ERRATUM—recordedaftersealing" && printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || missing="$missing p$p"
+    # C1b: every page carries the erratum's bounded line (and the disclosure); page 1 its full text.
+    printf '%s' "$flat" | grep -qF "ERRATUMrecordedaftersealing" && printf '%s' "$flat" | grep -qF "UNVERIFIED—thisrun'soutcomehasnoverifiedactual" || missing="$missing p$p"
+    [ "$p" != "1" ] || printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || missing="$missing p1:full-text"
   done
-  if [ "$3" = yes ]; then [ -z "$missing" ] && ok "$1: the erratum on every one of $n printed pages, read page by page" || bad "$1: pages without the erratum:$missing (of $n)"
+  if [ "$3" = yes ]; then [ -z "$missing" ] && ok "$1: the erratum's line and the disclosure on every one of $n printed pages, its full text on page 1, read page by page" || bad "$1: pages without the erratum:$missing (of $n)"
   else [ -n "$missing" ] && ok "$1: caught — pages without the erratum:$missing (of $n)" || bad "$1: not caught: every page still carries it"; fi
 }
 [ -f "$SHOTS/c1_run2.pdf" ] && pages "run 2 printed" "$SHOTS/c1_run2.pdf" yes || bad "no PDF printed"
@@ -442,7 +444,7 @@ FROZEN_SQL="WITH e AS (INSERT INTO evidence (institution_id, kind, summary, prov
 reharden
 sqlrefused "  ...and refused again" "$FROZEN_SQL" "its outcomes are frozen"
 # B8 — the erratum taken out of the printed header (the dev server reloads the page).
-edit "$BENCH" '<thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} />' '<thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={{ ...run, errata: [] }} account={account} />'
+edit "$BENCH" '<thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} compact />' '<thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={{ ...run, errata: [] }} account={account} compact />'
 sleep 2; walk print "$TOKEN" "$R2" c1_run2_b8.pdf
 pages "B8: the erratum out of the printed header" "$SHOTS/c1_run2_b8.pdf" no
 restore "$BENCH"

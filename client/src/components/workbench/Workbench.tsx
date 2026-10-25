@@ -34,24 +34,34 @@ const KICKER = 'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45
 const H2 = 'm-0 font-display text-[24px] leading-none tracking-[.03em] text-ink';
 const OUTLINED = 'border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite ' + FOCUS_RING;
 
-function RunBanners({ run, account }: { run: Run; account: AccountRead }) {
+/**
+ * C1b (Brad, 25 Oct 2026): in the PRINTED header (`compact`) every line is bounded — one
+ * line each, clipped — so Chrome repeats the header on every page. Unbounded text (the
+ * marker's citation, an erratum's texts) prints in full once, on page 1 (PrintPageOne);
+ * the header says so. On screen the banners are as before.
+ */
+const HEADER_LINE = 'print:overflow-hidden print:text-ellipsis print:whitespace-nowrap';
+
+function RunBanners({ run, account, compact = false }: { run: Run; account: AccountRead; compact?: boolean }) {
   const p = run.payload;
   const verified = p.realization === 'verified';
   const marker = account.status === 'ok' ? account.pov.reference_example : null;
+  const errata = (run.errata ?? []).filter((x) => x.superseded_by_id === null);
+  const line = compact ? ' ' + HEADER_LINE : '';
   return (
     <div data-testid="banners">
       {marker && (
-        <div className="bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6" data-testid="banner-reference">
-          {MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}
+        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-gold [overflow-wrap:anywhere] sm:px-6' + line} data-testid="banner-reference">
+          {MARKER_KIND[marker.kind].banner} · {compact ? 'Source on page 1' : <>Source: {marker.source_citation}</>}
         </div>
       )}
       {account.status === 'error' && (
-        <div className="bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6" data-testid="banner-marker-unavailable">
+        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6' + line} data-testid="banner-marker-unavailable">
           Couldn&apos;t load this account&apos;s reference marker: read the account page before relying on this run.
         </div>
       )}
       {p.bannerTitle && (
-        <div className="bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6" data-testid="banner-sealed">
+        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6' + line} data-testid="banner-sealed">
           {p.bannerTitle} — as recorded at sealing
         </div>
       )}
@@ -62,8 +72,17 @@ function RunBanners({ run, account }: { run: Run; account: AccountRead }) {
         : <div className="border-b border-warning bg-white px-4 py-2 font-mono text-[12px] tracking-[.04em] text-warning sm:px-6" data-testid="banner-unverified">
             UNVERIFIED — this run&apos;s outcome has no verified actual
           </div>}
-      {/* C1 (LVRF_PLAN §9): an erratum, recorded after sealing, beneath the disclosure banner, on screen and on every printed page. */}
-      {(run.errata ?? []).filter((x) => x.superseded_by_id === null).map((x) => <ErratumBanner key={x.id} x={x} />)}
+      {/* C1 (LVRF_PLAN §9): an erratum, recorded after sealing, beneath the disclosure banner, on screen and on every
+          printed page — in print as one bounded line (C1b), its full text once on page 1. */}
+      {compact
+        ? errata.length > 0 && (
+            <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
+              {errata.length === 1
+                ? <><span className="font-semibold">ERRATUM</span> recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1.</>
+                : <><span className="font-semibold">{errata.length} ERRATA</span> recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}. Full text on page 1.</>}
+            </div>
+          )
+        : errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
   );
 }
@@ -80,6 +99,20 @@ function ErratumBanner({ x }: { x: RunErratum }) {
       {x.supersedes_id && <>{' '}It supersedes the erratum recorded {x.supersedes_recorded_at ? day(x.supersedes_recorded_at) : ''} by {x.supersedes_recorded_by}, because: {sentence(x.supersession_reason ?? '')}.</>}
       {' '}<span className="font-semibold">The sealed record below is unchanged.</span>
       {' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).
+    </div>
+  );
+}
+
+/** C1b: printed once, at the top of page 1 — the full texts the bounded header points to. */
+function PrintPageOne({ run, account }: { run: Run; account: AccountRead }) {
+  const marker = account.status === 'ok' ? account.pov.reference_example : null;
+  const errata = (run.errata ?? []).filter((x) => x.superseded_by_id === null);
+  if (!marker && errata.length === 0 && !run.payload.bannerTitle) return null;
+  return (
+    <div className="hidden print:block" data-testid="print-page-one">
+      {marker && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]" data-testid="print-marker-full">{MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}</p>}
+      {run.payload.bannerTitle && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]">{run.payload.bannerTitle} — as recorded at sealing</p>}
+      {errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
   );
 }
@@ -361,10 +394,11 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
     <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="run-page">
       <div className="print:hidden"><RunBanners run={run} account={account} /></div>
       <table className="block w-full border-collapse print:table">
-        <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} /></td></tr></thead>
+        <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} compact /></td></tr></thead>
         <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter run={run} /></td></tr></tfoot>
         <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
           <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 pb-16 pt-6 sm:px-[30px] print:gap-5 print:px-0 print:pb-4 print:pt-4">
+            <PrintPageOne run={run} account={account} />
             <header className="flex flex-col gap-4">
               <Breadcrumb run={run} />
               <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
