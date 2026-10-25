@@ -11398,3 +11398,33 @@ read**; LVRF_PLAN §7g, mock-up `design/mockups/run.html`, DESIGN_SPEC §9):
   and oxlint clean. The change touches the run page's components only.
 - **The bundle:** **`index-CH43WjZ8.js`** / `index-yzluhmTC.css`. The review files in
   `~/lvrf-backups/slice4-screens/` are refreshed.
+
+### Deployed — 25 October 2026 (UTC): UX-1 slice 4 (`710abca`); Gate C clean
+
+`16ebe57..710abca`: UX-1 slice 4 and standard 10. **No migration, no hardening change, no
+re-exec.** Brad approved the screenshots and the five rulings, then deployed after the full
+regression on `710abca`: all 36 scripts passed, and every one reached its final tally.
+- **The backup:** `~/lvrf-pre-ux1s4-20261025T013052Z.dump`, 874,662 bytes, `-rw-------`,
+  **630 TOC entries** (as predicted).
+- **The deploy:** HEAD **`710abca`**, bundle **`index-CH43WjZ8.js`** / `index-yzluhmTC.css`.
+  The API has been up since 01:32:10 UTC, with the origin check configured and the actor
+  header off.
+- **Gate C** (read-only, by me over ssh):
+  - **the standard checks:**
+    - run hashes 25/25;
+    - ownership clean;
+    - plain sentences 69/69;
+    - drift D1/D3/D4 no findings;
+    - **129 triggers by `pg_trigger`, 0 disabled**;
+  - **since the restart:** **0 refusals**, 0 audit rows;
+  - **the journal:** 25 request lines, **none carrying a value**, every one logged by its
+    route pattern.
+    - **Brad's visit to Scotts' run 2:** `GET /api/runs/:id` 200 and the account's `GET
+      /api/institutions/:institutionId/pov` (200 and 304), all `session=y`.
+    - **The comparison** (`GET /api/value-runs/:baselineRunId/compare/:comparisonRunId`,
+      200) loaded for the retired engagement once its fold was opened.
+    - **The only 401s** are the deploy's own smoke checks (`GET /api/runs/:id` twice, `GET
+      /api/auth/me` once).
+- **Slice 3's open journal item, now closed:** the `/pov` reads above are logged as `GET
+  /api/institutions/:institutionId/pov`, with no value. Before Brad's visit, none had
+  happened since that deploy.
