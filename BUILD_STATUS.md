@@ -11918,3 +11918,56 @@ CONFIDENCE_MODEL ruling for later, with no change in C1.
   and how-read). It passed 160 of 160 at 03:09:58, and in P1's full regression at 03:10.
   The fix is in `475bccd`.
 - **Conclusion: a test not yet updated, not a flaky one.** It passed in every run since.
+
+### Deployed — 25 October 2026 (UTC): C1 (`feab0ad`, migration 0040); Gate C clean
+
+`9c179ac..feab0ad`: the C1 docs commit, C1 (`3ff80e5`) and the C1 review (`feab0ad`).
+**Migration 0040; hardening re-run; no re-exec.**
+- **Gate B** (Brad): the backup, then the pull, migration, ownership and hardening, then the
+  deploy. The deploy restarted the API at 11:12:37 UTC.
+  - **Paste 1 (backup), read back on the box:** `~/lvrf-pre-c1-20261025T111116Z.dump`,
+    904,943 bytes, `-rw-------`, **651 TOC entries, as predicted**, with no `run_errata`
+    entry, so it was taken before the migration.
+  - **The hardening log** is from 11:12.
+- **Brad's acts** (through the UI):
+  - **11:20:** "Render record" on run 2. Record document v1, internal; its
+    `content_hash` equals the run's `payloadHash`.
+  - **11:26:** Scotts' vendor link corrected.
+  - **11:28 and 11:30:** errata on run 2, then run 1.
+- **Gate C** (read-only, by me over ssh):
+  - **the deploy:** HEAD `feab0ad`, clean tree; bundle **`index-CpcN8E2B.js`** /
+    `index-CXf26yGQ.css`;
+  - **the standard checks:**
+    - run hashes **25/25** (recomputed and embedded), so runs 1 and 2 are unchanged;
+    - ownership clean;
+    - **plain sentences 84/84** (76 + C1's eight), 0 stale;
+    - drift D1/D3/D4 no findings; schema drift none (41 migrations, 1010 objects);
+    - **141 triggers by `pg_trigger`, 0 disabled**;
+  - **the Scotts link:**
+    - the `baseline` row withdrawn 11:26 by Brad Piver, with his reason;
+    - **one current `impact_basis` link**, correcting `baseline`, by Brad Piver, with the
+      same reason;
+    - 11 link rows: 10 current, 1 withdrawn, 1 correcting;
+  - **the errata:**
+    - **run 2:** sealed 35 Low, recomputed **35 Low**;
+    - **run 1:** sealed 10 Low, recomputed **10 Low**;
+    - both under model 1.0.0 (`d4cf8f31472a`), the model each run sealed;
+    - both corrected to `impact_basis`, recorded by Brad Piver; neither supersedes or is
+      superseded; the method is the server's;
+  - **since the restart:** **0 refusals**, 0 figure checks. The audit rows are exactly the
+    acts: `value_outcome_evidence` update ×1 and insert ×1, `run_errata` insert ×2,
+    `record_documents` insert ×1;
+  - **the journal:** 90 request lines, **none carrying a value**. The writes are
+    correct-support 201 ×1, errata 201 ×2 and record-document 201 ×1. The only 401s are the
+    deploy's two smoke checks.
+
+**Two things for Brad (no change made):**
+1. **Run 1's erratum names the wrong run.** Its "what was wrong" reads "Run 2 sealed the
+   vendor publication…" (the same texts as run 2's erratum). The supersession route is the
+   correction: a new erratum on run 1 that supersedes it, with a reason.
+2. **Run 2's record document v1 (11:20) predates the erratum and does not refer to it.** A
+   record document holds the sealed payload and its hash, by design. Nothing links it to
+   errata recorded later on its run. The printed run page carries the erratum on every page,
+   but the document row does not. `record_documents` is provisional until the Repository
+   Constitution ratifies. A candidate loose end: does a document of record need to name
+   later errata?
