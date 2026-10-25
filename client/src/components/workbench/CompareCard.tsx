@@ -251,6 +251,7 @@ function CompareBody({ run, predecessor }: { run: Run; predecessor: { id: string
       <ModelQualification model={c.model} />
 
       {/* A band that did not move is information, not an absence of one — never omitted. */}
+      <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Notes as recorded at the sealing of each run.</p>
       <p className="m-0 mb-4 text-[12.5px] text-ink-70" data-testid="compare-confidence">
         Run {predecessor.run_number} to run {run.payload.runNumber}: confidence{' '}
         <strong className="text-ink">{c.confidence.score_from} / 100</strong> →{' '}

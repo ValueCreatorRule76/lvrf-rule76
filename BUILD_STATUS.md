@@ -11370,3 +11370,31 @@ read**; LVRF_PLAN §7g, mock-up `design/mockups/run.html`, DESIGN_SPEC §9):
     taken, because ssh to the box is unavailable this session.
 - **For Brad's review:** screenshots at 1280 and 390, every printed page as an image, and
   the PDFs, all on the Mac only, in `~/lvrf-backups/slice4-screens/` (600).
+
+**Brad's review** (24 Oct 2026): the screenshots are approved, with five rulings:
+1. R1's help text in words: approved.
+2. Disabled actions show their reason underneath: approved.
+3. Scotts run 2 shows "Baseline set" as sealed: approved.
+4. The disclosure and realization labels: approved.
+5. Sealed text stays verbatim, marked "as recorded at sealing", added to DESIGN_SPEC §9 in
+   this slice.
+
+**Ruling 5, applied before Gate B:**
+- **DESIGN_SPEC §9 gains standard 10.** Sealed text stays verbatim, even where it uses an
+  internal term (standard 6 governs the app's own words), and every block of it carries the
+  mark "as recorded at sealing".
+- **Where the mark appears on the run page:**
+  - the sealed banner and the run's note;
+  - the figure's source;
+  - the sealed evidence;
+  - the scoring method and notes;
+  - the findings;
+  - the heartbeat events;
+  - the comparison's notes.
+- **The checks:** `verify_run_page` now checks that every verbatim sealed text (marked
+  `data-record`) sits in a block carrying the mark. B8 removes the findings' mark and is
+  caught.
+- **Results:** `verify_run_page` **207 passed, 0 failed**; `verify_hygiene` 19/0. Build, tsc
+  and oxlint clean. The change touches the run page's components only.
+- **The bundle:** **`index-CH43WjZ8.js`** / `index-yzluhmTC.css`. The review files in
+  `~/lvrf-backups/slice4-screens/` are refreshed.

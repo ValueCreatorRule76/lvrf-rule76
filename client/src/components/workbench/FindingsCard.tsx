@@ -18,6 +18,8 @@ export function FindingsCard({ run }: { run: Run }) {
       {findings.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">None raised for this run.</p>
       ) : (
+        <>
+        <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Messages as recorded at sealing.</p>
         <ul className="m-0 list-none p-0" data-testid="findings">
           {findings.map((f) => (
             <li key={f.code} className="border-b border-rule-soft py-2 last:border-b-0">
@@ -29,6 +31,7 @@ export function FindingsCard({ run }: { run: Run }) {
             </li>
           ))}
         </ul>
+        </>
       )}
     </Card>
   );

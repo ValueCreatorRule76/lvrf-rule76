@@ -35,6 +35,7 @@ export function HeartbeatCard({ run }: { run: Run }) {
   // the event's hash are an auditor's identifiers, so they sit in a mono line.
   return (
     <Card title="Heartbeat ledger" badge={<Badge tone="neutral">{events.length} events · {allHealthy ? 'all healthy' : 'see states'}</Badge>}>
+      <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Events as recorded at sealing.</p>
       <ul className="m-0 list-none p-0" data-testid="heartbeat-ledger">
         {events.map((e, i) => (
           <li key={`${e.heartbeatId}-${i}`} className="border-b border-rule-soft py-2 last:border-b-0">

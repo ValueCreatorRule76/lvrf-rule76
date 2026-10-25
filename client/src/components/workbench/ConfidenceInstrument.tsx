@@ -40,6 +40,7 @@ export function ConfidenceInstrument({ run }: { run: Run }) {
   return (
     <section aria-label="How the score was made" className="mb-5 border border-rule bg-white px-4 py-4" data-testid="confidence-ledger">
       <h3 className="m-0 font-display text-[15px] tracking-[.07em]">How the score was made</h3>
+      <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Method and notes as recorded at sealing.</p>
       <p className="m-0 mt-2 flex flex-wrap items-baseline gap-2">
         <ConfidenceBadge score={c.score} band={c.band} />
         <span className="text-[11.5px] text-ink-45" data-record>{c.method}</span>

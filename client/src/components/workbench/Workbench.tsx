@@ -50,7 +50,7 @@ function RunBanners({ run, account }: { run: Run; account: AccountRead }) {
       )}
       {p.bannerTitle && (
         <div className="bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6" data-testid="banner-sealed">
-          {p.bannerTitle} — as sealed with this run
+          {p.bannerTitle} — as recorded at sealing
         </div>
       )}
       {verified
@@ -133,7 +133,7 @@ function Figures({ run }: { run: Run }) {
     ['Realization', label(REALIZATION, p.realization)],
     ['Who may see it', label(DISCLOSURE, p.disclosure)],
   ];
-  if (isEnrichedBusinessMetric(bm) && bm.sourceSystem) rows.push(['Source, as recorded', bm.sourceSystem]);
+  if (isEnrichedBusinessMetric(bm) && bm.sourceSystem) rows.push(['Source', bm.sourceSystem]);
   // Currency figures are stored without a currency on the run, so none is assumed.
   if (p.claimedCurrencyImpact !== null) rows.push(['Currency impact claimed', `${p.claimedCurrencyImpact.toLocaleString('en-US')} (no currency recorded on this run)`]);
   if (p.realizedCurrencyImpact !== null) rows.push(['Currency impact realized', `${p.realizedCurrencyImpact.toLocaleString('en-US')} (no currency recorded on this run)`]);
@@ -144,7 +144,7 @@ function Figures({ run }: { run: Run }) {
         {rows.map(([k, v]) => (
           <div key={k} className="contents">
             <dt className="pt-1.5 text-ink-45 sm:pt-1">{k}</dt>
-            <dd className="m-0 pb-1.5 text-ink sm:pt-1" data-testid={`figure-${k.toLowerCase().replace(/[\s,]+/g, '-')}`} data-record={k === 'Source, as recorded' ? '' : undefined}>{v}</dd>
+            <dd className="m-0 pb-1.5 text-ink sm:pt-1" data-testid={`figure-${k.toLowerCase().replace(/[\s,]+/g, '-')}`} data-record={k === 'Source' ? '' : undefined}>{v}{k === 'Source' && <span className="ml-1 text-[11px] italic text-ink-45" data-testid="sealed-mark">(as recorded at sealing)</span>}</dd>
           </div>
         ))}
       </dl>
@@ -283,8 +283,8 @@ export function Workbench({ run, account }: { run: Run; account: AccountRead }) 
                 </div>
               </div>
               {p.note && (
-                <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-70" data-testid="run-note" data-record>
-                  <span className={KICKER}>{p.bannerTitle ?? 'Note'}, sealed with this run </span> {p.note}
+                <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-70" data-testid="run-note">
+                  <span className={KICKER} data-testid="sealed-mark">{p.bannerTitle ?? 'Note'}, as recorded at sealing </span> <span data-record>{p.note}</span>
                 </p>
               )}
               <StageStrip run={run} />

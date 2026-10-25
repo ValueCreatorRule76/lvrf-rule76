@@ -1022,6 +1022,14 @@ rule is added, removed or relaxed by any of them.
    - a "Menu" button replaces the navigation and the actor line;
    - tables become stacked rows;
    - long identifiers break; prose never does.
+10. **Sealed text stays verbatim, marked "as recorded at sealing"** (Brad, 24 Oct 2026).
+    Text a locked run sealed (its note, evidence summaries and sources, finding messages,
+    the scoring method and notes, heartbeat events) is the record and is never
+    rewritten, even where it uses an internal term (standard 6 governs the app's own
+    words, not the record's).
+    - **Every block of sealed text carries the mark** "as recorded at sealing", so a
+      reader can tell the record's words from the app's.
+    - **The app's own labels around sealed text** still follow standards 4–6.
 
 ## 10. Brand and design system
 

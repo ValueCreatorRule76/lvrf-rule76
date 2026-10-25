@@ -39,7 +39,8 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_run.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 WB=client/src/components/workbench/Workbench.tsx
 EVC=client/src/components/workbench/EvidenceCard.tsx
-for f in "$WB" "$EVC"; do cp "$f" "$W/$(basename "$f").orig"; done
+FND=client/src/components/workbench/FindingsCard.tsx
+for f in "$WB" "$EVC" "$FND"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
@@ -48,7 +49,7 @@ cleanup() {
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for f in "$WB" "$EVC"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
+  for f in "$WB" "$EVC" "$FND"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W/chrome"
 }
 . scripts/lib/finish.sh
@@ -136,7 +137,7 @@ for (const width of widths) {
   const has = (id, txt) => banners.some(([d, t2]) => d === id && (!txt || t2.includes(txt)));
   check(X.verified ? has('banner-verified') : has('banner-unverified', "UNVERIFIED — this run's outcome has no verified actual"), `${W}: the disclosure banner (${X.verified ? 'VERIFIED' : 'UNVERIFIED'}) shows`, JSON.stringify(banners));
   check(X.marker ? has('banner-reference', X.marker) : !has('banner-reference'), `${W}: the account's marker ${X.marker ? `"${X.marker}"` : '(none)'} as recorded`, JSON.stringify(banners));
-  check(X.sealed ? has('banner-sealed', `${X.sealed} — as sealed with this run`) : !has('banner-sealed'), `${W}: the run's own sealed banner ${X.sealed ? `"${X.sealed}"` : '(none)'}`, JSON.stringify(banners));
+  check(X.sealed ? has('banner-sealed', `${X.sealed} — as recorded at sealing`) : !has('banner-sealed'), `${W}: the run's own sealed banner ${X.sealed ? `"${X.sealed}"` : '(none)'}`, JSON.stringify(banners));
   // Title, confidence, stage strip, hash.
   check(await ev(`document.querySelector('[data-testid=run-page] h1').textContent`) === `Run ${X.n}`, `${W}: the title is "Run ${X.n}"`);
   const conf = await ev(`document.querySelector('[data-testid=confidence] [data-testid=confidence-badge]')?.textContent ?? ''`);
@@ -176,6 +177,10 @@ for (const width of widths) {
     check(await ev(`${body}.offsetParent !== null && ${body}.inert === false`), `${W}: ${f} opens`);
   }
   for (let i = 0; i < 30 && await ev(`document.querySelector('[data-testid=fold-ledgers]').textContent.includes('loading')`); i++) await sleep(200);
+  // DESIGN_SPEC §9 standard 10: every verbatim sealed text sits in a block marked "as recorded at sealing".
+  const sealedTexts = await ev(`document.querySelectorAll('[data-testid=run-page] [data-record]').length`);
+  const unmarked = await ev(`[...document.querySelectorAll('[data-testid=run-page] [data-record]')].filter(r=>{let e=r.parentElement;while(e&&e.dataset.testid!=='run-page'){const m=e.querySelector('[data-testid=sealed-mark]');if(m&&/as recorded at (the )?sealing/.test(m.textContent))return false;if(e.tagName==='SECTION'||e.dataset.testid==='sealed-evidence')break;e=e.parentElement}return true}).map(r=>r.textContent.slice(0,60))`);
+  check(sealedTexts > 0 && unmarked.length === 0, `${W}: every verbatim sealed text (${sealedTexts}) is marked "as recorded at sealing"`, JSON.stringify(unmarked));
   // Retired engagement: the comparison still works (its own run list is refused by the server).
   if (X.compareWith) {
     const cmp = await ev(`document.querySelector('[data-testid=compare-confidence]')?.textContent ?? document.querySelector('[data-testid=fold-ledgers]').textContent.slice(-200)`);
@@ -309,7 +314,11 @@ restore "$EVC"
 edit "$WB" "                {label(STAGE_LABEL, stage)}{state === 'gap'" "                {stage}{state === 'gap'"
 brk "B7: the stage strip in enum values" curia1 "$R_CURIA1" "$W/x.curia1.json" "the stage strip in plain labels"
 restore "$WB"
-for f in "$WB" "$EVC"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
+# B8 — the findings' sealed messages without their mark.
+edit "$FND" '        <p className="m-0 text-[11px] italic text-ink-45" data-testid="sealed-mark">Messages as recorded at sealing.</p>' ''
+brk "B8: finding messages shown without \"as recorded at sealing\"" scotts "$R_SCOTTS" "$W/x.scotts.json" 'is marked "as recorded at sealing"'
+restore "$FND"
+for f in "$WB" "$EVC" "$FND"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $SHOTS"
 
 echo

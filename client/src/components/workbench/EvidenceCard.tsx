@@ -31,7 +31,7 @@ export function EvidenceCard({ run }: { run: Run }) {
   const verified = evidence.filter((e) => e.source_verified).length;
   return (
     <div className="border border-rule bg-white" data-testid="sealed-evidence">
-      <p className="m-0 border-b border-rule px-4 py-2 text-[11.5px] text-ink-45">{verified} of {evidence.length} source-verified when this run was sealed</p>
+      <p className="m-0 border-b border-rule px-4 py-2 text-[11.5px] text-ink-45">{verified} of {evidence.length} source-verified when this run was sealed · <span data-testid="sealed-mark">summaries and sources as recorded at sealing</span></p>
       <ul className="m-0 list-none p-0">
         {evidence.map((e, i) => (
           <li key={i} className="border-b border-rule-soft px-4 py-3 last:border-b-0" data-testid="sealed-item">
