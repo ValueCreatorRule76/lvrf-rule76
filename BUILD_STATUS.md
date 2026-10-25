@@ -12442,3 +12442,69 @@ prod since C1.**
   - nothing was written.
 - **Still to do:** Brad prints Scotts run 2 from prod and looks at every page. At true scale
   it prints 6 pages, each with the disclosure banner, the marker line and the erratum line.
+
+## L39: scripts build their own fixtures, not prod's state — 25 October 2026 (UTC)
+
+**Which scripts broke on prod's current state:**
+- The full regression on the fresh prod copy (`lvrf-pre-p2-20261025T162141Z`, taken after
+  Brad's C1 acts) passed 38 of 39 scripts.
+- **The one that broke was `verify_corrections`.** It read Scotts' vendor link as `baseline`,
+  then corrected it and recorded the errata itself, so it could run only on a copy taken before
+  Brad did that on prod.
+- The other scripts that name prod accounts (run page, POV print, walk runs and others) read them
+  to render real records, and pass on either copy.
+
+**The fix:** `verify_corrections` now builds Scotts' shape through the routes on its own fixture
+account ("Correction walk account (fixture)"):
+- **The account:** an offering; one outcome; a fixture pack entry, its lever, the capability's
+  claim, the metric's basis and a hypothesis (the POV shows an outcome's evidence under its
+  hypothesis).
+- **The error:** another company's filing, linked as the baseline, source-verified.
+- **The runs:**
+  - run 1 is sealed with that filing as its only baseline item;
+  - the account's own filing is then added, and run 2 sealed with both;
+  - the engagement is then retired.
+- **The rest of the script is unchanged:** the steward corrects the link and records the errata
+  in the browser, by session, as Brad did on prod.
+- **Nothing reads what prod holds.** The C1-era checks that 0040 orphaned nothing were proven at
+  C1's Gate A on a pre-0040 copy, and are dropped here, as prod has been past 0040 since.
+- **The figures are computed from the sealed payloads, never typed:**
+  - run 1's recompute falls (35 → 10);
+  - run 2's does not (35 → 35);
+  - these are the two shapes Scotts' runs had.
+- **Scotts' link was a vendor publication.** Since 0040 the vendor trigger refuses one as a
+  baseline, and no test may switch a guard off, so the fixture's wrong link is a filing. The
+  trigger is still shown holding on a correction: the fixture's vendor case study, linked as the
+  impact basis, corrected to the baseline or to the actual, is refused.
+- `scripts/lib/corrections_walk.mjs` finds the link by its summary (a new argument), not by
+  "starts with vendor_publication".
+
+**A C1 display gap L39 found, fixed at Brad's word (25 Oct 2026):**
+- **The gap:** the POV showed "Corrected by <name> from <support> to <support>: <reason>" only on
+  vendor-claim cards. A corrected filing was listed as "impact_basis: …" with no note.
+- **Why it mattered:** since 0040 no vendor link can be a baseline, so every future correction,
+  C2's attestations included, would have shown none.
+- **The fix:** `PovPage.tsx` `CorrectedNote`, shown under any corrected link in the evidence list
+  and on vendor claims as before. Client only.
+- **B13**, the note on vendor claims only, as C1 had it: caught. The corrected filing's line has no
+  correction. `PovPage.tsx` is restored byte-identical.
+
+**Gate A:**
+- **`verify_corrections` on the fresh copy: 200 passed, 0 failed,** every break caught and every
+  file restored byte-identical.
+- **Prod-copy equivalence against the deployed `cdd1b61`:** 76 GETs, 76 identical. The server is
+  unchanged.
+- **The screenshots:** `~/lvrf-backups/l39-screens/` (700; files 600):
+  - the POV with the correction note and the struck-through withdrawn line;
+  - the run page with its erratum, at 1280 and 390;
+  - run 1 superseded;
+  - W6 corrected;
+  - the non-steward views;
+  - run 2's PDF and B8's PDF.
+- **The older dump** (`lvrf-pre-ux1s2-20261019T171542Z.dump`) is no longer needed by any script.
+  It is kept until Brad says to remove it.
+- **The full regression on the fresh copy: all 39 scripts pass** (`verify_corrections` 200/0,
+  `verify_run_page` 273/0, `verify_pov_print` 116/0). The build and lint are clean (the 1
+  pre-existing warning). The bundle is `index-CXc2-nRr.js` / `index-C9WVm_9W.css` (the CSS is
+  unchanged).
+- **The regression now runs on the fresh copy.** No script needs the older one.

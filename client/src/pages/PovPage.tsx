@@ -155,6 +155,12 @@ function Chain({ h, o }: { h: PovHypothesis; o: PovOutcome | undefined }) {
   );
 }
 
+/** C1: a link that corrects what an earlier one supported — on any evidence, not only a vendor claim (L39, Brad, 25 Oct 2026). */
+function CorrectedNote({ e }: { e: PovOutcome['evidence'][number] }) {
+  if (!e.corrects_supports) return null;
+  return <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {e.corrects_supports.replace('_', ' ')} to {e.supports.replace('_', ' ')}: {e.correction_reason}</p>;
+}
+
 function OutcomeDetail({ o }: { o: PovOutcome }) {
   const vendorClaims = o.evidence.filter((e) => e.kind === 'vendor_publication');
   const other = o.evidence.filter((e) => e.kind !== 'vendor_publication');
@@ -180,6 +186,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             {other.map((e, i) => (
               <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {e.supports}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
+                <CorrectedNote e={e} />
               </li>))}
           </ul>
         )}
@@ -197,7 +204,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             <span className={KICKER}>Vendor publication — a claim, not an actual</span>
             <p className="m-0 mt-1 text-[14px] font-semibold text-ink">{e.summary}</p>
             <p className="m-0 mt-1 text-[12px] text-ink-45">{e.provenance}. Never applied to this account's baseline, never a target.</p>
-            {e.corrects_supports && <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {e.corrects_supports.replace('_', ' ')} to {e.supports.replace('_', ' ')}: {e.correction_reason}</p>}
+            <CorrectedNote e={e} />
           </div>
         ))}
         {o.pack_entry && (

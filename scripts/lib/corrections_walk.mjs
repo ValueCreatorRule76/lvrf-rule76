@@ -3,19 +3,24 @@
 // "  PASS"/"  FAIL" lines it counts. The CDP preamble and the in-page field
 // helpers are evidence_form_walk.mjs's. Signs in by SESSION — never the header.
 //
-//   node scripts/lib/corrections_walk.mjs MODE VITE_PORT CDP_PORT SHOTS TOKEN INST RUN EVIDENCE PDF_NAME
+//   node scripts/lib/corrections_walk.mjs MODE VITE_PORT CDP_PORT SHOTS TOKEN INST RUN EVIDENCE PDF_NAME SUMMARY
+//
+// INST, RUN and EVIDENCE are the script's own fixture (L39): an account whose one engagement sealed
+// EVIDENCE as the baseline in error, in runs 1 and 2, before it was retired. SUMMARY is that
+// evidence's summary, which finds its line on the page.
 //
 // MODE:
-//   acts       the steward corrects the vendor link on the account page (W6)
+//   acts       the steward corrects the wrong link on the account page (W6)
 //              and records an erratum on RUN, as Brad will on prod
 //   display    RUN's page at 1280 and 390 and printed to SHOTS/PDF_NAME; the
 //              POV's withdrawn line; the walk's struck-through link
 //   nonsteward both controls disabled, each with its reason
 //   print      RUN's page printed to SHOTS/PDF_NAME only (break B8)
+//   povnote    the POV's correction note on the corrected link only (break B13)
 //   supersede  the steward supersedes RUN's erratum through the form (Brad's C1 review)
 import { writeFileSync } from 'node:fs';
 
-const [MODE, VITE_PORT, CDP_PORT, SHOTS, TOKEN, INST, RUN, EVIDENCE, PDF_NAME] = process.argv.slice(2);
+const [MODE, VITE_PORT, CDP_PORT, SHOTS, TOKEN, INST, RUN, EVIDENCE, PDF_NAME, SUMMARY] = process.argv.slice(2);
 const APP = `http://localhost:${VITE_PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ok = (m) => console.log(`  PASS  ${m}`);
@@ -71,27 +76,27 @@ const runReady = `!!document.querySelector('[data-testid=run-page] h1')`;
 const walkReady = `!!document.querySelector('[data-testid=w6]')`;
 const povReady = `!!document.querySelector('[data-testid=pov] h1')`;
 // The W6 list item of this evidence: its "Correct what it supports…" control is inside it.
-const vendorLi = `[...document.querySelectorAll('[data-testid=w6-evidence]')].find(li=>li.textContent.startsWith('vendor_publication'))`;
+const linkLi = `[...document.querySelectorAll('[data-testid=w6-evidence]')].find(li=>li.textContent.includes(${JSON.stringify(SUMMARY)}))`;
 
 if (MODE === 'acts') {
   check(await open(`/accounts/${INST}`, walkReady), 'the account page shows the walk (W6)');
   await unfold('[data-testid=w6]');
-  check(await ev(`!!(${vendorLi})`) && (await ev(`(${vendorLi}).textContent`)).includes('supports baseline'), "W6 lists the vendor publication as it stands: \"supports baseline\"");
-  check(await ev(`(()=>{const li=${vendorLi};const b=li&&li.querySelector('[data-testid=correct-support-open]');return !!b&&!b.disabled})()`), 'the steward sees "Correct what it supports…", enabled');
-  await ev(`(${vendorLi}).querySelector('[data-testid=correct-support-open]').click()`); await sleep(300);
+  check(await ev(`!!(${linkLi})`) && (await ev(`(${linkLi}).textContent`)).includes('supports baseline'), "W6 lists the wrong link as it stands: \"supports baseline\"");
+  check(await ev(`(()=>{const li=${linkLi};const b=li&&li.querySelector('[data-testid=correct-support-open]');return !!b&&!b.disabled})()`), 'the steward sees "Correct what it supports…", enabled');
+  await ev(`(${linkLi}).querySelector('[data-testid=correct-support-open]').click()`); await sleep(300);
   const form = `document.querySelector('[data-testid=correct-support]')`;
   check(await ev(`[...${form}.querySelectorAll('select option')].map(o=>o.value).filter(Boolean).join(',')`) === 'actual,impact_basis', 'the choices are the other two supports (actual, impact basis), never the current one');
   check(await ev(`${form}.textContent.includes('withdrawn') && ${form}.textContent.includes('A sealed run is not changed')`), 'the form says what it records: the link withdrawn, kept, and a sealed run not changed');
   await setField(form, 'What it supports', 'impact_basis');
-  await setField(form, 'Why', 'Verification: a vendor\'s published case study is not this account\'s baseline; it is the impact basis (C1).');
+  await setField(form, 'Why', 'Verification: another company\'s filing is not this account\'s baseline; it is the impact basis (C1).');
   check(await click(form, 'Withdraw and correct'), 'the steward submits "Withdraw and correct"');
   check(await waitFor(`!!document.querySelector('[data-testid=w6-withdrawn]')`), 'W6 now lists the withdrawn link');
   await unfold('[data-testid=w6]');
   check(!(await ev(`!!document.querySelector('[data-testid=correct-support]')`)), 'the form closes once recorded (no stale form left on the corrected link)');
   const struck = await ev(`document.querySelector('[data-testid=w6-withdrawn]').textContent`);
-  check(await ev(`!!document.querySelector('[data-testid=w6-withdrawn] s')`) && /^supports baseline — .*withdrawn by .+, \d{4}-\d{2}-\d{2}: Verification: a vendor's published case study/.test(struck),
+  check(await ev(`!!document.querySelector('[data-testid=w6-withdrawn] s')`) && /^supports baseline — .*withdrawn by .+, \d{4}-\d{2}-\d{2}: Verification: another company's filing/.test(struck),
     'the withdrawn link is struck through, with who withdrew it, the date and the reason', struck);
-  check((await ev(`(${vendorLi}).textContent`)).includes('supports impact_basis') && (await ev(`(${vendorLi}).textContent`)).includes('corrected from baseline'),
+  check((await ev(`(${linkLi}).textContent`)).includes('supports impact_basis') && (await ev(`(${linkLi}).textContent`)).includes('corrected from baseline'),
     'the current link reads "supports impact_basis", "corrected from baseline"');
   await shot('c1_walk_corrected', 1280);
 
@@ -102,11 +107,22 @@ if (MODE === 'acts') {
   check(await ev(`[...${ef}.querySelectorAll('select option')].map(o=>o.value).filter(Boolean).join(',')`) === EVIDENCE, 'the one choice is the corrected link');
   check(!(await ev(`!!${ef}.querySelector('input[type=number]')`)) && !(await ev(`${ef}.textContent.toLowerCase().includes('score:')`)), 'the form has no score field: the recompute is the server\'s');
   await setField(ef, 'The corrected link', EVIDENCE);
-  await setField(ef, 'What was wrong', 'The vendor publication (the 75% reduction story) was sealed as support for the baseline.');
+  await setField(ef, 'What was wrong', "Another company's filing was sealed as support for this account's baseline.");
   await setField(ef, 'What is right', "It supports the impact basis only; the baseline rests on the account's own filing.");
   await setField(ef, 'Why it is recorded', "Verification: Brad's C1 ruling, point 1 — the sealed run stays as sealed.");
   check(await click(ef, 'Record the erratum'), 'the steward submits "Record the erratum"');
   check(await waitFor(`!!document.querySelector('[data-testid=banner-erratum]')`), 'the page reloads with the erratum banner');
+}
+
+// The corrected link's own line on the POV carries its correction (L39: on any evidence, not only a vendor claim).
+async function povNote() {
+  const c = await ev(`[...document.querySelectorAll('[data-testid=outcome] li')].find(li=>li.textContent.includes(${JSON.stringify(SUMMARY)})&&!li.closest('[data-testid=pov-withdrawn]')&&!li.querySelector('s'))?.querySelector('[data-testid=pov-corrected]')?.textContent ?? ''`);
+  check(c.startsWith('Corrected by ') && c.includes('from baseline to impact basis: Verification:'), 'the corrected link\'s own line reads "Corrected by <name> from baseline to impact basis: <reason>"', c);
+}
+
+if (MODE === 'povnote') {
+  check(await open(`/accounts/${INST}/pov`, povReady), 'the POV opens');
+  await povNote();
 }
 
 if (MODE === 'display') {
@@ -129,10 +145,9 @@ if (MODE === 'display') {
   const w = await ev(`document.querySelector('[data-testid=pov-withdrawn]')?.textContent ?? ''`);
   check(await ev(`!!document.querySelector('[data-testid=pov-withdrawn] s')`) && /^baseline: .* — withdrawn by .+, \d{1,2} [A-Z][a-z]{2} \d{4}: Verification:/.test(w),
     'the POV lists the withdrawn link under its outcome, struck through: "withdrawn by <name>, <date>: <reason>"', w);
-  const c = await ev(`document.querySelector('[data-testid=pov-corrected]')?.textContent ?? ''`);
-  check(c.startsWith('Corrected by ') && c.includes('from baseline to impact basis'), 'the vendor claim reads "Corrected by <name> from baseline to impact basis: <reason>"', c);
-  check(await ev(`[...document.querySelectorAll('[data-testid=outcome] li')].filter(li=>li.textContent.includes('Vendor publication about another company')&&!li.closest('[data-testid=pov-withdrawn]')&&!li.querySelector('s')).length`) === 0,
-    'the vendor publication is not listed as baseline evidence any more (only its struck-through withdrawn line)');
+  await povNote();
+  check(await ev(`[...document.querySelectorAll('[data-testid=outcome] li')].filter(li=>li.textContent.includes(${JSON.stringify('baseline: ' + SUMMARY)})&&!li.closest('[data-testid=pov-withdrawn]')&&!li.querySelector('s')).length`) === 0,
+    'the wrong link is not listed as baseline evidence any more (only its struck-through withdrawn line)');
   await shot('c1_pov_withdrawn_1280', 1280);
 }
 
@@ -158,7 +173,7 @@ if (MODE === 'supersede') {
   const ef = `document.querySelector('[data-testid=record-erratum]')`;
   await setField(ef, 'The corrected link', EVIDENCE);
   check(await waitFor(`!!document.querySelector('[data-testid=erratum-supersedes]')`), 'choosing the link names the erratum it would supersede, and says the earlier one stays on the record');
-  await setField(ef, 'What was wrong', 'The vendor publication was sealed as support for the baseline (run 1).');
+  await setField(ef, 'What was wrong', "Another company's filing was sealed as support for the baseline (run 1).");
   await setField(ef, 'What is right', "It supports the impact basis only; the baseline rests on the account's own filing.");
   await setField(ef, 'Why it is recorded', "Verification: Brad's C1 ruling, point 1, restated.");
   check(!(await click(ef, 'Record the erratum')), 'without a reason for superseding, the form does not submit');

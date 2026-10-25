@@ -7,12 +7,15 @@
 #   ./scripts/verify_corrections.sh [screenshot_dir]
 #
 # Clones `lvrf_prodcopy` (restored by restore_prod_copy.sh, sign-in data
-# neutralised) to `lvrf_verifycorr` with make_clone, migrated (through 0040)
-# and hardened, dropped on exit. Scotts' link is corrected and its two runs
-# given errata ON THE CLONE, in a browser signed in by SESSION, as Brad will on
-# prod; fixtures are invented ("Correction check account (fixture)"). Every
-# write goes through the routes except the attempts the database must refuse,
-# each in a transaction rolled back.
+# neutralised, migrated to the latest) to `lvrf_verifycorr` with make_clone,
+# hardened, dropped on exit.
+# L39 (25 Oct 2026): the script builds its own fixtures and asserts on them, never on what prod
+# holds. Scotts' shape is rebuilt through the routes on a fixture account ("Correction walk
+# account (fixture)"): one engagement whose outcome sealed another company's filing as its
+# baseline, in run 1 and again in run 2 (beside its own filing), then retired. Its link is
+# corrected and its two runs given errata in a browser signed in by SESSION, as Brad did on prod.
+# Other fixtures are invented ("Correction check account (fixture)"). Every write goes through the
+# routes except the attempts the database must refuse, each in a transaction rolled back.
 # DELIBERATE BREAKS, every file restored byte-identical and every function
 # restored by re-applying hardening.sql:
 #   B1  the erratum route's steward check removed: the database still refuses
@@ -27,6 +30,7 @@
 #   B10 (C1-D1) the correction route inserting before it withdraws: refused by the one-current index
 #   B11 (C1-D3) a run sealed under another model version: the recompute refused
 #   B12 (C1 review) the route's one-erratum-per-correction check removed: the unique index refuses
+#   B13 (L39) the POV's correction note shown on vendor claims only: the corrected filing's line loses it
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,7 +50,8 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_corr.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 CORR=server/routes/corrections.ts; PRODUCE=server/routes/produceRun.ts; BENCH=client/src/components/workbench/Workbench.tsx; MODEL=server/spine/confidenceModel.ts
-EDITED=("$CORR" "$PRODUCE" "$BENCH" "$MODEL")
+POVP=client/src/pages/PovPage.tsx
+EDITED=("$CORR" "$PRODUCE" "$BENCH" "$MODEL" "$POVP")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -119,30 +124,19 @@ step "1. Typecheck"
 npx tsc --noEmit -p . > "$W/tsc.log" 2>&1 && ok "server tsc" || bad "server tsc: $(head -5 "$W/tsc.log")"
 (cd client && npx tsc -b) > "$W/tsc2.log" 2>&1 && ok "client tsc -b" || bad "client tsc: $(head -5 "$W/tsc2.log")"
 
-step "2. Clone the prod copy; the seals before; migrate through 0040; harden"
+step "2. Clone the prod copy; migrate (to the latest); harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
-SCOTTS="$(q "SELECT id FROM institutions WHERE name ILIKE 'Scotts%' AND deleted_at IS NULL LIMIT 1")"
-R1="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagement_id WHERE g.institution_id = '$SCOTTS' AND r.run_number = 1")"
-R2="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagement_id WHERE g.institution_id = '$SCOTTS' AND r.run_number = 2")"
-O_S="$(q "SELECT payload->>'valueOutcomeId' FROM value_runs WHERE id = '$R2'")"
-EV_V="$(q "SELECT e.id FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id WHERE voe.value_outcome_id = '$O_S' AND e.kind = 'vendor_publication'")"
-EV_B="$(q "SELECT e.id FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id WHERE voe.value_outcome_id = '$O_S' AND e.kind <> 'vendor_publication'")"
-for v in SCOTTS R1 R2 O_S EV_V EV_B; do [ -n "${!v}" ] || { bad "Scotts fixture $v empty"; exit 1; }; done
-SEALS0="$(seals)"; LINKS0="$(q "SELECT count(*) FROM value_outcome_evidence")"; RUNS0="$(q "SELECT count(*) FROM value_runs")"
+RUNS0="$(q "SELECT count(*) FROM value_runs")"
 HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
-printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before 0040: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
-migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0040_corrections)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0040_corrections and later)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "167" ] && ok "167 triggers by pg_trigger (135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0040 ($DRIFT)" || bad "drift: $DRIFT"
-[ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE withdrawn_at IS NULL AND corrects_supports IS NULL) FROM value_outcome_evidence")" = "$LINKS0|$LINKS0" ] \
-  && ok "0040 orphans nothing: all $LINKS0 links kept, every one current and uncorrected" || bad "links after 0040: $(q "SELECT count(*) FROM value_outcome_evidence")"
-[ "$(q "SELECT supports FROM value_outcome_evidence WHERE value_outcome_id = '$O_S' AND evidence_id = '$EV_V' AND withdrawn_at IS NULL")" = "baseline" ] \
-  && ok "Scotts' vendor publication still current, supports = baseline (nothing changes until the steward's act)" || bad "Scotts' link after 0040"
-[ "$(seals)" = "$SEALS0" ] && ok "runs 1 and 2 byte-identical after 0040 (md5 of each row)" || bad "a Scotts run changed in the migration"
-[ "$(q "SELECT count(*) FROM run_errata")" = "0" ] && ok "run_errata empty" || bad "run_errata not empty"
+printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+# (0040 orphaning nothing and leaving Scotts' runs byte-identical was proven at C1's Gate A, on a copy
+# taken before it; prod has been past 0040 since. L39: nothing here reads what prod holds.)
 
 step "3. Every reader of the link table filters on withdrawn_at (a code grep: a missed reader fails)"
 python3 - > "$W/grep.txt" <<'PY'
@@ -207,10 +201,42 @@ EV_F="$(rj b.evidence_id)"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB public_filing extract 'TRIR FY25 second source (fixture)' baseline)" 201 "  ...a second baseline item (for the SQL breaks)"
 EV_F2="$(rj b.evidence_id)"
 
+# L39 — Scotts' shape, built here: an account whose one engagement sealed another company's filing
+# as its baseline (run 1, the only baseline item; run 2, beside the account's own filing), then retired.
+WRONG="Another company's TRIR filing (fixture), linked as baseline in error"
+expect POST /api/account-inputs "{\"institution\":{\"name\":\"Correction walk account (fixture) $TS\",\"industry_slug\":\"manufacturing\",\"classification_note\":\"Verification: classified for C1 (L39).\"},\"persons\":[{\"full_name\":\"Fixture walk owner (invented)\",\"email\":\"walk.$TS@corrections.example\",\"title\":\"Owner\"}]}" 201 "the walk fixture account (Scotts' shape, L39)"
+INST_W="$(rj b.institution_id)"; OWNER_W="$(rj b.person_ids[0])"
+expect POST "/api/institutions/$INST_W/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Correction capability\",\"owner_person_id\":\"$OWNER_W\",\"is_primary\":false,\"basis\":\"Verification: EHS solution.\"}" 201 "  ...its offering"
+CAP_W="$(rj b.capability_id)"
+expect POST "/api/institutions/$INST_W/value-outcomes" "$(OUTB walk "$OWNER_W")" 201 "  ...its one outcome"
+O_S="$(rj b.value_outcome_id)"; ENG_W="$(rj b.engagement_id)"; MET_W="$(rj b.business_metric_id)"
+# The POV shows an outcome's evidence under its hypothesis, as Scotts' is: a pack entry, its lever,
+# the capability's claim, the metric's basis and a hypothesis, each through its route.
+IND_W="$(q "SELECT id FROM industries WHERE tenant_id = '$TEN' AND slug = 'manufacturing'")"
+E_W="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation) VALUES ('$TEN', '$IND_W', 'Correction TRIR entry (fixture)', 'incidents per 200,000 hours', 'decrease', 'Fixture definition.', 'w', true, 'r', 'Fixture confounders: plant mix, seasonality.', 'Verification fixture, not a source.') RETURNING id" | head -1)"
+expect POST "/api/capabilities/$CAP_W/industry-measures" "{\"industry_measure_id\":\"$E_W\",\"claim\":\"Verification: training reduces incidents.\"}" 201 "  ...the capability claims a fixture pack entry"
+expect POST "/api/industry-measures/$E_W/levers" '{"name":"Hazard recognition (fixture)","mechanism":"Crews trained to recognise hazards stop unsafe tasks earlier.","leading_indicator":"Near-miss reports","citation":"Verification citation, not a source."}' 201 "  ...a lever on it (the steward)"
+L_W="$(rj b.value_lever_id)"
+expect POST "/api/business-metrics/$MET_W/pack-basis" "{\"industry_measure_id\":\"$E_W\",\"basis_note\":\"Verification: the same rate.\"}" 201 "  ...the metric based on the entry"
+expect POST "/api/institutions/$INST_W/hypotheses" "{\"value_outcome_id\":\"$O_S\",\"value_lever_id\":\"$L_W\",\"statement\":\"Frontline hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 365, 'YYYY-MM-DD')")\",\"falsifier_conditions\":\"on the same denominator, among the covered population\"}" 201 "  ...a hypothesis on the outcome"
+expect POST "/api/value-outcomes/$O_S/evidence" "$(EVB public_filing 'other company filing' "$WRONG" baseline true)" 201 "  ...another company's filing linked as its baseline (the error), source-verified"
+EV_V="$(rj b.evidence_id)"
+expect POST "/api/engagements/$ENG_W/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run 1, the wrong link its only baseline.","source_fixture":"corrections"}' 201 "  ...run 1"
+R1="$(rj b.value_run_id)"
+expect POST "/api/value-runs/$R1/lock" '{"lock_reason":"Verification: run 1 sealed."}' 200 "  ...run 1 locked"
+expect POST "/api/value-outcomes/$O_S/evidence" "$(EVB public_filing 'own filing' 'TRIR FY25 own filing (fixture)' baseline true)" 201 "  ...the account's own filing, as the baseline too"
+EV_B="$(rj b.evidence_id)"
+expect POST "/api/engagements/$ENG_W/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run 2, both baseline items.","source_fixture":"corrections"}' 201 "  ...run 2"
+R2="$(rj b.value_run_id)"
+expect POST "/api/value-runs/$R2/lock" '{"lock_reason":"Verification: run 2 sealed."}' 200 "  ...run 2 locked"
+expect POST "/api/engagements/$ENG_W/retire" '{"retirement_reason":"Verification: retired, as Scotts was."}' 200 "  ...the engagement retired"
+SEALS0="$(seals)"
+
 step "5. The vendor trigger: a vendor publication about another company supports the impact basis only"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' baseline)" 422 "a vendor publication on a customer account as the baseline, at the route" "it may support the impact basis only"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' actual)" 422 "  ...as the actual" "vendor-published evidence may not support a measured actual"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' impact_basis)" 201 "  ...as the impact basis: accepted"
+EV_VEN="$(rj b.evidence_id)"
 VEN_SQL() { printf "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('%s', 'vendor_publication', 'v', 'Verification vendor fixture', '%s', 'quote', 'Customers cut incidents by 75%%.', 'The vendor fixture headline, read as written.') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '%s', id, '%s' FROM e" "$1" "$S" "$2" "$3"; }
 sqlrefused "the same, at the database (baseline)" "$(VEN_SQL "$INST" "$O_F" baseline)" "it may support the impact basis only"
 # The tenant's own account has only simulated customer persons, so no outcome can be opened there through
@@ -219,7 +245,7 @@ sqlrefused "the same, at the database (baseline)" "$(VEN_SQL "$INST" "$O_F" base
 
 step "6. C1-D1 at the database: one current link; a correction inserted before the withdrawal is refused"
 CORR_SQL() { printf "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports, corrects_supports, corrected_by_person_id, correction_reason) VALUES ('%s', '%s', '%s', '%s', '%s', 'Verification: inserted before the withdrawal.')" "$1" "$2" "$3" "$4" "${5:-$S}"; }
-sqlrefused "insert-before-withdraw on Scotts' vendor link (the correction, its predecessor still current)" "$(CORR_SQL "$O_S" "$EV_V" impact_basis baseline)" "value_outcome_evidence_one_current"
+sqlrefused "insert-before-withdraw on the walk fixture's wrong link (the correction, its predecessor still current)" "$(CORR_SQL "$O_S" "$EV_V" impact_basis baseline)" "value_outcome_evidence_one_current"
 sqlrefused "insert-before-withdraw on a fixture link" "$(CORR_SQL "$O_F" "$EV_F" impact_basis baseline)" "value_outcome_evidence_one_current"
 sqlrefused "a correction by X, not the steward" "UPDATE value_outcome_evidence SET withdrawn_by_person_id = '$S', withdrawn_at = now(), withdrawal_reason = 'Verification: withdrawn first.' WHERE value_outcome_id = '$O_F' AND evidence_id = '$EV_F'; $(CORR_SQL "$O_F" "$EV_F" impact_basis baseline "$X")" "only the tenant's steward corrects what a link supports"
 sqlrefused "a correction naming a support no link of it had" "UPDATE value_outcome_evidence SET withdrawn_by_person_id = '$S', withdrawn_at = now(), withdrawal_reason = 'Verification: withdrawn first.' WHERE value_outcome_id = '$O_F' AND evidence_id = '$EV_F'; $(CORR_SQL "$O_F" "$EV_F" impact_basis actual)" "none supports actual"
@@ -232,7 +258,7 @@ sqlrefused "a DELETE of a link" "DELETE FROM value_outcome_evidence WHERE value_
 
 step "7. The correction route: the steward's, in plain words"
 CS() { printf '/api/value-outcomes/%s/evidence/%s/correct-support' "$1" "$2"; }
-REF0="$(q "SELECT count(*) FROM refusals")"
+REF0="$(q "SELECT count(*) FROM refusals")"; WD0="$(q "SELECT count(*) FROM value_outcome_evidence WHERE withdrawn_at IS NOT NULL")"
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Verification: X tries to correct it."}' 403 "X corrects a link" "steward" "$X"
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Verification: an extra field.","withdrawn_at":"2026-01-01"}' 400 "an unknown field" "body.withdrawn_at is not a field of this request"
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"baseline","reason":"Verification: no change at all."}' 422 "the same support" "This link already supports the baseline; there is nothing to correct."
@@ -240,7 +266,7 @@ expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Too sho
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"attach","reason":"Verification: not a support value."}' 422 "an unknown support" "the baseline, the actual or the impact basis"
 expect POST "$(CS "$O_F" "$(q "SELECT gen_random_uuid()")")" '{"supports":"impact_basis","reason":"Verification: no such link."}' 404 "no such link" "no current link of evidence"
 [ "$(q "SELECT count(*) FROM refusals")" -ge "$((REF0 + 4))" ] && ok "  ...the refusals recorded" || bad "  ...refusals $(q "SELECT count(*) FROM refusals") (was $REF0)"
-[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE withdrawn_at IS NOT NULL")" = "0" ] && ok "  ...nothing withdrawn by any of them" || bad "  ...a refused request withdrew a link"
+[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE withdrawn_at IS NOT NULL")" = "$WD0" ] && ok "  ...nothing withdrawn by any of them" || bad "  ...a refused request withdrew a link"
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Verification: this filing bases the impact, not the baseline."}' 201 "the steward corrects a fixture link (baseline → impact basis), engagement open"
 [ "$(q "SELECT supports || '|' || (withdrawn_by_person_id = '$S') || '|' || (withdrawn_at::date = now()::date) || '|' || withdrawal_reason FROM value_outcome_evidence WHERE value_outcome_id = '$O_F' AND evidence_id = '$EV_F' AND withdrawn_at IS NOT NULL")" = "baseline|true|true|Verification: this filing bases the impact, not the baseline." ] \
   && ok "  ...the old link withdrawn: who (the steward), when (today), why" || bad "  ...withdrawn row"
@@ -268,12 +294,12 @@ BASE_EARNED="$(q "SELECT f->>'earned' FROM value_runs r, jsonb_array_elements(r.
 [ "$BASE_EARNED" = "0" ] && ok "  ...its baseline factor earns 0: the verified filing no longer counts for the baseline (the second item is unverified)" || bad "  ...baseline factor earned $BASE_EARNED"
 printf '%s' "$GAPS" | grep -q 'baseline_evidence_verified' && ok "  ...and the gap register names the baseline evidence gap, as the run does" || bad "  ...gap register: $(printf '%s' "$GAPS" | head -c 300)"
 
-step "9. The freeze, in the database (C1-D2): on Scotts' retired engagement, only the corrections"
-[ "$(q "SELECT (g.deleted_at IS NOT NULL OR g.superseded_by_id IS NOT NULL) FROM value_outcomes vo JOIN engagements g ON g.id = vo.engagement_id WHERE vo.id = '$O_S'")" = "t" ] && ok "Scotts' outcome belongs to a retired engagement" || bad "Scotts' engagement not retired"
+step "9. The freeze, in the database (C1-D2): on the walk fixture's retired engagement, only the corrections"
+[ "$(q "SELECT (g.deleted_at IS NOT NULL OR g.superseded_by_id IS NOT NULL) FROM value_outcomes vo JOIN engagements g ON g.id = vo.engagement_id WHERE vo.id = '$O_S'")" = "t" ] && ok "the walk fixture's outcome belongs to a retired engagement" || bad "the walk fixture's engagement not retired"
 expect POST "/api/value-outcomes/$O_S/evidence" "$(EVB public_filing filing 'A new link (fixture)' baseline)" 409 "a new evidence link on the frozen outcome, at the route" "its outcomes are frozen"
-sqlrefused "  ...at the database" "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$SCOTTS', 'public_filing', 'f', 'Verification frozen fixture', '$S', 'quote', 'q', 'Verification: a new link on a frozen outcome.') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '$O_S', id, 'baseline' FROM e" "its outcomes are frozen"
+sqlrefused "  ...at the database" "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$INST_W', 'public_filing', 'f', 'Verification frozen fixture', '$S', 'quote', 'q', 'Verification: a new link on a frozen outcome.') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '$O_S', id, 'baseline' FROM e" "its outcomes are frozen"
 
-step "10. Brad's acts, in the browser as the steward (on the clone): correct Scotts' link; an erratum on run 2"
+step "10. Brad's acts, in the browser as the steward (on the clone): correct the walk fixture's link; an erratum on run 2"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) & VITE_PID=$!
 "$CHROME" --headless=new --remote-debugging-port="$CDP_PORT" --user-data-dir="$W/chrome" --no-first-run --window-size=1280,900 about:blank > /dev/null 2>&1 & CHROME_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
@@ -281,56 +307,65 @@ login() { curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' 
 TOKEN="$(login "$S_EMAIL")"; X_TOKEN="$(login "$X_EMAIL")"
 [ -n "$TOKEN" ] && [ -n "$X_TOKEN" ] && ok "S and X signed in by session" || { bad "no session"; exit 1; }
 walk() {  # MODE TOKEN RUN PDF_NAME
-  node scripts/lib/corrections_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$2" "$SCOTTS" "$3" "$EV_V" "${4:-none.pdf}" > "$W/walk.$1.log" 2>&1; local rc=$?
+  node scripts/lib/corrections_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$2" "$INST_W" "$3" "$EV_V" "${4:-none.pdf}" "$WRONG" > "$W/walk.$1.log" 2>&1; local rc=$?
   PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.$1.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.$1.log" || true)))
   grep -E '^  (PASS|FAIL)' "$W/walk.$1.log" || true
   [ "$rc" = "0" ] || bad "the $1 walk exited $rc — a crash is a failure (see $W/walk.$1.log)"
 }
 walk acts "$TOKEN" "$R2"
 [ "$(q "SELECT supports || '|' || (withdrawn_by_person_id = '$S') || '|' || (withdrawn_at::date = now()::date) || '|' || (length(withdrawal_reason) >= 12) FROM value_outcome_evidence WHERE value_outcome_id = '$O_S' AND evidence_id = '$EV_V' AND withdrawn_at IS NOT NULL")" = "baseline|true|true|true" ] \
-  && ok "Scotts: the baseline link withdrawn — by the steward, today, with the reason" || bad "Scotts withdrawn row"
+  && ok "the walk fixture: the baseline link withdrawn — by the steward, today, with the reason" || bad "the walk fixture's withdrawn row"
 [ "$(q "SELECT string_agg(supports || ':' || coalesce(corrects_supports, '-'), ',') FROM value_outcome_evidence WHERE value_outcome_id = '$O_S' AND evidence_id = '$EV_V' AND withdrawn_at IS NULL")" = "impact_basis:baseline" ] \
-  && ok "Scotts: one current link, impact_basis, correcting baseline" || bad "Scotts current link"
-expect POST "$(CS "$O_S" "$EV_V")" '{"supports":"baseline","reason":"Verification: a second correction of it."}' 422 "a second correction of the same link (back to baseline), on the frozen outcome" "it may support the impact basis only"
-expect POST "$(CS "$O_S" "$EV_V")" '{"supports":"actual","reason":"Verification: a second correction of it."}' 422 "  ...to the actual" "may not support"
+  && ok "the walk fixture: one current link, impact_basis, correcting baseline" || bad "the walk fixture's current link"
+expect POST "$(CS "$O_S" "$EV_V")" '{"supports":"baseline","reason":"Verification: a second correction of it."}' 409 "correcting the walk fixture's link back to its withdrawn support, on the frozen outcome" "a withdrawn link is not recorded again"
+# Scotts' link was a vendor publication; the vendor trigger now refuses one as a baseline, so the
+# fixture's vendor case study (born impact basis) shows the trigger holding on a correction too.
+expect POST "$(CS "$O_F" "$EV_VEN")" '{"supports":"baseline","reason":"Verification: a vendor claim corrected to baseline."}' 422 "a vendor publication corrected to the baseline" "it may support the impact basis only"
+expect POST "$(CS "$O_F" "$EV_VEN")" '{"supports":"actual","reason":"Verification: a vendor claim corrected to actual."}' 422 "  ...to the actual" "may not support"
 E2="$(q "SELECT id FROM run_errata WHERE value_run_id = '$R2'")"
 [ -n "$E2" ] && ok "run 2: an erratum recorded through the page" || bad "run 2: no erratum"
 
 step "11. The errata: the server's recompute, under the model the run was sealed with (C1-D3, C1-D4)"
-ERR() { printf '{"evidence_id":"%s","what_was_wrong":"The vendor publication was sealed as support for the baseline.","what_is_right":"It supports the impact basis only; the baseline rests on the filing.","reason":"Verification: Brad'"'"'s C1 ruling, point 1."%s}' "$1" "${2:-}"; }
+ERR() { printf '{"evidence_id":"%s","what_was_wrong":"Another company'"'"'s filing was sealed as support for the baseline.","what_is_right":"It supports the impact basis only; the baseline rests on the account'"'"'s own filing.","reason":"Verification: Brad'"'"'s C1 ruling, point 1."%s}' "$1" "${2:-}"; }
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V")" 403 "X records an erratum on run 1" "steward" "$X"
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" ',"recomputed_score":80')" 400 "B9: a typed recompute score in the body" "the recompute is the server's"
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" ',"model_version":"0.9.0"')" 400 "  ...a typed model version" "the recompute is the server's"
-expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_B")" 422 "an erratum naming evidence whose link was never corrected" "there is no correction to state"
+expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_B")" 422 "an erratum naming evidence whose link was never corrected (run 2 sealed it)" "there is no correction to state"
 expect POST "/api/value-runs/$RF1/errata" "$(ERR "$EV_F")" 409 "an erratum on an unlocked run" "an unlocked run is replaced, not corrected"
 expect POST "/api/value-runs/$R1/errata" '{"evidence_id":"'"$EV_V"'","what_was_wrong":"short","what_is_right":"It supports the impact basis only.","reason":"Verification: a short text."}' 422 "an erratum with a 5-character 'what was wrong'" "in at least 12 characters"
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V")" 201 "the steward records the erratum on run 1 (C1-D4)"
 E1="$(rj b.erratum_id)"
-# The independent computation: from each run's SEALED payload, without the vendor row (Brad's ruling, point 4):
+# The independent computation: from each run's SEALED payload, without the wrong row (Brad's ruling, point 4):
 # the baseline factor is 25 × the best remaining baseline item's credit (1 if source-verified and not an
 # attestation, else 0); the impact basis is full when no currency figure was claimed; every other factor as sealed.
 indep() {
-  q "SELECT payload FROM value_runs WHERE id = '$1'" | node -e '
+  q "SELECT payload FROM value_runs WHERE id = '$1'" | WRONG="$WRONG" node -e '
     const p = JSON.parse(require("fs").readFileSync(0, "utf8")); const c = p.confidence;
-    const items = p.evidence.filter((e) => e.kind !== "vendor_publication" && e.supports === "baseline");
+    const items = p.evidence.filter((e) => e.summary !== process.env.WRONG && e.supports === "baseline");
     if (items.some((e) => e.kind === "attestation")) { console.log("cannot: an attested baseline item"); process.exit(0); }
     if (p.claimedCurrencyImpact != null) { console.log("cannot: a currency figure was claimed"); process.exit(0); }
     const base = items.length === 0 ? 0 : 25 * Math.max(...items.map((e) => (e.source_verified ? 1 : 0)));
     const score = c.factors.reduce((s, f) => s + (f.factor === "baseline_evidence_verified" ? base : f.factor === "impact_basis_evidenced" ? 10 : Number(f.earned)), 0);
     console.log(`${score}|${score >= 80 ? "high" : score >= 55 ? "medium" : "low"}|${c.score}|${c.band}`);'
 }
-for pair in "1:$R1:$E1:10" "2:$R2:$E2:35"; do
-  IFS=: read -r N RID EID WANT <<< "$pair"
+# What the fixture's design makes them: run 1 loses its only baseline item (25) and gains the impact
+# basis (10); run 2 keeps its own filing. Computed from the sealed payloads, never typed.
+WANT1="$(indep "$R1" | cut -d'|' -f1)"; WANT2="$(indep "$R2" | cut -d'|' -f1)"
+SEALED1="$(indep "$R1" | cut -d'|' -f3)"; SEALED2="$(indep "$R2" | cut -d'|' -f3)"
+[ -n "$WANT1" ] && [ "$WANT1" -lt "$SEALED1" ] && [ "$WANT2" -ge "$SEALED2" ] \
+  && ok "the fixture's two shapes: run 1's recompute falls ($SEALED1 → $WANT1), run 2's does not ($SEALED2 → $WANT2)" || bad "the fixture's shapes: run 1 $SEALED1 → $WANT1, run 2 $SEALED2 → $WANT2"
+for pair in "1:$R1:$E1:$WANT1:$SEALED1" "2:$R2:$E2:$WANT2:$SEALED2"; do
+  IFS=: read -r N RID EID WANT SEALED <<< "$pair"
   STORED="$(q "SELECT recomputed_score::numeric::int || '|' || recomputed_band || '|' || sealed_score::numeric::int || '|' || sealed_band FROM run_errata WHERE id = '$EID'")"
   IND="$(indep "$RID")"
   [ "$STORED" = "$(printf '%s' "$IND" | awk -F'|' '{printf "%d|%s|%d|%s", $1, $2, $3, $4}')" ] && [ "${STORED%%|*}" = "$WANT" ] \
-    && ok "run $N: the server's recompute ($STORED) equals the script's own, without the vendor row ($IND): $WANT / 100" || bad "run $N: stored $STORED, independent $IND, expected $WANT"
+    && ok "run $N: the server's recompute ($STORED) equals the script's own, without the wrong row ($IND): $WANT / 100" || bad "run $N: stored $STORED, independent $IND, expected $WANT"
   [ "$(q "SELECT model_version || '|' || model_fingerprint || '|' || (recorded_by_person_id = '$S') || '|' || (recompute_method LIKE 'Recomputed under model 1.0.0 (d4cf8f31472a), the model this run was sealed with%') || '|' || (recompute_method LIKE '%The sealed run is unchanged.') FROM run_errata WHERE id = '$EID'")" = "1.0.0|d4cf8f31472a|true|true|true" ] \
     && ok "  ...stores model 1.0.0 (d4cf8f31472a), the one run $N sealed; the steward; the method, ending \"The sealed run is unchanged.\"" || bad "  ...run $N's erratum: $(q "SELECT model_version, recompute_method FROM run_errata WHERE id = '$EID'")"
-  [ "$(q "SELECT (payload->'confidence'->>'modelVersion') || '|' || confidence_score::numeric::int FROM value_runs WHERE id = '$RID'")" = "1.0.0|$WANT" ] && ok "  ...run $N's own sealed score is still $WANT, under 1.0.0" || bad "  ...run $N sealed"
+  [ "$(q "SELECT (payload->'confidence'->>'modelVersion') || '|' || confidence_score::numeric::int FROM value_runs WHERE id = '$RID'")" = "1.0.0|$SEALED" ] && ok "  ...run $N's own sealed score is still $SEALED, under 1.0.0" || bad "  ...run $N sealed"
 done
 expect GET "/api/runs/$R2" "" 200 "GET the run"
-[ "$(rj "b.errata.length + '|' + b.errata[0].recorded_by + '|' + Number(b.errata[0].recomputed_score)")" = "1|$S_NAME|35" ] && ok "  ...it carries the erratum: by $S_NAME, recomputed 35" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
+[ "$(rj "b.errata.length + '|' + b.errata[0].recorded_by + '|' + Number(b.errata[0].recomputed_score)")" = "1|$S_NAME|$WANT2" ] && ok "  ...it carries the erratum: by $S_NAME, recomputed $WANT2" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
 sqlrefused "an erratum recorded by X, at the database" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$X' FROM run_errata WHERE id = '$E1'" "only the tenant's steward records an erratum" "$X"
 sqlrefused "an erratum naming an outcome its run did not seal" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, '$O_F', evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, '$S' FROM run_errata WHERE id = '$E1'" "is not the one run"
 sqlrefused "B2: an UPDATE of an erratum" "UPDATE run_errata SET recomputed_score = 80 WHERE id = '$E1'" "is final"
@@ -341,7 +376,7 @@ ECOPY() {  # FROM_ERRATUM RUN EVIDENCE SUPPORTS SUPERSEDES_SQL SUPERSESSION_REAS
   printf "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, '%s', value_outcome_id, '%s', '%s', %s, %s, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id FROM run_errata WHERE id = '%s'" "$2" "$3" "$4" "$5" "$6" "$1"
 }
 [ "$(q "SELECT corrected_to_supports || '|' || (supersedes_id IS NULL) FROM run_errata WHERE id IN ('$E1', '$E2') GROUP BY 1")" = "impact_basis|true" ] \
-  && ok "each erratum names its correction: Scotts' vendor link, corrected to impact_basis; neither supersedes another" || bad "corrected_to_supports: $(q "SELECT corrected_to_supports, supersedes_id FROM run_errata")"
+  && ok "each erratum names its correction: the walk fixture's link, corrected to impact_basis; neither supersedes another" || bad "corrected_to_supports: $(q "SELECT corrected_to_supports, supersedes_id FROM run_errata")"
 expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_V")" 409 "a second erratum for the same run and correction, at the route" "An erratum for this correction is already recorded on this run"
 sqlrefused "  ...at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis NULL NULL)" "run_errata_one_per_correction"
 SUP() { printf ',"supersedes_erratum_id":"%s","supersession_reason":"%s"' "$1" "$2"; }
@@ -350,11 +385,11 @@ expect POST "/api/value-runs/$R2/errata" "$(ERR "$EV_V" "$(SUP "$E1" "Verificati
 sqlrefused "  ...at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis "'$E1'" "'Verification: run 1''s erratum, named on run 2.'")" "an erratum supersedes one of the same run and the same correction"
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" ',"supersession_reason":"Verification: a reason with nothing named."')" 422 "a supersession reason with no erratum named" "name it"
 sqlrefused "a supersession named with no reason, at the database" "$(ECOPY "$E2" "$R2" "$EV_V" impact_basis "'$E2'" NULL)" "run_errata_supersession_complete"
-sqlrefused "an erratum about a link that was never corrected (Scotts' filing), at the database" "$(ECOPY "$E2" "$R2" "$EV_B" baseline NULL NULL)" "an erratum is about a corrected link"
+sqlrefused "an erratum about a link that was never corrected (the account's own filing), at the database" "$(ECOPY "$E2" "$R2" "$EV_B" baseline NULL NULL)" "an erratum is about a corrected link"
 walk supersede "$TOKEN" "$R1"
 E1B="$(q "SELECT id FROM run_errata WHERE supersedes_id = '$E1'")"
-[ -n "$E1B" ] && [ "$(q "SELECT value_run_id || '|' || corrected_to_supports || '|' || recomputed_score::numeric::int || '|' || (recorded_by_person_id = '$S') || '|' || supersession_reason FROM run_errata WHERE id = '$E1B'")" = "$R1|impact_basis|10|true|Verification: the first erratum's wording was a draft." ] \
-  && ok "run 1: the superseding erratum names E1, with the reason; the server's recompute again 10; the steward's" || bad "superseding row: $(q "SELECT * FROM run_errata WHERE supersedes_id = '$E1'")"
+[ -n "$E1B" ] && [ "$(q "SELECT value_run_id || '|' || corrected_to_supports || '|' || recomputed_score::numeric::int || '|' || (recorded_by_person_id = '$S') || '|' || supersession_reason FROM run_errata WHERE id = '$E1B'")" = "$R1|impact_basis|$WANT1|true|Verification: the first erratum's wording was a draft." ] \
+  && ok "run 1: the superseding erratum names E1, with the reason; the server's recompute again $WANT1; the steward's" || bad "superseding row: $(q "SELECT * FROM run_errata WHERE supersedes_id = '$E1'")"
 [ "$(q "SELECT count(*) FROM run_errata WHERE id = '$E1'")" = "1" ] && ok "  ...E1 stays on the record (append-only)" || bad "  ...E1 gone"
 expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1" "Verification: superseding E1 a second time.")")" 409 "superseding E1 again (already superseded), at the route" "That is not the current erratum for this correction on this run"
 sqlrefused "  ...at the database" "$(ECOPY "$E1B" "$R1" "$EV_V" impact_basis "'$E1'" "'Verification: superseding E1 a second time.'")" "run_errata_superseded_once"
@@ -370,14 +405,14 @@ expect POST "/api/engagements/$ENG_F3/produce-run" '{"note":"Verification: retir
 expect POST "/api/value-runs/$(rj b.value_run_id)/lock" '{"lock_reason":"Verification: sealed before retirement."}' 200 "  ...locked"
 expect POST "/api/engagements/$ENG_F3/retire" '{"retirement_reason":"Verification: retired under section 26."}' 200 "engagement retirement, under the new guard"
 expect POST "/api/institutions/$INST/reference-example" '{"kind":"outside_in_test","source_citation":"Verification fixture citation (not a source)","note":"Verification: a marker on an account with a retired engagement."}' 201 "the reference-example marker, on that account"
-ok "the erratum on a retired engagement's run: section 11 (runs 1 and 2, Scotts' engagement retired)"
+ok "the erratum on a retired engagement's run: section 11 (runs 1 and 2, the walk fixture's engagement retired)"
 expect POST "/api/value-outcomes/$O_F3/evidence" "$(EVB public_filing filing 'After retirement (fixture)' baseline)" 409 "  ...and a new link on that retired outcome still refused" "its outcomes are frozen"
 
 step "13. The seals: every run hashes; runs 1 and 2 byte-identical"
 HASH1="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 RUNS1="$(q "SELECT count(*) FROM value_runs")"
 printf '%s' "$HASH1" | grep -qE "^$RUNS1 runs: recompute matches $RUNS1, differs 0; embedded payloadHash matches $RUNS1, differs 0" && ok "after every act: check_run_hashes $HASH1 (the $RUNS0 prod runs and this script's)" || bad "hashes after: $HASH1"
-[ "$(seals)" = "$SEALS0" ] && ok "runs 1 and 2 byte-identical to before 0040 (md5 of each whole row)" || bad "a Scotts run changed"
+[ "$(seals)" = "$SEALS0" ] && ok "runs 1 and 2 byte-identical to when they were sealed, after the correction and every erratum (md5 of each whole row)" || bad "a fixture run changed"
 
 step "14. The display: run 2 on screen (1280, 390) and in print; the POV; the walk; X's view"
 walk display "$TOKEN" "$R2" c1_run2.pdf
@@ -397,8 +432,9 @@ pages() {  # NAME PDF WANT(yes|no)
 }
 [ -f "$SHOTS/c1_run2.pdf" ] && pages "run 2 printed" "$SHOTS/c1_run2.pdf" yes || bad "no PDF printed"
 P1T="$(pdftotext -f 1 -l 1 "$SHOTS/c1_run2.pdf" - 2>/dev/null | tr -d '[:space:]')"
-printf '%s' "$P1T" | grep -qF "UNVERIFIED—thisrun'soutcomehasnoverifiedactual" && printf '%s' "$P1T" | grep -qF "35/100·Low(sealed:35/100·Low)" \
-  && ok "  ...printed beside the disclosure banner, with \"35 / 100 · Low (sealed: 35 / 100 · Low)\"" || bad "  ...page 1's banners: $(printf '%s' "$P1T" | head -c 300)"
+SCORES2="$(q "SELECT recomputed_score::numeric::int || '/100·' || initcap(recomputed_band) || '(sealed:' || sealed_score::numeric::int || '/100·' || initcap(sealed_band) || ')' FROM run_errata WHERE id = '$E2'")"
+printf '%s' "$P1T" | grep -qF "UNVERIFIED—thisrun'soutcomehasnoverifiedactual" && printf '%s' "$P1T" | grep -qF "$SCORES2" \
+  && ok "  ...printed beside the disclosure banner, with \"$SCORES2\"" || bad "  ...page 1's banners: $(printf '%s' "$P1T" | head -c 300)"
 
 step "15. Deliberate breaks"
 # B1 — the erratum route's steward check removed: the database refuses X still.
@@ -439,8 +475,8 @@ reharden
 sqlrefused "  ...and refused again" "$(VEN_SQL "$INST" "$O_F" baseline)" "it may support the impact basis only"
 # B7 — the frozen-outcome guard relaxed (on the clone).
 fnbreak lvrf_outcome_evidence_link_guard "    IF o.retired THEN" "    IF false THEN"
-FROZEN_SQL="WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$SCOTTS', 'public_filing', 'f', 'Verification frozen fixture', '$S', 'quote', 'q', 'Verification: a new link on a frozen outcome.') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '$O_S', id, 'baseline' FROM e"
-[ "$(sqlaccepted "$FROZEN_SQL")" = "ACCEPTED" ] && ok "B7: caught — with the guard relaxed, a new link on Scotts' frozen outcome is accepted" || bad "B7: not caught"
+FROZEN_SQL="WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$INST_W', 'public_filing', 'f', 'Verification frozen fixture', '$S', 'quote', 'q', 'Verification: a new link on a frozen outcome.') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '$O_S', id, 'baseline' FROM e"
+[ "$(sqlaccepted "$FROZEN_SQL")" = "ACCEPTED" ] && ok "B7: caught — with the guard relaxed, a new link on the walk fixture's frozen outcome is accepted" || bad "B7: not caught"
 reharden
 sqlrefused "  ...and refused again" "$FROZEN_SQL" "its outcomes are frozen"
 # B8 — the erratum taken out of the printed header (the dev server reloads the page).
@@ -448,6 +484,13 @@ edit "$BENCH" '<thead className="hidden print:table-header-group" data-testid="p
 sleep 2; walk print "$TOKEN" "$R2" c1_run2_b8.pdf
 pages "B8: the erratum out of the printed header" "$SHOTS/c1_run2_b8.pdf" no
 restore "$BENCH"
+# B13 (L39) — the POV's correction note on vendor claims only, as C1 had it: the corrected filing's line loses it.
+edit "$POVP" '                <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
+                <CorrectedNote e={e} />' '                <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />'
+sleep 2; node scripts/lib/corrections_walk.mjs povnote "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_W" "$R2" "$EV_V" none.pdf "$WRONG" > "$W/walk.b13.log" 2>&1 || true
+grep -q "^  PASS  the POV opens" "$W/walk.b13.log" && grep -q "^  FAIL  the corrected link's own line" "$W/walk.b13.log" \
+  && ok "B13: the note on vendor claims only → caught: the corrected filing's line has no correction" || bad "B13: not caught: $(cat "$W/walk.b13.log" | head -3)"
+restore "$POVP"
 # B11 (C1-D3) — a run sealed under another model: the recompute refuses, from the payload and from the source.
 cat > "$W/rc.ts" <<TS
 import { recomputeWithCorrection } from '$(pwd)/server/lib/recomputeRun.ts';
@@ -459,8 +502,8 @@ TS
 PAY="$(q "SELECT payload FROM value_runs WHERE id = '$R2'")"
 MATCH="$(q "SELECT json_build_object('kind', kind, 'summary', summary, 'provenance', provenance) FROM evidence WHERE id = '$EV_V'")"
 RC="$(npx tsx "$W/rc.ts" "$PAY" "$MATCH" 2>&1 | tail -1)"
-printf '%s' "$RC" | grep -qF '["ok:35","This run was sealed under model 0.9.0' && printf '%s' "$RC" | grep -qF 'It cannot be recomputed under the model it was sealed with.' \
-  && ok "B11: a payload sealed under model 0.9.0 → refused: \"It cannot be recomputed under the model it was sealed with.\" (as sealed: 35)" || bad "B11 (payload): $RC"
+printf '%s' "$RC" | grep -qF "[\"ok:$WANT2\",\"This run was sealed under model 0.9.0" && printf '%s' "$RC" | grep -qF 'It cannot be recomputed under the model it was sealed with.' \
+  && ok "B11: a payload sealed under model 0.9.0 → refused: \"It cannot be recomputed under the model it was sealed with.\" (under its own: $WANT2)" || bad "B11 (payload): $RC"
 edit "$MODEL" "export const MODEL_VERSION = '1.0.0'" "export const MODEL_VERSION = '1.0.1'"
 RC2="$(npx tsx "$W/rc.ts" "$PAY" "$MATCH" 2>&1 | tail -1)"
 printf '%s' "$RC2" | grep -qF '["refused",' && ok "B11: the server's model bumped to 1.0.1 → run 2's recompute refused (sealed under 1.0.0)" || bad "B11 (source): $RC2"
