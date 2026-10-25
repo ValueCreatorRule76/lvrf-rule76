@@ -120,6 +120,7 @@ on institution routes (P3).
 | L34 | **The Accounts home makes up to four reads per account** (`/view`, `/walk`, `/pov`, `/research`) to say where each stands, through the workspace's own derivations (`client/src/lib/workspaceStatus.ts`) | UX-1 slice 2, 19 Oct 2026 | Fine at today's handful of accounts. A list of dozens or hundreds wants one read-only summary route that returns each row's inputs. It must keep **one** implementation of the six-step rule: the route returns the inputs, and the client derives from them; the rule is not rewritten on the server |
 | L35 | **Evidence added before its figure exists gets no figure check.** Outcome evidence is checked against the outcome's figure for what it supports (baseline, actual, impact basis) when the evidence is added (P1, `outcomeEvidence.ts`). Evidence for the actual is usually added before the actual is measured, so there is nothing to compare and no `figure_checks` row; when the actual is later recorded (`outcomeWalk.ts`, measure), nothing checks it against that evidence. A statement still records "not checkable" either way | P1 build, 25 Oct 2026 (Brad: record it, assigned to P3) | **Assigned to P3.** When a figure is recorded (measure; and a commitment's target, if P3 checks targets), check it against every quote or locator evidence already supporting it, recorded as a new `figure_checks` row, and feed the result to the verification state P3 introduces. Until then the actual's evidence shows no figure check, which is accurate: none was run |
 | L36 | **A vendor publication about another company, linked as `impact_basis`, must earn no confidence credit in any factor.** C1 restricts it to the impact basis (trigger `value_outcome_evidence_vendor_impact_only`), but the model still grades it there: in `computeConfidence` factor 4, when a currency figure is claimed, a source-verified `vendor_publication` linked as `impact_basis` with a stated basis earns half the factor (5 of 10, "self-declared as inference"); with no currency figure the factor is full regardless of evidence, so it earns nothing today. Factors 2 and 3 can no longer see it (it supports neither the baseline nor the actual) | C1 review, 25 Oct 2026 (Brad: "with the correction applied" accepted; record this) | **A CONFIDENCE_MODEL ruling, for later; no change in C1.** When ruled: `evidenceCredit` (or factor 4) gives 0 to a `vendor_publication` about a non-tenant account, with its own note; it is a model change, so MODEL_VERSION is bumped and the fingerprint changes, and runs sealed under 1.0.0 keep their scores. C1's erratum recompute runs under the sealed model, so errata recorded before the change are unaffected |
+| L37 | **A stored document of record does not name errata recorded after it.** Run 2's record document v1 (rendered 25 Oct 2026 11:20) holds the sealed payload and its hash; its erratum was recorded at 11:28, and nothing in the document row points to it. The printed run page carries the erratum on every page; the stored document does not | C1 Gate C, 25 Oct 2026 (Brad: record it, direction ruled) | **Direction ruled by Brad (25 Oct 2026):** a stored document of record is **never changed**. Wherever it is shown or retrieved, the run's **current errata appear beside it**, labelled "Erratum recorded after this document was rendered". **Any render after an erratum includes it.** **Build later, alongside `record_documents`' ratification** (the Repository Constitution) |
 
 ---
 
@@ -2451,7 +2452,7 @@ verifies both versions.
 
 ---
 
-## 9. C1: correcting the Scotts vendor-publication link (planned 25 Oct 2026; **ruled by Brad, 25 Oct 2026; built, Gate A passed 25 Oct 2026, with Brad's C1 review (errata superseded, never duplicated; L36) — BUILD_STATUS "C1"; not deployed**)
+## 9. C1: correcting the Scotts vendor-publication link (planned 25 Oct 2026; **ruled by Brad, 25 Oct 2026; built, Gate A passed 25 Oct 2026, with Brad's C1 review (errata superseded, never duplicated; L36) — BUILD_STATUS "C1"; **deployed at `feab0ad`, Gate C clean; closed 25 Oct 2026**)
 
 **Runs before P2.** A correction slice, with its own Gate A, B and C.
 
@@ -2660,3 +2661,261 @@ a missed reader fails.
 | **C1-D2** | The frozen-outcome rule is enforced only in the evidence route today. Move it into the database, with the correction as the one exception | **Yes.** "Nothing else is" should not rest on a route; the same reason the other governance rules are triggers |
 | **C1-D3** | Who computes the recompute stated in the erratum | **The server, at the erratum's recording,** from the sealed payload with the corrected link applied, by the same `computeConfidence`. It refuses when the sealed snapshot can't reconstruct the input exactly. A typed score is refused (B9). The sealed score is shown beside it, unchanged |
 | **C1-D4** | Run 1 sealed the same row | **An erratum on run 1 too,** with its own recompute. Same act, same rule |
+
+---
+
+## 10. P2: acts and lineage (planned 25 Oct 2026; **plan for Brad's review, not built**)
+
+**Source:** `docs/LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md`, ratified 24 Oct 2026, §2.4 (audit),
+§5.1 (`governance_acts`, `research_imports`, `research_results.import_id`,
+`lvrf_lineage`) and §7 (P2: "`governance_acts`, the presence trigger (Step 0 on a scratch
+database first), `research_imports` with hash, `lvrf_lineage`, `/lineage/:table/:id`").
+
+**Value spine stages served:** `verify` and `return`. The point is defensibility: every
+governed change names its act, actor and reason, and any figure can be traced to where it
+came from.
+
+### What exists (read 25 Oct 2026)
+
+- **Who/when is recorded per object, not per act.**
+  - **The columns:** `research_results.reviewed_by_person_id` / `reviewed_at` /
+    `review_note`; `evidence.citation_resolved_by_person_id` / `_at`;
+    `value_outcomes.committed_by_` / `verified_by_`; `value_runs.locked_at` /
+    `lock_reason`; `retired_by` / `deleted_at` and supersession reasons; C1's withdrawal
+    and correction columns.
+  - **`audit_log`** holds whole rows (old and new) with the actor, through `lvrf_audit()`.
+  - **There is no act row:** nothing says "this UPDATE was an *accept*". Retire, withdraw
+    and supersede are distinguished only by which columns changed.
+- **Research intake** (decision D1, the boundary in CLAUDE.md):
+  - a prompt is generated from live rows into `research_prompts` (immutable, with its
+    SHA-256);
+  - a person runs it;
+  - **the browser `JSON.parse`s the paste and posts the parsed object**
+    (`AccountResearch.tsx:267`, `PackResearch.tsx:227`). **The server never sees the
+    pasted text.** Each `research_results` row keeps its own slice as `raw_response`
+    (jsonb);
+  - a person accepts or rejects per field.
+- **The research the prod copy holds:** 34 results (26 `industry_measure`, 13 of them
+  untracked; 8 `institution_fact`), all accepted. Express's JSON body limit is the default
+  100 KB (`server/index.ts:80`).
+- **What runs seal:**
+  - **facts** with their own `id` and `evidenceId` (`payload.institutionFacts`);
+  - **the entity** with its `id`;
+  - **outcome evidence without its id**, only kind, summary, provenance and flags (C1's
+    recompute matches it by kind, summary and provenance).
+- **Scotts' TRIR baseline has no research chain.** Its evidence is an `observation`
+  recorded directly in W6 on 12 Oct ("Found through AI-assisted research"), with **no
+  `research_results` row and no prompt.** Scotts' revenue fact does have one: prompt →
+  result (accepted 12 Oct) → evidence → fact → sealed in run 2.
+- **No research import and no act row exists before P2,** by construction.
+
+### Conflicts, named (not resolved silently)
+
+1. **§7's acceptance test can't be met on the real record.** It asks Scotts' TRIR baseline to
+   trace prompt → import → result → accept act → evidence → fact → run 2's seal. None of
+   that exists for the baseline, and no import or act predates P2 → **P2-D1**.
+2. **§2.4's act vocabulary doesn't cover today's acts.** It lists {import, validate,
+   approve, certify, activate, supersede, verify, attest, open_citation, accept, reject,
+   withdraw, ratify, demote, commit}. It lacks measure, lock, retire (engagement), exclude,
+   mark, link (a solution to a lever), and C1's correct and record-erratum → **P2-D3**.
+3. **§5.1 says "CHECK on `created_at`",** but `research_results` has no `created_at`. Its
+   insert stamp is `parsed_at`, set by `research_results_touch` and frozen on UPDATE. The
+   precedent is `research_results_untracked_predates_prompts` → **P2-D6** uses `parsed_at`.
+4. **CLAUDE.md's research boundary** ("only `industryResearch.ts` and `accountResearch.ts`
+   write `research_prompts` and `research_results`") **must name `research_imports`.** That
+   edits the constitution file → **P2-D8**.
+5. **The import must hold what was parsed,** but today the browser parses the paste and the
+   server never sees the text → **P2-D5**.
+
+### What it builds
+
+**Step 0, before any migration** (§7): prove the presence check on a scratch database
+(`createdb lvrf_step0`, not a clone, dropped after).
+- **The mechanism:** a deferred constraint trigger keyed on `txid_current()`.
+- **`scripts/step0_act_presence.sh`** shows, with a pass or fail for each:
+  - **an act in the same transaction → commit succeeds**, whichever order the act and the
+    change are written in;
+  - **no act → refused at commit**;
+  - **an act in another transaction → refused**;
+  - **an act written inside a rolled-back savepoint → refused**;
+  - **an act for another row → refused.**
+- **If any of these fails, P2 stops and the mechanism goes back to Brad.**
+
+**Migration 0041 (`acts_and_lineage`).** It adds tables, an enum and one nullable column. It
+orphans nothing: no row is changed or deleted, and every existing research result keeps
+`import_id` NULL, which is allowed for rows parsed before the cutover.
+- **enum `governance_act`:** §2.4's fifteen values, plus the ones today's routes need
+  (P2-D3): `measure`, `lock`, `retire`, `exclude`, `mark`, `link`, `correct`,
+  `record_erratum`.
+- **`governance_acts`, append-only:**
+  - `id`, `tenant_id`, `act`;
+  - `subject_table` and `subject_id`: the row the act governs;
+  - `result_table` and `result_id`: the row it created, if any (a supersession's successor,
+    a correcting link, an erratum);
+  - `actor_person_id`;
+  - `reason` (nullable: acts whose route takes no reason, such as accept with no note, record
+    none; never invented);
+  - `evidence_ids` (uuid[]);
+  - `route`: the pattern, no values;
+  - `txid` (bigint, `DEFAULT txid_current()`);
+  - `at`.
+
+  An index on (`txid`, `subject_table`, `subject_id`), and CHECKs: a result is both or
+  neither; the reason is at least 12 characters when present; the route is a pattern (no
+  `?`, no uuid).
+- **`research_imports`, immutable:**
+  - `id`, `tenant_id`, `prompt_id` (NOT NULL: since D1 a result names its prompt);
+  - `raw_text`;
+  - `raw_sha256`, with CHECK `research_imports_sha256_is_the_text`, the same form as
+    `research_prompts_sha256_is_the_text`;
+  - `byte_length`, with a CHECK that it is the text's length and at most 524,288;
+  - `imported_by_person_id`, `imported_at`.
+- **`research_results.import_id`:** a nullable FK, `ON DELETE RESTRICT`, with CHECK
+  `research_results_import_after_cutover`: `import_id IS NOT NULL OR parsed_at < '<cutover>'`
+  (P2-D6).
+- **Hardening section 27:**
+  - **`governance_acts_audit`, `_no_delete`, `_immutable`, and `_actor`.** The actor is
+    `lvrf_current_actor()`, and the subject exists and is in the act's tenant.
+  - **`research_imports_audit`, `_no_delete`, and `_immutable`.**
+  - **`research_results_import_matches`:** the import's prompt is the result's prompt, and
+    both are the result's tenant's.
+  - **The presence check:** one constraint trigger, `<table>_act_present` (`AFTER INSERT OR
+    UPDATE … DEFERRABLE INITIALLY DEFERRED`, one function `lvrf_require_act()`), on each
+    subject table of P2-D3.
+    - **When it fires:** only when the row makes one of that table's governed transitions
+      (the function reads `TG_TABLE_NAME` and compares OLD and NEW).
+    - **What it requires:** an act with this `txid` naming the row as its subject or its
+      result.
+    - **The refusal:** "LVRF: <table> <id>: <transition> with no governance act recorded in
+      this transaction." It goes into `plainChecks`/`PLAIN_*`.
+  - **Section 24** refuses UPDATE on `governance_acts` and `research_imports`. `ownership.sql`
+    grants INSERT on both, and no UPDATE.
+  - **The trigger count:** **141 + 4 + 3 + 1 + N**, where N is the number of subject tables.
+    It is **167 with P2-D3 as recommended (N = 18).**
+- **`lvrf_lineage(p_table text, p_id uuid)`:**
+  - **`STABLE`, `SECURITY INVOKER`, read-only.**
+  - **It returns ordered steps:** `step`, `kind`, `table`, `id`, `actor`, `at`, `detail`
+    (jsonb), `source` (`act` · `record` · `seal`).
+  - **The chain:** prompt → import → result → review act → evidence (with its form, quote or
+    locator, figure check and opened citation) → fact, entity or measure → its supersessions
+    → outcome links (with withdrawals and corrections) → runs that sealed it → errata.
+  - **History before P2** comes from the existing who/when columns. Each such step is
+    labelled `source = 'record'`, "recorded before governance acts (<cutover>)"; no act is
+    invented (P2-D2).
+  - **Outcome evidence in a sealed run** is matched by kind, summary and provenance, and
+    labelled so, because snapshots carry no evidence id (P2-D7).
+
+**Routes:**
+- **Every route in P2-D3's mapping writes its `governance_acts` row in the same
+  transaction,** through one helper, `server/lib/governanceAct.ts`.
+- **The two research POSTs** take `{ raw_text }` and parse it on the server, with the
+  existing parser unchanged (P2-D5).
+  - The 100 KB limit is raised to 512 KB for those two routes only.
+  - The import is inserted, then each result with its `import_id`, then the `import` act.
+  - An unparseable paste is refused (422) and recorded as today; no import row is kept.
+  - The clients send the text, no longer the parsed object.
+- **`GET /api/lineage/:table/:id`:**
+  - for an authorized user, tenant-scoped (another tenant's id → 404, logged, like every
+    read);
+  - **tables (P2-D7):** `institution_facts`, `institution_entities`, `industry_measures`,
+    `evidence`, and `value_outcomes` (`?figure=baseline|actual`).
+
+**Display: `/lineage/:table/:id`,** a noun page in the UX-1 house style.
+- Each step is a row with what, who, when and the source label. A quote is shown with its
+  how-read, a locator as P1 renders it. Withdrawn links and superseded errata are struck
+  through, as C1 shows them.
+- **The page prints,** with a footer naming the subject and the print date.
+- **Links "Where this came from":** each fact on the account facts card and the POV; each
+  sealed fact and evidence item on the run page; the outcome's baseline and actual.
+- **Nothing is computed or sourced here:** the page only reads.
+
+### Gate A (planned)
+
+**`verify_acts_lineage.sh`, new,** on a clone of the restored, neutralised prod copy, with
+invented fixtures ("Fixture Valley Electric Cooperative (invented)").
+- **Step 0's script re-run** inside it: five cases.
+- **The schema:** about 167 triggers; drift none (42 migrations); existing results keep
+  `import_id` NULL, with none blank or invented; `governance_acts` empty after the
+  migration.
+- **Every route in the P2-D3 mapping:**
+  - it writes exactly one act per subject (or per subject and result), with the session
+    actor, a route pattern and no values;
+  - **a code grep:** every route that makes a governed transition calls the helper;
+  - a missed route fails.
+- **Research:**
+  - a fixture prompt is run; the pasted text is stored byte-for-byte; its SHA-256 is
+    recomputed in the script;
+  - every result names the import and the prompt;
+  - **a v1 or v2 envelope pasted as text parses exactly as before** (an identity test on
+    the parsed rows).
+- **Lineage, on a fixture** created through the routes after P2: prompt → import → result →
+  accept act → evidence → fact → supersession → a run's seal, each step with who and when,
+  every step `source = 'act'` or `'seal'`.
+- **Lineage, on the real record** (per P2-D1):
+  - **Scotts' revenue fact:** prompt → result → accept (`record`, reviewed 12 Oct by Brad
+    Piver) → evidence → fact → run 2's seal, with **"no import (before research imports)"**
+    shown, not skipped;
+  - **Scotts' TRIR baseline:** evidence (observation, AI-sourced, citation opened 13 Oct)
+    → the outcome link → runs 1 and 2 (matched) → no research step, stated as "recorded
+    directly as outcome evidence". The vendor publication shows withdrawn, corrected to the
+    impact basis, with both errata, run 1's superseded one struck through;
+  - **Curia:** one fact and one outcome.
+- **The display:** at 1280 and 390, and in print. The links are present where listed, there
+  is no sideways scroll, and a non-authorized reader is refused.
+- **Breaks, every file restored byte-identical:**
+  - **B1:** a governed change with no act, refused at commit (§7);
+  - **B2:** a tampered import, hash ≠ text, refused (§7);
+  - **B3:** an import edited after insert, refused (§7);
+  - **B4:** an act whose actor is not the session actor;
+  - **B5:** an UPDATE or DELETE of an act;
+  - **B6:** an act written in another transaction does not count;
+  - **B7:** a result parsed after the cutover with no import;
+  - **B8:** a result naming another prompt's import;
+  - **B9:** the helper call removed from one route (accept), so the route's write is refused
+    at commit and the 500 becomes a plain refusal;
+  - **B10:** the lineage function's `withdrawn_at` and supersession steps removed, so the
+    fixture chain loses a step and the script names it;
+  - **B11:** a paste over 512 KB, refused in words.
+- **The regression:** all 38 scripts plus the new one. **Every existing script that writes
+  through a governed route keeps passing unchanged,** which is the proof the helper is
+  wired everywhere. A script that writes a governed transition by SQL on its throwaway clone
+  must now write its act too; each one is named in BUILD_STATUS.
+- **Prod-copy equivalence** against `feab0ad`: every GET identical except the added link
+  targets. The two research POSTs change shape (the text, not the object), which the gate
+  states.
+
+### Gate B (planned pastes, a STOP after each)
+
+1. **Backup:** expect about **674 TOC entries**. The basis is the box's own
+   `lvrf-pre-c1-…` (651, at 0039) plus 0040's 23, counted locally.
+2. **Pull; migrate as `lvrf_migrate`; `ownership.sql`, then `hardening.sql`, as postgres;**
+   then:
+   - the trigger count (about 167);
+   - drift none (42 migrations);
+   - ownership clean;
+   - run hashes 25 of 25;
+   - **0 results parsed since the cutover literal** (P2-D6);
+   - `governance_acts` 0, `research_imports` 0.
+3. **Deploy.**
+
+### Gate C (planned)
+
+- **The standard checks:** triggers, plain sentences, run hashes, ownership, drift,
+  refusals and the journal, with no values.
+- **Brad's first acts after the deploy** each show one `governance_acts` row: who, the
+  route pattern and the reason.
+- **The lineage of Scotts' revenue fact and TRIR baseline** read on prod as Gate A
+  predicted.
+
+### Decisions for Brad
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **P2-D1** | §7's acceptance test (Scotts' TRIR baseline traced prompt → import → result → accept → evidence → fact → run 2) can't be met: the baseline was never researched, and no import or act predates P2 | **Test the full chain on a fixture made after P2; on the real record, trace Scotts' revenue fact (prompt → result → accept → evidence → fact → run 2) with "no import (before research imports)" stated, and Scotts' TRIR baseline as it really is.** The test proves the function; the real records prove it tells the truth about history |
+| **P2-D2** | Backfill `governance_acts` for history from the who/when columns and `audit_log`? | **No backfill.** An act row says the act was recorded as an act at the time; writing them now from other columns would manufacture that. Lineage reads history from the columns, labelled "recorded before governance acts" |
+| **P2-D3** | Which acts, on which subject tables, are enforced in P2 | **Every governed transition today, 18 tables, with the act vocabulary extended:** <br>• accept and reject → `research_results`, pending→accepted/rejected <br>• open_citation → `evidence`, `citation_resolved` set <br>• commit, measure, verify → `value_outcomes` <br>• lock → `value_runs` <br>• retire → `engagements` <br>• withdraw → `industry_measures`, `value_levers`, `lever_offerings`, `reference_example_markers`, `value_hypotheses`, `account_person_links`, on `deleted_at` set <br>• supersede → the predecessor's `superseded_by_id` set, with the successor as the act's result, on `institution_facts`, `institution_entities`, `business_metrics`, `value_hypotheses`, `reference_example_markers` <br>• ratify → `value_levers` insert (O-D2) <br>• link → `lever_offerings` insert <br>• exclude → `industry_measure_exclusions` insert <br>• mark → `reference_example_markers` insert <br>• correct → `value_outcome_evidence`, withdrawal plus correcting insert <br>• record_erratum → `run_errata` insert <br>• import → `research_imports` insert <br>**Out of P2:** creation routes that already carry their own who/when and change no governed state (account inputs, offerings, claims, outcome creation, outcome evidence, typed facts, hypotheses, summaries, analyst, classification, pack basis, produce-run, record document, prompt generation). Act rows for them are a later item, if wanted |
+| **P2-D4** | The presence mechanism | **A deferred constraint trigger keyed on `txid_current()`,** proven by Step 0 before any migration; order-independent within the transaction. The alternative, a `SET LOCAL lvrf.act_id` per request, can be set without writing the act, so it proves less |
+| **P2-D5** | The import must be the text that was parsed | **The client sends `{ raw_text }`; the server parses it with the existing parser.** 512 KB limit on the two routes only. An unparseable paste is refused and recorded as today, and no import row is kept (an import is what produced results) |
+| **P2-D6** | How "import required after the cutover" is enforced | **A CHECK on `parsed_at` against a literal cutover** (the generation day, 00:00 UTC), as `research_results_untracked_predates_prompts` already does. Gate B checks that no result was parsed between the literal and the migration; **no research between Gate A and the deploy.** (A literal that has passed fails the migration safely, in its own transaction) |
+| **P2-D7** | Lineage scope and the sealed-evidence match | **Facts, entities, pack measures, evidence and an outcome's baseline or actual.** For runs sealed before evidence ids were sealed, match outcome evidence by kind, summary and provenance, labelled as matched. Sealing the evidence id in new runs is a payload change (payloadVersion 3) and is **not** in P2; it is recorded as a loose end if wanted |
+| **P2-D8** | CLAUDE.md's research boundary names `research_prompts` and `research_results` only | **Amend it in the P2 commit:** "Only `industryResearch.ts` and `accountResearch.ts` write `research_prompts`, `research_imports` and `research_results`." This is a constitution-file edit, so it needs Brad's approval |
