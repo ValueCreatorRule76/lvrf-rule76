@@ -2447,3 +2447,215 @@ verifies both versions.
 | **P1-D4** | New runs seal each fact's evidence form, quote or locator, how-read and figure-check result | **Yes.** A sealed case must reproduce what it rested on; old runs stay byte-identical under a payload version |
 | **P1-D5** | Research results already parsed under contract v1 (quote, no how-read): the reviewer supplies how-read at accept | **Yes.** A person states how they read it, which is the rule's intent; nothing is backfilled by machine |
 | **P1-D6** | Existing evidence rows stay `legacy` forever (no backfill to quote or locator by script) | **Yes.** A legacy row is corrected only the normal way: superseding its fact with new evidence. A script guessing forms would be the system rewriting what was recorded |
+
+---
+
+## 9. C1: correcting the Scotts vendor-publication link (planned 25 Oct 2026; **ruled by Brad, 25 Oct 2026; plan for his review, not built**)
+
+**Runs before P2.** A correction slice, with its own Gate A, B and C.
+
+**The finding** (Brad, 25 Oct 2026, from run 2's page):
+- Scotts' `vendor_publication` (the "75% reduction" story) reads "supports the baseline".
+- Its own summary says it is "never applied to the baseline", and §4a A9 recorded it as
+  `supports = impact_basis`.
+- **The record says baseline everywhere** (read-only, on prod):
+  - the one live link in `value_outcome_evidence`, recorded 12 Oct 2026 20:46 by Brad
+    Piver;
+  - runs 1 and 2, which both sealed it as `baseline`.
+- **So the label is right and the data is wrong.**
+
+**Value spine stages served:** `baseline` (what the baseline rests on) and `verify` (what a
+sealed record is now known to have got wrong).
+
+### Brad's ruling (25 Oct 2026)
+
+1. **Runs 1 and 2 stay exactly as sealed.** An append-only, steward-only **erratum**
+   records:
+   - the run;
+   - what was wrong and what is right;
+   - who, when, and the reason.
+
+   It renders on the run page and on every printed page, and says the sealed record is
+   unchanged.
+2. **`value_outcome_evidence` gets explicit withdrawal:**
+   - who, when, and a reason of at least 12 characters, all or none;
+   - steward-only.
+
+   The Scotts baseline link is withdrawn with its reason, and a new `impact_basis` link
+   added. **These two correction acts are allowed on a retired engagement's frozen
+   outcome; nothing else is.**
+3. **A trigger refuses a `vendor_publication` about a non-tenant institution as support for
+   the baseline or the actual** (impact basis only), with a deliberate break in Gate A.
+4. **Run 2's confidence is recomputed, read-only, without the vendor row,** and the result
+   is stated in the erratum. The sealed score is never changed.
+5. **Every account is checked, read-only, for the same error,** and the findings reported
+   (below).
+
+### Step 5: the findings (read-only, prod, 25 Oct 2026)
+
+| Query | Result |
+|---|---|
+| Live links: every `vendor_publication` by account | **1**: Scotts Miracle-Gro, `supports = baseline`, recorded 12 Oct 2026, engagement retired |
+| The error, live: a `vendor_publication` on a non-tenant account supporting the baseline or the actual | **1**: Scotts, baseline. None supporting the actual (the existing `lvrf_block_ai_actual` already refuses that) |
+| Sealed: runs whose payload carries a `vendor_publication` supporting the baseline or the actual | **2**: Scotts run 1 and run 2, both locked |
+| Every account | **Curia: 4 links, 0 vendor publications. Skillsoft (the tenant's own): 4 links, 0 vendor publications.** Scotts: 2 links, 1 vendor publication |
+
+**The error is only Scotts'.** Curia is clean. Skillsoft is the tenant's own account, which
+the new trigger leaves alone (a vendor's own published results are about itself).
+
+### What it builds
+
+**Migration 0040 (`corrections`).** It changes `value_outcome_evidence` and adds
+`run_errata`. It orphans nothing: no row is deleted, and every existing link stays current.
+- **The link table:**
+  - **The primary key widens** to (`value_outcome_id`, `evidence_id`, `supports`), with a
+    **partial unique index on (`value_outcome_id`, `evidence_id`) where the link is not
+    withdrawn.** One current link per outcome and evidence; a corrected link sits beside
+    its withdrawn predecessor (C1-D1).
+  - **New columns:**
+    - `withdrawn_by_person_id`, `withdrawn_at`, `withdrawal_reason`: all null or all set,
+      the reason at least 12 characters (CHECK `value_outcome_evidence_withdrawal_complete`);
+    - `corrects_supports` (text), `corrected_by_person_id`, `correction_reason`: all null
+      or all set. A correcting link names the `supports` value it replaces, which must
+      differ from its own.
+- **Table `run_errata`, append-only:**
+  - the run and the tenant;
+  - `what_was_wrong`, `what_is_right` and `reason`, each at least 12 characters;
+  - the recompute: `recomputed_score`, `recomputed_band`, `recompute_method`, and the
+    sealed score beside them;
+  - `recorded_by_person_id`, `recorded_at`.
+- **Hardening section 26:**
+  - **`value_outcome_evidence_guard`**, BEFORE INSERT OR UPDATE:
+    - the only UPDATE is a withdrawal, once, by the tenant's steward; `supports` never
+      changes;
+    - an INSERT on a retired engagement's outcome is refused **unless** it is a correction
+      by the steward: its (outcome, evidence) has a withdrawn link, and it names that
+      `supports` in `corrects_supports`.
+
+    **The freeze moves into the database (C1-D2).** Today only the evidence route enforces
+    it.
+  - **`value_outcome_evidence_vendor_impact_only`**, BEFORE INSERT: a `vendor_publication`
+    whose outcome's institution is not the tenant's own may support only `impact_basis`.
+  - **`run_errata_audit`, `_no_delete`, `_immutable`, `_steward_only`.**
+  - **The trigger count goes 135 → 141.** Gate C counts them from `pg_trigger`.
+- **`ownership.sql`:** INSERT on `run_errata` (not UPDATE). `value_outcome_evidence` gains
+  UPDATE for `lvrf_app`, for the withdrawal only; the guard refuses every other UPDATE.
+- **Plain sentences** for the new CHECKs in `plainChecks.ts`.
+
+**Readers exclude withdrawn links.** Every read of `value_outcome_evidence` adds
+`withdrawn_at IS NULL`: produce-run (the confidence input and the evidence snapshot),
+`/pov`, `/walk`, `/view`, the gap register, `lvrf_block_ai_actual`, the figure-check guard,
+`verifyConfidenceParity` and compare. Gate A greps the code for every read of the table, so
+a missed reader fails.
+
+**Routes** (steward-only; refusals in plain words, recorded):
+- **`POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support`:** withdraws
+  the current link with its reason and adds the corrected one, in one transaction. It is
+  allowed on a frozen outcome; it refuses anything that isn't a change of `supports`.
+- **`POST /api/value-runs/:id/errata`:** records an erratum.
+  - **The recompute is the server's, never typed (C1-D3):**
+    - it reads the run's sealed payload, with the corrected link applied to the sealed
+      evidence snapshot, and runs the same `computeConfidence`;
+    - the factors that don't read evidence are taken as sealed;
+    - it **refuses** when it can't reconstruct the input exactly: a sealed evidence item
+      that was attested, whose attester the snapshot does not carry.
+  - It states the method, for example "Recomputed with the sealed evidence, the vendor
+    publication counted as impact basis, not baseline; the sealed score is unchanged".
+
+**The display:**
+- **The run page:** the erratum sits beneath the disclosure banner, **in the printed
+  `<thead>`, so on every printed page**. It reads:
+  - "ERRATUM, <date>: <what was wrong>. <what is right>.";
+  - "The sealed record below is unchanged.";
+  - "Recomputed without it: <n / 100 · Band> (sealed: 35 / 100 · Low)".
+
+  It is marked "recorded after sealing", which is distinct from standard 10's "as recorded
+  at sealing".
+- **The account page:** the walk's evidence list gains "Correct what it supports…"
+  (steward-only), with the withdrawn link shown struck through, its reason and who
+  withdrew it.
+- **The POV and `/view`** show only current links. A withdrawn link is listed under the
+  outcome as "withdrawn <date> by <name>: <reason>".
+- **Steward-only "Record an erratum…"** on the run page.
+
+**Brad's acts on prod, after the deploy** (through the UI; no script writes to prod):
+1. Correct the Scotts link: withdraw `baseline` with its reason, add `impact_basis`.
+2. Record the erratum on run 2. Run 1 sealed the same row, so it gets its own erratum.
+
+### Gate A (planned)
+
+**`verify_corrections.sh`, new**, on a clone of the restored, neutralised prod copy.
+- **The corrections:**
+  - the Scotts link corrected through the route on a frozen outcome: the old link
+    withdrawn (who, when, reason), the new `impact_basis` link current;
+  - one current link per (outcome, evidence);
+  - **everything else on the frozen outcome still refused,** at the route and in the
+    database: a new evidence link, and a second correction of the same link.
+- **The erratum:**
+  - recorded on runs 1 and 2 by the steward;
+  - refused for a non-steward, at the route and in the database;
+  - UPDATE and DELETE refused;
+  - **run 2's recompute equals an independent recomputation in the script.** Expected 35 /
+    100 · Low: the baseline factor takes the best item, the verified filing, and the
+    impact basis is full with no currency claimed. The script computes it; nothing is
+    assumed.
+- **The seals:** `check_run_hashes` gives 25 of 25 before and after. Runs 1 and 2 are
+  byte-identical.
+- **The display:** at 1280 and 390, and in print, the erratum on **every** printed page,
+  read page by page.
+- **The readers:** a new run on a fixture outcome with a withdrawn link doesn't carry it,
+  and neither do `/pov` or the gap register.
+- **The vendor trigger:**
+  - a fixture `vendor_publication` on a non-tenant account refused for the baseline and the
+    actual, and accepted for the impact basis;
+  - on the tenant's own account, accepted for the baseline.
+- **Breaks, all caught, every file restored byte-identical:**
+  - **B1:** the erratum's steward check removed;
+  - **B2:** an UPDATE of an erratum;
+  - **B3:** a withdrawal with an 11-character reason;
+  - **B4:** a withdrawal with who but no when;
+  - **B5:** produce-run's `withdrawn_at` filter removed, so a withdrawn link is counted;
+  - **B6:** the vendor trigger's body removed, so a vendor baseline is accepted;
+  - **B7:** the frozen-outcome guard relaxed, so a new link on a retired engagement is
+    accepted;
+  - **B8:** the erratum taken out of the printed header, so page 2 loses it;
+  - **B9:** a typed recompute score sent in the erratum body, which must be refused (the
+    score is the server's).
+- **The regression:** all 37 scripts plus the new one.
+- **Prod-copy equivalence:** every GET identical except `/api/runs/:id`'s added `errata`
+  (empty until Brad's acts) and the link fields.
+- **Clean checks:** build, tsc and oxlint clean; drift none after 0040.
+
+### Gate B (planned pastes, a STOP after each)
+
+1. **Backup:** `pg_dump -Fc`, and the TOC count against the last dump.
+2. **Pull, migrate as `lvrf_migrate`, then `ownership.sql` and `hardening.sql` as postgres,**
+   then the checks:
+   - 141 triggers from `pg_trigger`;
+   - drift none (41 migrations);
+   - ownership clean;
+   - run hashes 25 of 25;
+   - the Scotts link still `baseline` and current (nothing changes until Brad's act).
+3. **Deploy:** `lvrf-deploy.sh`.
+
+### Gate C (planned)
+
+- **The standard checks:** 141 triggers; plain sentences for every CHECK; run hashes 25 of
+  25.
+- **After Brad's acts:**
+  - the Scotts baseline link withdrawn, with his name, the date and the reason;
+  - one current `impact_basis` link;
+  - errata on runs 1 and 2, each with the server's recompute;
+  - runs 1 and 2 byte-identical (`check_run_hashes`);
+  - the erratum on run 2's page and in its print;
+  - no refusals other than any deliberate one;
+  - no values in the journal.
+
+### Decisions for Brad
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **C1-D1** | The link table's key is (outcome, evidence), so a corrected link for the same evidence collides with its withdrawn predecessor. Widen the key to include `supports`, with "one current link per (outcome, evidence)" as a partial unique index, or write a duplicate evidence row for the corrected link | **Widen the key.** The evidence is the same piece of evidence; only what it supports was wrong. A duplicate row would put two copies of one source on the record |
+| **C1-D2** | The frozen-outcome rule is enforced only in the evidence route today. Move it into the database, with the correction as the one exception | **Yes.** "Nothing else is" should not rest on a route; the same reason the other governance rules are triggers |
+| **C1-D3** | Who computes the recompute stated in the erratum | **The server, at the erratum's recording,** from the sealed payload with the corrected link applied, by the same `computeConfidence`. It refuses when the sealed snapshot can't reconstruct the input exactly. A typed score is refused (B9). The sealed score is shown beside it, unchanged |
+| **C1-D4** | Run 1 sealed the same row | **An erratum on run 1 too,** with its own recompute. Same act, same rule |
