@@ -31,6 +31,7 @@
 #   B11 (C1-D3) a run sealed under another model version: the recompute refused
 #   B12 (C1 review) the route's one-erratum-per-correction check removed: the unique index refuses
 #   B13 (L39) the POV's correction note shown on vendor claims only: the corrected filing's line loses it
+#   B14 (L39) the printed erratum line showing the sealed score as the recompute: run 1's pages catch it
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -397,6 +398,26 @@ expect GET "/api/runs/$R1" "" 200 "GET run 1"
 [ "$(rj "b.errata.length + '|' + b.errata.find(x=>x.id==='$E1').superseded_by_id + '|' + b.errata.find(x=>x.id==='$E1B').supersedes_id")" = "2|$E1B|$E1" ] \
   && ok "  ...returns both errata: E1 superseded by the new one, which names E1" || bad "  ...$(rj "JSON.stringify(b.errata.map(x=>[x.id,x.supersedes_id,x.superseded_by_id]))")"
 
+step "11c. The score-changing case (Brad, L39): run 1's recompute differs from its sealed score"
+# Scotts' runs never exercised it: each recomputed to its own sealed score. Here run 1 recomputes to
+# WANT1 against SEALED1; on screen and on every printed page, every score but the erratum's is SEALED1.
+WANT="$WANT1" SEALED="$SEALED1" node scripts/lib/corrections_walk.mjs score "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_W" "$R1" "$EV_V" l39_run1.pdf "$WRONG" > "$W/walk.score.log" 2>&1 || bad "the score walk exited non-zero"
+PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.score.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.score.log" || true))); grep -E '^  (PASS|FAIL)' "$W/walk.score.log" || true
+if [ -f "$SHOTS/l39_run1.pdf" ]; then
+  N1="$(pdfinfo "$SHOTS/l39_run1.pdf" | awk '/^Pages:/{print $2}')"; MISS=""; ODD=""
+  for p in $(seq 1 "$N1"); do
+    flat="$(pdftotext -f "$p" -l "$p" "$SHOTS/l39_run1.pdf" - 2>/dev/null | tr -d '[:space:]')"
+    printf '%s' "$flat" | grep -qF "ERRATUM:recomputed$WANT1/100(sealed$SEALED1/100).Fulltextonpage1." || MISS="$MISS p$p"
+    [ "$p" != 1 ] || printf '%s' "$flat" | grep -qF "withthecorrection:$WANT1/100·Low(sealed:$SEALED1/100·Low)" || MISS="$MISS p1:full"
+    # Every other "n/100" on the page, with the erratum's own figures taken out: the sealed score only.
+    rest="$(printf '%s' "$flat" | sed -e "s#recomputed$WANT1/100(sealed$SEALED1/100)##g" -e "s#withthecorrection:$WANT1/100·Low(sealed:$SEALED1/100·Low)##g")"
+    for x in $(printf '%s' "$rest" | grep -oE '[0-9]+(\.[0-9]+)?/100' | cut -d/ -f1); do awk -v a="$x" -v b="$SEALED1" 'BEGIN{exit !(a+0 == b+0)}' || ODD="$ODD p$p:$x"; done
+  done
+  [ -z "$MISS" ] && ok "run 1 printed ($N1 pages): every page's erratum line reads \"recomputed $WANT1 / 100 (sealed $SEALED1 / 100)\"; page 1 \"with the correction: $WANT1 / 100 · Low (sealed: $SEALED1 / 100 · Low)\"" || bad "run 1 printed: missing$MISS"
+  TALLY="$(for p in $(seq 1 "$N1"); do pdftotext -f "$p" -l "$p" "$SHOTS/l39_run1.pdf" - 2>/dev/null | tr -d '[:space:]' | sed -e "s#recomputed$WANT1/100(sealed$SEALED1/100)##g" -e "s#withthecorrection:$WANT1/100·Low(sealed:$SEALED1/100·Low)##g" | grep -oE '[0-9]+(\.[0-9]+)?/100' || true; done | sort | uniq -c | awk '{printf "%s%s ×%s", (NR > 1 ? ", " : ""), $2, $1}')"
+  [ -z "$ODD" ] && [ -n "$TALLY" ] && ok "  ...and every other score on every printed page is the sealed $SEALED1 / 100 ($TALLY)" || bad "  ...other scores in print:$ODD (${TALLY:-none found})"
+else bad "run 1: no PDF printed"; fi
+
 step "12. C1-D2: the other legitimate acts on a retired engagement still succeed"
 expect POST "/api/institutions/$INST/value-outcomes" "$(OUTB two "$OWNER")" 201 "a second fixture engagement and outcome"
 O_F3="$(rj b.value_outcome_id)"; ENG_F3="$(rj b.engagement_id)"
@@ -491,6 +512,13 @@ sleep 2; node scripts/lib/corrections_walk.mjs povnote "$VITE_PORT" "$CDP_PORT" 
 grep -q "^  PASS  the POV opens" "$W/walk.b13.log" && grep -q "^  FAIL  the corrected link's own line" "$W/walk.b13.log" \
   && ok "B13: the note on vendor claims only → caught: the corrected filing's line has no correction" || bad "B13: not caught: $(cat "$W/walk.b13.log" | head -3)"
 restore "$POVP"
+# B14 (L39) — the printed erratum line with the sealed score where the recompute belongs.
+edit "$BENCH" ': recomputed {Number(errata[0].recomputed_score)} / 100' ': recomputed {Number(errata[0].sealed_score)} / 100'
+sleep 2; walk print "$TOKEN" "$R1" l39_run1_b14.pdf
+B14M=""; for p in $(seq 1 "$(pdfinfo "$SHOTS/l39_run1_b14.pdf" 2>/dev/null | awk '/^Pages:/{print $2}')"); do
+  pdftotext -f "$p" -l "$p" "$SHOTS/l39_run1_b14.pdf" - 2>/dev/null | tr -d '[:space:]' | grep -qF "ERRATUM:recomputed$WANT1/100(sealed$SEALED1/100)." || B14M="$B14M p$p"; done
+[ -n "$B14M" ] && [ -f "$SHOTS/l39_run1_b14.pdf" ] && ok "B14: the sealed score printed as the recompute → caught on pages:$B14M" || bad "B14: not caught"
+restore "$BENCH"
 # B11 (C1-D3) — a run sealed under another model: the recompute refuses, from the payload and from the source.
 cat > "$W/rc.ts" <<TS
 import { recomputeWithCorrection } from '$(pwd)/server/lib/recomputeRun.ts';

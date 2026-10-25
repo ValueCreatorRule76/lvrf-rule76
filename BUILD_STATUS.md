@@ -12508,3 +12508,26 @@ account ("Correction walk account (fixture)"):
   pre-existing warning). The bundle is `index-CXc2-nRr.js` / `index-C9WVm_9W.css` (the CSS is
   unchanged).
 - **The regression now runs on the fresh copy.** No script needs the older one.
+
+### L39, Brad's confirmation: the score-changing case — 25 October 2026 (UTC)
+
+**Brad's ask:** confirm that the fixture's run 1 erratum shows "recomputed 10 / 100 (sealed 35 /
+100)", and that the sealed 35 is unchanged everywhere else on the page and in print. On prod, each
+Scotts run recomputed to exactly its own sealed score, so this case was never exercised there.
+
+**`verify_corrections` step 11c, after run 1's erratum is superseded:**
+- **On screen, at 1280 and 390, with every fold opened:**
+  - the erratum reads "with the correction: 10 / 100 · … (sealed: 35 / 100 · …)";
+  - every other "n / 100" on the page is 35: the confidence box, the score fold and the
+    findings, 3 in all.
+- **In print, 4 pages:**
+  - every page's header carries "ERRATUM: recomputed 10 / 100 (sealed 35 / 100). Full text on
+    page 1.";
+  - page 1 carries "with the correction: 10 / 100 · Low (sealed: 35 / 100 · Low)";
+  - every other score on every page is the sealed one: 35/100 twice, and 35.0/100 once, in the
+    findings as recorded at sealing.
+- **B14, the printed erratum line showing the sealed score as the recompute:** caught on pages
+  1–4. `Workbench.tsx` is restored byte-identical.
+- **`verify_corrections`: 210 passed, 0 failed.**
+- **The pages:** `~/lvrf-backups/l39-screens/`: `l39_run1.pdf`, its page PNGs, and
+  `l39_run1_score_1280.png` and `_390.png`.

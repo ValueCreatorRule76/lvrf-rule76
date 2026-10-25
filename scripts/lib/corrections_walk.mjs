@@ -17,6 +17,7 @@
 //   nonsteward both controls disabled, each with its reason
 //   print      RUN's page printed to SHOTS/PDF_NAME only (break B8)
 //   povnote    the POV's correction note on the corrected link only (break B13)
+//   score      RUN's recompute beside its sealed score, every other score the sealed one (env WANT, SEALED); printed
 //   supersede  the steward supersedes RUN's erratum through the form (Brad's C1 review)
 import { writeFileSync } from 'node:fs';
 
@@ -184,6 +185,29 @@ if (MODE === 'supersede') {
   check(await ev(`(${shown}).querySelectorAll('[data-testid=banner-erratum]').length`) === 1 && b.includes("because: Verification: the first erratum's wording was a draft.") && b.includes('The sealed record below is unchanged.'),
     'one erratum shown — the current one — naming the one it supersedes, who recorded it and why', b.slice(0, 200));
   await shot('c1_run1_superseded_1280', 1280);
+}
+
+// L39 (Brad): the score-changing case. RUN's erratum states the recompute (WANT) beside the sealed
+// score (SEALED); every other score on the page is the sealed one. Printed to SHOTS/PDF_NAME.
+if (MODE === 'score') {
+  const { WANT, SEALED } = process.env;
+  for (const width of [1280, 390]) {
+    check(await open(`/runs/${RUN}`, runReady, width), `run 1 @${width} opens`);
+    // Every fold opened, as a reader would, so the scores inside them are read too.
+    await ev(`document.querySelectorAll('[data-testid$=-toggle][aria-expanded=false]').forEach(b=>b.click()); document.querySelectorAll('details').forEach(d=>d.open=true)`); await sleep(600);
+    const shown = `[...document.querySelectorAll('[data-testid=banners]')].find(x=>x.offsetParent!==null)`;
+    const b = await ev(`(${shown}).querySelector('[data-testid=banner-erratum]')?.textContent ?? ''`);
+    check(b.includes(`with the correction: ${WANT} / 100`) && b.includes(`(sealed: ${SEALED} / 100`), `@${width}: the erratum reads "with the correction: ${WANT} / 100 · … (sealed: ${SEALED} / 100 · …)"`, b.slice(-140));
+    // Every "n / 100" on the page outside the errata, as a reader sees it (hidden print-only parts excluded).
+    const others = await ev(`(()=>{let t=document.body.innerText;
+      for(const el of document.querySelectorAll('[data-testid=banner-erratum],[data-testid=banner-erratum-line],[data-testid=record-erratum]')){const x=el.innerText;if(x)t=t.split(x).join(' ');}
+      return [...t.matchAll(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*100\\b/g)].map(m=>m[1])})()`);
+    check(Array.isArray(others) && others.length >= 2 && others.every((x) => Number(x) === Number(SEALED)), `@${width}: every other score on the page is the sealed ${SEALED} / 100 (${others.length} of them)`, JSON.stringify(others));
+    await shot(`l39_run1_score_${width}`, width);
+  }
+  await open(`/runs/${RUN}`, runReady);
+  const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+  writeFileSync(`${SHOTS}/${PDF_NAME}`, Buffer.from(pdf.result.data, 'base64'));
 }
 
 if (MODE === 'print') {
