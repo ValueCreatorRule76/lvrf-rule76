@@ -60,9 +60,10 @@ function What({ s }: { s: Step }) {
     case 'link': case 'correct': return (
       <span className={d.current ? '' : 'line-through'} data-testid={d.current ? 'lineage-link-current' : 'lineage-link-withdrawn'}>
         supports {str(d.supports).replace('_', ' ')}{d.corrects_supports ? `, correcting ${str(d.corrects_supports).replace('_', ' ')}: ${str(d.reason)}` : ''}
+        {note ? <span className="block text-ink-45 no-underline">{note}</span> : null}
       </span>
     );
-    case 'withdrawn': return <span data-testid="lineage-withdrawal">{d.supports ? `the link supporting ${str(d.supports).replace('_', ' ')} withdrawn: ` : 'withdrawn: '}{str(d.reason)}</span>;
+    case 'withdrawn': return <span data-testid="lineage-withdrawal">{d.supports ? `the link supporting ${str(d.supports).replace('_', ' ')} withdrawn: ` : 'withdrawn: '}{str(d.reason)}{note ? <span className="block text-ink-45">{note}</span> : null}</span>;
     case 'seal': return (
       <>
         <Link to={`/runs/${s.row_id}`} className="underline">Run {str(d.run_number)}</Link>{d.locked ? ', locked' : ''} · <span className="font-mono">{str(d.payload_hash).slice(0, 12)}…</span>
@@ -77,7 +78,7 @@ function What({ s }: { s: Step }) {
         {d.matched ? <span className="block text-ink-45">{str(d.matched)}</span> : null}
       </>
     );
-    case 'erratum': return <span className={d.superseded ? 'line-through' : ''}>run {str(d.run_number)}: sealed {Number(d.sealed)} / 100, recomputed {Number(d.recomputed)} / 100{d.superseded ? ' (superseded)' : ''}</span>;
+    case 'erratum': return <><span className={d.superseded ? 'line-through' : ''}>run {str(d.run_number)}: sealed {Number(d.sealed)} / 100, recomputed {Number(d.recomputed)} / 100{d.superseded ? ' (superseded)' : ''}</span>{note ? <span className="block text-ink-45">{note}</span> : null}</>;
     default: return <>{str(d.reason)}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
   }
 }

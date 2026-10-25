@@ -2457,8 +2457,7 @@ BEGIN
   ELSIF rr.review_state::text <> 'pending' THEN
     RETURN QUERY SELECT (CASE WHEN rr.review_state::text = 'accepted' THEN 'accept' ELSE 'reject' END), 'research_results'::text, rr.id,
       (SELECT full_name FROM persons WHERE id = rr.reviewed_by_person_id), rr.reviewed_at, 'record'::text,
-      jsonb_build_object('reason', rr.review_note, 'note',
-        CASE WHEN rr.reviewed_at < '2026-10-25 00:00:00+00' THEN 'recorded before governance acts (25 Oct 2026)' ELSE 'no act recorded' END);
+      jsonb_build_object('reason', rr.review_note, 'note', 'recorded before governance acts (25 Oct 2026)');
   ELSE
     RETURN QUERY SELECT 'pending'::text, 'research_results'::text, rr.id, NULL::text, NULL::timestamptz, 'record'::text,
       jsonb_build_object('note', 'not yet reviewed');
@@ -2496,8 +2495,7 @@ BEGIN
       coalesce(a.actor, (SELECT full_name FROM persons WHERE id = e.citation_resolved_by_person_id)), coalesce(a.at, e.citation_resolved_at),
       CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
       CASE WHEN a.actor IS NOT NULL THEN jsonb_build_object('source_verified', e.source_verified, 'act', a.act)
-           WHEN e.citation_resolved_at < '2026-10-25 00:00:00+00' THEN jsonb_build_object('source_verified', e.source_verified, 'note', 'recorded before governance acts (25 Oct 2026)')
-           ELSE jsonb_build_object('source_verified', e.source_verified, 'note', 'no act recorded') END;
+           ELSE jsonb_build_object('source_verified', e.source_verified, 'note', 'recorded before governance acts (25 Oct 2026)') END;
   END IF;
   IF e.attested_by_person_id IS NOT NULL THEN
     RETURN QUERY SELECT 'attested'::text, 'evidence'::text, e.id, (SELECT full_name FROM persons WHERE id = e.attested_by_person_id), e.attested_at,
@@ -2531,12 +2529,14 @@ BEGIN
       coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.actor END, l.linked_by), coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.at END, l.linked_at),
       CASE WHEN l.corrects_supports IS NOT NULL AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
       jsonb_build_object('outcome', l.value_outcome_id, 'evidence', l.evidence_id, 'supports', l.supports,
-                         'corrects_supports', l.corrects_supports, 'reason', l.correction_reason, 'current', l.withdrawn_at IS NULL);
+                         'corrects_supports', l.corrects_supports, 'reason', l.correction_reason, 'current', l.withdrawn_at IS NULL)
+        || CASE WHEN l.corrects_supports IS NOT NULL AND a.actor IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END;
     IF l.withdrawn_at IS NOT NULL THEN
       RETURN QUERY SELECT 'withdrawn'::text, 'value_outcome_evidence'::text, l.value_outcome_id,
         (SELECT full_name FROM persons WHERE id = l.withdrawn_by_person_id), l.withdrawn_at,
         CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
-        jsonb_build_object('supports', l.supports, 'reason', l.withdrawal_reason);
+        jsonb_build_object('supports', l.supports, 'reason', l.withdrawal_reason)
+          || CASE WHEN a.actor IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END;
     END IF;
   END LOOP;
 END $$;
@@ -2685,10 +2685,13 @@ BEGIN
        WHERE e.id = p_id AND item->>'kind' = e.kind::text AND item->>'summary' = e.summary AND item->>'provenance' = e.provenance), '[]'::jsonb);
     st := st || coalesce((
       SELECT jsonb_agg(jsonb_build_object('kind', 'erratum', 'row_table', 'run_errata', 'row_id', x2.id, 'actor', p.full_name, 'at', x2.recorded_at,
-               'source', 'act', 'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
-                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x2.id)))
+               'source', CASE WHEN ea.id IS NOT NULL THEN 'act' ELSE 'record' END,
+               'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
+                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x2.id))
+                 || CASE WHEN ea.id IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END)
                ORDER BY r.run_number, x2.recorded_at)
         FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
+        LEFT JOIN governance_acts ea ON ea.subject_table = 'run_errata' AND ea.subject_id = x2.id AND ea.act = 'record_erratum'
        WHERE x2.evidence_id = p_id), '[]'::jsonb);
 
   ELSE -- value_outcomes, one figure
@@ -2721,10 +2724,13 @@ BEGIN
                             WITH ORDINALITY AS t(kind, row_table, row_id, actor, at, source, detail, ord)), '[]'::jsonb);
     st := st || coalesce((
       SELECT jsonb_agg(jsonb_build_object('kind', 'erratum', 'row_table', 'run_errata', 'row_id', x2.id, 'actor', p.full_name, 'at', x2.recorded_at,
-               'source', 'act', 'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
-                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s2 WHERE s2.supersedes_id = x2.id)))
+               'source', CASE WHEN ea.id IS NOT NULL THEN 'act' ELSE 'record' END,
+               'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
+                 'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s2 WHERE s2.supersedes_id = x2.id))
+                 || CASE WHEN ea.id IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END)
                ORDER BY r.run_number, x2.recorded_at)
         FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
+        LEFT JOIN governance_acts ea ON ea.subject_table = 'run_errata' AND ea.subject_id = x2.id AND ea.act = 'record_erratum'
        WHERE x2.value_outcome_id = p_id), '[]'::jsonb);
   END IF;
 

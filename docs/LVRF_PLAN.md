@@ -122,6 +122,7 @@ on institution routes (P3).
 | L36 | **A vendor publication about another company, linked as `impact_basis`, must earn no confidence credit in any factor.** C1 restricts it to the impact basis (trigger `value_outcome_evidence_vendor_impact_only`), but the model still grades it there: in `computeConfidence` factor 4, when a currency figure is claimed, a source-verified `vendor_publication` linked as `impact_basis` with a stated basis earns half the factor (5 of 10, "self-declared as inference"); with no currency figure the factor is full regardless of evidence, so it earns nothing today. Factors 2 and 3 can no longer see it (it supports neither the baseline nor the actual) | C1 review, 25 Oct 2026 (Brad: "with the correction applied" accepted; record this) | **A CONFIDENCE_MODEL ruling, for later; no change in C1.** When ruled: `evidenceCredit` (or factor 4) gives 0 to a `vendor_publication` about a non-tenant account, with its own note; it is a model change, so MODEL_VERSION is bumped and the fingerprint changes, and runs sealed under 1.0.0 keep their scores. C1's erratum recompute runs under the sealed model, so errata recorded before the change are unaffected |
 | L37 | **A stored document of record does not name errata recorded after it.** Run 2's record document v1 (rendered 25 Oct 2026 11:20) holds the sealed payload and its hash; its erratum was recorded at 11:28, and nothing in the document row points to it. The printed run page carries the erratum on every page; the stored document does not | C1 Gate C, 25 Oct 2026 (Brad: record it, direction ruled) | **Direction ruled by Brad (25 Oct 2026):** a stored document of record is **never changed**. Wherever it is shown or retrieved, the run's **current errata appear beside it**, labelled "Erratum recorded after this document was rendered". **Any render after an erratum includes it.** **Build later, alongside `record_documents`' ratification** (the Repository Constitution) |
 | L38 | **A value that drops a qualifier the quote has passes the figure check.** The quote "We had approximately 4,200 employees" and the value 4,200 read **pass**: rules v1 (`server/lib/figureCheck.ts`) flag a qualifier that is in the value but not the quote, never one that is in the quote but not the value. Dropping any of v1's eight qualifiers (approximately, up to, at least, estimated, adjusted, excluding, including, over) turns a qualified figure into an exact-looking one | P2 Gate A screenshots, 25 Oct 2026 (Brad: record it) | **For figure-check rules v2.** Flag a qualifier in the quote that the value drops, as a wording flag naming it ("the quote says approximately; the value does not"), flagged, not blocked. A rules-version change: existing `figure_checks` rows keep the rules version they ran under, and a re-check is a new row |
+| L39 | **`verify_corrections` (and any script that breaks on C1-applied data) depends on prod's state.** It reads Scotts' vendor link as `baseline`, then corrects it and records the errata itself, so it can run only on a prod copy taken before Brad's C1 acts (25 Oct 2026). The P2 Gate A regression therefore ran on the older copy (`lvrf-pre-ux1s2-…`, 19 Oct), restored for it, with the fresh one (`lvrf-pre-p2-…`) kept beside it | P2 review, 25 Oct 2026 (Brad: record it; fix right after P2) | **Right after P2:** each such script builds its own fixture links and errata on its clone and asserts on those, never on what prod happens to hold. Then the full regression runs on the fresh copy, and the older dump is removed once no script needs it (the retention rule: the latest prod dump plus the six pre-migration backups) |
 
 ---
 
@@ -2957,3 +2958,112 @@ D1, D2 and D8 as recommended. D7 with the label "matched by kind, summary and so
 | **P2-D6** | How "import required after the cutover" is enforced | **A CHECK on `parsed_at` against a literal cutover** (the generation day, 00:00 UTC), as `research_results_untracked_predates_prompts` already does. Gate B checks that no result was parsed between the literal and the migration; **no research between Gate A and the deploy.** (A literal that has passed fails the migration safely, in its own transaction) |
 | **P2-D7** | Lineage scope and the sealed-evidence match | **Facts, entities, pack measures, evidence and an outcome's baseline or actual.** For runs sealed before evidence ids were sealed, match outcome evidence by kind, summary and provenance, labelled as matched. Sealing the evidence id in new runs is a payload change (payloadVersion 3) and is **not** in P2; it is recorded as a loose end if wanted |
 | **P2-D8** | CLAUDE.md's research boundary names `research_prompts` and `research_results` only | **Amend it in the P2 commit:** "Only `industryResearch.ts` and `accountResearch.ts` write `research_prompts`, `research_imports` and `research_results`." This is a constitution-file edit, so it needs Brad's approval |
+
+---
+
+## 11. C2: what a commitment's and a verification's attestation supports (ruled by Brad, 25 Oct 2026; **planned; not to be built until P2's Gate C is clean**)
+
+**Value spine stages served:** `commit` and `verify` (what each attestation is evidence of), and
+`return` (the errata on the runs that sealed it).
+
+### The finding (P2 review, read-only, 25 Oct 2026)
+
+- **The code:**
+  - `server/routes/outcomeWalk.ts:233`, at commit, links the commitment's attestation as
+    `impact_basis`;
+  - `outcomeWalk.ts:590`, at verify, links its attestation as `attestation` only if that value
+    already exists in the table. `value_outcome_evidence_supports_known` (0030) allows only
+    baseline, actual and impact_basis, so it is always `impact_basis`.
+- **The real record:**
+  - **Curia** has 1 commitment attestation linked `impact_basis`, current;
+  - Scotts and Skillsoft have none;
+  - **9 sealed runs (Curia 13–21) seal it.**
+- **Credit:** none earned. Factor 4 was full in all 9 because no currency figure was claimed. With
+  a currency figure and a stated basis, such an item would be graded, and could earn factor-4
+  credit for an act that is not evidence of the figure's derivation.
+
+### Brad's ruling (25 Oct 2026)
+
+1. **`supports` gains `target_commitment` and `verification`.** Neither feeds an evidence factor.
+2. **Commit and verify link their attestations with them:** commit as `target_commitment`,
+   verify as `verification`.
+3. **Curia's one link is corrected by C1's mechanism:** the `impact_basis` link withdrawn with
+   its reason, and a `target_commitment` link recorded as its correction.
+4. **Errata on Curia runs 13–21, with a dry-run count first.**
+
+### What it builds (planned)
+
+**Migration 0042.** It changes three CHECKs and orphans nothing: no row changes. Every
+existing link keeps its `supports` until a steward corrects it.
+- `value_outcome_evidence_supports_known`, the correction CHECK (`corrects_supports`'s list) and
+  `run_errata_supports_known` each gain `target_commitment` and `verification`.
+- Plain sentences are updated with them.
+
+**The model.**
+- `computeConfidence` reads only `baseline` (factor 2), `actual` (factor 3) and `impact_basis`
+  (factor 4), so the new values reach no factor **without any change to its logic**.
+- `ConfidenceEvidenceInput['supports']` widens to name them.
+- **C2-D1** decides whether that type change moves `MODEL_FINGERPRINT`, and so the version.
+
+**Routes:**
+- **commit** links `target_commitment`; **verify** links `verification`. The
+  `existingSupportsValues` fallback is removed.
+- **`correct-support`** accepts the two new values, so the steward can correct Curia's link
+  through the route, with its act (P2).
+- **The erratum recompute** takes them as "supports nothing a factor reads".
+
+**The dry run, before any erratum:** a read-only report (`scripts/report_c2_errata.ts`, as
+lvrf_app, run by Brad on the box or by me over ssh) lists each run that sealed a commitment or
+verification attestation as `impact_basis`. For each run it gives:
+- the run, its sealed score;
+- the recompute with the item moved to `target_commitment` or `verification`, under the
+  model each was sealed with.
+
+The count is expected to be **9 (Curia 13–21), each recomputing to its sealed score** (factor
+4 was full with no currency claimed). The report writes nothing.
+
+**Brad's acts on prod after the deploy** (through the UI):
+1. Correct Curia's link.
+2. Record the errata on runs 13–21, ticking each against the dry run's list. Each erratum
+   writes its `record_erratum` act.
+
+**The display:** the walk, the POV and the run page show "supports the commitment" and
+"supports the verification".
+
+### Gate A (planned)
+
+**`verify_c2.sh`** builds its own fixture outcomes, links and errata (L39), and covers:
+- commit and verify link the new values;
+- neither earns credit in any factor, with or without a claimed currency figure. A fixture
+  that claims currency shows factor 4 unchanged by them;
+- the correction of an `impact_basis` attestation link to `target_commitment` through the
+  route, with its act;
+- the dry run's count and recomputes, against an independent computation in the script;
+- an erratum on a fixture run.
+
+**Breaks:**
+- the CHECK without the new values (the route refuses them);
+- commit linking `impact_basis` again;
+- factor 4 grading `target_commitment`;
+- the dry run writing anything;
+- an erratum with a typed score.
+
+**Also:** the regression on the fresh prod copy, once L39 is fixed, and prod-copy equivalence.
+
+### Gate B and Gate C (planned)
+
+- **Gate B:** the backup; pull, migrate, ownership, hardening and the checks; deploy.
+- **The dry run on prod**, read-only, before Brad's acts: the count of 9.
+- **Gate C:**
+  - Curia's link withdrawn and corrected;
+  - 9 errata, each with its act;
+  - runs 13–21 byte-identical;
+  - no refusals but deliberate ones.
+
+### Decisions for Brad
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **C2-D1** | Widening `supports`' type in the model: does it change `MODEL_FINGERPRINT`, and so need a new `MODEL_VERSION`? | **Measure it at build.** If the fingerprint is unchanged (no constant or logic changes), keep 1.0.0: every sealed run still recomputes under its own model. If it moves, bump to 1.0.1 and record why. C1's recompute then refuses old runs unless their model is kept beside the new one, so name that before building |
+| **C2-D2** | The 9 errata: through the UI one by one, or a steward script with `--apply`? | **The UI, one by one, against the dry run's list.** Each is a steward act with its own act row, and scripts never write to prod. Nine is a sitting, not a batch |
+| **C2-D3** | Verify's attestation also stands behind the actual. Link it `verification` only, or `verification` and `actual`? | **`verification` only, as ruled.** The measured actual comes from the customer's system of record (CLAUDE.md, the governing AI principle); an attestation about it is not that evidence |

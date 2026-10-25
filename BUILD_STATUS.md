@@ -12223,3 +12223,36 @@ with its metric's unit). The outcome step now carries the unit.
 - **The regression:** all 39 scripts pass (tenant scope 212); the build, tsc and oxlint are
   clean. The bundle is `index-DTamUagY.js` / `index-DrNmLaoH.css`.
 - **The screens:** `~/lvrf-backups/p2-screens/` adds `p2_lineage_corrected_baseline_1280.png`.
+
+**P2 review, second round (Brad, 25 Oct 2026):** option (a), with the label fix, the fresh-copy
+check and L39.
+- **The label fix (`hardening.sql`, lineage):**
+  - an erratum step reads `act` only when its `record_erratum` act exists;
+  - a withdrawal, correction, review or citation with no act reads `record`, "recorded before
+    governance acts (25 Oct 2026)", keyed on whether an act exists, not on the cutover date.
+    C1's acts (25 Oct 11:26–11:32) fall after the cutover but before P2. Under P2 every
+    governed act has its row, by the presence trigger.
+  - The page shows the note on erratum, withdrawal and correction rows.
+- **Proven on the older prod copy** (`lvrf-pre-ux1s2-…`, restored for the regression): all 39
+  scripts pass, `verify_acts_lineage` 189/0, tenant scope 212. The bundle is `index-C-Tu7UkD.js`
+  / `index-DrNmLaoH.css`.
+- **The fresh copy with Brad's C1 acts:**
+  - **Paste 1's backup,** `lvrf-pre-p2-20261025T162141Z.dump`: 949,491 bytes, 600, 677 TOC
+    entries (as predicted), no `governance_acts` entry, SHA-256 `74291cde…`, matching on the box
+    and the Mac. It was copied with the LVRF key and restored as `lvrf_prodcopy`, sign-in data
+    neutralised.
+  - **Scotts' baseline lineage there** (14 steps):
+    - the vendor link struck through, withdrawn 25 Oct 11:26 by Brad Piver with his reason;
+    - the impact-basis link as its correction;
+    - runs 1 and 2's seal steps each note their current erratum (run 1's supersedes an earlier
+      one);
+    - **steps 12–14, the errata, read "from the record", recorded before governance acts,** as
+      do the withdrawal and the correction.
+  - **The screenshot:** `~/lvrf-backups/p2-screens/p2_lineage_scotts_baseline_with_c1_acts_1280.png`.
+  - **Prod-copy equivalence on it,** against `feab0ad`: 76 of 76 identical, nothing allowed.
+  - **`verify_acts_lineage` also passes on it:** 189/0.
+  - **Both dumps are kept until L39 is fixed;** `lvrf_prodcopy` is the fresh copy again.
+- **L39 recorded:** `verify_corrections`, and any script that breaks on C1-applied data, must
+  build its own fixture links and errata. To be fixed right after P2; the older dump is dropped
+  once no script needs it.
+- **C2 written** as LVRF_PLAN §11, as ruled. It is not to be built until P2's Gate C is clean.
