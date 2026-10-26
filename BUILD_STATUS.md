@@ -12954,10 +12954,14 @@ or text naming the tenant, Skillsoft):
 - **Runs:**
   - **by phrase:** Curia 8 ("produced to exercise the first runtime heartbeat"), 9, 10 and 15
     (heartbeat checks), and 21 ("D1 live");
-  - **by their notes, which the report prints in full for every run:** Curia 2, 3 and 6–21 each
-    record a system change rather than a change in the case. For example: run 7 "Produced so the
-    evidence form has an outcome to post to"; run 11 "Coverage should read 35%"; run 14
-    "Synthetic-ness now travels as a boolean"; runs 17–20, the model version, the gap
-    discriminant, findings and D0. Only runs 1, 4 and 5 describe a change in the case itself.
+  - **by their notes, which the report prints in full for every run:**
+    - **Runs that record a change in the case:** Curia 1 (the hypothesis), 3 (the metric
+      definition confirmed by the analyst of record), 4 (the baseline sourced from Curia HRIS), 5
+      (that extract attached), and 13 (the outcome committed, target 150).
+    - **Runs that record a system change rather than a change in the case:** Curia 2 (migration
+      0013), 6 (the accept-path filing), and 7–12 and 14–21. For example: run 7 "Produced so the
+      evidence form has an outcome to post to"; run 11 "Coverage should read 35%"; run 14
+      "Synthetic-ness now travels as a boolean"; runs 17–20, the model version, the gap
+      discriminant, findings and D0.
   - Scotts 1–2 and Skillsoft 1 read as case runs.
 - **For Brad's ruling, with C3.**
