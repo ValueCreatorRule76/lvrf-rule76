@@ -90,6 +90,8 @@ export function outsideInWalkRouter(pool: Pool): Router {
                     'capability_name', c.name,
                     'metric', json_build_object('id', bm.id, 'name', bm.name, 'unit', bm.unit, 'direction', bm.direction,
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
+                    -- C2c: how many locked runs sealed this outcome, for the correction's confirmation.
+                    'sealed_run_count', (SELECT count(*) FROM value_runs r WHERE r.locked_at IS NOT NULL AND r.deleted_at IS NULL AND r.payload->>'valueOutcomeId' = vo.id::text),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
                                                                             'corrects_supports', voe.corrects_supports, 'correction_reason', voe.correction_reason,
                                                                             'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),

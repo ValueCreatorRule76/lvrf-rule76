@@ -127,6 +127,10 @@ const CASES = [
   { route: 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support', kind: 'id',
     path: `/api/value-outcomes/${E.OUTCOME_A}/evidence/${E.LINKEV_A}/correct-support`, body: {}, controlBody: { x: 1 },
     notFound: [404, `no current link of evidence ${E.LINKEV_A} to value outcome ${E.OUTCOME_A}`], target: ['value_outcomes', E.OUTCOME_A] },
+  // C2c: the withdrawal, the same shape as the correction.
+  { route: 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw', kind: 'id',
+    path: `/api/value-outcomes/${E.OUTCOME_A}/evidence/${E.LINKEV_A}/withdraw`, body: {}, controlBody: { x: 1 },
+    notFound: [404, `no current link of evidence ${E.LINKEV_A} to value outcome ${E.OUTCOME_A}`], target: ['value_outcomes', E.OUTCOME_A] },
   { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
     notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
   // P2: where a figure came from (read-only).

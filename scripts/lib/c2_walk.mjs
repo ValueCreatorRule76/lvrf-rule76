@@ -110,6 +110,8 @@ if (MODE === 'runcorrect') {
   await setField(form, 'What it supports', 'target_commitment');
   await setField(form, 'Why', "Verification: the commitment's attestation supports the commitment, not the impact basis (C2b).");
   check(await click(form, 'Withdraw and correct'), 'the steward submits "Withdraw and correct"');
+  check(await waitFor(`!!document.querySelector('[data-testid=correct-on-run-form] [data-testid=form-confirm]')`, 5000), '  ...and is shown the confirmation before anything is sent');
+  await ev(`document.querySelector('[data-testid=correct-on-run-form] [data-testid=form-confirm-yes]').click()`);
   check(await waitFor(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].some(p=>p.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`), 'the page reloads with "Corrected on <date> by <name>"');
   const done = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].map(p=>p.textContent).join(' | ')`);
   check(/^Corrected on \d{1,2} [A-Z][a-z]{2} \d{4} by .+: “.+” now supports the commitment, not impact basis\. The sealed run is unchanged: an erratum records it\.$/.test(done), '  ...reading the date, who, what it supports now and what it did', done);
@@ -145,8 +147,8 @@ if (MODE === 'noreoffer') {
 
 if (MODE === 'nonsteward') {
   check(await open(`/runs/${RUN}`, runReady), 'X: the run page opens');
-  check(await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')?.disabled`), 'X: "Correct what a link supports…" is disabled');
-  check((await ev(`document.querySelector('[data-testid=correct-on-run-reason]')?.textContent ?? ''`)).startsWith("Correcting what a link supports is the steward's act"), 'X: …with its reason, naming the steward');
+  check(await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')?.disabled && !!document.querySelector('[data-testid=withdraw-on-run-open]')?.disabled`), 'X: "Correct what a link supports…" and "Withdraw a link…" are disabled');
+  check((await ev(`document.querySelector('[data-testid=correct-on-run-reason]')?.textContent ?? ''`)).startsWith("Correcting or withdrawing a link is the steward's act"), 'X: …with its reason, naming the steward');
 }
 
 if (MODE === 'erratum') {

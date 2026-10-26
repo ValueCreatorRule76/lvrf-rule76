@@ -47,6 +47,8 @@ export interface WalkState {
       }[];
       /** C1: links withdrawn by a correction, kept and shown struck through. */
       withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
+      /** C2c: how many locked runs sealed this outcome. */
+      sealed_run_count: number;
     }[];
     runs: {
       id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;

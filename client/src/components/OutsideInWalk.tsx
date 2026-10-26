@@ -7,7 +7,7 @@ import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
 import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
-import { supportsChoices, supportsShort } from '../lib/labels';
+import { label, supportsChoices, supportsShort, SUPPORTS } from '../lib/labels';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
 /**
@@ -96,7 +96,7 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
  * allowed on a retired engagement's frozen outcome. A sealed run is unchanged
  * — an erratum on the run page records what it sealed wrongly.
  */
-function CorrectSupport({ e, outcomeId, onDone }: { e: WalkEvidence; outcomeId: string; onDone: () => void }) {
+function CorrectSupport({ e, outcomeId, metricName, sealedRuns, onDone }: { e: WalkEvidence; outcomeId: string; metricName: string; sealedRuns: number; onDone: () => void }) {
   const { actor } = useActor();
   const [open, setOpen] = useState(false);
   const [supports, setSupports] = useState('');
@@ -129,6 +129,8 @@ function CorrectSupport({ e, outcomeId, onDone }: { e: WalkEvidence; outcomeId: 
             <textarea rows={2} className={INPUT_CLASS} value={reason} onChange={(ev) => setReason(ev.target.value)} />
             <p className={HELP_CLASS}>At least 12 characters. Kept with the withdrawn link and the new one.</p></label>
         </div>}
+        // C2c (Brad, 26 Oct 2026): the link, the change, the outcome and how many runs share it, before submitting.
+        confirm={<span data-testid="confirm-text">Correct “{e.summary.slice(0, 80)}” on {metricName}: from {label(SUPPORTS, e.supports)} to {label(SUPPORTS, supports)}. {sealedRuns} sealed run{sealedRuns === 1 ? '' : 's'} share{sealedRuns === 1 ? 's' : ''} this outcome; none of them changes: record an erratum on each that sealed it.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ supports, reason: reason.trim() })}
         submitLabel="Withdraw and correct" onSuccess={() => { setOpen(false); setSupports(''); setReason(''); onDone(); }} renderSuccess={() => <>Corrected.</>} />
@@ -403,7 +405,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} onDone={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
           )}
           {outcome && outcome.withdrawn_links.length > 0 && (
             <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>

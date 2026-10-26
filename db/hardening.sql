@@ -2118,6 +2118,14 @@ BEGIN
     USING ERRCODE = 'check_violation';
 END $$;
 
+-- C2c: two texts are the same once case, runs of white space, and spaces or full stops at either end are set aside.
+CREATE OR REPLACE FUNCTION lvrf_same_text(a text, bs text[]) RETURNS boolean
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM unnest(bs) b
+                  WHERE b IS NOT NULL AND a IS NOT NULL
+                    AND btrim(regexp_replace(lower(a), '[[:space:]]+', ' ', 'g'), ' .') = btrim(regexp_replace(lower(b), '[[:space:]]+', ' ', 'g'), ' .'))
+$$;
+
 CREATE OR REPLACE FUNCTION lvrf_run_erratum_steward_only() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -2149,6 +2157,14 @@ BEGIN
        SELECT 1 FROM run_errata p WHERE p.id = NEW.supersedes_id AND p.value_run_id = NEW.value_run_id
           AND p.evidence_id = NEW.evidence_id AND p.corrected_to_supports = NEW.corrected_to_supports) THEN
     RAISE EXCEPTION 'LVRF: run_errata: an erratum supersedes one of the same run and the same correction.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- C2c (Brad, 26 Oct 2026): the reason for superseding says why the earlier erratum is superseded; it may not
+  -- repeat the erratum's own text (this one's, or the one it supersedes). New rows only: runs 13 and 17's stay as recorded.
+  IF NEW.supersedes_id IS NOT NULL AND lvrf_same_text(NEW.supersession_reason, ARRAY[NEW.what_was_wrong, NEW.what_is_right, NEW.reason,
+       (SELECT p.what_was_wrong FROM run_errata p WHERE p.id = NEW.supersedes_id), (SELECT p.what_is_right FROM run_errata p WHERE p.id = NEW.supersedes_id),
+       (SELECT p.reason FROM run_errata p WHERE p.id = NEW.supersedes_id)]) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: the reason for superseding repeats the erratum''s own text; say why the earlier erratum is superseded.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
@@ -2421,6 +2437,19 @@ LANGUAGE sql STABLE AS $$
    ORDER BY a.at LIMIT 1
 $$;
 
+-- C2c (26 Oct 2026): a link's act, by its outcome, its evidence and its moment. An act's `at` is its
+-- transaction's now() (forced by the guard), the same moment as the withdrawal it records. Before this,
+-- a link step took the outcome's first act whatever its evidence: wrong once an outcome has two.
+CREATE OR REPLACE FUNCTION lvrf_lineage_link_act(p_outcome uuid, p_evidence uuid, p_at timestamptz, p_acts text[])
+RETURNS TABLE (actor text, at timestamptz)
+LANGUAGE sql STABLE AS $$
+  SELECT p.full_name, a.at
+    FROM governance_acts a JOIN persons p ON p.id = a.actor_person_id
+   WHERE a.subject_table = 'value_outcome_evidence' AND a.subject_id = p_outcome AND a.result_id = p_evidence
+     AND a.at = p_at AND a.act::text = ANY (p_acts)
+   LIMIT 1
+$$;
+
 CREATE OR REPLACE FUNCTION lvrf_lineage_research(p_result uuid)
 RETURNS TABLE (kind text, row_table text, row_id uuid, actor text, at timestamptz, source text, detail jsonb)
 LANGUAGE plpgsql STABLE AS $$
@@ -2524,7 +2553,11 @@ BEGIN
        AND (p_supports IS NULL OR v.supports = p_supports OR v.corrects_supports = p_supports)
      ORDER BY ins.at NULLS FIRST
   LOOP
-    SELECT * INTO a FROM lvrf_lineage_act('value_outcome_evidence', l.value_outcome_id, ARRAY['correct']);
+    -- The correcting act is the one that withdrew this link's predecessor (the same transaction, C1-D1).
+    SELECT * INTO a FROM lvrf_lineage_link_act(l.value_outcome_id, l.evidence_id,
+      (SELECT pr.withdrawn_at FROM value_outcome_evidence pr
+        WHERE pr.value_outcome_id = l.value_outcome_id AND pr.evidence_id = l.evidence_id AND pr.supports = l.corrects_supports AND pr.withdrawn_at IS NOT NULL),
+      ARRAY['correct']);
     RETURN QUERY SELECT CASE WHEN l.corrects_supports IS NOT NULL THEN 'correct' ELSE 'link' END, 'value_outcome_evidence'::text, l.value_outcome_id,
       coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.actor END, l.linked_by), coalesce(CASE WHEN l.corrects_supports IS NOT NULL THEN a.at END, l.linked_at),
       CASE WHEN l.corrects_supports IS NOT NULL AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
@@ -2532,6 +2565,8 @@ BEGIN
                          'corrects_supports', l.corrects_supports, 'reason', l.correction_reason, 'current', l.withdrawn_at IS NULL)
         || CASE WHEN l.corrects_supports IS NOT NULL AND a.actor IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END;
     IF l.withdrawn_at IS NOT NULL THEN
+      -- Its withdrawal's act: a correction's, or (C2c) a withdrawal's with no replacement.
+      SELECT * INTO a FROM lvrf_lineage_link_act(l.value_outcome_id, l.evidence_id, l.withdrawn_at, ARRAY['correct', 'withdraw']);
       RETURN QUERY SELECT 'withdrawn'::text, 'value_outcome_evidence'::text, l.value_outcome_id,
         (SELECT full_name FROM persons WHERE id = l.withdrawn_by_person_id), l.withdrawn_at,
         CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,

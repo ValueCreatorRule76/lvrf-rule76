@@ -655,6 +655,8 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
        ORDER BY e.deleted_at IS NOT NULL, e.created_at`),
     q<{ id: string; source_verified: boolean } & Record<string, unknown>>(`
       SELECT vo.id, vo.engagement_id, bm.name AS metric_name, bm.unit, c.name AS capability_name,
+             -- C2c: how many locked runs sealed this outcome (a correction or withdrawal changes none of them).
+             (SELECT count(*)::int FROM value_runs r WHERE r.locked_at IS NOT NULL AND r.deleted_at IS NULL AND r.payload->>'valueOutcomeId' = vo.id::text) AS sealed_run_count,
              (SELECT coalesce(json_agg(json_build_object('offering_key', o.offering_key, 'name', o.name) ORDER BY o.name), '[]')
                 FROM offering_capabilities oc JOIN offerings o ON o.id = oc.offering_id WHERE oc.capability_id = c.id) AS offerings,
              vo.baseline_value::text, to_char(vo.baseline_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS baseline_measured_on,
@@ -749,6 +751,11 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
   // C1: links withdrawn by a correction, listed apart under their outcome (who, when, why).
   const withdrawn = await q<{ value_outcome_id: string } & Record<string, unknown>>(`
     SELECT w.value_outcome_id, w.supports, e.summary, wp.full_name AS withdrawn_by,
+           -- C2c: which evidence, and whether a correcting link replaced it (a withdrawal alone has none).
+           w.evidence_id AS link_evidence_id,
+           -- (a correcting link in any state: corrected and later withdrawn, it was still replaced)
+           EXISTS (SELECT 1 FROM value_outcome_evidence c WHERE c.value_outcome_id = w.value_outcome_id AND c.evidence_id = w.evidence_id
+                     AND c.corrects_supports = w.supports) AS replaced,
            to_char(w.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS withdrawn_on, w.withdrawal_reason AS reason
       FROM value_outcome_evidence w JOIN evidence e ON e.id = w.evidence_id
       JOIN persons wp ON wp.id = w.withdrawn_by_person_id

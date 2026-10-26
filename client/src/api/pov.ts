@@ -126,7 +126,10 @@ export interface PovOutcome {
   pack_entry: PackEntryRef | null;
   evidence: PovEvidence[];
   /** C1: links withdrawn by a correction, listed apart. */
-  withdrawn_links: { supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
+  /** C2c: link_evidence_id, and whether a correcting link replaced it (false: withdrawn alone). */
+  withdrawn_links: { supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string; link_evidence_id: string; replaced: boolean }[];
+  /** C2c: how many locked runs sealed this outcome. */
+  sealed_run_count: number;
 }
 
 export interface PovHypothesis {

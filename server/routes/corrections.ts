@@ -22,6 +22,12 @@ import { ACT_SUPPORTS, SUPPORTS_WORD, isSupports, type Supports } from '../lib/s
  *     value_outcome_evidence_one_current). Allowed on a retired engagement's
  *     frozen outcome: the only write there that is (C1-D2).
  *
+ *   POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw
+ *     C2c (Brad, 26 Oct 2026): a link that should support nothing is withdrawn with
+ *     no replacement — who, when, why (12+ characters), its own act ('withdraw'),
+ *     shown struck through. Allowed on a retired engagement's frozen outcome under
+ *     the same exception as a correction (C1-D2). A sealed run is not changed.
+ *
  *   POST /api/value-runs/:runId/errata
  *     a sealed run got it wrong: an erratum beside it — what was wrong, what is
  *     right, why — with the server's recompute of the run's confidence under the
@@ -143,8 +149,58 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'value_outcome_evidence', subjectId: null, tenantId, institutionId, valueOutcomeId: outcomeId });
     }
   });
+  router.post('/:outcomeId/evidence/:evidenceId/withdraw', requireSteward(pool), async (req, res) => {
+    const endpoint = 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw';
+    const client: PoolClient = req.dbClient!;
+    const { outcomeId, evidenceId } = req.params;
+    if (!isUuid(outcomeId) || !isUuid(evidenceId)) {
+      res.status(400).json({ message: 'invalid value outcome or evidence id' });
+      return;
+    }
+    let tenantId: string | null = null;
+    let institutionId: string | null = null;
+    try {
+      const actor = actorOf(req);
+      if (!isRecord(req.body)) throw new Refusal(422, 'Say why the link is withdrawn.');
+      const { rows: [link] } = await client.query<{ supports: string; tenant_id: string; institution_id: string }>(
+        `SELECT voe.supports, i.tenant_id, i.id AS institution_id
+           FROM value_outcome_evidence voe
+           JOIN value_outcomes vo ON vo.id = voe.value_outcome_id
+           JOIN institutions i ON i.id = vo.institution_id
+          WHERE voe.value_outcome_id = $1 AND voe.evidence_id = $2 AND voe.withdrawn_at IS NULL
+          FOR UPDATE OF voe`,
+        [outcomeId, evidenceId],
+      );
+      if (!link || isOtherTenant(req, link.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
+        res.status(404).json({ message: `no current link of evidence ${evidenceId} to value outcome ${outcomeId}` });
+        return;
+      }
+      tenantId = link.tenant_id;
+      institutionId = link.institution_id;
+      if (await refuseUnknownFields(pool, req, res, ['reason'],
+        { endpoint, subjectTable: 'value_outcome_evidence', subjectId: null, tenantId, institutionId })) return;
+      const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+      if (reason.length < MIN_REASON) throw new Refusal(422, `Say why the link is withdrawn, in at least ${MIN_REASON} characters.`);
+      await client.query(
+        `UPDATE value_outcome_evidence SET withdrawn_by_person_id = $3, withdrawn_at = now(), withdrawal_reason = $4
+          WHERE value_outcome_id = $1 AND evidence_id = $2 AND supports = $5 AND withdrawn_at IS NULL`,
+        [outcomeId, evidenceId, actor, reason, link.supports],
+      );
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw', {
+        act: 'withdraw', tenantId: link.tenant_id, subjectTable: 'value_outcome_evidence', subjectId: outcomeId,
+        resultTable: 'evidence', resultId: evidenceId, reason,
+      });
+      res.status(200).json({ value_outcome_id: outcomeId, evidence_id: evidenceId, withdrawn_supports: link.supports });
+    } catch (err) {
+      await answer(pool, err, req, res, { endpoint, subjectTable: 'value_outcome_evidence', subjectId: null, tenantId, institutionId, valueOutcomeId: outcomeId });
+    }
+  });
   return router;
 }
+
+/** C2c: two texts are the same once case, runs of white space, and spaces or full stops at either end are set aside (as lvrf_same_text). */
+const sameText = (a: string, b: unknown) => typeof b === 'string'
+  && a.toLowerCase().replace(/\s+/g, ' ').replace(/^[ .]+|[ .]+$/g, '') === b.toLowerCase().replace(/\s+/g, ' ').replace(/^[ .]+|[ .]+$/g, '');
 
 export function erratumRouter(pool: Pool): Router {
   const router = Router();
@@ -219,6 +275,12 @@ export function erratumRouter(pool: Pool): Router {
           throw new Refusal(409, `That is not the current erratum for this correction on this run; the current one is ${current.id} (${current.recorded_on}, by ${current.recorded_by}).`);
         }
         if (supersessionReason.length < MIN_REASON) throw new Refusal(422, `Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
+        // C2c (Brad, 26 Oct 2026): the reason says why the earlier erratum is superseded, not what an erratum records.
+        const { rows: [prev] } = await client.query<{ what_was_wrong: string; what_is_right: string; reason: string }>(
+          'SELECT what_was_wrong, what_is_right, reason FROM run_errata WHERE id = $1', [supersedes]);
+        if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {
+          throw new Refusal(422, "The reason for superseding repeats the erratum's own text: say why the earlier erratum is superseded.");
+        }
       }
       const rc = recomputeWithCorrection(run.payload as never, { kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
       // C2 (Brad, 25 Oct 2026): a seal that cannot be reproduced is recorded NOT RECOMPUTED, saying why; any other refusal stands.

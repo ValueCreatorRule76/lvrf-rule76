@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { postGoverned, type PostResult } from '../api/post';
 import { useActor } from '../actor/ActorContext';
 import { ResultBlock, FOCUS_RING } from './GovernedForm';
@@ -38,17 +38,21 @@ export function GovernedAction<T>({
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // C2c: one request per click — set synchronously, as GovernedForm's.
+  const inFlight = useRef(false);
 
   const blockedLocally = Boolean(disabledReason);
   const disabled = blockedLocally || !actor || submitting || result?.status === 'ok';
 
   async function handleClick() {
-    if (blockedLocally || !actor || submitting) return;
+    if (inFlight.current || blockedLocally || !actor || submitting) return;
+    inFlight.current = true;
     setSubmitting(true);
     const r = await postGoverned<T>(path, body);
     setSubmitting(false);
     setResult(r);
     if (r.status === 'ok') onSuccess?.(r.data);
+    else inFlight.current = false;
   }
 
   return (

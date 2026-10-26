@@ -12761,3 +12761,116 @@ errata wait for C2b.
   ["C2b TRIR FY25 (fixture) — supports baseline", "Verification: the owner commits to 1.2
   (E). — supports the commitment"].
 - **`verify_c2`: 150 passed, 0 failed.** Test only; the bundle is unchanged.
+
+## C2 and C2b, Gate C; the Curia mistake — 26 October 2026 (UTC)
+
+**Gate C, read-only over ssh (box at `1028e4e`, bundle `index-BjknoEG7.js`):**
+- **The record's checks:** run hashes 25/25; ownership clean; plain sentences 91/91; no drift
+  (43 migrations); 167 triggers; 0 refusals since the restart.
+- **Brad's acts:**
+  - **Curia's commitment attestation** (`e523bc46…`): withdrawn from `impact_basis` and
+    corrected to `target_commitment` at 13:08:58, with its `correct` act and no figure check.
+  - **Runs 13–21** each carry a current erratum about it. Each is not recomputed, with the
+    expected reason (13–16: no model version; 17–21: the attester not sealed, at 15), the
+    quoted factor (10 of 10), and its `record_erratum` act.
+  - Runs 13–21 are byte-identical.
+- **Runs 13 and 17 carry two errata each.** The first of each is superseded by a second whose
+  supersession reason repeats the erratum's own text. They stay as recorded (Brad).
+- **A first Gate C (12:20 UTC) ran before the acts** and found none; the acts were made from
+  13:08.
+
+**The Curia mistake (17:01:59):** a second correction moved "Skillsoft Q1 FY2027 quarterly DRR
+105 percent …" (`f9775317…`, a public filing about the tenant) on Curia's reference outcome from
+`impact_basis` to **baseline**. Its reason is erratum wording, so it looks like the run page's
+correction form was used for an erratum. No sealed run carries it. C1's rule ("a withdrawn link
+is not recorded again") means it cannot be corrected back.
+
+**Brad's ruling (a):** C2c before C3.
+
+## C2c: withdrawing a link; a confirmation first; the run page's controls apart; one request per submit — Gate A, 26 October 2026 (UTC)
+
+**1. Withdraw a link, with no replacement:**
+- **The route:** `POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw` with
+  `{reason}` (12+ characters).
+  - steward-only, with its own act (`withdraw`; `ROUTE_ACTS`);
+  - allowed on a retired engagement's frozen outcome. The link guard already allowed a steward's
+    withdrawal there (C1-D2).
+- **The display:** the withdrawn link is struck through on the run page ("withdrawn on <date> by
+  <name>, with no replacement: <reason>"), and on the POV and W6 as before.
+- **The run page's withdraw form offers every current link,** a corrected one too (the Curia
+  case). The correction form still offers only links never corrected (C2b).
+
+**2. A confirmation before a correction or a withdrawal is sent** (`GovernedForm`'s new
+`confirm`), on the run page and on W6. It states:
+- the link;
+- the change ("from the impact basis to the commitment", or "it supports the baseline now, and
+  will support nothing; no link replaces it");
+- the outcome;
+- how many sealed runs share it. That is `sealed_run_count`, new on the POV's and the walk's
+  outcomes: the locked runs that sealed the outcome.
+
+**3. The run page's controls are apart,** each with its line:
+- "The outcome's links — changes what a link of <outcome> supports, for every run that shares
+  it; this run stays as sealed."
+- "This run — records, beside this sealed run, what it got wrong; it changes no link and no
+  score."
+
+**4. One request per submit, and no repeated reasons:**
+- **One request:** `GovernedForm` and `GovernedAction` guard with a ref set on the first click.
+  State alone let two clicks in one tick both submit, which fits runs 13 and 17.
+- **A supersession reason that repeats the erratum's own text is refused.** That means this
+  erratum's texts or the superseded one's, compared once case, white space and full stops at
+  either end are set aside:
+  - at the route ("The reason for superseding repeats the erratum's own text: say why the
+    earlier erratum is superseded.");
+  - and at the database, in the errata guard (`lvrf_same_text`). New rows only, so runs 13 and
+    17's stay as recorded. No migration and no trigger is added (167).
+
+**Found and fixed in Gate A:**
+- **The lineage named a link step's act by its outcome only** (the outcome's first act). Once an
+  outcome has two acts, as Curia's now does, a step could name the other's act and time.
+- `lvrf_lineage_link_act` now matches the act by outcome, evidence and moment (the act's forced
+  `now()` equals the withdrawal's).
+- The POV's `withdrawn_links` gain `link_evidence_id` and `replaced` (a correcting link in any
+  state), so a link corrected and then withdrawn is not shown as "no replacement" twice.
+
+**Gate A:**
+- **`verify_c2c.sh`: 79 passed, 0 failed.** New, on the Curia mistake as its fixture (a filing
+  about the tenant, sealed as the impact basis in two runs, the engagement retired, a later live
+  engagement). It covers:
+  - the mistaken correction to the baseline, and that it cannot be corrected back;
+  - the withdraw route's refusals;
+  - the run page's two lines;
+  - a double-click erratum sends one request, counted on the network;
+  - the supersession repeat refused, in other case and spacing too;
+  - the withdrawal from run 2's page: the confirmation before any request, one request on
+    "Confirm" pressed twice, struck through with "no replacement";
+  - in the database: no current link, the steward, the reason, its one `withdraw` act; runs
+    byte-identical;
+  - run 1 sharing it at 1280 and 390;
+  - the lineage reading the correction and the withdrawal each from its own act.
+- **Breaks, each caught, every file restored byte-identical:**
+  - B8, the route's steward check removed: the database refuses X;
+  - B9, the act removed: the commit is refused ("a withdrawal with no governance act recorded in
+    this transaction"), and the journal logs it without values;
+  - B10, the confirmation removed: a request goes on the first press;
+  - B11, a control's line removed;
+  - B12, the one-request guard removed: a double click sends 2;
+  - B13, the route's repeat check removed: the database refuses;
+  - B14, the database's check removed (on the clone): accepted, rolled back.
+- **Prod-copy equivalence against `1028e4e`:** 70 of 76 identical. The 3 walks and 3 POVs differ
+  only by `sealed_run_count`, `link_evidence_id` and `replaced`; with them allowed, 76 of 76.
+- **Updated scripts:** `corrections_walk` and `c2_walk` press "Confirm"; `c2_walk` reads the run
+  page's new non-steward reason.
+- **The screenshots:** `~/lvrf-backups/c2c-screens/`.
+- **Recorded:** L45, the Runs list's erratum marker (slice 5).
+- **The full regression on the fresh copy: all 41 scripts pass,** with `verify_c2c` added.
+  - **Two scripts caught the new route as unregistered,** which is what they are for:
+    - `verify_steward_acts` needs it classified steward-only. It now is (`stewardActs.ts`,
+      "Withdrawing an evidence link"; 15 steward routes);
+    - `verify_tenant_scope` needs a tenant case. One is added, the same shape as the correction's.
+  - Re-run: `verify_steward_acts` 38/0, `verify_tenant_scope` passed, `verify_acts_lineage`
+    189/0.
+  - The others in the full run: `verify_corrections` 211/0, `verify_c2` 151/0, `verify_c2c` 79/0.
+  - The build and lint are clean (the 1 pre-existing warning). The bundle is `index-gFnFD1no.js`
+    / `index-4dwWTpqu.css`.

@@ -56,6 +56,7 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/industries/:industryId/exclusions': ['exclude'],
   'POST /api/institutions/:institutionId/reference-example': ['mark'],
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support': ['correct'],
+  'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw': ['withdraw'],
   'POST /api/value-runs/:runId/errata': ['record_erratum'],
   // Create-only: left out of P2 by name (LVRF_PLAN §10, D3).
   'POST /api/account-inputs': 'create-only',

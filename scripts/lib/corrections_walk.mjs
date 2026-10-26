@@ -91,6 +91,9 @@ if (MODE === 'acts') {
   await setField(form, 'What it supports', 'impact_basis');
   await setField(form, 'Why', 'Verification: another company\'s filing is not this account\'s baseline; it is the impact basis (C1).');
   check(await click(form, 'Withdraw and correct'), 'the steward submits "Withdraw and correct"');
+  // C2c: a confirmation first, naming the link, the change, the outcome and how many runs share it.
+  check(await waitFor(`!!document.querySelector('[data-testid=correct-support] [data-testid=form-confirm]')`, 5000), '  ...and is shown the confirmation before anything is sent');
+  await ev(`document.querySelector('[data-testid=correct-support] [data-testid=form-confirm-yes]').click()`);
   check(await waitFor(`!!document.querySelector('[data-testid=w6-withdrawn]')`), 'W6 now lists the withdrawn link');
   await unfold('[data-testid=w6]');
   check(!(await ev(`!!document.querySelector('[data-testid=correct-support]')`)), 'the form closes once recorded (no stale form left on the corrected link)');

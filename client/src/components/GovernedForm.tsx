@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { postGoverned, type PostResult } from '../api/post';
 import { useActor } from '../actor/ActorContext';
 
@@ -58,6 +58,11 @@ export interface GovernedFormProps<T> {
    * else stays outlined. Disabled, it is grey like any other, with its reason.
    */
   primary?: boolean;
+  /**
+   * C2c (Brad, 26 Oct 2026): when set, the first submit shows this statement of what will be
+   * recorded, and the request is sent only on "Confirm"; "Back" returns to the fields.
+   */
+  confirm?: ReactNode;
 }
 
 export function GovernedForm<T>({
@@ -73,22 +78,36 @@ export function GovernedForm<T>({
   onSuccess,
   unmet,
   primary = false,
+  confirm,
 }: GovernedFormProps<T>) {
   const { actor } = useActor();
   const [result, setResult] = useState<PostResult<T> | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  // C2c (Brad, 26 Oct 2026): one request per submit. State updates only on the next render, so two clicks in
+  // one tick would both see `submitting` false; the ref is set synchronously, on the first click.
+  const inFlight = useRef(false);
   const [submitting, setSubmitting] = useState(false);
 
   const blockedLocally = Boolean(disabledReason);
   const disabled = blockedLocally || !actor || !canSubmit || submitting || result?.status === 'ok';
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (blockedLocally || !actor || !canSubmit || submitting) return;
+  async function send() {
+    if (inFlight.current || blockedLocally || !actor || !canSubmit) return;
+    inFlight.current = true;
     setSubmitting(true);
     const r = await postGoverned<T>(path, buildBody());
     setSubmitting(false);
+    setConfirming(false);
     setResult(r);
     if (r.status === 'ok') onSuccess?.(r.data);
+    else inFlight.current = false;
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (inFlight.current || blockedLocally || !actor || !canSubmit || submitting) return;
+    if (confirm && !confirming) { setConfirming(true); return; }
+    await send();
   }
 
   return (
@@ -143,9 +162,21 @@ export function GovernedForm<T>({
         </p>
       )}
 
+      {confirming && (
+        <div className="mb-3 border-l-[3px] border-ink bg-offwhite px-3.5 py-3" data-testid="form-confirm">
+          <span className="block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Confirm before recording</span>
+          <div className="mt-1 text-[12.5px] text-ink">{confirm}</div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={submitting} onClick={() => { void send(); }} data-testid="form-confirm-yes"
+              className={'border border-ink bg-ink px-3 py-1.5 text-[12px] font-semibold text-offwhite disabled:cursor-not-allowed disabled:opacity-50 ' + FOCUS_RING}>Confirm</button>
+            <button type="button" disabled={submitting} onClick={() => setConfirming(false)} data-testid="form-confirm-back"
+              className={'border border-silver px-3 py-1.5 text-[12px] text-ink-45 hover:border-ink hover:text-ink ' + FOCUS_RING}>Back</button>
+          </div>
+        </div>
+      )}
       <button
         type="submit"
-        disabled={disabled}
+        disabled={disabled || confirming}
         title={blockedLocally ? disabledReason : undefined}
         data-primary={primary && !disabled ? 'true' : undefined}
         className={

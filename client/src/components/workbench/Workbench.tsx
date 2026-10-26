@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { businessMetricName, isEnrichedBusinessMetric, type Run, type RunErratum } from '../../types/run';
 import { MARKER_KIND, type Pov } from '../../api/pov';
 import { day, unitText, STEP_TITLES } from '../../lib/workspaceStatus';
-import { label, supportsChoices, supportsShort, DISCLOSURE, REALIZATION, STAGE_LABEL } from '../../lib/labels';
+import { label, supportsChoices, supportsShort, DISCLOSURE, REALIZATION, STAGE_LABEL, SUPPORTS } from '../../lib/labels';
 import { GovernedAction } from '../GovernedAction';
 import { FOCUS_RING, GovernedForm } from '../GovernedForm';
 import { useActor } from '../../actor/ActorContext';
@@ -260,7 +260,7 @@ function Actions({ run }: { run: Run }) {
  */
 function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountRead; onChanged: () => void }) {
   const { actor } = useActor();
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'none' | 'correct' | 'withdraw'>('none');
   const [evidenceId, setEvidenceId] = useState('');
   const [supports, setSupports] = useState('');
   const [reason, setReason] = useState('');
@@ -269,56 +269,96 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
   if (!outcome) return null;
   const done = outcome.evidence.filter((e) => e.corrects_supports !== null);
   const open_ = outcome.evidence.filter((e) => e.corrects_supports === null);
-  const notSteward = actor?.is_steward ? undefined : `Correcting what a link supports is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
-  const chosen = open_.find((e) => e.evidence_id === evidenceId);
+  // C2c: a link withdrawn with no replacement, struck through (a corrected one is named by its correction above).
+  const withdrawnAlone = outcome.withdrawn_links.filter((l) => !l.replaced);
+  const notSteward = actor?.is_steward ? undefined : `Correcting or withdrawing a link is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  // A correction is offered for a link never corrected (C2b); a withdrawal for any current link — a corrected one too (C2c).
+  const choosable = mode === 'withdraw' ? outcome.evidence : open_;
+  const chosen = choosable.find((e) => e.evidence_id === evidenceId);
+  const n = outcome.sealed_run_count;
+  const runs = `${n} sealed run${n === 1 ? '' : 's'} share${n === 1 ? 's' : ''} this outcome; none of them changes`;
   const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
   const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
+  const close = () => { setMode('none'); setEvidenceId(''); setSupports(''); setReason(''); };
+  const linkField = (
+    <label className="block"><span className={L}>The link</span>
+      <select className={I} value={evidenceId} onChange={(ev) => { setEvidenceId(ev.target.value); setSupports(''); }}>
+        <option value="" disabled>— choose —</option>
+        {choosable.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — supports {supportsShort(e.supports)}</option>)}
+      </select></label>
+  );
+  const whyField = (
+    <label className="block"><span className={L}>Why</span>
+      <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>
+  );
+  const btn = 'self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent';
   return (
-    <div className="flex flex-col gap-1 print:hidden" data-testid="correct-on-run">
+    <section className="flex flex-col gap-1.5 border-t border-rule-soft pt-3 print:hidden" data-testid="correct-on-run" aria-label="The outcome's links">
+      <p className="m-0 text-[11.5px] text-ink-45" data-testid="correct-on-run-says">
+        <span className="font-semibold text-ink">The outcome&apos;s links</span> — changes what a link of {outcome.metric_name} supports, for every run that shares it; this run stays as sealed.
+      </p>
       {done.map((e) => (
         <p key={e.evidence_id} className="m-0 max-w-[90ch] text-[11.5px] text-ink-45" data-testid="correct-on-run-done">
           Corrected on {e.corrected_on ? day(e.corrected_on) : 'a date not recorded'} by {e.corrected_by}: “{e.summary.slice(0, 80)}” now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}. The sealed run is unchanged: an erratum records it.
         </p>
       ))}
-      {open_.length > 0 && !open && (
-        <>
-          <button type="button" disabled={Boolean(notSteward)} onClick={() => setOpen(true)}
-            className="self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent" data-testid="correct-on-run-open">
-            Correct what a link supports…
-          </button>
+      {withdrawnAlone.map((l) => (
+        <p key={`${l.link_evidence_id}-${l.supports}`} className="m-0 max-w-[90ch] text-[11.5px] text-ink-45" data-testid="correct-on-run-withdrawn">
+          <s>“{l.summary.slice(0, 80)}”, supporting {label(SUPPORTS, l.supports)}</s> — withdrawn on {day(l.withdrawn_on)} by {l.withdrawn_by}, with no replacement: {l.reason}
+        </p>
+      ))}
+      {outcome.evidence.length > 0 && mode === 'none' && (
+        <div className="flex flex-wrap items-center gap-2">
+          {open_.length > 0 && <button type="button" disabled={Boolean(notSteward)} onClick={() => setMode('correct')} className={btn} data-testid="correct-on-run-open">Correct what a link supports…</button>}
+          <button type="button" disabled={Boolean(notSteward)} onClick={() => setMode('withdraw')} className={btn} data-testid="withdraw-on-run-open">Withdraw a link…</button>
           {notSteward && <span className="max-w-[46ch] text-[11px] text-ink-45" data-testid="correct-on-run-reason">{notSteward}</span>}
-        </>
+        </div>
       )}
-      {open && (
+      {mode === 'correct' && (
         <div className="border-t border-rule-soft pt-3" data-testid="correct-on-run-form">
           <GovernedForm<{ supports: string }>
             path={`/api/value-outcomes/${outcome.id}/evidence/${evidenceId}/correct-support`}
             provenanceLabel="What this records"
             provenance={<p className="m-0 text-[12.5px] text-ink">This corrects the <strong>current link</strong> of this run's outcome, {outcome.metric_name}, for every run that shares it: the link is <strong>withdrawn</strong> with your name, the date and your reason, and stays shown struck through; a new link records what it supports. <strong>The sealed run is not changed</strong>: record an erratum on it.</p>}
             fields={<div className="flex flex-col gap-3">
-              <label className="block"><span className={L}>The link</span>
-                <select className={I} value={evidenceId} onChange={(ev) => { setEvidenceId(ev.target.value); setSupports(''); }}>
-                  <option value="" disabled>— choose —</option>
-                  {open_.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — supports {supportsShort(e.supports)}</option>)}
-                </select></label>
+              {linkField}
               <label className="block"><span className={L}>What it supports</span>
                 <select className={I} value={supports} disabled={!chosen} onChange={(ev) => setSupports(ev.target.value)}>
                   <option value="" disabled>— choose —</option>
                   {chosen && supportsChoices(chosen.kind, chosen.supports).map((s) => <option key={s} value={s}>{supportsShort(s)}</option>)}
                 </select></label>
-              <label className="block"><span className={L}>Why</span>
-                <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>
+              {whyField}
             </div>}
+            confirm={chosen && <span data-testid="confirm-text">Correct “{chosen.summary.slice(0, 80)}” on {outcome.metric_name}: from {label(SUPPORTS, chosen.supports)} to {label(SUPPORTS, supports)}. {runs}: record an erratum on each that sealed it.</span>}
             canSubmit={Boolean(chosen) && supports !== '' && reason.trim().length >= 12}
             unmet={[...(!chosen ? ['choose the link'] : []), ...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
             buildBody={() => ({ supports, reason: reason.trim() })}
             submitLabel="Withdraw and correct"
-            onSuccess={() => { setOpen(false); setEvidenceId(''); setSupports(''); setReason(''); onChanged(); }}
+            onSuccess={() => { close(); onChanged(); }}
             renderSuccess={() => <>Corrected.</>}
           />
+          <button type="button" onClick={close} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
         </div>
       )}
-    </div>
+      {mode === 'withdraw' && (
+        <div className="border-t border-rule-soft pt-3" data-testid="withdraw-on-run-form">
+          <GovernedForm<{ withdrawn_supports: string }>
+            path={`/api/value-outcomes/${outcome.id}/evidence/${evidenceId}/withdraw`}
+            provenanceLabel="What this records"
+            provenance={<p className="m-0 text-[12.5px] text-ink">This <strong>withdraws</strong> a current link of this run's outcome, {outcome.metric_name}, with <strong>no replacement</strong>, for every run that shares it: your name, the date and your reason are kept, and it stays shown struck through. <strong>The sealed run is not changed.</strong></p>}
+            fields={<div className="flex flex-col gap-3">{linkField}{whyField}</div>}
+            confirm={chosen && <span data-testid="confirm-text">Withdraw “{chosen.summary.slice(0, 80)}” from {outcome.metric_name}: it supports {label(SUPPORTS, chosen.supports)} now, and will support nothing; no link replaces it. {runs}.</span>}
+            canSubmit={Boolean(chosen) && reason.trim().length >= 12}
+            unmet={[...(!chosen ? ['choose the link'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
+            buildBody={() => ({ reason: reason.trim() })}
+            submitLabel="Withdraw the link"
+            onSuccess={() => { close(); onChanged(); }}
+            renderSuccess={() => <>Withdrawn.</>}
+          />
+          <button type="button" onClick={close} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -343,7 +383,8 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
   const reason = notSteward ?? noCorrection;
   if (!open) {
     return (
-      <div className="flex flex-col gap-1 print:hidden" data-testid="record-erratum">
+      <div className="flex flex-col gap-1 border-t border-rule-soft pt-3 print:hidden" data-testid="record-erratum">
+        <p className="m-0 text-[11.5px] text-ink-45" data-testid="record-erratum-says"><span className="font-semibold text-ink">This run</span> — records, beside this sealed run, what it got wrong; it changes no link and no score.</p>
         <button type="button" disabled={Boolean(reason)} onClick={() => setOpen(true)}
           className="self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent" data-testid="record-erratum-open">
           Record an erratum…
