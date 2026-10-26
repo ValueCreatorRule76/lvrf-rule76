@@ -3077,6 +3077,9 @@ The count is expected to be **9 (Curia 13–21), each recomputing to its sealed 
 
 **Also:** the regression on the fresh prod copy, once L39 is fixed, and prod-copy equivalence.
 
+**C2 approved (Brad, 26 Oct 2026), including the departure:** only an attestation may be corrected to
+the commitment or the verification.
+
 ### Gate B and Gate C (planned)
 
 - **Gate B:** the backup; pull, migrate, ownership, hardening and the checks; deploy.
@@ -3101,3 +3104,34 @@ The count is expected to be **9 (Curia 13–21), each recomputing to its sealed 
 | **C2-D1** | Widening `supports`' type in the model: does it change `MODEL_FINGERPRINT`, and so need a new `MODEL_VERSION`? | **Measure it at build.** If the fingerprint is unchanged (no constant or logic changes), keep 1.0.0: every sealed run still recomputes under its own model. If it moves, bump to 1.0.1 and record why. C1's recompute then refuses old runs unless their model is kept beside the new one, so name that before building |
 | **C2-D2** | The 9 errata: through the UI one by one, or a steward script with `--apply`? | **The UI, one by one, against the dry run's list.** Each is a steward act with its own act row, and scripts never write to prod. Nine is a sitting, not a batch |
 | **C2-D3** | Verify's attestation also stands behind the actual. Link it `verification` only, or `verification` and `actual`? | **`verification` only, as ruled.** The measured actual comes from the customer's system of record (CLAUDE.md, the governing AI principle); an attestation about it is not that evidence |
+
+## 12. C3: attestation credit requires a customer-side attester (ruled by Brad, 26 Oct 2026; **planned after C2's Gate C; not built until Brad approves the plan**)
+
+**The finding (C2's condition 3):** Curia's baseline system export in runs 17–21 is attested by
+"Brad Piver (external analyst of record)", a person row in Curia's institution whose title says
+"not a Curia employee". The model gives it customer-side credit (0.6, 15 of 25) because the rule
+reads only `persons.institution_id`.
+
+**Brad's ruling:**
+1. **Who counts as a customer-side attester:** attestation credit in the confidence model, and
+   `client_stated` in `lvrf_evidence_basis`, require a non-simulated person of the evidence's
+   institution who holds a customer-side role (`metric_owner` or `executive_sponsor`) and is not
+   linked as `analyst_of_record`.
+2. **The model:** that is model 1.0.1. The 1.0.0 scorer is kept (M1), and sealed runs are
+   unchanged.
+3. **The errata:** on Curia runs 17–21, each states, read from the seal, that the baseline
+   export's attester was the analyst of record (not customer-side), and how many baseline-factor
+   points rest on it. The sealed scores stand.
+4. **First, a read-only report on prod:** every evidence row attested by an analyst-of-record
+   person, and every sealed run that credited one.
+
+## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **after C3**)
+
+- **What becomes one-way or final:** `source_verified`, `attested_by_person_id`, `kind`,
+  `simulated`, and any other column the score or the disclosure gate reads.
+- **How they are corrected:** by supersession only.
+- **L42:** new runs seal the attester (name, scope, simulated) beside each attested item, and the
+  model version and fingerprint, so every future run is recomputable.
+- **First, a read-only report:** the two 23 Aug updates that set `simulated`, with no actor
+  recorded. What changed, and whether any run sealed the value from before or after.
+
