@@ -12874,3 +12874,31 @@ is not recorded again") means it cannot be corrected back.
   - The others in the full run: `verify_corrections` 211/0, `verify_c2` 151/0, `verify_c2c` 79/0.
   - The build and lint are clean (the 1 pre-existing warning). The bundle is `index-gFnFD1no.js`
     / `index-4dwWTpqu.css`.
+
+### C2c deployed; Gate C — 26 October 2026 (UTC)
+
+**Brad deployed C2c at `42e7fe4`.** The backup came first, then hardening (0 errors), then the
+deploy. He then withdrew the Skillsoft filing's baseline link from run 21's page.
+
+**Gate C, read-only over ssh:**
+- **Code and checks:** bundle `index-gFnFD1no.js` / `index-4dwWTpqu.css`. Hardening log 0
+  errors; `lvrf_same_text` and `lvrf_lineage_link_act` present. 167 triggers, 0 disabled;
+  ownership clean; 91/91 plain sentences; no drift (43 migrations); run hashes 25/25.
+- **The Skillsoft filing** (`f9775317…`) has no current link to Curia's reference outcome:
+  - `impact_basis` was withdrawn at 17:01:59 by the mistaken correction;
+  - `baseline` was withdrawn at 18:46:54 by Brad, with his reason ("Linked as baseline in error
+    on 26 Oct 2026 (the correction form was used in place of an erratum)…").
+- **Acts:** one new act, `withdraw`, at 18:46:54, naming that evidence. 14 in all (correct,
+  record_erratum, withdraw). Errata unchanged: 14, 11 current. No erratum, as Brad ruled.
+- **The lineage of Curia's baseline** reads the correction to the baseline (17:01:59, act) and its
+  withdrawal (18:46:54, act), each from its own act. Before C2c, the correction step would have
+  taken the 13:08 attestation act.
+- **Since the restart:**
+  - one POST, the withdrawal, which returned 200;
+  - the audit log has one act insert and one link update;
+  - no run updated; runs 13–21 byte-identical;
+  - 0 refusals.
+- **The confirmation's count:** **15** sealed runs share Curia's reference outcome (runs 7–21).
+  Brad checked the page without confirming, and it shows 15. The Gate B paste had said to expect
+  9, wrongly: 9 is the number of runs that sealed the attestation, not the number that sealed the
+  outcome. The 9 in Brad's report came from that paste.
