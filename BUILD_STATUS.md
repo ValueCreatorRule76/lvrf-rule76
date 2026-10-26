@@ -12750,3 +12750,14 @@ errata wait for C2b.
 - **The full regression on the fresh copy: all 40 scripts pass** (`verify_c2` 150/0,
   `verify_corrections` 210/0, `verify_run_page` 273/0). The build and lint are clean (the 1
   pre-existing warning). The bundle is `index-BjknoEG7.js` / `index-C9WVm_9W.css`.
+
+### C2b, Brad's confirmation: the run-page link list's contents — 26 October 2026 (UTC)
+
+- **The change:** on the run that shares the corrected outcome, `verify_c2` now asserts the
+  contents of "The link". It lists exactly the outcome's other current links (here the one
+  baseline filing, "C2b TRIR FY25 (fixture) — supports baseline"), never the corrected
+  attestation. Before, it asserted only the attestation's absence.
+- **B7** now fails that exact-list check: the list reads
+  ["C2b TRIR FY25 (fixture) — supports baseline", "Verification: the owner commits to 1.2
+  (E). — supports the commitment"].
+- **`verify_c2`: 150 passed, 0 failed.** Test only; the bundle is unchanged.

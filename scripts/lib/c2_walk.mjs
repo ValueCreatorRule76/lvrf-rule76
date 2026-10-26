@@ -10,7 +10,7 @@
 //   runcorrect C2b: INST's walk shows a later engagement, so W6 cannot reach RUN's outcome; RUN's page
 //              corrects the attestation (env SUMMARY) to the commitment; RUN_OTHER, sharing the outcome,
 //              shows the correction once made and offers no second form for that link (env SUMMARY, RUN_OTHER)
-//   noreoffer  C2b break B7: RUN, sharing the outcome, offers no second form for the corrected link (env SUMMARY)
+//   noreoffer  C2b break B7: RUN, sharing the outcome, lists exactly the other current links (env OTHER_LINKS)
 //   nonsteward C2b: RUN's page offers the correction disabled, with its reason
 //   erratum    RUN's page at 1280 and 390: its erratum reads "Not recomputed: …" beside the sealed
 //              score, and no other score; printed to SHOTS/PDF_NAME
@@ -118,13 +118,7 @@ if (MODE === 'runcorrect') {
   check(await open(`/runs/${RUN_OTHER}`, runReady), 'run 1, sharing the outcome, opens');
   const done1 = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].map(p=>p.textContent).join(' | ')`);
   check(done1 === done, 'run 1 shows the same correction, once made', done1);
-  const btn = await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`);
-  let offered = false;
-  if (btn) {
-    await ev(`document.querySelector('[data-testid=correct-on-run-open]').click()`); await sleep(300);
-    offered = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-form] option')].some(o=>o.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`);
-  }
-  check(!offered, '  ...and offers no second form for that link (any form there lists only links never corrected)');
+  await linkList(process.env.OTHER_LINKS);
   await shot('c2b_run1_shared_1280', 1280);
   for (const width of [390]) {
     check(await open(`/runs/${RUN_OTHER}`, runReady, width), `run 1 @${width} opens`);
@@ -133,16 +127,20 @@ if (MODE === 'runcorrect') {
   }
 }
 
+// C2b: on a run sharing the outcome, "The link" lists exactly the outcome's other current links (OTHER, "|"-separated
+// option texts), never the corrected one. The list's contents are asserted, not only the corrected link's absence.
+async function linkList(OTHER) {
+  if (!(await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`))) { bad('"Correct what a link supports…" is not offered for the other links'); return; }
+  await ev(`document.querySelector('[data-testid=correct-on-run-open]')?.click()`); await sleep(300);
+  const opts = await ev(`(()=>{const l=[...document.querySelectorAll('[data-testid=correct-on-run-form] label')].find(l=>l.textContent.includes('The link'));return l?[...l.querySelectorAll('option')].filter(o=>o.value).map(o=>o.textContent):null})()`);
+  check(Array.isArray(opts) && JSON.stringify(opts) === JSON.stringify(OTHER.split('|')),
+    `"The link" lists exactly the outcome's other current links (${OTHER.split('|').length}: ${OTHER}), never the corrected attestation`, JSON.stringify(opts));
+}
+
 // C2b break B7: the run sharing the outcome must offer no second form for a corrected link.
 if (MODE === 'noreoffer') {
-  const { SUMMARY } = process.env;
   check(await open(`/runs/${RUN}`, runReady), 'the run sharing the outcome opens');
-  let offered = false;
-  if (await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`)) {
-    await ev(`document.querySelector('[data-testid=correct-on-run-open]').click()`); await sleep(300);
-    offered = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-form] option')].some(o=>o.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`);
-  }
-  check(!offered, 'no second form for the corrected link');
+  await linkList(process.env.OTHER_LINKS);
 }
 
 if (MODE === 'nonsteward') {

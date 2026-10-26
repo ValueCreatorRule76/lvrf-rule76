@@ -363,7 +363,9 @@ if [ -f "$SHOTS/c2_run_b1.pdf" ]; then
 else bad "B's run: no PDF printed"; fi
 
 step "12b. C2b: the correction from the run page, for a retired engagement's outcome the walk cannot reach"
-SUMMARY="$SUM_E" RUN_OTHER="$R_E1" cwalk runcorrect "$INST_E" "$R_E2"
+# The outcome's other current link, as "The link" names it: the baseline filing, never the corrected attestation.
+OTHER_LINKS="C2b TRIR FY25 (fixture) — supports baseline"
+SUMMARY="$SUM_E" RUN_OTHER="$R_E1" OTHER_LINKS="$OTHER_LINKS" cwalk runcorrect "$INST_E" "$R_E2"
 [ "$(q "SELECT supports || '|' || coalesce(corrects_supports, '-') || '|' || (corrected_by_person_id = '$S') FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id WHERE voe.value_outcome_id = '$O_E1' AND e.kind = 'attestation' AND voe.withdrawn_at IS NULL")" = "target_commitment|impact_basis|true" ] \
   && ok "  ...in the database: the attestation now supports the commitment, correcting impact_basis, by the steward, on the frozen outcome" || bad "  ...links: $(q "SELECT supports, corrects_supports FROM value_outcome_evidence WHERE value_outcome_id = '$O_E1'")"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'correct' AND subject_id = '$O_E1'")" = "1" ] && ok "  ...with its one act (P2)" || bad "  ...acts: $(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$O_E1'")"
@@ -371,9 +373,9 @@ X_TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json'
 TOKEN_S="$TOKEN"; TOKEN="$X_TOKEN"; cwalk nonsteward "$INST_E" "$R_E1"; TOKEN="$TOKEN_S"
 # B7 — the run-page correction re-offering a corrected link.
 edit "$BENCH" "  const open_ = outcome.evidence.filter((e) => e.corrects_supports === null);" "  const open_ = outcome.evidence;"
-sleep 3; SUMMARY="$SUM_E" node scripts/lib/c2_walk.mjs noreoffer "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_E" "$R_E1" none.pdf > "$W/walk.b7.log" 2>&1 || true
-grep -q "^  PASS  the run sharing the outcome opens" "$W/walk.b7.log" && grep -q "^  FAIL  no second form for the corrected link" "$W/walk.b7.log" \
-  && ok "B7: the corrected link re-offered → caught: the run sharing the outcome offers a second form" || bad "B7: not caught: $(head -3 "$W/walk.b7.log")"
+sleep 3; OTHER_LINKS="$OTHER_LINKS" node scripts/lib/c2_walk.mjs noreoffer "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_E" "$R_E1" none.pdf > "$W/walk.b7.log" 2>&1 || true
+grep -q "^  PASS  the run sharing the outcome opens" "$W/walk.b7.log" && grep -q "^  FAIL  \"The link\" lists exactly the outcome's other current links" "$W/walk.b7.log" \
+  && ok "B7: the corrected link re-offered → caught: \"The link\" lists $(grep -o '— \[.*\]$' "$W/walk.b7.log" | head -1)" || bad "B7: not caught: $(head -3 "$W/walk.b7.log")"
 restore "$BENCH"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $SHOTS"
