@@ -97,8 +97,8 @@ if (MODE === 'acts') {
   const struck = await ev(`document.querySelector('[data-testid=w6-withdrawn]').textContent`);
   check(await ev(`!!document.querySelector('[data-testid=w6-withdrawn] s')`) && /^supports baseline — .*withdrawn by .+, \d{4}-\d{2}-\d{2}: Verification: another company's filing/.test(struck),
     'the withdrawn link is struck through, with who withdrew it, the date and the reason', struck);
-  check((await ev(`(${linkLi}).textContent`)).includes('supports impact_basis') && (await ev(`(${linkLi}).textContent`)).includes('corrected from baseline'),
-    'the current link reads "supports impact_basis", "corrected from baseline"');
+  check((await ev(`(${linkLi}).textContent`)).includes('supports impact basis') && (await ev(`(${linkLi}).textContent`)).includes('corrected from baseline'),
+    'the current link reads "supports impact basis", "corrected from baseline"');
   await shot('c1_walk_corrected', 1280);
 
   check(await open(`/runs/${RUN}`, runReady), 'the run page opens');

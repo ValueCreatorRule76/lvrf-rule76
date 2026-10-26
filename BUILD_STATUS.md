@@ -12558,3 +12558,141 @@ Scotts run recomputed to exactly its own sealed score, so this case was never ex
 **The old dump is removed, at Brad's word.** `~/lvrf-backups/lvrf-pre-ux1s2-20261019T171542Z.dump`
 is deleted. That leaves the latest prod dump (`lvrf-pre-p2-20261025T162141Z.dump`) and the six
 pre-migration backups, as the retention rule says. L39 is done.
+
+## C2: what a commitment's and a verification's attestation supports — Gate A, 25 October 2026 (UTC)
+
+**Value spine stages served:** `commit` and `verify`, and `return` (the errata).
+
+**C2-D1, measured:** `MODEL_VERSION` and `MODEL_FINGERPRINT` are `1.0.0 d4cf8f31472a` before and
+after widening `supports`' type. The fingerprint covers the model's constants, not its types, so
+the model stays 1.0.0 and every sealed run still recomputes under its own model. `verify_c2`
+checks it.
+
+**Migration 0042 (`0042_c2_supports`):**
+- **The three CHECKs gain `target_commitment` and `verification`:**
+  `value_outcome_evidence_supports_known`, `value_outcome_evidence_correction_complete` (the
+  corrected-from list) and `run_errata_supports_known`.
+- **Errata that are not recomputed (Brad's ruling after the dry run):**
+  - `run_errata`'s `recomputed_score` and `recomputed_band` become nullable, and so do
+    `model_version` and `model_fingerprint` (for a run that sealed none);
+  - they are held under the new `run_errata_recompute_complete`;
+  - `scores_in_range` and `bands_known` are rewritten definite under NULL.
+- **Plain sentences:** updated, and one added.
+- **What it orphans: nothing.** No row changes, and no trigger is added (167). The 3 existing
+  errata are recomputed, so each passes the new CHECK.
+
+**The server:**
+- **`server/lib/supports.ts`:** the one list of supports and their words ("the commitment",
+  "the verification").
+- **Commit and verify:**
+  - commit links its attestation as `target_commitment`;
+  - verify links its attestation as `verification` only (C2-D3);
+  - verify's `existingSupportsValues` fallback is removed. It could never find `attestation`,
+    because the CHECK never allowed it.
+- **`correct-support`:**
+  - it accepts both values;
+  - **a departure for Brad's review:** only an attestation may be corrected to the commitment or
+    the verification ("Only an attestation supports the commitment; this evidence is not one.");
+  - no figure check is recorded for either, because neither supports a figure. Before this, the
+    route would have checked them against the currency figure.
+- **The recompute** (`recomputeRun.ts`):
+  - the corrected item is named in words;
+  - **a seal it cannot reproduce gives a NOT RECOMPUTED result** in place of a refusal. Its
+    reason is specific to the run: "this run sealed no model version, …" or "this run's seal
+    does not carry who attested its attested evidence, so "<the factor's question>" (sealed at
+    n) cannot be reproduced …". Where the seal shows it, the method then quotes the one factor
+    the item could feed, with that factor's sealed value (Brad's condition 1);
+  - a run sealed under another recorded model is still refused, as M1 rules;
+  - the erratum route records a not-recomputed result with no score.
+
+**The client:**
+- the walk, the POV, the run page, the erratum form and the lineage show "supports the
+  commitment" and "supports the verification";
+- the correction form offers the two values for an attestation only;
+- an erratum that was not recomputed reads "Not recomputed: …" beside the sealed score, on
+  screen. In print, the header line is "ERRATUM: not recomputed (sealed m / 100). Full text on
+  page 1.";
+- the lineage reads "not recomputed".
+
+**`scripts/report_c2_errata.ts`, the dry run:** read-only (one READ ONLY transaction). It finds
+commitment and verification attestations by the provenance commit and verify write. It lists each
+locked run that sealed one as the impact basis, with:
+- the sealed score;
+- the recompute, or why it was not recomputed;
+- whether its erratum is recorded.
+
+**On the fresh prod copy:** 1 attestation (Curia's, still `impact_basis`), and 9 runs, 13–21:
+- 13–16: "this run sealed no model version";
+- 17–21: "this run's seal does not carry who attested its attested evidence, so "Is the baseline
+  supported by confirmed evidence?" (sealed at 15) cannot be reproduced".
+
+**Brad's condition 2, which evidence columns can change after insert:**
+- `lvrf_app` holds UPDATE on every column of `evidence`.
+- **What the triggers make final:**
+  - the form, quote, locator and how-read (`evidence_form_final`);
+  - a resolved citation (`evidence_resolution_is_final`);
+  - AI-sourced, which stays so;
+  - a supersession, once, to a newer row;
+  - and no simulated attester is allowed.
+- **Changeable, audited but unguarded:** `kind`, `summary`, `provenance`, `source_verified`,
+  `attested_by_person_id`, `attested_at`, `simulated` and the rest.
+- **The record:** 4 updates on the prod copy. Two are citations opened (12 Oct). Two set
+  `simulated` on two rows (23 Aug), with no actor recorded.
+- Recorded as **L41** (evidence mutability) and **L42** (new runs seal the attester and the model).
+
+**Brad's condition 3, the attester of Curia's baseline system export in runs 17–21:**
+- **Who:** "Brad Piver (external analyst of record)", a person row in Curia's institution, not
+  simulated, created 24 Aug 2026.
+- **Its own title:** "External analyst of record — not a Curia employee. Asserting from published
+  material."
+- **The vendor-side account is a separate row:** "Brad Piver", Value Engineer, of the tenant.
+- **The rule:** `evidenceCredit` gives an attested item 0.6 only when the attester is
+  institution-scoped (`persons.institution_id` set), and 0 for a vendor-side attester ("not an
+  authority on the customer's metric").
+- **Mechanically consistent:** the row is institution-scoped, so the item earned 15 of 25.
+- **Against the rule's intent:** the person's own title says they are not of the customer. The
+  scope stands in for "customer-side", and this row passes it.
+- **Nothing is changed. For Brad's ruling.**
+
+**Gate A:**
+- **`verify_c2.sh`: 114 passed, 0 failed.** New; its own fixtures (L39). It covers:
+  - C2-D1;
+  - what 0042 orphans (nothing), and the CHECKs definite under NULL;
+  - Curia's shape, built by running the pre-C2 commit itself;
+  - commit and verify linking the new values;
+  - the model: neither value changes a factor, with no currency claimed and with 250,000 claimed;
+    the same attestations on the impact basis and the actual do;
+  - the dry run: writes nothing; its lines match the script's own computation (A recomputes to
+    its sealed 45; B is not recomputed: the attester is not sealed);
+  - the correction through the route, with its act and no figure check;
+  - the errata: A recomputed; B not recomputed, saying why and quoting the seal's factor; and the
+    no-model reason, from a run's own payload without its model;
+  - the display on screen at 1280 and 390, and every printed page of B's run.
+- **Breaks, each caught, every file restored byte-identical:**
+  - B1, the CHECK without the new values: commit refused in words, nothing written;
+  - B2, commit linking impact_basis again;
+  - B3, factor 4 grading target_commitment;
+  - B4, the dry run writing: its READ ONLY transaction refuses;
+  - B5, a typed score;
+  - B6, the not-recomputed method without the seal's factor line.
+- **The full regression on the fresh copy: all 40 scripts pass,** with `verify_c2` added.
+  - **Two scripts were updated for C2's wording:**
+    - `verify_run_page`'s B11 and `verify_corrections`' B14 edit the erratum line's new text;
+    - `verify_corrections` reads the new refusal sentence and "supports impact basis" on W6;
+    - `verify_hygiene` and `verify_drift` carry the widened CHECK.
+  - Re-run after the update: `verify_run_page` 273/0, `verify_corrections` 210/0.
+  - The build and lint are clean (the 1 pre-existing warning). The bundle is `index-DzCNmirE.js`
+    / `index-C9WVm_9W.css`.
+- **Prod-copy equivalence against the deployed `b6de1de`:** 76 GETs, 76 identical.
+- **The screenshots and printed pages:** `~/lvrf-backups/c2-screens/` (700; files 600).
+
+**For Brad's review:**
+1. **The departure:** only an attestation may be corrected to the commitment or the
+   verification (the route, and the form's options).
+2. **Condition 3's finding:** the Curia attester's institution scope.
+3. **L41 and L42.**
+
+**Gate B (planned):** the backup; pull; migrate 0042; ownership; hardening; the checks; deploy.
+Then the dry run on prod, read-only. Then Brad's acts through the UI:
+- correct Curia's link;
+- the 9 errata, each not recomputed, ticked against the dry run's list.

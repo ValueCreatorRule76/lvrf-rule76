@@ -236,12 +236,14 @@ export interface RunErratum {
   what_was_wrong: string;
   what_is_right: string;
   reason: string;
-  model_version: string;
-  model_fingerprint: string;
+  /** C2: NULL only on an erratum not recomputed for a run that sealed no model version. */
+  model_version: string | null;
+  model_fingerprint: string | null;
   sealed_score: string;
   sealed_band: string;
-  recomputed_score: string;
-  recomputed_band: string;
+  /** C2: NULL together when the recompute refused (the seal cannot be reproduced); recompute_method then says why. */
+  recomputed_score: string | null;
+  recomputed_band: string | null;
   recompute_method: string;
   recorded_by: string;
   recorded_at: string;

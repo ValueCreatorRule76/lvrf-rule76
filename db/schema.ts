@@ -1032,8 +1032,9 @@ export const valueOutcomeEvidence = pgTable('value_outcome_evidence', {
   primaryKey({ columns: [t.valueOutcomeId, t.evidenceId, t.supports] }),
   /** C1-D1: one current link per outcome and evidence. */
   uniqueIndex('value_outcome_evidence_one_current').on(t.valueOutcomeId, t.evidenceId).where(sql`${t.withdrawnAt} IS NULL`),
+  /** C2 (LVRF_PLAN §11): a commitment's and a verification's attestation support those acts, and no factor reads them. */
   check('value_outcome_evidence_supports_known',
-    sql`${t.supports} IN ('baseline', 'actual', 'impact_basis')`),
+    sql`${t.supports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification')`),
   check('value_outcome_evidence_withdrawal_complete',
     sql`(${t.withdrawnByPersonId} IS NULL AND ${t.withdrawnAt} IS NULL AND ${t.withdrawalReason} IS NULL)
         OR (${t.withdrawnByPersonId} IS NOT NULL AND ${t.withdrawnAt} IS NOT NULL AND ${t.withdrawalReason} IS NOT NULL
@@ -1041,7 +1042,7 @@ export const valueOutcomeEvidence = pgTable('value_outcome_evidence', {
   check('value_outcome_evidence_correction_complete',
     sql`(${t.correctsSupports} IS NULL AND ${t.correctedByPersonId} IS NULL AND ${t.correctionReason} IS NULL)
         OR (${t.correctsSupports} IS NOT NULL AND ${t.correctedByPersonId} IS NOT NULL AND ${t.correctionReason} IS NOT NULL
-            AND ${t.correctsSupports} IN ('baseline', 'actual', 'impact_basis') AND ${t.correctsSupports} <> ${t.supports}
+            AND ${t.correctsSupports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification') AND ${t.correctsSupports} <> ${t.supports}
             AND length(btrim(${t.correctionReason})) >= 12)`),
 ]);
 
@@ -2518,13 +2519,21 @@ export const runErrata = pgTable('run_errata', {
   whatWasWrong: text('what_was_wrong').notNull(),
   whatIsRight: text('what_is_right').notNull(),
   reason: text('reason').notNull(),
-  /** The model the run was sealed with, and under which the recompute ran (C1-D3). */
-  modelVersion: text('model_version').notNull(),
-  modelFingerprint: text('model_fingerprint').notNull(),
+  /**
+   * The model the run was sealed with, and under which the recompute ran (C1-D3). C2 (Brad, 25 Oct
+   * 2026): NULL only on an erratum not recomputed, for a run that sealed no model version.
+   */
+  modelVersion: text('model_version'),
+  modelFingerprint: text('model_fingerprint'),
   sealedScore: numeric('sealed_score', { precision: 5, scale: 1 }).notNull(),
   sealedBand: text('sealed_band').notNull(),
-  recomputedScore: numeric('recomputed_score', { precision: 5, scale: 1 }).notNull(),
-  recomputedBand: text('recomputed_band').notNull(),
+  /**
+   * C2 (Brad, 25 Oct 2026): NULL together when the server's recompute refuses (the run sealed no
+   * model version, or its seal cannot be reproduced). The method then reads "Not recomputed: <the
+   * refusal>", with what the seal itself shows of the factor the item fed. No number is invented.
+   */
+  recomputedScore: numeric('recomputed_score', { precision: 5, scale: 1 }),
+  recomputedBand: text('recomputed_band'),
   recomputeMethod: text('recompute_method').notNull(),
   recordedByPersonId: uuid('recorded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
@@ -2532,16 +2541,23 @@ export const runErrata = pgTable('run_errata', {
   index('run_errata_run_idx').on(t.valueRunId),
   uniqueIndex('run_errata_one_per_correction').on(t.valueRunId, t.evidenceId, t.correctedToSupports).where(sql`${t.supersedesId} IS NULL`),
   uniqueIndex('run_errata_superseded_once').on(t.supersedesId).where(sql`${t.supersedesId} IS NOT NULL`),
-  check('run_errata_supports_known', sql`${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis')`),
+  check('run_errata_supports_known', sql`${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification')`),
   check('run_errata_supersession_complete',
     // Every term definite: a NULL reason must make this false, never unknown (an unknown CHECK passes; P1's B3).
     sql`(${t.supersedesId} IS NULL AND ${t.supersessionReason} IS NULL) OR (${t.supersedesId} IS NOT NULL AND ${t.supersessionReason} IS NOT NULL AND length(btrim(coalesce(${t.supersessionReason}, ''))) >= 12)`),
   check('run_errata_texts_stated',
     sql`length(btrim(${t.whatWasWrong})) >= 12 AND length(btrim(${t.whatIsRight})) >= 12 AND length(btrim(${t.reason})) >= 12`),
+  // Every term definite under NULL (check-null-holes): a NULL recompute is allowed only as "not recomputed" below.
   check('run_errata_scores_in_range',
-    sql`${t.sealedScore} BETWEEN 0 AND 100 AND ${t.recomputedScore} BETWEEN 0 AND 100`),
+    sql`${t.sealedScore} BETWEEN 0 AND 100 AND (${t.recomputedScore} IS NULL OR ${t.recomputedScore} BETWEEN 0 AND 100)`),
   check('run_errata_bands_known',
-    sql`${t.sealedBand} IN ('low', 'medium', 'high') AND ${t.recomputedBand} IN ('low', 'medium', 'high')`),
+    sql`${t.sealedBand} IN ('low', 'medium', 'high') AND (${t.recomputedBand} IS NULL OR ${t.recomputedBand} IN ('low', 'medium', 'high'))`),
+  /** C2: recomputed (score, band and model, the method not "Not recomputed:"), or not (score and band NULL, the method saying why). */
+  check('run_errata_recompute_complete',
+    sql`(${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
+         AND ${t.recomputeMethod} NOT LIKE 'Not recomputed:%')
+        OR (${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.recomputeMethod} LIKE 'Not recomputed:%'
+         AND (${t.modelVersion} IS NULL) = (${t.modelFingerprint} IS NULL))`),
   check('run_errata_method_stated', sql`length(btrim(${t.recomputeMethod})) >= 24`),
 ]);
 

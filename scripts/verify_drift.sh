@@ -89,7 +89,7 @@ OUT="$(d2 "$VERIFY_URL" || true)"; case "$OUT" in *"in the database but not in"*
 q "ALTER TABLE institutions DROP COLUMN drift_probe" > /dev/null
 q "ALTER TABLE value_outcome_evidence DROP CONSTRAINT value_outcome_evidence_supports_known" > /dev/null
 OUT="$(d2 "$VERIFY_URL" || true)"; case "$OUT" in *"but not in the database: check value_outcome_evidence.value_outcome_evidence_supports_known"*) ok "a dropped CHECK -> D2 names it (the 0013 failure: journal says applied, the object is absent)" ;; *) bad "dropped check: $OUT" ;; esac
-q "ALTER TABLE value_outcome_evidence ADD CONSTRAINT value_outcome_evidence_supports_known CHECK (supports IN ('baseline', 'actual', 'impact_basis'))" > /dev/null
+q "ALTER TABLE value_outcome_evidence ADD CONSTRAINT value_outcome_evidence_supports_known CHECK (supports IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification'))" > /dev/null
 OUT="$(d2 "$VERIFY_URL")"; case "$OUT" in "schema drift: none"*) ok "  ...restored: none" ;; *) bad "restore: $OUT" ;; esac
 
 step "6. D3 — governance triggers"

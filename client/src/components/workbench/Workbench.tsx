@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { businessMetricName, isEnrichedBusinessMetric, type Run, type RunErratum } from '../../types/run';
 import { MARKER_KIND, type Pov } from '../../api/pov';
 import { day, unitText, STEP_TITLES } from '../../lib/workspaceStatus';
-import { label, DISCLOSURE, REALIZATION, STAGE_LABEL } from '../../lib/labels';
+import { label, supportsShort, DISCLOSURE, REALIZATION, STAGE_LABEL } from '../../lib/labels';
 import { GovernedAction } from '../GovernedAction';
 import { FOCUS_RING, GovernedForm } from '../GovernedForm';
 import { useActor } from '../../actor/ActorContext';
@@ -79,7 +79,7 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
                 // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
-                ? <><span className="font-semibold">ERRATUM</span>: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
                 : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )
@@ -99,7 +99,10 @@ function ErratumBanner({ x }: { x: RunErratum }) {
       {' '}What was wrong: {sentence(x.what_was_wrong)}. What is right: {sentence(x.what_is_right)}. Why: {sentence(x.reason)}.
       {x.supersedes_id && <>{' '}It supersedes the erratum recorded {x.supersedes_recorded_at ? day(x.supersedes_recorded_at) : ''} by {x.supersedes_recorded_by}, because: {sentence(x.supersession_reason ?? '')}.</>}
       {' '}<span className="font-semibold">The sealed record below is unchanged.</span>
-      {' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).
+      {x.recomputed_score === null || x.recomputed_band === null
+        // C2 (Brad, 25 Oct 2026): the server could not reproduce the seal; its sentence says why. No score is shown but the sealed one.
+        ? <>{' '}<span data-testid="erratum-not-recomputed">{x.recompute_method.replace(/\s*The sealed run is unchanged\.$/, '').replace(/\.$/, '')}</span> (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>
+        : <>{' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>}
     </div>
   );
 }
@@ -292,15 +295,15 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
   ];
   return (
     <div className="border-t border-rule-soft pt-3 print:hidden" data-testid="record-erratum">
-      <GovernedForm<{ erratum_id: string; recomputed_score: number; recomputed_band: string }>
+      <GovernedForm<{ erratum_id: string; recomputed_score: number | null; recomputed_band: string | null }>
         path={`/api/value-runs/${run.id}/errata`}
         provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">An erratum beside this sealed run, by you, dated. <strong>The sealed run is not changed.</strong> The server recomputes its confidence with the correction, under the model it was sealed with, and states both scores.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">An erratum beside this sealed run, by you, dated. <strong>The sealed run is not changed.</strong> The server recomputes its confidence with the correction, under the model it was sealed with, and states both scores; if the seal cannot be reproduced, it records that it was not recomputed, and why.</p>}
         fields={<div className="flex flex-col gap-3">
           <label className="block"><span className={L}>The corrected link</span>
             <select className={I} value={evidenceId} onChange={(e) => setEvidenceId(e.target.value)}>
               <option value="" disabled>— choose —</option>
-              {corrected.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — now supports {e.supports.replace('_', ' ')}, not {e.corrects_supports?.replace('_', ' ')}</option>)}
+              {corrected.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}</option>)}
             </select></label>
           <label className="block"><span className={L}>What was wrong</span><textarea rows={2} className={I} value={wrong} onChange={(e) => setWrong(e.target.value)} /></label>
           <label className="block"><span className={L}>What is right</span><textarea rows={2} className={I} value={right} onChange={(e) => setRight(e.target.value)} /></label>
@@ -316,7 +319,7 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
           ...(current ? { supersedes_erratum_id: current.id, supersession_reason: supersessionReason.trim() } : {}) })}
         submitLabel="Record the erratum"
         onSuccess={() => { setOpen(false); setSupersessionReason(''); onChanged(); }}
-        renderSuccess={(d) => <>Recorded. Recomputed: {Number(d.recomputed_score)} / 100.</>}
+        renderSuccess={(d) => <>{d.recomputed_score === null ? 'Recorded, not recomputed: the erratum says why.' : <>Recorded. Recomputed: {Number(d.recomputed_score)} / 100.</>}</>}
       />
     </div>
   );

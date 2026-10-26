@@ -101,7 +101,8 @@ export const MODEL_FINGERPRINT = createHash('sha256')
 export interface ConfidenceEvidenceInput {
   kind: string;
   sourceVerified: boolean;
-  supports: 'baseline' | 'attach' | 'actual' | 'impact_basis';
+  /** C2: 'target_commitment' and 'verification' are named so a caller may pass them; no factor reads them. */
+  supports: 'baseline' | 'attach' | 'actual' | 'impact_basis' | 'target_commitment' | 'verification';
   /** Name of the attester, if this evidence is an attestation. */
   attestedByName?: string | null;
   attestedByScope?: 'tenant' | 'institution' | null;

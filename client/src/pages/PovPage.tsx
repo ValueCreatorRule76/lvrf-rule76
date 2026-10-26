@@ -5,7 +5,7 @@ import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { ConfidenceBadge } from '../components/workbench/Workspace';
 import { day, unitText } from '../lib/workspaceStatus';
-import { label, STAGE_LABEL, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
+import { label, supportsShort, STAGE_LABEL, ASK_TYPE, DISCLOSURE_REGIME, FACT_KIND, GAP_PATH, GAP_STATE, IDENTIFIER_TYPE } from '../lib/labels';
 import { formatQuantity } from '../lib/format';
 import { EvidenceRestsOn, FigureCheckLine } from '../components/EvidenceRestsOn';
 
@@ -158,7 +158,7 @@ function Chain({ h, o }: { h: PovHypothesis; o: PovOutcome | undefined }) {
 /** C1: a link that corrects what an earlier one supported — on any evidence, not only a vendor claim (L39, Brad, 25 Oct 2026). */
 function CorrectedNote({ e }: { e: PovOutcome['evidence'][number] }) {
   if (!e.corrects_supports) return null;
-  return <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {e.corrects_supports.replace('_', ' ')} to {e.supports.replace('_', ' ')}: {e.correction_reason}</p>;
+  return <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {supportsShort(e.corrects_supports)} to {supportsShort(e.supports)}: {e.correction_reason}</p>;
 }
 
 function OutcomeDetail({ o }: { o: PovOutcome }) {
@@ -184,7 +184,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {other.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {other.map((e, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {e.supports}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
+              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {supportsShort(e.supports)}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
                 <CorrectedNote e={e} />
               </li>))}
@@ -194,7 +194,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {o.withdrawn_links.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {o.withdrawn_links.map((l, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{l.supports.replace('_', ' ')}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}</li>))}
+              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{supportsShort(l.supports)}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}</li>))}
           </ul>
         )}
       </div>

@@ -7,6 +7,7 @@ import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
 import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
+import { supportsShort } from '../lib/labels';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
 /**
@@ -89,6 +90,8 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
 }
 
 const SUPPORTS = ['baseline', 'actual', 'impact_basis'] as const;
+/** C2: only an attestation supports the commitment or the verification (the route refuses any other). */
+const ATTESTATION_SUPPORTS = [...SUPPORTS, 'target_commitment', 'verification'] as const;
 
 /**
  * C1 (LVRF_PLAN §9): the steward corrects what a link supports. The old link
@@ -118,12 +121,12 @@ function CorrectSupport({ e, outcomeId, onDone }: { e: WalkEvidence; outcomeId: 
     <div className="mt-1.5 border-t border-rule-soft pt-2" data-testid="correct-support">
       <GovernedForm<{ supports: string }>
         path={`/api/value-outcomes/${outcomeId}/evidence/${e.id}/correct-support`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">This link, supporting <strong>{e.supports.replace('_', ' ')}</strong>, is <strong>withdrawn</strong> with your name, the date and your reason, and stays shown struck through. A new link records what it supports instead. <strong>A sealed run is not changed</strong>; record an erratum on it.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">This link, supporting <strong>{supportsShort(e.supports)}</strong>, is <strong>withdrawn</strong> with your name, the date and your reason, and stays shown struck through. A new link records what it supports instead. <strong>A sealed run is not changed</strong>; record an erratum on it.</p>}
         fields={<div className="flex flex-col gap-3">
           <label className="block"><span className={LABEL_CLASS}>What it supports</span>
             <select className={INPUT_CLASS} value={supports} onChange={(ev) => setSupports(ev.target.value)}>
               <option value="" disabled>— choose —</option>
-              {SUPPORTS.filter((s) => s !== e.supports).map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              {(e.kind === 'attestation' ? ATTESTATION_SUPPORTS : SUPPORTS).filter((s) => s !== e.supports).map((s) => <option key={s} value={s}>{supportsShort(s)}</option>)}
             </select></label>
           <label className="block"><span className={LABEL_CLASS}>Why</span>
             <textarea rows={2} className={INPUT_CLASS} value={reason} onChange={(ev) => setReason(ev.target.value)} />
@@ -403,10 +406,10 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {e.supports}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} onDone={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} onDone={reload} /></li>)}</ul>
           )}
           {outcome && outcome.withdrawn_links.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {l.supports.replace('_', ' ')} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>
@@ -434,7 +437,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
                     {r.sealed_evidence.length === 0 && <li>sealed no evidence</li>}
                     {r.sealed_evidence.map((e, i) => (
                       <li key={i} data-testid="w7-sealed">
-                        sealed: {e.supports} · {e.kind} · basis {e.basis ?? '—'}
+                        sealed: {supportsShort(e.supports)} · {e.kind} · basis {e.basis ?? '—'}
                         {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
                         {' · '}{e.source_verified ? 'source verified' : 'unverified'} — {e.summary}
                       </li>

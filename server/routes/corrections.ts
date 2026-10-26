@@ -9,6 +9,7 @@ import { requireSteward } from '../lib/stewardActs.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { checkFigure, recordFigureCheck, type Locator } from '../lib/figureCheck.js';
 import { recomputeWithCorrection } from '../lib/recomputeRun.js';
+import { ACT_SUPPORTS, SUPPORTS_WORD, isSupports, type Supports } from '../lib/supports.js';
 
 /**
  * C1 (LVRF_PLAN §9; Brad's ruling and C1-D1–D4, 25 Oct 2026) — the two
@@ -36,8 +37,6 @@ class Refusal extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
 }
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const SUPPORTS = ['baseline', 'actual', 'impact_basis'] as const;
-const SUPPORTS_WORD: Record<string, string> = { baseline: 'the baseline', actual: 'the actual', impact_basis: 'the impact basis' };
 const MIN_REASON = 12;
 
 async function answer(pool: Pool, err: unknown, req: Request, res: Response,
@@ -76,10 +75,10 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
       if (!isRecord(req.body)) throw new Refusal(422, 'Say what the evidence supports, and why the link is corrected.');
       const { rows: [link] } = await client.query<{
         supports: string; tenant_id: string; institution_id: string; baseline_value: string | null; actual_value: string | null;
-        claimed_currency_impact: string | null; evidence_form: string; quote_text: string | null; locator: Locator | null;
+        claimed_currency_impact: string | null; evidence_form: string; quote_text: string | null; locator: Locator | null; kind: string;
       }>(
         `SELECT voe.supports, i.tenant_id, i.id AS institution_id, vo.baseline_value, vo.actual_value, vo.claimed_currency_impact,
-                e.evidence_form::text, e.quote_text, e.locator
+                e.evidence_form::text, e.quote_text, e.locator, e.kind::text
            FROM value_outcome_evidence voe
            JOIN value_outcomes vo ON vo.id = voe.value_outcome_id
            JOIN institutions i ON i.id = vo.institution_id
@@ -98,12 +97,16 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
         { endpoint, subjectTable: 'value_outcome_evidence', subjectId: null, tenantId, institutionId })) return;
       const supports = req.body.supports;
       const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
-      if (typeof supports !== 'string' || !SUPPORTS.includes(supports as (typeof SUPPORTS)[number])) {
-        throw new Refusal(422, 'Say what the evidence supports: the baseline, the actual or the impact basis.');
+      if (!isSupports(supports)) {
+        throw new Refusal(422, 'Say what the evidence supports: the baseline, the actual, the impact basis, the commitment or the verification.');
       }
       if (reason.length < MIN_REASON) throw new Refusal(422, `Say why the link is corrected, in at least ${MIN_REASON} characters.`);
       if (supports === link.supports) {
         throw new Refusal(422, `This link already supports ${SUPPORTS_WORD[supports]}; there is nothing to correct.`);
+      }
+      // C2: the commitment and the verification are acts a person attests to; only an attestation supports them.
+      if (ACT_SUPPORTS.includes(supports) && link.kind !== 'attestation') {
+        throw new Refusal(422, `Only an attestation supports ${SUPPORTS_WORD[supports]}; this evidence is not one.`);
       }
       // Withdraw first, then record the corrected link (C1-D1): one current link at a time.
       await client.query(
@@ -123,9 +126,11 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
       });
       // The corrected link's figure check (P1), as outcome evidence's: a statement is not checkable;
       // a quote or a locator is checked when the figure exists; legacy evidence is not checked.
+      // C2: the commitment and the verification support no figure, so nothing is checked for them
+      // (commit and verify record none either).
       const field = supports === 'baseline' ? 'baseline_value' : supports === 'actual' ? 'actual_value' : 'claimed_currency_impact';
       const figure = link[field];
-      if (link.evidence_form !== 'legacy' && (link.evidence_form === 'statement' || figure !== null)) {
+      if (!ACT_SUPPORTS.includes(supports as Supports) && link.evidence_form !== 'legacy' && (link.evidence_form === 'statement' || figure !== null)) {
         const checked = checkFigure({ numeric: figure === null ? null : Number(figure), text: null },
           { form: link.evidence_form as 'quote' | 'locator' | 'statement', quoteText: link.quote_text, locator: link.locator });
         await recordFigureCheck(client, {
@@ -215,8 +220,10 @@ export function erratumRouter(pool: Pool): Router {
         }
         if (supersessionReason.length < MIN_REASON) throw new Refusal(422, `Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
       }
-      const r = recomputeWithCorrection(run.payload as never, { kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as 'baseline');
-      if (!r.ok) throw new Refusal(422, r.reason);
+      const rc = recomputeWithCorrection(run.payload as never, { kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
+      // C2 (Brad, 25 Oct 2026): a seal that cannot be reproduced is recorded NOT RECOMPUTED, saying why; any other refusal stands.
+      if (!rc.ok && !rc.notRecomputed) throw new Refusal(422, rc.reason);
+      const r = rc.ok ? rc : { ...rc, score: null, band: null };
       const { rows: [row] } = await client.query<{ id: string }>(
         `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason,
            what_was_wrong, what_is_right, reason,
@@ -230,7 +237,7 @@ export function erratumRouter(pool: Pool): Router {
         act: 'record_erratum', tenantId: tenantId!, subjectTable: 'run_errata', subjectId: row.id, evidenceIds: [b.evidence_id],
         reason: String(texts.reason).trim(),
       });
-      res.status(201).json({ erratum_id: row.id, supersedes_erratum_id: supersedes ?? null, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion });
+      res.status(201).json({ erratum_id: row.id, supersedes_erratum_id: supersedes ?? null, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion, recompute_method: r.method });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId });
     }

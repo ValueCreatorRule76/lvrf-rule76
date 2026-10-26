@@ -124,6 +124,8 @@ on institution routes (P3).
 | L38 | **A value that drops a qualifier the quote has passes the figure check.** The quote "We had approximately 4,200 employees" and the value 4,200 read **pass**: rules v1 (`server/lib/figureCheck.ts`) flag a qualifier that is in the value but not the quote, never one that is in the quote but not the value. Dropping any of v1's eight qualifiers (approximately, up to, at least, estimated, adjusted, excluding, including, over) turns a qualified figure into an exact-looking one | P2 Gate A screenshots, 25 Oct 2026 (Brad: record it) | **For figure-check rules v2.** Flag a qualifier in the quote that the value drops, as a wording flag naming it ("the quote says approximately; the value does not"), flagged, not blocked. A rules-version change: existing `figure_checks` rows keep the rules version they ran under, and a re-check is a new row |
 | L39 | **`verify_corrections` (and any script that breaks on C1-applied data) depends on prod's state.** It reads Scotts' vendor link as `baseline`, then corrects it and records the errata itself, so it can run only on a prod copy taken before Brad's C1 acts (25 Oct 2026). The P2 Gate A regression therefore ran on the older copy (`lvrf-pre-ux1s2-…`, 19 Oct), restored for it, with the fresh one (`lvrf-pre-p2-…`) kept beside it | P2 review, 25 Oct 2026 (Brad: record it; fix right after P2) | **Right after P2:** each such script builds its own fixture links and errata on its clone and asserts on those, never on what prod happens to hold. Then the full regression runs on the fresh copy, and the older dump is removed once no script needs it (the retention rule: the latest prod dump plus the six pre-migration backups) **Built 25 Oct 2026 (Gate A):** only `verify_corrections` broke on the fresh copy (38 of 39 passed). It now builds Scotts' shape on its own fixture account and passes there (200/0); the POV's correction note is shown on any corrected link, not only vendor claims (Brad, 25 Oct 2026). The older dump is removed at Brad's word, after deploy |
 | L40 | **The client bundle crossed Vite's 500 KB warning at P2:** `index-C-Tu7UkD.js` is 510.27 kB minified (136.39 kB gzipped), and the build prints "Some chunks are larger than 500 kB after minification" | P2 deploy, 25 Oct 2026 (Brad: record it) | **A later slice:** split by route (`React.lazy` per page: the run page, the POV, packs, lineage), so the Accounts home loads only what it shows. Check that the print stylesheet and every printed page still render (each split page prints as it does today), that the request log keeps its patterns, and that no route's first paint changes. Presentation and loading only; no record changes |
+| L41 | **Evidence rows are not immutable after insert.** `lvrf_app` holds UPDATE on every column of `evidence`. The triggers make final only: the form, quote, locator and how-read (`evidence_form_final`); a resolved citation (`evidence_resolution_is_final`); AI-sourced, which stays so; a supersession, once, to a newer row; and no simulated attester. `kind`, `summary`, `provenance`, `source_verified`, `attested_by_person_id`, `attested_at`, `simulated` and the rest can change, audited but unguarded. On the prod copy, 4 updates in all: 2 citations opened (12 Oct) and 2 rows set `simulated` (23 Aug, no actor) | C2 dry run, 25 Oct 2026 (Brad: report and record) | **Open, for Brad's ruling:** which columns become final after insert (at least the ones a sealed run's recompute matches on: `kind`, `summary`, `provenance`, and the attester), by a trigger as `evidence_form_final` does |
+| L42 | **New runs must seal what a later recompute needs: each attested item's attester (name and scope) and the model version and fingerprint.** C2's dry run (25 Oct 2026) found Curia runs 13–16 sealed with no model version, and runs 17–21 sealed without the attester of their attested baseline item, so C1's recompute cannot reproduce any of the 9; their C2 errata are recorded not recomputed | C2 dry run, 25 Oct 2026 (Brad: record it) | **Open:** produce-run seals the attester (name, scope, simulated) beside each attested item, and every run seals `modelVersion` and `modelFingerprint` (runs since 1.0.0 already do), so every future run is recomputable; a payload change, so it needs its own ruling on the hash and on old runs |
 
 ---
 
@@ -3031,6 +3033,29 @@ The count is expected to be **9 (Curia 13–21), each recomputing to its sealed 
 
 **The display:** the walk, the POV and the run page show "supports the commitment" and
 "supports the verification".
+
+### The dry run's finding, and Brad's ruling (25 Oct 2026)
+
+- **The finding:** the dry run lists the expected 9 (Curia 13–21), but C1's recompute refuses
+  every one, for reasons unrelated to C2:
+  - runs 13–16 sealed no model version;
+  - runs 17–21 sealed under 1.0.0, but their baseline system export is attested (15 of 25), and
+    the seal does not carry the attester, so the seal cannot be reproduced.
+- **The C2 item** fed only factor 4, full in all 9 (no currency claimed): the mislabel changed
+  no score.
+- **Brad's ruling: an erratum, not recomputed.** Migration 0042 also makes run_errata's
+  recomputed score and band (and its model, for a run that sealed none) nullable under
+  `run_errata_recompute_complete`. When the seal cannot be reproduced, the erratum is recorded
+  with no score; its method reads "Not recomputed: <the reason, specific to the run>".
+- **His conditions:**
+  1. Where the seal shows it, the method also quotes, from the seal, the one factor the item
+     could feed and its sealed value. It is read by the server, never typed.
+  2. Report which evidence columns can change after insert (L41), and record that new runs must
+     seal the attester and the model (L42).
+  3. Report who attested Curia's baseline system export in runs 17–21, and whether the credit is
+     consistent with the institution-scoped attester rule, for his ruling. Nothing is changed.
+- **A run sealed under another *recorded* model** is still refused: M1 keeps every model's
+  scorer.
 
 ### Gate A (planned)
 

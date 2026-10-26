@@ -478,7 +478,7 @@ sleep 5; HL12="$(header_lines)"
 restore "$WB"
 # B11 (C1b) — the erratum line in its old order (name and date first) with that long name: the
 # figures and "Full text on page 1." are pushed past the clip at both widths.
-edit "$WB" "<><span className=\"font-semibold\">ERRATUM</span>: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" \
+edit "$WB" "<><span className=\"font-semibold\">ERRATUM</span>: {errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>" \
   "<><span className=\"font-semibold\">ERRATUM</span> recorded after sealing, {day(errata[0].recorded_at)}, by {'$HUGE_NAME'}: recomputed {Number(errata[0].recomputed_score)} / 100 (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1.</>"
 sleep 5; HL11="$(header_lines)"
 [ "$(node -e "const o=JSON.parse(process.argv[1] || '{}'); console.log(Object.keys(o).length === 2 && Object.values(o).every((m) => m.erratumVisible === false))" "$HL11")" = "true" ] \

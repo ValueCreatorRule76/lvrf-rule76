@@ -264,7 +264,7 @@ expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Verific
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Verification: an extra field.","withdrawn_at":"2026-01-01"}' 400 "an unknown field" "body.withdrawn_at is not a field of this request"
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"baseline","reason":"Verification: no change at all."}' 422 "the same support" "This link already supports the baseline; there is nothing to correct."
 expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"impact_basis","reason":"Too short"}' 422 "an 9-character reason" "in at least 12 characters"
-expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"attach","reason":"Verification: not a support value."}' 422 "an unknown support" "the baseline, the actual or the impact basis"
+expect POST "$(CS "$O_F" "$EV_F")" '{"supports":"attach","reason":"Verification: not a support value."}' 422 "an unknown support" "the baseline, the actual, the impact basis, the commitment or the verification"
 expect POST "$(CS "$O_F" "$(q "SELECT gen_random_uuid()")")" '{"supports":"impact_basis","reason":"Verification: no such link."}' 404 "no such link" "no current link of evidence"
 [ "$(q "SELECT count(*) FROM refusals")" -ge "$((REF0 + 4))" ] && ok "  ...the refusals recorded" || bad "  ...refusals $(q "SELECT count(*) FROM refusals") (was $REF0)"
 [ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE withdrawn_at IS NOT NULL")" = "$WD0" ] && ok "  ...nothing withdrawn by any of them" || bad "  ...a refused request withdrew a link"
@@ -513,7 +513,7 @@ grep -q "^  PASS  the POV opens" "$W/walk.b13.log" && grep -q "^  FAIL  the corr
   && ok "B13: the note on vendor claims only → caught: the corrected filing's line has no correction" || bad "B13: not caught: $(cat "$W/walk.b13.log" | head -3)"
 restore "$POVP"
 # B14 (L39) — the printed erratum line with the sealed score where the recompute belongs.
-edit "$BENCH" ': recomputed {Number(errata[0].recomputed_score)} / 100' ': recomputed {Number(errata[0].sealed_score)} / 100'
+edit "$BENCH" '<>recomputed {Number(errata[0].recomputed_score)} / 100</>' '<>recomputed {Number(errata[0].sealed_score)} / 100</>'
 sleep 2; walk print "$TOKEN" "$R1" l39_run1_b14.pdf
 B14M=""; for p in $(seq 1 "$(pdfinfo "$SHOTS/l39_run1_b14.pdf" 2>/dev/null | awk '/^Pages:/{print $2}')"); do
   pdftotext -f "$p" -l "$p" "$SHOTS/l39_run1_b14.pdf" - 2>/dev/null | tr -d '[:space:]' | grep -qF "ERRATUM:recomputed$WANT1/100(sealed$SEALED1/100)." || B14M="$B14M p$p"; done

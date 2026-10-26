@@ -51,7 +51,7 @@ migrate_clone "$VERIFY_DB" > /dev/null && ok "migrated (every existing supports 
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "hardened" || { bad "hardening failed"; exit 1; }
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "$T triggers (0030 adds none)" || bad "triggers $T"
-[ "$(q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'value_outcome_evidence_supports_known'")" = "CHECK ((supports = ANY (ARRAY['baseline'::text, 'actual'::text, 'impact_basis'::text])))" ] && ok "CHECK value_outcome_evidence_supports_known present" || bad "CHECK missing or different"
+[ "$(q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'value_outcome_evidence_supports_known'")" = "CHECK ((supports = ANY (ARRAY['baseline'::text, 'actual'::text, 'impact_basis'::text, 'target_commitment'::text, 'verification'::text])))" ] && ok "CHECK value_outcome_evidence_supports_known present" || bad "CHECK missing or different"
 
 step "3. L3 — the CHECK holds outside the route"
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"

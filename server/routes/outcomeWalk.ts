@@ -223,14 +223,12 @@ export function outcomeWalkRouter(pool: Pool): Router {
         ],
       );
 
-      // supports 'impact_basis' — stated by this task, not the dynamic
-      // existingSupportsValues check /verify uses. That check exists there
-      // because 'attestation' wasn't yet an established value in the table;
-      // this call site doesn't inherit that uncertainty.
+      // C2 (LVRF_PLAN §11; Brad, 25 Oct 2026): the commitment's attestation supports the
+      // commitment, not the impact basis — it is not evidence of a currency figure's derivation.
       await client.query(
         `INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports)
          VALUES ($1, $2, $3)`,
-        [outcomeId, evidence.id, 'impact_basis'],
+        [outcomeId, evidence.id, 'target_commitment'],
       );
 
       // Race guard, same shape as lockRun.ts's: if another request committed
@@ -576,18 +574,11 @@ export function outcomeWalkRouter(pool: Pool): Router {
         return;
       }
 
-      // supports is free text, not an enum — value_outcome_evidence has no
-      // CHECK constraint naming its legal members, only the convention
-      // baked into walkSpine.ts and confidenceModel.ts ('baseline',
-      // 'actual', 'impact_basis'). 'attestation' is not among the values
-      // those consumers already handle, so rather than assume it is safe to
-      // introduce, check what the table actually contains and prefer it
-      // only if some other write has already established it as real.
-      const { rows: supportsRows } = await client.query<{ supports: string }>(
-        'SELECT DISTINCT supports FROM value_outcome_evidence WHERE withdrawn_at IS NULL',
-      );
-      const existingSupportsValues = new Set(supportsRows.map((r) => r.supports));
-      const supportsValue = existingSupportsValues.has('attestation') ? 'attestation' : 'impact_basis';
+      // C2 (LVRF_PLAN §11; Brad, 25 Oct 2026; C2-D3): the verification's attestation supports the
+      // verification only — not the actual, which comes from the customer's system of record.
+      // (It was 'impact_basis', from a fallback that could never find 'attestation': the CHECK
+      // (0030) never allowed it.)
+      const supportsValue = 'verification';
 
       // The actor (x-actor-person-id) is who MADE this write — captured via
       // captured_by_person_id and the audit trigger. verified_by_person_id

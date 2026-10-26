@@ -36,7 +36,13 @@ export const EVIDENCE_KIND: Record<string, string> = {
   assessment_result: 'Assessment result', system_export: 'System export', artifact: 'Artifact', observation: 'Observation',
   attestation: 'Attestation', public_filing: 'Public filing', vendor_publication: 'Vendor publication',
 };
-export const SUPPORTS: Record<string, string> = { baseline: 'the baseline', actual: 'the actual', impact_basis: 'the impact basis' };
+export const SUPPORTS: Record<string, string> = {
+  baseline: 'the baseline', actual: 'the actual', impact_basis: 'the impact basis',
+  // C2 (LVRF_PLAN §11): a commitment's and a verification's attestation support those acts; no factor reads them.
+  target_commitment: 'the commitment', verification: 'the verification',
+};
+/** What a link supports, short, as the lists read it ("impact basis", "the commitment"); an unknown value as stored. */
+export const supportsShort = (v: string) => (v === 'target_commitment' || v === 'verification' ? SUPPORTS[v] : v.replace('_', ' '));
 
 /** The label for a stored value; an unknown value is shown as stored, never guessed. */
 export const label = (map: Record<string, string>, v: string) => map[v] ?? v;
