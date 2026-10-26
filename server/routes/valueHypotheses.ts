@@ -679,6 +679,10 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
       SELECT voe.value_outcome_id, voe.evidence_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis,
              -- C1: a link that corrects what an earlier one supported, with who and why.
              voe.corrects_supports, (SELECT full_name FROM persons WHERE id = voe.corrected_by_person_id) AS corrected_by, voe.correction_reason,
+             -- C2b: when — the withdrawal of the link it corrects, made in the same act (C1-D1); a link keeps no date of its own.
+             (SELECT to_char(p.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM value_outcome_evidence p
+               WHERE p.value_outcome_id = voe.value_outcome_id AND p.evidence_id = voe.evidence_id AND p.supports = voe.corrects_supports
+                 AND p.withdrawn_at IS NOT NULL) AS corrected_on,
              -- P1 (0039): what it rests on, and its latest figure check against this outcome.
              e.evidence_form::text, e.quote_text, e.locator, e.how_read,
              -- A statement is the attester's word when there is one, otherwise the recorder's.

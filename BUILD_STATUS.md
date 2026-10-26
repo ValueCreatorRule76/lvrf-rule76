@@ -12696,3 +12696,57 @@ locked run that sealed one as the impact basis, with:
 Then the dry run on prod, read-only. Then Brad's acts through the UI:
 - correct Curia's link;
 - the 9 errata, each not recomputed, ticked against the dry run's list.
+
+## C2b: correcting a link from the run page — Gate A, 26 October 2026 (UTC)
+
+**Found at C2's Gate B (Brad, 26 Oct 2026):** on Curia's account page, the walk's W6 shows only
+the live lot-acceptance engagement. Curia's commitment attestation (`e523bc46…`) is on the
+retired reference engagement (runs 13–21), and no page offered "Correct what it supports…" for
+it. The walk shows only the latest engagement with an outcome; C1's test passed because Scotts
+has one. Nothing was worked around, and nothing is written on prod: the correction and the 9
+errata wait for C2b.
+
+**The fix (client, and one read-only field on the POV):**
+- **The run page (`Workbench.tsx` `CorrectOnRun`)** offers "Correct what a link supports…" beside
+  "Record an erratum…", for the outcome the run sealed:
+  - the same route, act and refusals as W6; allowed on a retired engagement's frozen outcome (C1-D2);
+  - steward-only; a non-steward sees it disabled, with the reason naming the steward;
+  - **the form says what it does (Brad's condition 1):** "This corrects the current link of this
+    run's outcome, <metric>, for every run that shares it … The sealed run is not changed: record
+    an erratum on it.";
+  - **a corrected link is shown once corrected (condition 2):** "Corrected on <date> by <name>:
+    "<summary>" now supports <x>, not <y>. The sealed run is unchanged: an erratum records it."
+    It shows on every run that shares the outcome, and no second form is offered for that link;
+  - the choices per kind come from one helper (`supportsChoices`), shared with the walk.
+- **The POV's evidence rows gain `corrected_on`:** the day of the correction, read from the
+  withdrawal of the link it corrects (the same act, C1-D1; a link keeps no date of its own).
+
+**Gate A:**
+- **`verify_c2.sh`: 150 passed, 0 failed.** New step 12b, on a fixture in Curia's shape (account
+  E): a reference engagement whose commitment attestation is linked impact_basis by the pre-C2
+  commit, sealed in two runs and retired, then a later live engagement. It checks:
+  - the walk's W6 does not reach the attestation (the gap);
+  - run 2's page corrects it to the commitment, and the form's text;
+  - the choices for an attestation;
+  - the page reloads with "Corrected on …", and "Record an erratum…" is enabled;
+  - run 1, sharing the outcome, shows the same line and offers no second form for that link;
+  - 390 px with no sideways scroll;
+  - in the database: the link corrected on the frozen outcome, with its one act;
+  - the non-steward's view.
+- **B7, the run-page form re-offering a corrected link:** caught by the shared run's check.
+  `Workbench.tsx` is restored byte-identical.
+- **Prod-copy equivalence against the deployed `1cf9e3a`:** 73 of 76 identical. The 3 POVs
+  differ only by the new `corrected_on` key; with it allowed, 76 of 76.
+- **The survey (Brad's condition 3), read-only:** recorded as **L43**. The walk hides, for every
+  engagement but the latest with an outcome:
+  - W5's pack basis;
+  - W6's add evidence, open citation and correction;
+  - W7's produce-run;
+  - W8's lock;
+  - W9's retire.
+  Only the correction (now) and add evidence (through a live run) exist elsewhere. **L44**
+  records the NEXT/DONE tags. Both are for slice 5.
+- **The screenshots:** `~/lvrf-backups/c2b-screens/`.
+- **The full regression on the fresh copy: all 40 scripts pass** (`verify_c2` 150/0,
+  `verify_corrections` 210/0, `verify_run_page` 273/0). The build and lint are clean (the 1
+  pre-existing warning). The bundle is `index-BjknoEG7.js` / `index-C9WVm_9W.css`.

@@ -41,6 +41,9 @@ export const SUPPORTS: Record<string, string> = {
   // C2 (LVRF_PLAN §11): a commitment's and a verification's attestation support those acts; no factor reads them.
   target_commitment: 'the commitment', verification: 'the verification',
 };
+/** C2: what a link may be corrected to: an attestation may also support the commitment or the verification (the route refuses any other evidence). */
+export const supportsChoices = (kind: string, now: string): string[] =>
+  ['baseline', 'actual', 'impact_basis', ...(kind === 'attestation' ? ['target_commitment', 'verification'] : [])].filter((s) => s !== now);
 /** What a link supports, short, as the lists read it ("impact basis", "the commitment"); an unknown value as stored. */
 export const supportsShort = (v: string) => (v === 'target_commitment' || v === 'verification' ? SUPPORTS[v] : v.replace('_', ' '));
 

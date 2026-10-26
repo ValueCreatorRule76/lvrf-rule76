@@ -7,6 +7,11 @@
 // MODE:
 //   supports   INST's walk (W6), its POV and RUN's page: the attestations read "supports the
 //              commitment" and "supports the verification", never the impact basis
+//   runcorrect C2b: INST's walk shows a later engagement, so W6 cannot reach RUN's outcome; RUN's page
+//              corrects the attestation (env SUMMARY) to the commitment; RUN_OTHER, sharing the outcome,
+//              shows the correction once made and offers no second form for that link (env SUMMARY, RUN_OTHER)
+//   noreoffer  C2b break B7: RUN, sharing the outcome, offers no second form for the corrected link (env SUMMARY)
+//   nonsteward C2b: RUN's page offers the correction disabled, with its reason
 //   erratum    RUN's page at 1280 and 390: its erratum reads "Not recomputed: …" beside the sealed
 //              score, and no other score; printed to SHOTS/PDF_NAME
 import { writeFileSync } from 'node:fs';
@@ -73,6 +78,77 @@ if (MODE === 'supports') {
     check((await ev('document.documentElement.scrollWidth')) <= width, `@${width}: no sideways scroll`);
     await shot(`c2_run_supports_${width}`, width);
   }
+}
+
+const setField = (scopeExpr, labelText, value) => ev(`(()=>{
+  const root=${scopeExpr}; if(!root) return 'no scope';
+  const l=[...root.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(labelText)})); if(!l) return 'no label';
+  const el=l.querySelector('input,select,textarea'); if(!el) return 'no field';
+  const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:el.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)});
+  el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return true })()`);
+const click = (scopeExpr, label) => ev(`(()=>{const root=${scopeExpr}||document;const el=[...root.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(label)}));if(!el||el.disabled)return false;el.click();return true})()`);
+
+if (MODE === 'runcorrect') {
+  const { SUMMARY, RUN_OTHER } = process.env;
+  check(await open(`/accounts/${INST}`, `!!document.querySelector('[data-testid=w6]')`), 'the account page shows the walk (W6)');
+  await ev(`(()=>{const el=document.querySelector('[data-testid=w6]');if(!el)return 0;for(let p=el;p;p=p.parentElement){if(p.tagName==='DETAILS'&&!p.open)p.open=true;if(p.dataset&&p.dataset.open==='false')p.querySelector('[data-step-toggle]')?.click();}return 1})()`); await sleep(400);
+  check(!(await ev(`[...document.querySelectorAll('[data-testid=w6-evidence]')].some(li=>li.textContent.includes(${JSON.stringify(SUMMARY)}))`)),
+    "the walk's W6 shows the later engagement: the retired engagement's attestation is not on it (the gap C2b closes)");
+  check(await open(`/runs/${RUN}`, runReady), 'the retired engagement\'s run 2 opens');
+  check(await ev(`(()=>{const b=document.querySelector('[data-testid=correct-on-run-open]');return !!b&&!b.disabled})()`), 'the steward sees "Correct what a link supports…", enabled, beside "Record an erratum…"');
+  await ev(`document.querySelector('[data-testid=correct-on-run-open]').click()`); await sleep(300);
+  const form = `document.querySelector('[data-testid=correct-on-run-form]')`;
+  const says = await ev(`${form}.textContent`);
+  check(/corrects the current link of this run's outcome/.test(says) && /The sealed run is not changed: record an erratum on it\./.test(says),
+    'the form says it corrects the outcome\'s current link, and that the sealed run is not changed ("record an erratum on it")', says.slice(0, 260));
+  const linkVal = await ev(`[...${form}.querySelectorAll('label')].find(l=>l.textContent.includes('The link')).querySelector('select option[value]:not([value=""])') && [...[...${form}.querySelectorAll('label')].find(l=>l.textContent.includes('The link')).querySelectorAll('option')].find(o=>o.textContent.includes(${JSON.stringify(SUMMARY)}))?.value`);
+  check(Boolean(linkVal), 'the attestation is offered, as it stands ("supports impact basis")');
+  await setField(form, 'The link', linkVal); await sleep(200);
+  const choices = await ev(`[...[...${form}.querySelectorAll('label')].find(l=>l.textContent.includes('What it supports')).querySelectorAll('option')].map(o=>o.value).filter(Boolean).join(',')`);
+  check(choices === 'baseline,actual,target_commitment,verification', 'an attestation may be corrected to the baseline, the actual, the commitment or the verification', choices);
+  await setField(form, 'What it supports', 'target_commitment');
+  await setField(form, 'Why', "Verification: the commitment's attestation supports the commitment, not the impact basis (C2b).");
+  check(await click(form, 'Withdraw and correct'), 'the steward submits "Withdraw and correct"');
+  check(await waitFor(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].some(p=>p.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`), 'the page reloads with "Corrected on <date> by <name>"');
+  const done = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].map(p=>p.textContent).join(' | ')`);
+  check(/^Corrected on \d{1,2} [A-Z][a-z]{2} \d{4} by .+: “.+” now supports the commitment, not impact basis\. The sealed run is unchanged: an erratum records it\.$/.test(done), '  ...reading the date, who, what it supports now and what it did', done);
+  check(!(await ev(`(()=>{const b=document.querySelector('[data-testid=record-erratum-open]');return !b||b.disabled})()`)), '  ...and "Record an erratum…" is now enabled for it');
+  await shot('c2b_run2_corrected_1280', 1280);
+  check(await open(`/runs/${RUN_OTHER}`, runReady), 'run 1, sharing the outcome, opens');
+  const done1 = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].map(p=>p.textContent).join(' | ')`);
+  check(done1 === done, 'run 1 shows the same correction, once made', done1);
+  const btn = await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`);
+  let offered = false;
+  if (btn) {
+    await ev(`document.querySelector('[data-testid=correct-on-run-open]').click()`); await sleep(300);
+    offered = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-form] option')].some(o=>o.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`);
+  }
+  check(!offered, '  ...and offers no second form for that link (any form there lists only links never corrected)');
+  await shot('c2b_run1_shared_1280', 1280);
+  for (const width of [390]) {
+    check(await open(`/runs/${RUN_OTHER}`, runReady, width), `run 1 @${width} opens`);
+    check((await ev('document.documentElement.scrollWidth')) <= width, `@${width}: no sideways scroll`);
+    await shot(`c2b_run1_shared_${width}`, width);
+  }
+}
+
+// C2b break B7: the run sharing the outcome must offer no second form for a corrected link.
+if (MODE === 'noreoffer') {
+  const { SUMMARY } = process.env;
+  check(await open(`/runs/${RUN}`, runReady), 'the run sharing the outcome opens');
+  let offered = false;
+  if (await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`)) {
+    await ev(`document.querySelector('[data-testid=correct-on-run-open]').click()`); await sleep(300);
+    offered = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-form] option')].some(o=>o.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`);
+  }
+  check(!offered, 'no second form for the corrected link');
+}
+
+if (MODE === 'nonsteward') {
+  check(await open(`/runs/${RUN}`, runReady), 'X: the run page opens');
+  check(await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')?.disabled`), 'X: "Correct what a link supports…" is disabled');
+  check((await ev(`document.querySelector('[data-testid=correct-on-run-reason]')?.textContent ?? ''`)).startsWith("Correcting what a link supports is the steward's act"), 'X: …with its reason, naming the steward');
 }
 
 if (MODE === 'erratum') {

@@ -7,7 +7,7 @@ import { Card, Badge } from './workbench/Card';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
 import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
-import { supportsShort } from '../lib/labels';
+import { supportsChoices, supportsShort } from '../lib/labels';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
 /**
@@ -89,9 +89,6 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
   );
 }
 
-const SUPPORTS = ['baseline', 'actual', 'impact_basis'] as const;
-/** C2: only an attestation supports the commitment or the verification (the route refuses any other). */
-const ATTESTATION_SUPPORTS = [...SUPPORTS, 'target_commitment', 'verification'] as const;
 
 /**
  * C1 (LVRF_PLAN §9): the steward corrects what a link supports. The old link
@@ -126,7 +123,7 @@ function CorrectSupport({ e, outcomeId, onDone }: { e: WalkEvidence; outcomeId: 
           <label className="block"><span className={LABEL_CLASS}>What it supports</span>
             <select className={INPUT_CLASS} value={supports} onChange={(ev) => setSupports(ev.target.value)}>
               <option value="" disabled>— choose —</option>
-              {(e.kind === 'attestation' ? ATTESTATION_SUPPORTS : SUPPORTS).filter((s) => s !== e.supports).map((s) => <option key={s} value={s}>{supportsShort(s)}</option>)}
+              {supportsChoices(e.kind, e.supports).map((s) => <option key={s} value={s}>{supportsShort(s)}</option>)}
             </select></label>
           <label className="block"><span className={LABEL_CLASS}>Why</span>
             <textarea rows={2} className={INPUT_CLASS} value={reason} onChange={(ev) => setReason(ev.target.value)} />

@@ -21,6 +21,7 @@
 #   B4  the dry run writing a row: its READ ONLY transaction refuses it
 #   B5  an erratum with a typed score: refused
 #   B6  the not-recomputed erratum without the seal's factor line: the erratum check catches it
+#   B7  (C2b) the run-page correction re-offering a corrected link: the shared run's check catches it
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -40,7 +41,8 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_c2.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 WALK=server/routes/outcomeWalk.ts; MODELF=server/spine/confidenceModel.ts; REPORT=scripts/report_c2_errata.ts; RECOMP=server/lib/recomputeRun.ts
-EDITED=("$WALK" "$MODELF" "$REPORT" "$RECOMP")
+BENCH=client/src/components/workbench/Workbench.tsx
+EDITED=("$WALK" "$MODELF" "$REPORT" "$RECOMP" "$BENCH")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -124,6 +126,10 @@ q "UPDATE person_credentials SET revoked_at = now() WHERE person_id = '$S' AND r
 q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$S', '$HASH', 'verify')" > /dev/null
 q "UPDATE tenants SET steward_person_id = '$S' WHERE id = '$TEN'" > /dev/null
 q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT '$S', '$TEN', '$S', 'Verification fixture grant' WHERE NOT EXISTS (SELECT 1 FROM access_grants WHERE person_id = '$S' AND tenant_id = '$TEN' AND revoked_at IS NULL)" > /dev/null
+X_EMAIL="x.$TS@c2.example"
+X="$(q "INSERT INTO persons (tenant_id, full_name, email) VALUES ('$TEN', 'Authorized X (verification)', '$X_EMAIL') RETURNING id" | head -1)"
+q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$X', '$HASH', 'verify')" > /dev/null
+q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) VALUES ('$X', '$TEN', '$S', 'Verification fixture grant')" > /dev/null
 start_server && ok "API up on $PORT"
 expect POST /api/account-inputs "$(J institution "$(J name "C2 fixture account (invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for C2.')" persons "[$(J full_name 'C2 owner (invented)' email "owner.$TS@c2.example" title Owner),$(J full_name 'C2 verifier (invented)' email "verifier.$TS@c2.example" title Verifier)]")" 201 "a fixture account, with a customer-side owner and verifier"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; VERIFIER="$(rj b.person_ids[1])"
@@ -154,7 +160,23 @@ expect POST "/api/value-outcomes/$O_A/commit" "$(COMMIT A)" 201 "  ...committed 
 outcome B; O_B="$O"; ENG_B="$ENG"
 expect POST "/api/value-outcomes/$O_B/evidence" "$(EVB system_export 'C2 days to productivity (fixture export, attested)' baseline true "$OWNER")" 201 "  ...outcome B's baseline, a system export attested by the customer-side owner"
 expect POST "/api/value-outcomes/$O_B/commit" "$(COMMIT B)" 201 "  ...committed under the pre-C2 code"
+# C2b: Curia's account exactly — a reference engagement whose commitment attestation is linked impact_basis,
+# sealed and retired, then a later live engagement, so the account's walk shows the later one.
+INST_AB0="$INST"; OWNER_AB0="$OWNER"
+expect POST /api/account-inputs "$(J institution "$(J name "C2b fixture account E (invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for C2b.')" persons "[$(J full_name 'C2b owner E (invented)' email "ownere.$TS@c2.example" title Owner)]")" 201 "C2b: account E, Curia's shape"
+INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; INST_E="$INST"
+expect POST "/api/institutions/$INST/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'C2 capability' owner_person_id "$OWNER" is_primary false basis 'Verification: EHS solution.')" 201 "  ...its offering"
+outcome E1; O_E1="$O"; ENG_E1="$ENG"
+expect POST "/api/value-outcomes/$O_E1/evidence" "$(EVB public_filing 'C2b TRIR FY25 (fixture)' baseline true)" 201 "  ...the reference outcome's baseline"
+expect POST "/api/value-outcomes/$O_E1/commit" "$(COMMIT E)" 201 "  ...committed under the pre-C2 code"
+SUM_E="Verification: the owner commits to 1.2 (E)."
 restore "$WALK"; stop_server; start_server
+seal "$ENG_E1" "E run 1"; R_E1="$RUN"
+seal "$ENG_E1" "E run 2"; R_E2="$RUN"
+expect POST "/api/engagements/$ENG_E1/retire" "$(J retirement_reason 'Verification: the reference engagement retired, as Curia'"'"'s was.')" 200 "  ...the reference engagement retired"
+outcome E2; O_E2="$O"
+ok "  ...and a later, live engagement with an outcome: the account's walk shows it, not the reference one"
+INST="$INST_AB0"; OWNER="$OWNER_AB0"
 seal "$ENG_A" "A run 1"; R_A1="$RUN"
 seal "$ENG_A" "A run 2"; R_A2="$RUN"
 seal "$ENG_B" "B run 1"; R_B1="$RUN"
@@ -239,7 +261,7 @@ done
 LINE_B="$(grep -F " · $R_B1 · " "$W/dry.txt" || true)"
 printf '%s' "$LINE_B" | grep -qF "NOT RECOMPUTED: this run's seal does not carry who attested its attested evidence" \
   && ok "the dry run lists B's run as not recomputed: its seal does not carry the attester (as Curia runs 17–21)" || bad "dry run, B: $LINE_B"
-[ "$(grep -c "^  RUN C2 engagement" "$W/dry.txt")" = "3" ] && ok "  ...three fixture runs listed, and not C's (sealed as the commitment and the verification)" || bad "  ...fixture runs listed: $(grep -c "^  RUN C2 engagement" "$W/dry.txt")"
+[ "$(grep -c "^  RUN C2 engagement" "$W/dry.txt")" = "5" ] && ok "  ...five fixture runs listed (A's two, B's, and E's two, for C2b), and not C's (sealed as the commitment and the verification)" || bad "  ...fixture runs listed: $(grep -c "^  RUN C2 engagement" "$W/dry.txt")"
 grep -q "Nothing written.$" "$W/dry.txt" && ok "  ...it ends \"Nothing written.\"" || bad "  ...$(tail -1 "$W/dry.txt")"
 # B4 — the dry run writing a row: its READ ONLY transaction refuses.
 edit "$REPORT" "await client.query('BEGIN READ ONLY');" "await client.query('BEGIN READ ONLY');
@@ -339,6 +361,20 @@ if [ -f "$SHOTS/c2_run_b1.pdf" ]; then
   printf '%s' "$(pdftotext -f 1 -l 1 "$SHOTS/c2_run_b1.pdf" - | tr -d '[:space:]')" | grep -qF "Notrecomputed:thisrun'ssealdoesnotcarrywhoattesteditsattestedevidence" || MISS="$MISS p1:full"
   [ -z "$MISS" ] && ok "B's run printed ($NP pages): every page's header reads \"ERRATUM: not recomputed (sealed $SEALED_B / 100). Full text on page 1.\" beside the disclosure; page 1 the full reason" || bad "B's run printed: missing$MISS"
 else bad "B's run: no PDF printed"; fi
+
+step "12b. C2b: the correction from the run page, for a retired engagement's outcome the walk cannot reach"
+SUMMARY="$SUM_E" RUN_OTHER="$R_E1" cwalk runcorrect "$INST_E" "$R_E2"
+[ "$(q "SELECT supports || '|' || coalesce(corrects_supports, '-') || '|' || (corrected_by_person_id = '$S') FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id WHERE voe.value_outcome_id = '$O_E1' AND e.kind = 'attestation' AND voe.withdrawn_at IS NULL")" = "target_commitment|impact_basis|true" ] \
+  && ok "  ...in the database: the attestation now supports the commitment, correcting impact_basis, by the steward, on the frozen outcome" || bad "  ...links: $(q "SELECT supports, corrects_supports FROM value_outcome_evidence WHERE value_outcome_id = '$O_E1'")"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'correct' AND subject_id = '$O_E1'")" = "1" ] && ok "  ...with its one act (P2)" || bad "  ...acts: $(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$O_E1'")"
+X_TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -H "Origin: http://localhost:$VITE_PORT" -d "{\"email\":\"$X_EMAIL\",\"password\":\"$PW\"}" "$BASE/api/auth/login" | awk '$6 == "lvrf_session" {print $7}')"
+TOKEN_S="$TOKEN"; TOKEN="$X_TOKEN"; cwalk nonsteward "$INST_E" "$R_E1"; TOKEN="$TOKEN_S"
+# B7 — the run-page correction re-offering a corrected link.
+edit "$BENCH" "  const open_ = outcome.evidence.filter((e) => e.corrects_supports === null);" "  const open_ = outcome.evidence;"
+sleep 3; SUMMARY="$SUM_E" node scripts/lib/c2_walk.mjs noreoffer "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_E" "$R_E1" none.pdf > "$W/walk.b7.log" 2>&1 || true
+grep -q "^  PASS  the run sharing the outcome opens" "$W/walk.b7.log" && grep -q "^  FAIL  no second form for the corrected link" "$W/walk.b7.log" \
+  && ok "B7: the corrected link re-offered → caught: the run sharing the outcome offers a second form" || bad "B7: not caught: $(head -3 "$W/walk.b7.log")"
+restore "$BENCH"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $SHOTS"
 
