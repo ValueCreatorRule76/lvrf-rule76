@@ -12902,3 +12902,62 @@ deploy. He then withdrew the Skillsoft filing's baseline link from run 21's page
   Brad checked the page without confirming, and it shows 15. The Gate B paste had said to expect
   9, wrongly: 9 is the number of runs that sealed the attestation, not the number that sealed the
   outcome. The 9 in Brad's report came from that paste.
+
+## C3: the read-only report (with Brad's three additions) — 26 October 2026 (UTC)
+
+**Run on prod, read-only:** `scripts/report_c3.sql`, piped over ssh as `lvrf_app` in a READ ONLY
+transaction, with 0 errors. It classifies every person by Brad's C3 rule (a non-simulated person
+of the institution, holding `metric_owner` or `executive_sponsor`, not linked as
+`analyst_of_record`). It names two forms of analyst of record:
+- **by link:** `account_person_links`, 0037;
+- **by title:** a person row of the institution titled "analyst of record", which predates 0037.
+
+**A. Attested evidence:**
+- **Two rows on prod, both Curia's,** both attested by "Brad Piver (external analyst of record)":
+  - the baseline system export `1632a5e0…` (source-verified);
+  - the commitment attestation `e523bc46…`.
+- **That person is an analyst of record by title**, not by link. They hold **no roles at all**, so
+  under the C3 rule they are not customer-side.
+
+**B. Sealed runs whose evidence factor credited one:**
+- **17 runs, Curia 5–21.** Each credited the attested system export in the baseline factor, sealed
+  at 15 of 25.
+- **All 15 points rest on the attestation in each run.** No other baseline item of those runs is
+  independently source-verified. Under the C3 rule each would earn 0.
+
+**C. (addition 1) Committer or verifier credited to a person not customer-side:**
+- **9 runs, Curia 13–21:** `human_commit_of_record` 10 of 10, credited to the same analyst of
+  record by title (no roles).
+- **No verifier factor is credited anywhere.**
+- No credited committer or verifier went unmatched to its sealed note.
+
+**D. (addition 2) Evidence about the tenant supporting a customer outcome** (a vendor publication,
+or text naming the tenant, Skillsoft):
+- **Curia `cee6fea9…`,** "Supporting context for the baseline": a Skillsoft earnings-release filing,
+  current as baseline, not source-verified.
+  - Sealed in 16 runs (6–21); **earned nothing** (not source-verified).
+- **Curia `f9775317…`,** Skillsoft Q1 FY2027 DRR: now withdrawn from both supports (C2c).
+  - Sealed as impact basis in 10 runs (12–21), source-verified; **earned nothing** (no currency
+    claimed, so the factor is full without it).
+- **Scotts `423be7c6…`,** the vendor publication: baseline withdrawn (C1), impact basis current.
+  - Sealed as baseline in run 1 (not source-verified; earned nothing) and in run 2 (source-verified;
+    not needed: Scotts' own filing is independent).
+- **No sealed run's score rests on evidence about the tenant.**
+
+**E. (addition 3) Entered to exercise the system, by its own text:**
+- **Evidence:**
+  - Curia `cee6fea9…`: "entered through the API to verify the accept path … Entered to confirm
+    the endpoint creates and links in one transaction";
+  - Curia `f9775317…`: "Attached to exercise HB-0009 and to record the retention context".
+  - Scotts `0ee45ae0…` matched "test", but it is the retirement observation ("Outside-in reference
+    test complete"): **a false positive** of the phrase list.
+- **Runs:**
+  - **by phrase:** Curia 8 ("produced to exercise the first runtime heartbeat"), 9, 10 and 15
+    (heartbeat checks), and 21 ("D1 live");
+  - **by their notes, which the report prints in full for every run:** Curia 2, 3 and 6–21 each
+    record a system change rather than a change in the case. For example: run 7 "Produced so the
+    evidence form has an outcome to post to"; run 11 "Coverage should read 35%"; run 14
+    "Synthetic-ness now travels as a boolean"; runs 17–20, the model version, the gap
+    discriminant, findings and D0. Only runs 1, 4 and 5 describe a change in the case itself.
+  - Scotts 1–2 and Skillsoft 1 read as case runs.
+- **For Brad's ruling, with C3.**
