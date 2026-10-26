@@ -3137,3 +3137,21 @@ reads only `persons.institution_id`.
 - **First, a read-only report:** the two 23 Aug updates that set `simulated`, with no actor
   recorded. What changed, and whether any run sealed the value from before or after.
 
+
+## 14. Commit, measure and verify in the client (ruled by Brad, 26 Oct 2026; **planned after C3; not built**)
+
+**The finding (L43):** commit, measure and verify have no client control; they are callable only
+through the API.
+
+**Why next:**
+- The cost of delay, and every value case beyond an outside-in hypothesis, depend on three
+  things: a committed target, a measured actual and a named verifier.
+- None of the three can be recorded through the UI today.
+
+**The order (Brad, 26 Oct 2026):**
+1. C3;
+2. L41 + L42;
+3. **this slice**;
+4. then slice 5's walk rework (L43, L44).
+
+The plan is written after C3, and nothing is built until Brad approves it.
