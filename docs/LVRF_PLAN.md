@@ -3108,25 +3108,208 @@ the commitment or the verification.
 | **C2-D2** | The 9 errata: through the UI one by one, or a steward script with `--apply`? | **The UI, one by one, against the dry run's list.** Each is a steward act with its own act row, and scripts never write to prod. Nine is a sitting, not a batch |
 | **C2-D3** | Verify's attestation also stands behind the actual. Link it `verification` only, or `verification` and `actual`? | **`verification` only, as ruled.** The measured actual comes from the customer's system of record (CLAUDE.md, the governing AI principle); an attestation about it is not that evidence |
 
-## 12. C3: attestation credit requires a customer-side attester (ruled by Brad, 26 Oct 2026; **planned after C2's Gate C; not built until Brad approves the plan**)
+## 12. C3: credit only for customer-side people; errata on what the seals credited; system-exercise marks (ruled by Brad, 26 Oct 2026; **plan for approval, not built**)
 
-**The finding (C2's condition 3):** Curia's baseline system export in runs 17–21 is attested by
-"Brad Piver (external analyst of record)", a person row in Curia's institution whose title says
-"not a Curia employee". The model gives it customer-side credit (0.6, 15 of 25) because the rule
-reads only `persons.institution_id`.
+**Value spine stages served:** `measure` and `verify` (what earns confidence credit), and `return` (errata
+beside the runs that credited non-customer-side people; marks on what was entered to exercise the system).
 
-**Brad's ruling:**
-1. **Who counts as a customer-side attester:** attestation credit in the confidence model, and
-   `client_stated` in `lvrf_evidence_basis`, require a non-simulated person of the evidence's
-   institution who holds a customer-side role (`metric_owner` or `executive_sponsor`) and is not
-   linked as `analyst_of_record`.
-2. **The model:** that is model 1.0.1. The 1.0.0 scorer is kept (M1), and sealed runs are
-   unchanged.
-3. **The errata:** on Curia runs 17–21, each states, read from the seal, that the baseline
-   export's attester was the analyst of record (not customer-side), and how many baseline-factor
-   points rest on it. The sealed scores stand.
-4. **First, a read-only report on prod:** every evidence row attested by an analyst-of-record
-   person, and every sealed run that credited one.
+### What the report found (26 Oct 2026, `scripts/report_c3.sql`, read-only on prod)
+
+- **The attester:** Curia's baseline system export (`1632a5e0…`) and commitment attestation
+  (`e523bc46…`) are attested by "Brad Piver (external analyst of record)". That is a person row of
+  Curia, an analyst of record by its title, with no roles.
+- **Runs 5–21 (17)** credit the export 15 of 25 in the baseline factor, all 15 resting on the
+  attestation.
+- **Runs 13–21 (9)** credit the same person 10 of 10 as committer of record.
+- **No verifier credit anywhere.**
+- **Tenant evidence earned no points.** Of the system-exercise entries:
+  - evidence: 2 rows;
+  - runs, by their own notes: Curia 2, 6–12 and 14–21.
+
+### Brad's rulings (26 Oct 2026)
+
+- **A. Who is customer-side.**
+  - Credit requires a **positive customer-side role**: `metric_owner` or `executive_sponsor`,
+    held and not revoked, by a non-simulated person of the evidence's institution.
+  - "Not linked as `analyst_of_record`" is a **second guard**.
+  - The rule applies to attestation credit in the model, and to `client_stated` in
+    `lvrf_evidence_basis`.
+- **B + C. Errata on Curia runs 5–21 (17).**
+  - Each states, from its seal, the points resting on the analyst's attestations: 15 of 25 in the
+    baseline factor, and for runs 13–21 also 10 of 10 as committer.
+  - Each says they earn nothing under the C3 rule and that **the sealed score stands**. Points, not
+    a recomputed total.
+  - **Model 1.0.1 for future runs; the 1.0.0 scorer is kept (M1).**
+  - **Recorded through a steward batch:** a dry-run count first, one act per erratum, refused if the
+    count changed.
+- **D.** Brad withdraws Curia `cee6fea9…` (the Skillsoft earnings filing) from the baseline with
+  C2c's withdraw, with no erratum. Scotts' vendor publication stays as the impact basis. The
+  "about" institution is planned under L41 (§13).
+- **E. System-exercise marks.** Never delete.
+  - An **append-only, steward-only "system exercise" mark**, with a reason, on each listed evidence
+    row and run, shown wherever they appear.
+  - **The POV's and the book's headline use the latest unmarked run.**
+  - CLAUDE.md gains rule 9: verification never writes on prod (done, 26 Oct 2026).
+
+### What it builds (planned)
+
+**1. Who is customer-side, defined once** (hardening, a new function):
+- `lvrf_customer_side(person, institution) → boolean`: non-simulated; `persons.institution_id` is
+  the institution; holds `metric_owner` or `executive_sponsor` (not revoked); and no current
+  `account_person_links` row of role `analyst_of_record` for that person and institution.
+- The model's derivation (produce-run, the gap register) and `lvrf_evidence_basis` both read it.
+  There is one definition, so the score and the badge cannot disagree.
+
+**2. Model 1.0.1:**
+- **The input:** `ConfidenceEvidenceInput` gains `attesterCustomerSide: boolean` (replacing the
+  scope test). The committer and verifier inputs gain `committerCustomerSide` and
+  `verifierCustomerSide` (see C3-D1).
+- **The credit:** `evidenceCredit` 1.0.1 gives ATTESTATION_CREDIT only when the attester is
+  customer-side; otherwise 0, with the note "attester is not customer-side (<name>: <reason>)".
+- **The version and fingerprint:** `MODEL_VERSION` becomes 1.0.1. The fingerprint covers
+  constants, not logic, so a new constant, `ATTESTER_RULE` (the rule in words), joins the
+  fingerprint and moves it. That is C3-D2.
+- **M1, the 1.0.0 scorer kept:**
+  - a scorer registry, `server/spine/scorers.ts`: `{ '1.0.0': { fingerprint, computeConfidence,
+    evidenceCredit }, '1.0.1': {…} }`;
+  - produce-run scores with the current one;
+  - `recomputeRun` takes the scorer the run was sealed with. A run sealed under a version not in
+    the registry is refused, as today;
+  - 1.0.0 stays byte-for-byte the code that sealed runs 17–21 and Scotts'.
+- **What 1.0.1 runs seal (L42's attester part, folded in; C3-D3):**
+  - beside each attested item: the attester's name, and whether they were customer-side, with the
+    reason;
+  - the committer's and verifier's customer-side flags;
+  - so a 1.0.1 run's seal reproduces under 1.0.1.
+
+**3. `lvrf_evidence_basis`:** `client_stated` only when `lvrf_customer_side(attester, institution)`.
+Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two items lose
+`client_stated` on the POV: an expected diff in equivalence.
+
+**4. Errata about who was credited (migration 0043):**
+- **`run_errata` gains `kind`:** `'link_correction'` (every existing row) or
+  `'non_customer_credit'`, with a CHECK. For the new kind:
+  - `corrected_to_supports` and `evidence_id` may be NULL;
+  - the recompute fields are NULL;
+  - the method states the points.
+  - The existing CHECKs are rewritten per kind, every term definite under NULL. The errata guard
+    requires a corrected link only for `link_correction`.
+- **The text, built by the server from the seal, never typed.** For example: "From this run's seal:
+  15 of 25 in 'Is the baseline supported by confirmed evidence?' rest on an attestation by Brad
+  Piver (external analyst of record); 10 of 10 in 'Named human committer of record' were credited
+  to the same person. Under the C3 rule (model 1.0.1) neither earns credit: that person is not
+  customer-side (no customer-side role). The sealed score, 55 / 100, stands." No recomputed total.
+- **The rule for "points resting" is section B's:** the factor's sealed earned points, less what the
+  run's independent items of that support give. The committer and verifier points are the sealed
+  factor's earned points, when its note names the person.
+- **The steward batch** (C3-D4: a page, not a script; scripts never write to prod):
+  - `GET /api/errata/non-customer-credit` is the dry run: each locked run, the points and the
+    text, and the count. It writes nothing;
+  - `POST /api/errata/non-customer-credit` with `{expected_count, reason}` is steward-only. It
+    recomputes the list in the same transaction. If the count is not `expected_count` it refuses
+    in words and writes nothing; otherwise one erratum and one `record_erratum` act per run;
+  - a run already carrying a current `non_customer_credit` erratum is left out (the count says so);
+  - **the page:** "Errata the seals call for" on the Runs list, steward-only. It shows the dry
+    run's list and count, and a form whose confirmation states the count. Brad presses Confirm
+    once.
+  - **Expected on prod:** 17 (Curia 5–21).
+- **The display:** the erratum shows as an erratum (banner, the print's bounded line "ERRATUM:
+  credit to a person not customer-side (sealed m / 100). Full text on page 1.", the lineage).
+
+**5. System-exercise marks (migration 0043):**
+- **A new table, `system_exercise_marks`:** `id`, `tenant_id`, `subject_table` in (`evidence`,
+  `value_runs`), `subject_id`, `reason` (12+ characters), `marked_by_person_id`, `marked_at`.
+  - Append-only (no UPDATE, no DELETE), steward-only (a guard), one per subject (a unique index),
+    with its act (`mark`).
+  - In `ownership.sql`'s insert list, not its update list.
+- **Routes:** `POST /api/evidence/:id/system-exercise` and `POST /api/value-runs/:id/system-exercise`,
+  each steward-only with `{reason}`. Marking is per item, with a confirmation (C3-D5).
+- **Shown wherever they appear** ("SYSTEM EXERCISE — entered to exercise the system, not case
+  evidence: <reason>"):
+  - the run page (a banner beside the disclosure, and in print on every page);
+  - the Runs list, the POV's locked runs and the account page;
+  - the evidence lines (W6, the POV, the run page's sealed items, matched by kind, summary and
+    provenance);
+  - the lineage.
+- **Headlines:** the POV's and account page's "latest locked run", and the book's (the accounts
+  index: each engagement's latest locked run), use the **latest unmarked** locked run. A marked
+  run is never the headline, and stays listed, marked.
+- **Expected on prod:**
+  - evidence `cee6fea9…` and `f9775317…`;
+  - runs Curia 2, 6–12 and 14–21 (16);
+  - 18 marks in all (C3-D6).
+  - Curia's reference headline becomes run 13 (55 / 100).
+
+### Gate A (planned)
+
+**`verify_c3.sh`**, on its own fixtures (L39):
+- **The fixture:** an account with:
+  - an analyst of record by title (no roles);
+  - vendor staff linked as `analyst_of_record`;
+  - a `metric_owner` and an `executive_sponsor`;
+  - a person holding a revoked role;
+  - a simulated person.
+- **Sealed under the 1.0.0 code itself:** the script puts 1.0.0's `MODEL_VERSION` and credit test
+  back, seals runs with attested items and a committer, and restores the file. This is the C2 way.
+- **It covers:**
+  - each person's `lvrf_customer_side`;
+  - 1.0.1's credit for each (0.6 only for the role-holder);
+  - the fingerprint moved and 1.0.0's unchanged;
+  - a 1.0.0 run recomputing under the kept 1.0.0 scorer, and a 1.0.1 run under 1.0.1;
+  - `lvrf_evidence_basis` per person;
+  - the dry run's list and points against the script's own computation from each seal;
+  - the batch: refused when the count is off, then one erratum and one act per run, then
+    re-running it refused or empty;
+  - the erratum text: the points, "stands", and no recomputed total;
+  - marks: steward-only, append-only, one per subject, with an act;
+  - the mark shown on every surface, at 1280 and 390 and in print;
+  - the headlines: the latest unmarked run.
+- **Breaks:**
+  - the role test removed from `lvrf_customer_side`;
+  - the analyst-of-record guard removed;
+  - 1.0.1 crediting a non-customer-side attester;
+  - `ATTESTER_RULE` left out of the fingerprint (the version moves, the fingerprint doesn't);
+  - the 1.0.0 scorer dropped (a 1.0.0 run's recompute refused);
+  - the batch without its count check;
+  - a typed point figure;
+  - a mark deleted or updated (refused);
+  - a mark by X;
+  - the headline using a marked run;
+  - the print without the mark.
+- **Also:** the regression on the fresh prod copy; prod-copy equivalence, with expected diffs:
+  `client_stated` on Curia's two items, the new mark and kind fields, and the headline.
+
+### Gate B and Gate C (planned)
+
+- **Gate B:**
+  - the backup;
+  - pull; migrate 0043 as `lvrf_migrate`; `ownership.sql`; `hardening.sql`;
+  - the checks: triggers (167 plus the marks table's), plain sentences, ownership, run hashes
+    25/25, drift (44 migrations);
+  - deploy.
+- **Brad's acts, through the UI:**
+  1. the dry run (expect 17), then the batch, confirmed once;
+  2. withdraw `cee6fea9…` from the baseline (C2c);
+  3. the 18 marks, one at a time, against the report's list.
+- **Gate C:**
+  - 17 `non_customer_credit` errata, each with its act and its points from the seal;
+  - Curia 5–21 byte-identical;
+  - 18 marks, each with its act;
+  - Curia's headline run 13;
+  - the filing withdrawn;
+  - 0 refusals but deliberate ones.
+
+### Decisions for Brad
+
+| # | Decision | Recommendation |
+|---|---|---|
+| **C3-D1** | Does 1.0.1 also apply the rule to the committer and verifier factors (`human_commit_of_record`, `human_verifier_of_record`)? The errata say the 10 committer points "earn nothing under the C3 rule". | **Yes.** The errata state it, so the model must. Commit and verify already require a non-simulated person of the institution; the role test is the new part. Route-level enforcement at commit and verify belongs to §14. |
+| **C3-D2** | The fingerprint covers constants, not logic. Add `ATTESTER_RULE` (the rule in words) to the fingerprint so 1.0.1's fingerprint moves? | **Yes.** Otherwise the version moves and the fingerprint doesn't: the exact finding the fingerprint exists to catch. |
+| **C3-D3** | Fold L42's attester sealing into C3 (1.0.1 runs seal each attested item's attester and the customer-side flags)? | **Yes.** It is the input 1.0.1 introduces; without it no 1.0.1 run with an attested item is recomputable. §13 keeps L41 and what remains of L42. |
+| **C3-D4** | The batch as a steward page (GET dry run, POST with the count), not a script? | **Yes, a page:** scripts never write to prod (C2-D2), and CLAUDE.md rule 9. |
+| **C3-D5** | Marks one at a time, each with a confirmation, or a batch like the errata? | **One at a time.** Each mark's reason is the item's own (its note says what it exercised), and 18 is a sitting. |
+| **C3-D6** | The list to mark: evidence `cee6fea9…` and `f9775317…`, and Curia runs 2, 6–12 and 14–21 (16). Runs 1, 3, 4, 5 and 13 record case changes and stay unmarked. Scotts' `0ee45ae0…` (the retirement note) is a false positive and stays unmarked. | **As listed.** Brad confirms or edits the list before Gate B. |
+| **C3-D7** | `run_errata` gains `kind`, or a separate table for "credit to a person not customer-side"? | **`kind` on `run_errata`.** One erratum surface: banner, print, lineage and the Runs-list marker (L45) read one table. |
 
 ## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **after C3**)
 
@@ -3135,6 +3318,12 @@ reads only `persons.institution_id`.
 - **How they are corrected:** by supersession only.
 - **L42:** new runs seal the attester (name, scope, simulated) beside each attested item, and the
   model version and fingerprint, so every future run is recomputable.
+- **L41, what evidence is about (Brad, 26 Oct 2026, from C3's report D):**
+  - evidence gains a required `about_institution_id`: the institution the evidence is about;
+  - a trigger refuses evidence about another institution supporting a customer's baseline or
+    actual. Scotts' vendor publication, about another company, stays as the impact basis.
+  - Existing rows need a backfill rule, decided in this slice's plan.
+- **L42, after C3:** what remains once C3 seals the attester (C3-D3).
 - **First, a read-only report:** the two 23 Aug updates that set `simulated`, with no actor
   recorded. What changed, and whether any run sealed the value from before or after.
 

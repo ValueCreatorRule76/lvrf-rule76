@@ -59,6 +59,10 @@ These encode failures already paid for in CVAF 1.2. Violating them recreates kno
 7. **Never `npm audit fix --force`.**
 8. **Back up before migrating.** `pg_dump -Fc` before any schema change against a
    database with data in it.
+9. **Verification never writes on prod.** Verify scripts, fixtures and exercises of the
+   system run on throwaway clones. Prod holds case evidence and the acts of named people only;
+   a row entered on prod to exercise the system is marked as such and never deleted (C3, Brad,
+   26 Oct 2026).
 
 ### The governing AI principle
 
