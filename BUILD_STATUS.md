@@ -13111,3 +13111,60 @@ L45.
     existing behaviour, and correct.
   - Two throwaway databases from earlier work remain locally, `lvrf_c3try` and `lvrf_p1try`. They
     have not been dropped.
+
+### C3 Gate A on a fresh prod copy (Brad's rulings) — 27 October 2026 (UTC)
+
+**The copy:**
+- **The snapshot:** `lvrf_snapshot_20261027T020605Z.dump` (1,074,571 bytes), taken by Brad on the
+  box and copied here at 600. It replaces the 25 Oct copy as the one prod copy. Every
+  pre-migration backup is kept.
+- **Its TOC is 738,** against the C2c backup's 736. The C2c backup predates C2c's hardening, and
+  the two extra entries are exactly its functions, `lvrf_lineage_link_act` (new signature) and
+  `lvrf_same_text`. The paste's "expect equal" was wrong.
+- **An `lvrf_app` dump over ssh was refused,** with no drizzle sequence privilege (OWN-1, by
+  design). It wrote nothing on the box.
+- **Restored as `lvrf_prodcopy` by the deployed code** (a worktree at `42e7fe4`), so the copy is
+  prod's state exactly:
+  - 0042; 167 triggers;
+  - 25 runs, 14 errata, 13 links, 14 acts, the latest Brad's withdrawal at 18:46 UTC.
+  - The scripts migrate it through 0043 on their clones, as Gate B will on prod.
+
+**The errata dry run** (a throwaway clone of the copy, migrated and hardened, through `GET
+/api/errata/non-customer-credit`; the clone was then dropped): **17**.
+- Curia runs 5–12: 15 points each, sealed 45 / 100.
+- Curia runs 13–21: 25 points each, sealed 55 / 100.
+- Runs 5–16 sealed no model version; 17–21 sealed 1.0.0.
+
+**The marks candidates** (the same clone, `GET /api/system-exercise/candidates`):
+- 59 unmarked items, none marked: Curia 14 evidence and 22 runs; Scotts 14 evidence and 2 runs;
+  Skillsoft 6 evidence and 1 run.
+- Each is quoted from its own note. Brad ticks them on the page.
+
+**Two scripts read prod's state, and now that prod has acts and errata they failed. Both now
+read only what they wrote:**
+- **`verify_acts_lineage`** asserted no acts after migrating (P2-D2 meant "no backfill") and 29
+  distinct act routes in all.
+  - Now: acts and imports are as before the migration (the copy's 14|0).
+  - Its own acts cover 29 routes.
+  - The other 5 act routes in ROUTE_ACTS are named as exercised by their own scripts: the
+    link withdrawal by `verify_c2c`; roles, revoke, credit errata and marks by `verify_c3`.
+  - Its old message, "every act route in ROUTE_ACTS", had been untrue since C2c.
+- **`verify_run_page`'s print check** accepted only the "recomputed" erratum line. Curia run 21
+  now carries C2's "not recomputed" erratum. The pattern now takes the three forms:
+  - recomputed;
+  - not recomputed;
+  - credit to a person not customer-side.
+
+**The results:**
+- **The full regression on the fresh copy:** 40 of 42 passed; after the two fixes,
+  `verify_acts_lineage` 189/0 and `verify_run_page` 273/0. The build and lint are clean.
+- **The equivalence on the fresh copy** (clone A the deployed state, B the working tree's):
+  - with C3's keys allowed, **33 of 58** identical;
+  - the 25 left are the same three expected kinds:
+    - Curia's commitment attestation `assumed`, not `client_stated` (POV and walk: 2);
+    - the errata's `kind` on the 11 runs carrying errata (Curia 13–21, Scotts 1–2);
+    - the lineage's new `attested_by` (12).
+- **The leftover local clones:**
+  - `lvrf_c3try` (44 migrations: C3's migration trial) and `lvrf_p1try` (40: P1's) were each a
+    copy of the prod copy (3 accounts, 25 runs, 34 evidence rows).
+  - Both were dropped on Brad's ruling.

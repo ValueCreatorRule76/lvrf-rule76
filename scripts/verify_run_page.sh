@@ -228,7 +228,7 @@ pages_check() {  # NAME PDF XFILE
     [ -z "$marker" ] || printf '%s' "$txt" | grep -qF "$marker" || bad_pages="$bad_pages p$p:marker"
     # C1b: the header's lines are bounded — the marker points to page 1 for its source; an erratum is one line.
     [ -z "$marker" ] || printf '%s' "$flat" | grep -qF "·Sourceonpage1" || bad_pages="$bad_pages p$p:marker-line"
-    [ "$errata" = "0" ] || { printf '%s' "$flat" | grep -qE "ERRATUM:recomputed[0-9.]+/100\(sealed[0-9.]+/100\)\.Fulltextonpage1\.|ERRATA\.Fulltextonpage1\." || bad_pages="$bad_pages p$p:erratum-line"; }
+    [ "$errata" = "0" ] || { printf '%s' "$flat" | grep -qE "ERRATUM:(recomputed[0-9.]+/100|notrecomputed|credittoapersonnotcustomer-side)\(sealed[0-9.]+/100\)\.Fulltextonpage1\.|[0-9]+ERRATA\.Fulltextonpage1\." || bad_pages="$bad_pages p$p:erratum-line"; }
     if [ "$p" = "1" ]; then
       [ -z "$citation" ] || printf '%s' "$flat" | grep -qF -- "$citation" || bad_pages="$bad_pages p1:full-citation"
       [ "$errata" = "0" ] || printf '%s' "$flat" | grep -qF "Thesealedrecordbelowisunchanged." || bad_pages="$bad_pages p1:full-erratum"

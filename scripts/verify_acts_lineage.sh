@@ -121,7 +121,11 @@ else bad "Step 0 failed: $(grep FAIL "$W/step0.log" | head -3)"; fi
 step "3. Clone the prod copy; migrate through 0041; harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
-RR0="$(q "SELECT count(*) FROM research_results")"; HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
+RR0="$(q "SELECT count(*) FROM research_results")"
+# The copy's own acts and imports (prod's, since P2 deployed), kept apart from the script's: P2-D2 is "no backfill", not "none".
+ACTS_PRE="$(q "SELECT count(*) || '|' || (SELECT count(*) FROM research_imports) FROM governance_acts")"
+PRE_ACT_IDS="$(q "SELECT coalesce(string_agg(quote_literal(id::text), ',' ORDER BY id), '''00000000-0000-0000-0000-000000000000''') FROM governance_acts")"
+HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0041_acts_and_lineage)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "176" ] && ok "176 triggers by pg_trigger (C3 section 28: +9; 141 + section 27's 26)" || bad "triggers: $(trig)"
@@ -129,7 +133,7 @@ DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | t
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
   && ok "all $RR0 existing research results keep import_id NULL: none blank-filled, none invented" || bad "import_id after 0041"
-[ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "0|0" ] && ok "governance_acts and research_imports empty after the migration (no backfill: P2-D2)" || bad "acts/imports not empty"
+[ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "$ACTS_PRE" ] && ok "governance_acts and research_imports as before the migration ($ACTS_PRE, the copy's own): none backfilled (P2-D2)" || bad "acts/imports changed by the migration: $ACTS_PRE → $(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")"
 [ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "20" ] \
   && ok "20 _act_present triggers (P2's 18, C3's customer_role_grants and system_exercise_marks), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
 
@@ -321,7 +325,12 @@ CORR() { printf '{"legal_name":"%s","identifier_type":"sec_cik","identifier":"%s
 expect POST "/api/institutions/$INST/entity/supersede" "$(CORR 'Fixture Valley Electric Holdings' 0000888002 'Verification: the filer is the holding company.')" 201 "correct the entity"
 act_is "supersede (entity)" "supersede:institution_entities:institution_entities:true:POST /api/institutions/:institutionId/entity/supersede"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE route ~ '[0-9a-f]{8}-' OR route LIKE '%?%'")" = "0" ] && ok "no act carries an id or a value in its route" || bad "an act route carries a value"
-[ "$(q "SELECT count(DISTINCT route) FROM governance_acts")" = "29" ] && ok "29 distinct act routes exercised — every act route in ROUTE_ACTS" || bad "act routes exercised: $(q "SELECT count(DISTINCT route) FROM governance_acts")"
+# Every act route in ROUTE_ACTS is exercised here, but the five whose own scripts exercise them (C2c's withdrawal; C3's four).
+SCRIPT_ROUTES="$(q "SELECT string_agg(DISTINCT route, E'\n' ORDER BY route) FROM governance_acts WHERE id::text NOT IN ($PRE_ACT_IDS)")"
+ACT_ROUTES="$(npx tsx -e "import('$(pwd)/server/lib/governanceAct.ts').then(m => console.log(Object.entries(m.ROUTE_ACTS).filter(([, a]) => a !== 'create-only').map(([r]) => r).sort().join('\n')))" 2>/dev/null)"
+NOT_HERE="$(comm -23 <(printf '%s\n' "$ACT_ROUTES") <(printf '%s\n' "$SCRIPT_ROUTES" | sort) | paste -sd'|' -)"
+[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/errata/non-customer-credit|POST /api/institutions/:institutionId/customer-roles|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw" ] \
+  && ok "29 distinct act routes exercised by this script; the other 5 act routes in ROUTE_ACTS by their own scripts (withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
 
 step "8. Lineage — a fixture chain made after P2"
 LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvrf_lineage('$1', '$2'${3:+, '$3'})"; }
