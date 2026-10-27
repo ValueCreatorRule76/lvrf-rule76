@@ -13208,3 +13208,32 @@ read only what they wrote:**
 - it makes `source_verified` final, but does not say who may set it;
 - 4 human-entered rows on prod are `source_verified` with no citation opened;
 - proposed in §15 for L41's plan.
+
+### C3 Gate C — 27 October 2026 (UTC)
+
+Read-only over ssh, as `lvrf_app` with `default_transaction_read_only=on`.
+
+- **21 system-exercise marks**, each by Brad, each with its one `mark` act naming its item, each
+  reason quoting the item's own note:
+  - runs 2, 6–12 and 14–21 (16);
+  - evidence `1c57c4e7`, `1e85f541`, `cee6fea9`, `f41102bc` and `f9775317` (5).
+- **`cee6fea9`'s baseline link** was withdrawn at 03:08 UTC, with its `withdraw` act and Brad's
+  reason. No erratum names it (ruling D).
+- **The headlines take the latest unmarked run:**
+  - Curia's reference engagement is now **run 13** (55 / 100), with its erratum line ("a link
+    corrected since sealing; not recomputed");
+  - Scotts' run 2 is unchanged, with its line;
+  - Curia's lot acceptance and Skillsoft are unchanged.
+- **Since the deploy:** acts are 1 `withdraw` and 21 `mark`. There are **0 refusals** and 0 role
+  grants. The errata stay at 14: the credit batch was not pressed, and moved to C3b.
+- **All 25 runs are byte-identical to the fresh snapshot.** Each row's md5 was compared with the
+  time zone pinned to UTC on both sides. Without the pin, `r::text` renders timestamps in the
+  session's zone, and every row appears to differ.
+- **Run hashes:** 25 of 25 (recompute and embedded `payloadHash`).
+- **The tick report (Brad, 27 Oct 2026), not reproduced:**
+  - **The repro:** a clone of the fresh copy, with real mouse clicks after a mark and a reload,
+    in the dev build and in the deployed bundle. Every row ticked.
+  - **On prod,** the session showed no API request between 03:13 and Brad's later marks.
+  - Brad completed the marks afterwards.
+
+**C3 is closed.** Its credit errata are recorded in C3b's one batch.
