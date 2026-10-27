@@ -3375,3 +3375,237 @@ through the API.
 4. then slice 5's walk rework (L43, L44).
 
 The plan is written after C3, and nothing is built until Brad approves it.
+
+## 15. C3b: the definition factor under the C3 rule; an "unsourced figure" erratum; one errata batch (ruled by Brad, 27 Oct 2026; **plan for approval, not built**)
+
+**Value spine stages served:** `baseline` (a figure with no source on record says so) and `measure`/`verify`
+(what earns confidence credit), and `return` (errata beside the runs that sealed them).
+
+**Comes before L41 + L42 (§13).** C3's errata batch was not pressed on prod (Brad, 27 Oct 2026), so
+nothing needs superseding: C3b's batch records every erratum once, after its deploy.
+
+### What the read-only investigations found (27 Oct 2026, on prod)
+
+- **Evidence `1632a5e0`,** the "Curia HRIS" extract (mean 214 days):
+  - entered by Brad Piver, signed in as the vendor's value engineer, on 26 Aug 2026 00:43 UTC; one
+    insert, never updated;
+  - legacy form: no quote, no locator, no "how read". `source_verified` is set true by the body,
+    with no citation opened. It is attested by "Brad Piver (external analyst of record)";
+  - **the 214 figure first appears an hour earlier,** at 25 Aug 23:24, in the metric validation:
+    - the metric was superseded (`e6c42f98` → `fb006457`) with source system "Curia HRIS …
+      supplied by Curia";
+    - outcome `e3fb0061` was created with baseline 214.
+  - **Nothing from Curia exists in LVRF.** The only Curia person is the external analyst. There
+    are no research prompts, results or facts for Curia, and no row names an email, a file or a
+    document received from Curia.
+  - **Brad's ruling (27 Oct 2026):** he does not recall a source. The record says "no source on
+    record", never "invented".
+- **The metric definition:**
+  - both versions were confirmed by "Brad Piver (external analyst of record)", who is not
+    customer-side;
+  - Curia runs 3–21 (19) each earned 20 of 20 for it. The seals say only "Calculation method
+    documented." and do not name the confirmer;
+  - model 1.0.1 tests the confirmer only for being named and not simulated.
+
+### Brad's rulings (27 Oct 2026)
+
+1. **Model 1.0.2:** the definition factor gets the customer-side rule. 1.0.0 and 1.0.1 are kept as
+   scorers.
+2. **The credit errata add the definition points** (runs 3–21).
+3. **A new erratum kind, the unsourced figure, on runs 4–21.** It says:
+   - the 214 baseline and its stated source, "Curia HRIS, supplied by Curia", have no source on
+     record;
+   - it was entered by the vendor's value engineer;
+   - nothing from Curia exists in LVRF;
+   - the sealed record is unchanged.
+4. **Withdraw `1632a5e0`'s link** with that reason (Brad's act, C2c's withdraw).
+5. **Nothing live shows Curia's reference engagement as a "validated baseline".** Its headline
+   carries both errata lines.
+6. **One errata batch for all of it,** recorded once after the deploy.
+
+### What it builds (planned)
+
+**1. Model 1.0.2:**
+- **The credit:** `metric_definition_confirmed` earns its 20 only when the definition's confirmer
+  is customer-side (`lvrf_customer_side(confirmer, the metric's institution)`). Otherwise 0, with
+  the note "definition confirmed by <name>, who is not customer-side (<reason>)".
+- **The version:** a new constant, `DEFINITION_RULE`, joins the fingerprint, so 1.0.2 has its own.
+- **The registry:** `scorers.ts` gains 1.0.2; 1.0.0 (`d4cf8f31472a`) and 1.0.1 (`cf11d21c781a`)
+  are frozen as files beside it.
+  - **No prod run was sealed under 1.0.1** (25 runs, none since the C3 deploy), so 1.0.1 is kept
+    for M1, not for any run.
+- **The seal:** 1.0.2 runs seal the definition's confirmer `{name, simulated, customer_side,
+  reason, roles}` beside the factor, as C3 does for attesters. So a 1.0.2 run is recomputable.
+- **The gap register and the walk:** the factor's `not_customer_side` gap is a person ask: "the
+  definition must be confirmed by a customer-side person (a role named from a source)".
+
+**2. The credit errata gain the definition points** (still one `non_customer_credit` erratum per
+run, C3's kind; C3b-D2):
+- **Which runs:** each locked run whose definition factor earned points while the metric's
+  confirmer at sealing was not customer-side.
+  - The seals do not name the confirmer. The server reads it from the metric the run sealed:
+    the `business_metrics` version matching the sealed `businessMetric` (name and source system)
+    and current at the run's `created_at`, with `definition_confirmed_at` at or before it (C3b-D1).
+  - If that is not unique, the erratum says nothing about the factor.
+- **The text,** from the seal, as C3's, gaining "20 of 20 in 'Is the metric's calculation method
+  known and documented?' rest on a confirmation by <name>".
+- **Expected on prod: 19.**
+
+  | Curia runs | Points not credited | Sealed score |
+  |---|---|---|
+  | 3–4 | 20 | 30 |
+  | 5–12 | 35 | 45 |
+  | 13–21 | 45 | 55 |
+
+**3. The unsourced-figure erratum** (`run_errata.kind = 'unsourced_figure'`, migration 0044):
+- **The finding comes first.** A steward act records, on an outcome's figure (`baseline_value`,
+  `actual_value` or `claimed_currency_impact`), that the record holds no source for it. It goes
+  in a new append-only table `figure_findings`: outcome, field, value, reason, steward, date,
+  and its act (C3b-D3).
+- **What the server checks before it accepts a finding,** so the erratum's words are true (C3b-D4):
+  - the figure's value as it stands;
+  - **no person of the account is customer-side;**
+  - **no evidence of the account has an opened citation, or a customer-side attester;**
+  - **no research result or fact about the account was accepted.**
+
+  If any of these holds, the finding is refused in words.
+- **The erratum, one per locked run whose seal carries that figure at that value** (Curia: runs
+  4–21, sealed `baselineValue` 214). It is built by the server from the seal and the record:
+  - the figure and its stated source, from the seal's `businessMetric.sourceSystem`;
+  - who entered it: the actor of the audit row that first set the value, and that person's
+    title at the time ("the vendor's value engineer");
+  - "nothing from <account> exists in LVRF": the finding's checks, named;
+  - "The sealed record below is unchanged."
+- **No recompute, no points:** the factor reads evidence, not the figure.
+- **Never "invented":** a CHECK refuses an unsourced-figure erratum or a finding whose text holds
+  "invent", "fabricat" or "made up" (Brad's ruling 2). The server never writes them.
+- **Expected on prod: 18.**
+
+**4. One errata batch** (C3's page, widened):
+- The dry run lists every erratum the record calls for: the credit errata (19) and the
+  unsourced-figure errata (18), **37** in all, each with its text, and the count of each.
+- One submit carries both counts, and records one erratum and one act per row. It is refused if
+  either count changed.
+- **Order on prod:**
+  1. the finding;
+  2. the withdrawal of `1632a5e0`'s link;
+  3. the batch.
+
+  The batch reads seals, so the withdrawal does not change it.
+
+**5. Nothing live shows "validated baseline" for it** (C3b-D5):
+- **Where a figure has a current finding, a line "No source on record: <the finding's text>"
+  sits beside the figure.** That covers:
+  - the POV, the account page and the walk (the baseline and the metric's source system);
+  - the lineage of that figure;
+  - on screen and in print.
+- **A run carrying a current unsourced-figure erratum** shows its sealed banner title ("VALIDATED
+  BASELINE") and its provenance label (`curia_validated`) labelled "as recorded at sealing",
+  each with the erratum line beneath:
+  - on the run page, and on every printed page;
+  - on the Runs list;
+  - on the POV's locked runs.
+
+  The sealed text is never changed or hidden.
+- **The metric of the retired, frozen outcome is not superseded.** The finding's line is the
+  correction.
+- **The headlines** (the POV, the account page, the book, the Runs list) carry every current
+  erratum line, joined. For Curia's reference engagement:
+  - the credit line: "erratum: 45 of these points rest on a person who is not customer-side";
+  - the unsourced line: "erratum: its baseline, 214, has no source on record".
+
+### Gate A (planned)
+
+**`verify_c3b.sh`,** on its own fixtures (L39):
+- **The fixture:** an account worked by the vendor alone, in Curia's shape:
+  - an external analyst who confirms the definition and attests a "system export";
+  - a validated metric with a figure entered by tenant staff;
+  - runs sealed under the 1.0.0 code itself (C2's way);
+  - a second account with a customer-side metric owner, named through the role act.
+- **It covers:**
+  - 1.0.2's definition credit for each person;
+  - fingerprints: 1.0.2 moved, 1.0.0 and 1.0.1 unchanged; each run recomputed under its own;
+  - the credit dry run, points matching the script's own computation from each seal;
+  - the finding and its four checks: each refused when it fails, using the second account;
+  - the unsourced-figure dry run, and the erratum text read from the seal and the audit row;
+  - the joint batch: both counts, refused when either is off, then one act each;
+  - the live lines (POV, account page, walk, lineage, Runs list, run page, print), at 1280 and
+    390;
+  - the headlines with both lines.
+- **Breaks:**
+  - 1.0.2 crediting a non-customer-side confirmer;
+  - `DEFINITION_RULE` out of the fingerprint;
+  - the 1.0.1 scorer dropped;
+  - the confirmer read from the wrong metric version;
+  - each of the finding's four checks removed;
+  - "invented" in a finding (the CHECK);
+  - the batch without one of its counts;
+  - the sealed banner shown without its erratum line;
+  - the headline without the unsourced line;
+  - the figure's live line missing on the POV.
+- **Also:** the full regression and the equivalence, on a fresh prod copy. The expected diffs are
+  the new keys.
+
+### Gate B and Gate C (planned)
+
+- **Gate B:**
+  - the backup;
+  - pull; migrate 0044 as `lvrf_migrate`; `ownership.sql`; `hardening.sql`;
+  - the checks: triggers, plain sentences, ownership, run hashes 25/25, drift (45 migrations);
+  - deploy.
+- **Brad's acts, through the UI:**
+  1. the finding on Curia's reference outcome baseline (214);
+  2. withdraw `1632a5e0`'s baseline link, with the finding's reason;
+  3. the batch: the dry run reading 19 + 18, confirmed once.
+- **Gate C:**
+  - 19 credit errata and 18 unsourced-figure errata, each with its act;
+  - the finding and its act;
+  - the link withdrawn;
+  - Curia runs 3–21 byte-identical;
+  - the headline with both lines;
+  - no live "validated baseline" without its erratum line;
+  - no refusals but deliberate ones.
+
+### Decisions for Brad
+
+- **C3b-D1, the confirmer of an older run's definition:**
+  - The seal doesn't carry it, so it is read from the metric version the run sealed, current at
+    its sealing.
+  - **Recommended.** The alternative, saying nothing about the definition on runs 3–21, would
+    leave 20 points per run unstated.
+- **C3b-D2, one credit erratum per run, carrying the definition points with the attestation and
+  committer points:**
+  - **Recommended.** One line per run, one count.
+  - The alternative, a second kind for definitions, would put two credit errata on one run.
+- **C3b-D3, the finding as its own steward act and table, before the batch:**
+  - **Recommended.** It is what the live lines (POV, walk, lineage) read, and it holds the reason
+    once.
+  - The alternative, the batch naming the figure itself, leaves no outcome-level record for the
+    live pages.
+- **C3b-D4, the server checks the facts the erratum states,** and refuses a finding when any
+  fails. **Recommended:** the erratum never says more than the record shows.
+- **C3b-D5, sealed labels stay as sealed, labelled "as recorded at sealing", with the erratum line
+  beneath them:**
+  - **Recommended.** CLAUDE.md rule 6 applies by analogy: show the sealed record and the
+    correction, never suppress.
+  - The alternative is to stop showing the sealed banner title on live pages.
+- **C3b-D6, act names:**
+  - the finding uses a new act value, `find`;
+  - the batch keeps `record_erratum`.
+
+### L41: what it does not yet cover (checked 27 Oct 2026)
+
+**`source_verified` can be set true with no citation opened.**
+- **How:** the evidence route takes `source_verified` from the body for any evidence that is not
+  AI-sourced. Q4k's opened-citation act applies to AI-sourced evidence only.
+- **On prod, 4 human-entered rows are `source_verified` with no citation opened,** all legacy form:
+  - Curia `1632a5e0` and `f9775317`;
+  - Skillsoft `9765335f` and `271a449a`.
+- **L41 as written (§13)** makes `source_verified` final once set. It does not say who may set it
+  or on what record.
+- **Proposed for L41's plan:** `source_verified` becomes true only through an act by a named
+  person who opened the source. That is Q4k's open-citation, for every evidence row:
+  - with the opener, the moment and what was read (quote, locator, how read);
+  - the route stops taking it from the body;
+  - existing rows: a backfill rule decided in L41's plan. For example, the 4 rows are shown
+    "verified when entered, no opening recorded" until an opening is recorded.

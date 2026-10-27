@@ -13168,3 +13168,43 @@ read only what they wrote:**
   - `lvrf_c3try` (44 migrations: C3's migration trial) and `lvrf_p1try` (40: P1's) were each a
     copy of the prod copy (3 accounts, 25 runs, 34 evidence rows).
   - Both were dropped on Brad's ruling.
+
+### C3 deployed at `eaf29a3`; Gate C, first read; two read-only investigations — 27 October 2026 (UTC)
+
+**Gate B (Brad):**
+- the backup `lvrf-pre-c3-20261027T025727Z.dump` (1,074,571 bytes, 600);
+- 0043 migrated; `ownership.sql` and `hardening.sql` applied, with 0 ERROR lines;
+- 176 triggers; 44 migrations;
+- the bundle `index-0G6nPUEN.js` / `index-pWZMR7ze.css`.
+
+**Gate C, first read (03:15 UTC, read-only):**
+- **`cee6fea9`'s baseline link** was withdrawn at 03:08:53 by Brad, with its one `withdraw` act.
+  No erratum names it (ruling D).
+- **One mark, Curia run 21,** with its `mark` act; its reason quotes the run's own note.
+  - Brad ticked one item on purpose, and is marking the other 20 (5 evidence; runs 2, 6–12 and
+    14–20).
+- **No credit erratum:** Brad did not press Record, so nothing was sent. **The batch moves into
+  C3b's single batch** (LVRF_PLAN §15).
+- No refusals; no role grants.
+- **Gate C is completed after the remaining marks.**
+
+**Investigation 1, evidence `1632a5e0` (the "Curia HRIS" extract, 214 days):**
+- **Entered by:** Brad Piver, signed in as the vendor's value engineer, on 26 Aug 00:43 UTC.
+  - Legacy form; `source_verified` set true with no citation opened.
+  - Attested by the external analyst of record.
+- **The figure** first appears at the 25 Aug 23:24 metric validation (`e6c42f98` → `fb006457`;
+  outcome `e3fb0061`, baseline 214).
+- **Nothing from Curia exists in LVRF.** The only Curia person is the external analyst. There are
+  no research rows or facts, and no row names an email, a file or a document from Curia.
+- **The 214 figure has no source outside LVRF on record.** Brad's ruling: "no source on record",
+  never "invented".
+
+**Investigation 2, the definition:**
+- Both metric versions were confirmed by the external analyst of record, who is not customer-side.
+- **Curia runs 3–21 (19)** each earned 20 of 20 for it. The seals do not name the confirmer.
+- Model 1.0.1 does not apply the customer-side rule to this factor. **C3b plans 1.0.2.**
+
+**L41's coverage was checked:**
+- it makes `source_verified` final, but does not say who may set it;
+- 4 human-entered rows on prod are `source_verified` with no citation opened;
+- proposed in §15 for L41's plan.
