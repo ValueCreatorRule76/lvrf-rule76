@@ -131,6 +131,18 @@ const CASES = [
   { route: 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw', kind: 'id',
     path: `/api/value-outcomes/${E.OUTCOME_A}/evidence/${E.LINKEV_A}/withdraw`, body: {}, controlBody: { x: 1 },
     notFound: [404, `no current link of evidence ${E.LINKEV_A} to value outcome ${E.OUTCOME_A}`], target: ['value_outcomes', E.OUTCOME_A] },
+  // C3: customer-side roles (steward's act), the credit errata and the system-exercise marks. The batch
+  // routes take the actor's tenant, never an id in the path; they are checked in F.
+  { route: 'GET /api/institutions/:institutionId/customer-roles', kind: 'id', path: `/api/institutions/${E.INST_A}/customer-roles`,
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/institutions/:institutionId/customer-roles', kind: 'id', path: `/api/institutions/${E.INST_A}/customer-roles`,
+    body: {}, controlBody: { x: 1 }, notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/customer-roles/:id/revoke', kind: 'id', path: `/api/customer-roles/${E.GRANT_A}/revoke`,
+    body: {}, controlBody: { x: 1 }, notFound: [404, `role grant ${E.GRANT_A} not found`], target: ['customer_role_grants', E.GRANT_A] },
+  { route: 'GET /api/system-exercise/candidates', kind: 'list', path: '/api/system-exercise/candidates', aIds: [E.EV_A, E.RUN_A], bIds: [] },
+  { route: 'GET /api/errata/non-customer-credit', kind: 'list', path: '/api/errata/non-customer-credit', aIds: [], bIds: [] },
+  { route: 'POST /api/errata/non-customer-credit', kind: 'actor' },
+  { route: 'POST /api/system-exercise/marks', kind: 'actor' },
   { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
     notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
   // P2: where a figure came from (read-only).
@@ -412,6 +424,27 @@ step("E. POST /api/account-inputs creates in the ACTOR's tenant");
   rB.status === 201 && tenant === E.TENANT_B ? ok(`B -> 201, account created in tenant B`) : bad(`B -> ${rB.status} ${rB.text.slice(0, 200)} (tenant ${tenant})`);
   const rA = await call(cookieA, 'POST', '/api/account-inputs', body);
   rA.status === 409 ? ok('A, same name -> 409 (its own account of that name)') : bad(`A -> ${rA.status} ${rA.text.slice(0, 120)}`);
+}
+
+step("F. C3's batches take the actor's tenant: B can neither mark nor record errata on A's rows");
+{
+  const marksBefore = q('SELECT count(*) FROM system_exercise_marks');
+  const errataBefore = q('SELECT count(*) FROM run_errata');
+  for (const [table, id] of [['evidence', E.EV_A], ['value_runs', E.RUN_A]]) {
+    const rOther = await call(cookieB, 'POST', '/api/system-exercise/marks', { items: [{ subject_table: table, subject_id: id }], expected_count: 1 });
+    const rUnknown = await call(cookieB, 'POST', '/api/system-exercise/marks', { items: [{ subject_table: table, subject_id: UNKNOWN }], expected_count: 1 });
+    rOther.status === 409 && rOther.message === rUnknown.message && /^The count changed: 0 of the 1 items/.test(rOther.message ?? '')
+      ? ok(`marks: B naming A's ${table} row -> 409 "${(rOther.message ?? '').slice(0, 50)}…", the same as an unknown id`)
+      : bad(`marks: B naming A's ${table} -> ${rOther.status} ${JSON.stringify(rOther.message)}; unknown -> ${rUnknown.status} ${JSON.stringify(rUnknown.message)}`);
+  }
+  const g = await call(cookieB, 'GET', '/api/errata/non-customer-credit');
+  const e = await call(cookieB, 'POST', '/api/errata/non-customer-credit', { expected_count: (g.json?.count ?? 0) + 1, reason: note('Verification: P3 tenant scope checks.') });
+  e.status === 409 && /^The count changed: the seals now call for \d+ errata/.test(e.message ?? '')
+    ? ok(`credit errata: B's batch reads B's own seals only (B's count ${g.json?.count}); a count that is not B's -> 409`)
+    : bad(`credit errata as B -> ${e.status} ${JSON.stringify(e.message)}`);
+  const marksAfter = q('SELECT count(*) FROM system_exercise_marks');
+  const errataAfter = q('SELECT count(*) FROM run_errata');
+  marksAfter === marksBefore && errataAfter === errataBefore ? ok(`nothing marked, no erratum recorded (marks ${marksBefore}, errata ${errataBefore})`) : bad(`marks ${marksBefore} -> ${marksAfter}; errata ${errataBefore} -> ${errataAfter}`);
 }
 
 console.log(`\n==> cases ${PASS} passed, ${FAIL} failed`);

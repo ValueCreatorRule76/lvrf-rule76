@@ -3108,7 +3108,7 @@ the commitment or the verification.
 | **C2-D2** | The 9 errata: through the UI one by one, or a steward script with `--apply`? | **The UI, one by one, against the dry run's list.** Each is a steward act with its own act row, and scripts never write to prod. Nine is a sitting, not a batch |
 | **C2-D3** | Verify's attestation also stands behind the actual. Link it `verification` only, or `verification` and `actual`? | **`verification` only, as ruled.** The measured actual comes from the customer's system of record (CLAUDE.md, the governing AI principle); an attestation about it is not that evidence |
 
-## 12. C3: credit only for customer-side people; errata on what the seals credited; system-exercise marks (ruled by Brad, 26 Oct 2026; **plan for approval, not built**)
+## 12. C3: credit only for customer-side people; errata on what the seals credited; system-exercise marks (ruled by Brad, 26 Oct 2026; **built; Gate A 26 Oct 2026, BUILD_STATUS**)
 
 **Value spine stages served:** `measure` and `verify` (what earns confidence credit), and `return` (errata
 beside the runs that credited non-customer-side people; marks on what was entered to exercise the system).
@@ -3299,17 +3299,47 @@ Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two 
   - the filing withdrawn;
   - 0 refusals but deliberate ones.
 
-### Decisions for Brad
+### Decisions (ruled by Brad, 26 Oct 2026)
 
-| # | Decision | Recommendation |
-|---|---|---|
-| **C3-D1** | Does 1.0.1 also apply the rule to the committer and verifier factors (`human_commit_of_record`, `human_verifier_of_record`)? The errata say the 10 committer points "earn nothing under the C3 rule". | **Yes.** The errata state it, so the model must. Commit and verify already require a non-simulated person of the institution; the role test is the new part. Route-level enforcement at commit and verify belongs to §14. |
-| **C3-D2** | The fingerprint covers constants, not logic. Add `ATTESTER_RULE` (the rule in words) to the fingerprint so 1.0.1's fingerprint moves? | **Yes.** Otherwise the version moves and the fingerprint doesn't: the exact finding the fingerprint exists to catch. |
-| **C3-D3** | Fold L42's attester sealing into C3 (1.0.1 runs seal each attested item's attester and the customer-side flags)? | **Yes.** It is the input 1.0.1 introduces; without it no 1.0.1 run with an attested item is recomputable. §13 keeps L41 and what remains of L42. |
-| **C3-D4** | The batch as a steward page (GET dry run, POST with the count), not a script? | **Yes, a page:** scripts never write to prod (C2-D2), and CLAUDE.md rule 9. |
-| **C3-D5** | Marks one at a time, each with a confirmation, or a batch like the errata? | **One at a time.** Each mark's reason is the item's own (its note says what it exercised), and 18 is a sitting. |
-| **C3-D6** | The list to mark: evidence `cee6fea9…` and `f9775317…`, and Curia runs 2, 6–12 and 14–21 (16). Runs 1, 3, 4, 5 and 13 record case changes and stay unmarked. Scotts' `0ee45ae0…` (the retirement note) is a false positive and stays unmarked. | **As listed.** Brad confirms or edits the list before Gate B. |
-| **C3-D7** | `run_errata` gains `kind`, or a separate table for "credit to a person not customer-side"? | **`kind` on `run_errata`.** One erratum surface: banner, print, lineage and the Runs-list marker (L45) read one table. |
+- **D1, D2, D3, D4 and D7:** approved as recommended.
+  - D1: 1.0.1 applies the rule to the committer and verifier factors too.
+  - D2: `ATTESTER_RULE` joins the fingerprint (1.0.1 is `cf11d21c781a`; 1.0.0 stays `d4cf8f31472a`).
+  - D3: 1.0.1 runs seal each attester and the committer and verifier, with their customer-side status
+    and roles.
+  - D4: the errata batch is a steward page.
+  - D7: `kind` on `run_errata`.
+- **D5, changed: marks go through a batch page like the errata.**
+  - Each candidate is listed with its own note, quoted from the record. The steward ticks each.
+  - Each mark's reason quotes that note: "Entered to exercise the system, not as case evidence; its
+    own note reads: '…'".
+  - One submit carries the ticked count, with one act per mark. It is refused if the count changed.
+- **D6, changed: no fixed list.** Brad decides on the batch page by reading each item's own note. The
+  page pre-ticks nothing.
+- **Condition, the headline erratum line:** any headline taken from a run that carries a current
+  erratum (the POV, the account page, the book) shows the erratum line beside the score. For example:
+  "erratum: 25 of these points rest on a person who is not customer-side". Gate A breaks it.
+- **Roles (Brad, 26 Oct 2026), added to C3:** nothing granted `metric_owner` or
+  `executive_sponsor` but the customer-zero seed.
+  - **A steward act** names a customer-side role, with these guards, enforced in the database:
+    1. **The grant names its source:** an evidence row of the account, with its provenance,
+       showing the person holds the role there. No source, no grant.
+    2. **Refused for:**
+       - simulated persons;
+       - persons not of that account;
+       - anyone linked as `analyst_of_record`, or titled as external or an analyst;
+       - anyone with a vendor-side role or sign-in credentials (tenant staff);
+       - the steward themself.
+    3. **Every credit a role earns shows its source** ("metric owner per <source>, named by
+       <steward>, <date>") on the run page, the POV and the lineage.
+    4. **Revocation is a later act,** append-only, with a reason. A run seals the role as it stood.
+    5. **Verify scripts grant fixture roles through this act only:** no SQL role inserts, even on
+       clones.
+  - **Gate A breaks:** granting to the analyst of record, to tenant staff, to the steward, and with
+    no source.
+  - **The table:** grants live in `customer_role_grants` (0043), with source, steward, account and
+    revocation. `person_roles` keeps none of these, and its key cannot record a grant after a
+    revocation. The seed's two `person_roles` rows carry no source and do not count.
+  - **The act:** `grant` joins the act enum. Revocation uses `withdraw`.
 
 ## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **after C3**)
 

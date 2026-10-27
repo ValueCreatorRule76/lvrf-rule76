@@ -4,6 +4,9 @@ import { apiFetch } from '../api/http';
 import { day } from '../lib/workspaceStatus';
 import { formatQuantity } from '../lib/format';
 import { supportsShort } from '../lib/labels';
+import { SystemExerciseLine, type SystemExerciseMark } from '../components/SystemExercise';
+
+const isMark = (v: unknown): v is SystemExerciseMark => typeof v === 'object' && v !== null && 'reason' in v;
 
 /**
  * P2 (LVRF_PLAN §10; design §2.4, §4) — /lineage/:table/:id: where a figure
@@ -49,6 +52,11 @@ function What({ s }: { s: Step }) {
           {loc ? <span className="block">{[loc.document, loc.table, loc.row, loc.column].filter(Boolean).map(str).join(' · ')}: {str(loc.value)} ({str(loc.scale)})</span> : null}
           {d.how_read ? <span className="block text-ink-45">How it was read: {str(d.how_read)}</span> : null}
           <span className="block text-ink-45">Source: {str(d.provenance)}</span>
+          {/* C3: an attester's customer-side role with its source, or why not; the row's system-exercise mark. */}
+          {d.attested_by ? (d.attester_roles
+            ? <span className="block text-ink-45" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}: {str(d.attester_roles)}</span>
+            : <span className="block text-warning" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}, who is not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule.</span>) : null}
+          {isMark(d.system_exercise) ? <SystemExerciseLine mark={d.system_exercise} className="mt-0.5" /> : null}
         </>
       );
     }
@@ -73,10 +81,11 @@ function What({ s }: { s: Step }) {
         {/* P2 review: the errata recorded after this seal, beside it (the sealed record is never changed). */}
         {Array.isArray(d.errata) && (d.errata as Record<string, unknown>[]).map((x) => (
           <span key={str(x.id)} className="block text-warning" data-testid="lineage-seal-erratum">
-            Erratum recorded after sealing, {day(str(x.recorded_at))}, by {str(x.recorded_by)}{x.supersedes ? ' (it supersedes an earlier erratum)' : ''}: {str(x.what_was_wrong)} {x.recomputed === null ? 'Not recomputed' : `Recomputed ${Number(x.recomputed)} / 100`} (sealed {Number(x.sealed)} / 100).
+            Erratum recorded after sealing, {day(str(x.recorded_at))}, by {str(x.recorded_by)}{x.supersedes ? ' (it supersedes an earlier erratum)' : ''}: {str(x.what_was_wrong)} {x.kind === 'non_customer_credit' ? `${Number(x.points_not_credited)} points rest on a person not customer-side; the sealed score stands` : x.recomputed === null ? 'Not recomputed' : `Recomputed ${Number(x.recomputed)} / 100`} (sealed {Number(x.sealed)} / 100).
           </span>
         ))}
         {d.matched ? <span className="block text-ink-45">{str(d.matched)}</span> : null}
+        {isMark(d.system_exercise) ? <SystemExerciseLine mark={d.system_exercise} className="mt-0.5" /> : null}
       </>
     );
     case 'erratum': return <><span className={d.superseded ? 'line-through' : ''}>run {str(d.run_number)}: sealed {Number(d.sealed)} / 100, {d.recomputed === null ? 'not recomputed' : `recomputed ${Number(d.recomputed)} / 100`}{d.superseded ? ' (superseded)' : ''}</span>{note ? <span className="block text-ink-45">{note}</span> : null}</>;

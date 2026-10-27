@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceLevel } from './confidenceModel.js';
+// C3: parity with records/simulate_spine.py is a property of model 1.0.0, the model that port produced; it is
+// checked against the frozen 1.0.0 scorer (M1). 1.0.1's customer-side rule has no Python counterpart.
+import { computeConfidence, evidenceCredit, fixtureEvidenceToInput, type ConfidenceLevel } from './models/confidence_1_0_0.js';
 import { computeDelta } from './deltaEngine.js';
 import { computeHealth, type HealthEventInput, type HealthState } from './healthModel.js';
 import { buildHeartbeatPlan } from './heartbeatLedger.js';

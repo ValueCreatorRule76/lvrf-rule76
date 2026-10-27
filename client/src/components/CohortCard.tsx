@@ -60,6 +60,8 @@ function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean })
           <Badge tone="watch">Unmeasured floor</Badge>
         )}
       </div>
+      {/* C3 (Brad's condition): beside a headline from a run that carries a current erratum. */}
+      {composite.floor === 'run' && d.erratum_line && <span className="mt-1 block text-[11px] text-warning" data-testid="book-headline-erratum">{d.erratum_line}</span>}
       <p className="m-0 mt-1.5 text-[12px] text-ink-45">
         Set by the weakest member:{' '}
         <Link to={`/accounts/${d.institution_id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>
@@ -159,7 +161,10 @@ export function CohortCard({ n }: { n: string }) {
                       {STATUS_LABEL[m.status]}
                       {m.status === 'no_locked_run' ? ` (${m.run_count} unlocked)` : ''}
                     </td>
-                    <td className="border-b border-rule-soft px-3 py-[9px]">{scoreBadge(m)}</td>
+                    <td className="border-b border-rule-soft px-3 py-[9px]">
+                      {scoreBadge(m)}
+                      {m.erratum_line && <span className="mt-1 block text-[11px] text-warning" data-testid="book-member-erratum">{m.erratum_line}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -186,7 +191,12 @@ export function CohortCard({ n }: { n: string }) {
                         {cohort.composite.determined_by ? ` · set by ${memberLabel(cohort.composite.determined_by)}` : ''}
                       </span>
                     </span>
-                    {cohort.composite.determined_by && scoreBadge(cohort.composite.determined_by)}
+                    {cohort.composite.determined_by && (
+                      <span className="text-right">
+                        {scoreBadge(cohort.composite.determined_by)}
+                        {cohort.composite.determined_by.erratum_line && <span className="mt-1 block text-[11px] text-warning" data-testid="industry-headline-erratum">{cohort.composite.determined_by.erratum_line}</span>}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -219,14 +219,25 @@ export interface Run {
   payload: RunPayload;
   /** C1: errata recorded beside this sealed run, by the steward (never part of the seal). */
   errata?: RunErratum[];
+  /** C3: the run's system-exercise mark, and the marks on the evidence it sealed (as the seal names it). */
+  system_exercise?: SystemExerciseMark | null;
+  marked_evidence?: { kind: string; summary: string; provenance: string; system_exercise: SystemExerciseMark }[];
 }
 
 /** C1 (LVRF_PLAN §9): what a sealed run got wrong, and the server's recompute under the model it was sealed with. */
+/** C3: an evidence row or run entered to exercise the system, marked so (never deleted). */
+export interface SystemExerciseMark { reason: string; marked_by: string; marked_on: string }
+
 export interface RunErratum {
   id: string;
-  evidence_id: string;
-  /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. */
-  corrected_to_supports: string;
+  /** C3: 'link_correction' (C1), or 'non_customer_credit' (points the seal credited to a person not customer-side). */
+  kind: 'link_correction' | 'non_customer_credit';
+  /** C3: for a credit erratum, the sealed points that rest on people not customer-side. */
+  points_not_credited: string | null;
+  /** A link correction's evidence; NULL on a credit erratum. */
+  evidence_id: string | null;
+  /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. NULL on a credit erratum. */
+  corrected_to_supports: string | null;
   /** C1 review: an erratum is corrected only by a later one that supersedes it, naming it. */
   supersedes_id: string | null;
   supersession_reason: string | null;

@@ -118,6 +118,8 @@ export interface InstitutionRunsSummary {
   count: number;
   latest_confidence_score: string | null;
   latest_confidence_band: string | null;
+  /** C3: the headline run's current errata, in one line (the headline is the latest unmarked run). */
+  latest_erratum_line: string | null;
 }
 
 export interface InstitutionView {

@@ -124,14 +124,14 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RR0="$(q "SELECT count(*) FROM research_results")"; HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0041_acts_and_lineage)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "167" ] && ok "167 triggers by pg_trigger (141 + section 27's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "176" ] && ok "176 triggers by pg_trigger (C3 section 28: +9; 141 + section 27's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
   && ok "all $RR0 existing research results keep import_id NULL: none blank-filled, none invented" || bad "import_id after 0041"
 [ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "0|0" ] && ok "governance_acts and research_imports empty after the migration (no backfill: P2-D2)" || bad "acts/imports not empty"
-[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "18" ] \
-  && ok "18 _act_present triggers, each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
+[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "20" ] \
+  && ok "20 _act_present triggers (P2's 18, C3's customer_role_grants and system_exercise_marks), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
 
 step "4. The coverage guard (Brad's condition on D3): every mutating route classed; every act route records its act"
 node scripts/list_api_routes.mjs 2>/dev/null | grep -E '^(POST|PUT|PATCH|DELETE) ' | sort -u > "$W/routes.txt"
@@ -448,8 +448,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b10.sql" > /dev/null
 [ "$(LN institution_facts "$F_HC")" = "prompt:record > import:act > result:record > accept:act > evidence:record > open_citation:act > figure_check:record > fact:record > seal:seal" ] \
   && ok "B10: caught — without the supersession steps the chain loses \"superseded_by\"; the script names the missing step" || bad "B10: not caught: $(LN institution_facts "$F_HC")"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "167" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
-  && ok "  ...hardening.sql re-applied: the step back, 167 triggers" || bad "  ...B10 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "176" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
+  && ok "  ...hardening.sql re-applied: the step back, 176 triggers" || bad "  ...B10 restore"
 # B13 (P2 review) — the errata note on a seal step removed (on the clone).
 python3 - "$W/b13.sql" <<'PY'
 import re, sys
@@ -462,8 +462,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b13.sql" > /dev/null
 [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "0" ] \
   && ok "B13: caught — without the errata note the seal step reads as if nothing were recorded after it" || bad "B13: not caught"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "167" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
-  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 167 triggers" || bad "  ...B13 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "176" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
+  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 176 triggers" || bad "  ...B13 restore"
 # B11 — a paste over 512 KB; and a parser refusal recorded by hash and size, never text.
 BIG="$(node -e "process.stdout.write(JSON.stringify({prompt_id:'$PF', pad:'x'.repeat(530000)}))")"
 REF0="$(q "SELECT count(*) FROM refusals")"

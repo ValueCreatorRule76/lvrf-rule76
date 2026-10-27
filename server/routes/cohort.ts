@@ -78,6 +78,7 @@ interface Row {
   model_version: string | null;
   model_fingerprint: string | null;
   run_count: number | null;
+  erratum_line: string | null;
 }
 
 export interface CohortMember {
@@ -104,6 +105,8 @@ export interface CohortMember {
   model_fingerprint: string | null;
   /** All runs for this engagement, locked or not — context for no_locked_run. */
   run_count: number;
+  /** C3 (Brad's condition): the run of record's current errata, in a line, shown beside its score; null if none. */
+  erratum_line: string | null;
 }
 
 export interface Cohort {
@@ -171,6 +174,7 @@ function toMember(r: Row): CohortMember {
     model_version: recorded ? r.model_version : null,
     model_fingerprint: recorded ? r.model_fingerprint : null,
     run_count: r.run_count ?? 0,
+    erratum_line: recorded ? r.erratum_line : null,
   };
 }
 
@@ -267,9 +271,12 @@ export function cohortRouter(pool: Pool): Router {
                   id, engagement_id, run_number, confidence_score, confidence_band,
                   locked_at,
                   payload->'confidence'->>'modelVersion'     AS model_version,
-                  payload->'confidence'->>'modelFingerprint' AS model_fingerprint
+                  payload->'confidence'->>'modelFingerprint' AS model_fingerprint,
+                  lvrf_run_erratum_line(id) AS erratum_line
              FROM value_runs
             WHERE deleted_at IS NULL AND locked_at IS NOT NULL
+              -- C3 (ruling E): a run marked as a system exercise is never the run of record.
+              AND lvrf_system_exercise_mark('value_runs', id) IS NULL
             ORDER BY engagement_id, run_number DESC
          ),
          run_counts AS (
@@ -283,7 +290,7 @@ export function cohortRouter(pool: Pool): Router {
                 e.id AS engagement_id, e.name AS engagement_name,
                 r.id AS run_id, r.run_number, r.confidence_score, r.confidence_band,
                 r.locked_at, r.model_version, r.model_fingerprint,
-                rc.run_count
+                rc.run_count, r.erratum_line
            FROM institutions i
            LEFT JOIN industries ind ON ind.id = i.industry_id
            LEFT JOIN engagements e

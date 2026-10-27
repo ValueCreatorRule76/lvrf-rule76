@@ -47,7 +47,7 @@ export function runsRouter(pool: Pool): Router {
       // C1: the errata recorded beside this sealed run (never part of it), every one of them;
       // a superseded erratum names its successor, and a superseding one its predecessor.
       const { rows: errata } = await pool.query(
-        `SELECT x.id, x.evidence_id, x.corrected_to_supports, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
+        `SELECT x.id, x.kind, x.points_not_credited, x.evidence_id, x.corrected_to_supports, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
                 x.sealed_score, x.sealed_band, x.recomputed_score, x.recomputed_band, x.recompute_method,
                 p.full_name AS recorded_by, x.recorded_at,
                 x.supersedes_id, x.supersession_reason,
@@ -58,7 +58,16 @@ export function runsRouter(pool: Pool): Router {
           WHERE x.value_run_id = $1 ORDER BY x.recorded_at`,
         [req.params.id],
       );
-      res.json({ ...run, errata });
+      // C3: the run's system-exercise mark, and the marks on the evidence it sealed (matched as the
+      // seal names it: kind, summary and provenance, within the run's account).
+      const { rows: [mark] } = await pool.query<{ m: unknown }>('SELECT lvrf_system_exercise_mark($1, $2::uuid) AS m', ['value_runs', req.params.id]);
+      const { rows: markedEvidence } = await pool.query(
+        `SELECT x->>'kind' AS kind, x->>'summary' AS summary, x->>'provenance' AS provenance, lvrf_system_exercise_mark('evidence', e.id) AS system_exercise
+           FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x
+           JOIN evidence e ON e.institution_id = $2 AND e.kind::text = x->>'kind' AND e.summary = x->>'summary' AND e.provenance = x->>'provenance'
+          WHERE r.id = $1 AND lvrf_system_exercise_mark('evidence', e.id) IS NOT NULL`,
+        [req.params.id, run.institution_id]);
+      res.json({ ...run, errata, system_exercise: mark?.m ?? null, marked_evidence: markedEvidence });
     } catch (err) {
       respondServerError(res, err);
     }

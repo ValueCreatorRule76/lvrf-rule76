@@ -275,14 +275,17 @@ export function institutionViewRouter(pool: Pool): Router {
           WHERE e.institution_id = $1 AND vr.deleted_at IS NULL`,
         [institutionId],
       );
+      // C3: the headline is the latest unmarked run (a system exercise is never the headline), with its
+      // current errata in one line beside the score.
       const { rows: [latestRun] } = await pool.query<{
         confidence_score: string;
         confidence_band: string;
+        erratum_line: string | null;
       }>(
-        `SELECT vr.confidence_score, vr.confidence_band
+        `SELECT vr.confidence_score, vr.confidence_band, lvrf_run_erratum_line(vr.id) AS erratum_line
            FROM value_runs vr
            JOIN engagements e ON e.id = vr.engagement_id AND e.deleted_at IS NULL
-          WHERE e.institution_id = $1 AND vr.deleted_at IS NULL
+          WHERE e.institution_id = $1 AND vr.deleted_at IS NULL AND lvrf_system_exercise_mark('value_runs', vr.id) IS NULL
           ORDER BY vr.walked_at DESC
           LIMIT 1`,
         [institutionId],
@@ -308,6 +311,7 @@ export function institutionViewRouter(pool: Pool): Router {
           count: runCount,
           latest_confidence_score: latestRun ? latestRun.confidence_score : null,
           latest_confidence_band: latestRun ? latestRun.confidence_band : null,
+          latest_erratum_line: latestRun ? latestRun.erratum_line : null,
         },
       });
     } catch (err) {

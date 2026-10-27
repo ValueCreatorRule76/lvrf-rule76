@@ -44,6 +44,8 @@ export interface WalkState {
         figure_check: FigureCheckShown | null;
         /** C1: set when this link replaced a withdrawn one — what it used to support, and why. */
         corrects_supports: string | null; correction_reason: string | null;
+        /** C3: the row's system-exercise mark. */
+        system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
       }[];
       /** C1: links withdrawn by a correction, kept and shown struck through. */
       withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
@@ -52,6 +54,8 @@ export interface WalkState {
     }[];
     runs: {
       id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;
+      /** C3: the run's mark (a marked run is never the book's headline), and its errata in one line. */
+      system_exercise: { reason: string; marked_by: string; marked_on: string } | null; erratum_line: string | null;
       /** Q4l: what the run sealed, per evidence row, read from its payload. */
       sealed_evidence: { supports: string; kind: string; basis: string | null; ai_sourced: boolean | null; citation_resolved: boolean | null; source_verified: boolean | null; summary: string }[];
     }[];
@@ -68,7 +72,9 @@ export interface WalkState {
 export interface WalkStatus {
   steps: Record<'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7' | 'w8' | 'w9', StepState>;
   engagement: { id: string; name: string; retired: boolean } | null;
-  runs: { run_number: number; locked_at: string | null; confidence_score: string | null; confidence_band: string }[];
+  runs: { run_number: number; locked_at: string | null; confidence_score: string | null; confidence_band: string;
+    /** C3: the run's mark (a marked run is never the headline) and its current errata in one line. */
+    system_exercise: { reason: string } | null; erratum_line: string | null }[];
   baseline: { value: string; unit: string; measured_at: string; metric: string } | null;
   evidence: { opened_verified: number; total: number };
 }
@@ -99,7 +105,8 @@ export function walkStatus(w: WalkState): WalkStatus {
   return {
     steps: { w1: d.s1, w2: d.s2, w3: d.s3, w4: d.s4, w5: d.s5, w6: d.s6, w7: d.s7, w8: d.s8, w9: d.s9 },
     engagement: d.eng ? { id: d.eng.id, name: d.eng.name, retired: d.eng.retired } : null,
-    runs: (d.eng?.runs ?? []).map((r) => ({ run_number: r.run_number, locked_at: r.locked_at, confidence_score: r.confidence_score, confidence_band: r.confidence_band })),
+    runs: (d.eng?.runs ?? []).map((r) => ({ run_number: r.run_number, locked_at: r.locked_at, confidence_score: r.confidence_score, confidence_band: r.confidence_band,
+      system_exercise: r.system_exercise, erratum_line: r.erratum_line })),
     baseline: d.outcome ? { value: d.outcome.baseline_value, unit: d.outcome.metric.unit, measured_at: d.outcome.baseline_measured_at, metric: d.outcome.metric.name } : null,
     evidence: { opened_verified: d.outcome?.evidence.filter((e) => e.citation_resolved && e.source_verified).length ?? 0, total: d.outcome?.evidence.length ?? 0 },
   };
@@ -219,7 +226,7 @@ export interface AccountRow {
   status: string | null;
   industry: string;
   standing: string;
-  engagements: { name: string; retired: boolean; run: { number: number; score: string | null; band: string } | null }[];
+  engagements: { name: string; retired: boolean; run: { number: number; score: string | null; band: string; erratum_line: string | null } | null }[];
   last: { what: string; at: string } | null;
 }
 
@@ -249,8 +256,9 @@ export async function loadAccountRow(id: string): Promise<AccountRow | { error: 
   if (!w.ok || !p.ok || !r.ok) return { error: ROW_UNAVAILABLE };
   const walk = w.v; const pov = p.v; const research = r.v;
   const engagements = (walk?.engagements ?? []).map((e) => {
-    const locked = [...e.runs].reverse().find((r) => r.locked_at);
-    return { name: e.name, retired: e.retired, run: locked ? { number: locked.run_number, score: locked.confidence_score, band: locked.confidence_band } : null };
+    // C3: the book's headline is the latest UNMARKED locked run (a system exercise is never the headline).
+    const locked = [...e.runs].reverse().find((r) => r.locked_at && !r.system_exercise);
+    return { name: e.name, retired: e.retired, run: locked ? { number: locked.run_number, score: locked.confidence_score, band: locked.confidence_band, erratum_line: locked.erratum_line } : null };
   });
   const marker = pov?.reference_example ? MARKER_KIND[pov.reference_example.kind].label.toLowerCase() : null;
   const allRetired = engagements.length > 0 && engagements.every((e) => e.retired);

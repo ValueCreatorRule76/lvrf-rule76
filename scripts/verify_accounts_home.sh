@@ -109,7 +109,10 @@ for (const width of [1280, 390]) {
   // Each row's words: standing as "n of 6 · …" (or the tenant's own); each engagement's run in the agreed form.
   const standing = await ev(`[...document.querySelectorAll('[data-testid=row-standing]')].map(e=>e.childNodes[0]?.textContent ?? '')`);
   check(standing.every((s) => /^[1-6] of 6 · \S/.test(s) || s === 'Not worked as a path: your own account'), `${W}: every row says where it stands ("n of 6 · next step")`, JSON.stringify(standing));
-  const runs = await ev(`[...document.querySelectorAll('[data-testid=row-engagement]')].map(e=>e.querySelector('span.block')?.textContent ?? '')`);
+  // C3: an erratum line may sit beside the headline (Brad's condition); the headline is read without it, and the line checked on its own.
+  const runs = await ev(`[...document.querySelectorAll('[data-testid=row-engagement]')].map(e=>{const b=e.querySelector('span.block'); if(!b) return ''; const c=b.cloneNode(true); c.querySelectorAll('[data-testid=headline-erratum]').forEach(x=>x.remove()); return c.textContent})`);
+  const errLines = await ev(`[...document.querySelectorAll('[data-testid=row-engagement] [data-testid=headline-erratum]')].map(e=>e.textContent)`);
+  check(errLines.every((s) => /^erratum: \S/.test(s)), `${W}: every erratum line beside a headline starts "erratum: …"`, JSON.stringify(errLines));
   check(runs.length > 0 && runs.every((s) => /^run \d+ · \d+ \/ 100 · (Low|Medium|High)$/.test(s) || s === 'No locked run yet.'), `${W}: every engagement line is "run N · n / 100 · Band" or "No locked run yet."`, JSON.stringify(runs));
   const low = await ev(`[...document.querySelectorAll('[data-testid=confidence-badge]')].filter(b=>/· Low/.test(b.textContent)).map(b=>getComputedStyle(b).color)`);
   const critical = await ev(`(()=>{const d=document.createElement('span');d.className='text-critical';document.body.appendChild(d);const c=getComputedStyle(d).color;d.remove();return c})()`);

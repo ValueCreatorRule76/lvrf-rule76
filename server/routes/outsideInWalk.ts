@@ -95,6 +95,8 @@ export function outsideInWalkRouter(pool: Pool): Router {
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
                                                                             'corrects_supports', voe.corrects_supports, 'correction_reason', voe.correction_reason,
                                                                             'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),
+                                                                            -- C3: the row's system-exercise mark.
+                                                                            'system_exercise', lvrf_system_exercise_mark('evidence', ev.id),
                                                                             -- Q4k: the citation state, for "Open the citation…"
                                                                             'ai_sourced', ev.ai_sourced, 'source_verified', ev.source_verified,
                                                                             'citation_resolved', ev.citation_resolved,
@@ -127,6 +129,9 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                             -- Q4l: what each run SEALED, read from its own payload
                                                             -- (never the live rows): per evidence row, as produced.
                                                             'confidence_score', r.confidence_score,
+                                                            -- C3: the run's mark (a marked run is never the book's headline), and its errata in one line.
+                                                            'system_exercise', lvrf_system_exercise_mark('value_runs', r.id),
+                                                            'erratum_line', lvrf_run_erratum_line(r.id),
                                                             'sealed_evidence', coalesce((SELECT json_agg(json_build_object(
                                                                 'supports', ev->>'supports', 'kind', ev->>'kind', 'basis', ev->>'basis',
                                                                 'ai_sourced', (ev->>'ai_sourced')::boolean, 'citation_resolved', (ev->>'citation_resolved')::boolean,

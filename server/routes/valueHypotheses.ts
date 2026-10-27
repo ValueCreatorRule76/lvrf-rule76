@@ -641,14 +641,19 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              -- The one earlier stage the record can confirm: a named committer.
              EXISTS (SELECT 1 FROM value_outcomes vo WHERE vo.engagement_id = e.id AND vo.deleted_at IS NULL
                         AND vo.superseded_by_id IS NULL AND vo.committed_by_person_id IS NOT NULL) AS committed,
+             -- C3: the headline is the latest UNMARKED locked run (a system exercise is never the headline),
+             -- with its current errata in one line beside the score.
              (SELECT json_build_object('id', r.id, 'run_number', r.run_number, 'confidence_score', r.confidence_score,
-                                       'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash)
+                                       'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash,
+                                       'erratum_line', lvrf_run_erratum_line(r.id))
                 FROM value_runs r WHERE r.engagement_id = e.id AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL
+                 AND lvrf_system_exercise_mark('value_runs', r.id) IS NULL
                ORDER BY r.run_number DESC LIMIT 1) AS latest_locked_run,
              -- Q4m: EVERY locked run, oldest first. The POV lists them all: a locked
              -- run is part of the record, and retiring an engagement keeps its runs.
              (SELECT coalesce(json_agg(json_build_object('id', r.id, 'run_number', r.run_number, 'confidence_score', r.confidence_score,
-                                       'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash)
+                                       'confidence_band', r.confidence_band, 'locked_at', r.locked_at, 'payload_hash', r.payload_hash,
+                                       'erratum_line', lvrf_run_erratum_line(r.id), 'system_exercise', lvrf_system_exercise_mark('value_runs', r.id))
                                        ORDER BY r.run_number), '[]')
                 FROM value_runs r WHERE r.engagement_id = e.id AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL) AS locked_runs
         FROM engagements e WHERE e.institution_id = $1 AND e.superseded_by_id IS NULL
@@ -661,6 +666,11 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
                 FROM offering_capabilities oc JOIN offerings o ON o.id = oc.offering_id WHERE oc.capability_id = c.id) AS offerings,
              vo.baseline_value::text, to_char(vo.baseline_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS baseline_measured_on,
              vo.target_value::text, cp.full_name AS committed_by, to_char(vo.committed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS committed_on,
+             -- C3: the committer's and verifier's customer-side roles with their sources, or why not.
+             CASE WHEN cp.id IS NULL THEN NULL ELSE lvrf_customer_roles(cp.id, vo.institution_id) END AS committer_roles,
+             CASE WHEN cp.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(cp.id, vo.institution_id) END AS committer_not_customer_side,
+             CASE WHEN vp.id IS NULL THEN NULL ELSE lvrf_customer_roles(vp.id, vo.institution_id) END AS verifier_roles,
+             CASE WHEN vp.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(vp.id, vo.institution_id) END AS verifier_not_customer_side,
              vo.actual_value::text, to_char(vo.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS actual_measured_on,
              vp.full_name AS verified_by, vo.source_verified, vo.realization::text, bm.industry_measure_id,
              -- Q4m: an outcome of a retired engagement is frozen; the POV says so
@@ -689,6 +699,10 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              e.evidence_form::text, e.quote_text, e.locator, e.how_read,
              -- A statement is the attester's word when there is one, otherwise the recorder's.
              coalesce(ap.full_name, cp.full_name) AS stated_by,
+             -- C3: an attester's customer-side role with its source, or why they are not customer-side; the row's mark.
+             CASE WHEN ap.id IS NULL THEN NULL ELSE lvrf_customer_roles(ap.id, vo.institution_id) END AS attester_roles,
+             CASE WHEN ap.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(ap.id, vo.institution_id) END AS attester_not_customer_side,
+             lvrf_system_exercise_mark('evidence', e.id) AS system_exercise,
              to_char(coalesce(e.attested_at, e.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS stated_on,
              (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
                 FROM figure_checks c WHERE c.evidence_id = e.id AND c.subject_table = 'value_outcomes' AND c.subject_id = voe.value_outcome_id

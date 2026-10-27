@@ -853,6 +853,10 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
         attesterName: schema.persons.fullName,
         attesterTenantId: schema.persons.tenantId,
         attesterInstitutionId: schema.persons.institutionId,
+        // C3 (1.0.1): the one definition of customer-side (hardening.sql), as produceRun.ts reads it.
+        attesterCustomerSide: sql<boolean | null>`CASE WHEN ${schema.persons.id} IS NULL THEN NULL ELSE lvrf_customer_side(${schema.persons.id}, ${seeded.institution.id}) END`,
+        attesterSideReason: sql<string | null>`CASE WHEN ${schema.persons.id} IS NULL THEN NULL ELSE lvrf_customer_side_reason(${schema.persons.id}, ${seeded.institution.id}) END`,
+        attesterRoles: sql<string | null>`CASE WHEN ${schema.persons.id} IS NULL THEN NULL ELSE lvrf_customer_roles(${schema.persons.id}, ${seeded.institution.id}) END`,
       })
       .from(schema.valueOutcomeEvidence)
       .innerJoin(schema.evidence, eq(schema.valueOutcomeEvidence.evidenceId, schema.evidence.id))
@@ -872,7 +876,15 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       supports: r.supports as ConfidenceEvidenceInput['supports'],
       attestedByName: r.attesterName,
       attestedByScope: r.attesterName != null ? (r.attesterInstitutionId ? 'institution' : 'tenant') : null,
+      attesterCustomerSide: r.attesterCustomerSide,
+      attesterSideReason: r.attesterSideReason,
+      attesterRoles: r.attesterRoles,
     }));
+    const sideOf = async (personId: string) => (await db.execute(sql`SELECT lvrf_customer_side(${personId}, ${seeded.institution.id}) AS side,
+      lvrf_customer_side_reason(${personId}, ${seeded.institution.id}) AS reason, lvrf_customer_roles(${personId}, ${seeded.institution.id}) AS roles`)).rows[0] as
+      { side: boolean; reason: string | null; roles: string | null };
+    const sponsorSide = await sideOf(seeded.persons.sponsor.id);
+    const verifierSideRow = await sideOf(seeded.persons.verifier.id);
 
     // Computed, never asserted or estimated — db/CONFIDENCE_MODEL.md. The
     // computed band governs; value_outcomes.confidence is advisory only.
@@ -887,6 +899,8 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       committerSimulated: fixture.persons.sponsor.synthetic,
       verifierName: seeded.persons.verifier.fullName,
       verifierSimulated: verifierSynthetic,
+      committerCustomerSide: sponsorSide.side, committerSideReason: sponsorSide.reason, committerRoles: sponsorSide.roles,
+      verifierCustomerSide: verifierSideRow.side, verifierSideReason: verifierSideRow.reason, verifierRoles: verifierSideRow.roles,
       assertedConfidence: vo.confidence,
     });
 

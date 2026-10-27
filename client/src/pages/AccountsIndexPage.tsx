@@ -46,7 +46,10 @@ function Row({ inst }: { inst: InstitutionListItem }) {
               <span key={i} className="text-[12.5px] text-ink-70" data-testid="row-engagement">
                 {e.name}{e.retired && <span className="text-ink-45"> (retired)</span>}
                 <span className="block">
-                  {e.run ? <>run {e.run.number} · <ConfidenceBadge score={e.run.score} band={e.run.band} /></> : <span className="text-ink-45">No locked run yet.</span>}
+                  {e.run ? <>run {e.run.number} · <ConfidenceBadge score={e.run.score} band={e.run.band} />
+                    {/* C3 (Brad's condition): beside a headline from a run that carries a current erratum. */}
+                    {e.run.erratum_line && <span className="block text-[11px] text-warning" data-testid="headline-erratum">{e.run.erratum_line}</span>}</>
+                    : <span className="text-ink-45">No locked run yet.</span>}
                 </span>
               </span>
             ))}

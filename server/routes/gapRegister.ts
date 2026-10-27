@@ -63,6 +63,8 @@ const ASK_TYPE_BY_GAP: Record<string, AskType> = {
   attested_only: 'document',
   absent: 'person',
   simulated: 'person',
+  // C3: the person named is not customer-side — a person ask (name the role from a source, or another person).
+  not_customer_side: 'person',
   unsubstantiated: 'definition',
   self_declared_inference: 'definition',
 };
@@ -281,7 +283,7 @@ function buildRequirement(factor: string, gap: string): string {
         case 'evidence_unqualified':
           return (
             `The evidence attached to ${subject} must be independently source-verified, ` +
-            'or attested by a named, institution-scoped, non-simulated person — none currently qualifies.'
+            'or attested by a customer-side person (a role named from a source, C3) — none currently qualifies.'
           );
         case 'attested_only':
           return (
@@ -305,6 +307,8 @@ function buildRequirement(factor: string, gap: string): string {
           return "A named, non-simulated person of record must commit to this outcome's target.";
         case 'simulated':
           return 'The committer of record must be a real person — the person currently named is a simulated identity.';
+        case 'not_customer_side':
+          return 'The committer of record must be customer-side: a person of the account whose customer-side role is named from a source (C3).';
       }
       break;
     case 'human_verifier_of_record':
@@ -313,6 +317,8 @@ function buildRequirement(factor: string, gap: string): string {
           return "A named, non-simulated person of record must verify this outcome's result.";
         case 'simulated':
           return 'The verifier of record must be a real person — the person currently named is a simulated identity.';
+        case 'not_customer_side':
+          return 'The verifier of record must be customer-side: a person of the account whose customer-side role is named from a source (C3).';
       }
       break;
   }
@@ -397,16 +403,21 @@ export function gapRegisterRouter(pool: Pool): Router {
         attester_name: string | null;
         attester_institution_id: string | null;
         attester_simulated: boolean | null;
+        attester_customer_side: boolean | null; attester_side_reason: string | null; attester_roles: string | null;
       }>(
         `SELECT e.kind, e.source_verified, voe.supports,
                 p.full_name AS attester_name, p.institution_id AS attester_institution_id,
-                p.simulated AS attester_simulated
+                p.simulated AS attester_simulated,
+                -- C3 (1.0.1): as produceRun.ts derives it.
+                CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_side(p.id, $2) END AS attester_customer_side,
+                CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(p.id, $2) END AS attester_side_reason,
+                CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_roles(p.id, $2) END AS attester_roles
            FROM value_outcome_evidence voe
            JOIN evidence e ON e.id = voe.evidence_id
            LEFT JOIN persons p ON p.id = e.attested_by_person_id
           WHERE voe.value_outcome_id = $1 AND voe.withdrawn_at IS NULL
           ORDER BY e.created_at`,
-        [vo.id],
+        [vo.id, vo.institution_id],
       );
       const rawEvidenceForConfidence: RawEvidenceForConfidence[] = evidenceRows.map((r) => ({
         kind: r.kind,
@@ -415,6 +426,9 @@ export function gapRegisterRouter(pool: Pool): Router {
         attesterName: r.attester_name,
         attesterInstitutionId: r.attester_institution_id,
         attesterSimulated: r.attester_simulated,
+        attesterCustomerSide: r.attester_customer_side,
+        attesterSideReason: r.attester_side_reason,
+        attesterRoles: r.attester_roles,
       }));
 
       // Same committer/verifier resolution as produceRun.ts: a null id, or
@@ -441,6 +455,15 @@ export function gapRegisterRouter(pool: Pool): Router {
         verifierSimulated = !verifier || verifier.simulated;
       }
 
+      const sideOf = async (personId: string | null) => {
+        if (!personId) return { customer_side: null, reason: null, roles: null };
+        const { rows: [x] } = await pool.query<{ customer_side: boolean; reason: string | null; roles: string | null }>(
+          'SELECT lvrf_customer_side($1, $2) AS customer_side, lvrf_customer_side_reason($1, $2) AS reason, lvrf_customer_roles($1, $2) AS roles',
+          [personId, vo.institution_id]);
+        return x;
+      };
+      const committerSide = await sideOf(vo.committed_by_person_id);
+      const verifierSide = await sideOf(vo.verified_by_person_id);
       const confidenceInput = buildConfidenceInput({
         metricDefinitionNotes: bm.definition_notes,
         metricDefinitionConfirmedByPersonId: bm.definition_confirmed_by_person_id,
@@ -454,6 +477,8 @@ export function gapRegisterRouter(pool: Pool): Router {
         committerSimulated,
         verifierName,
         verifierSimulated,
+        committerCustomerSide: committerSide.customer_side, committerSideReason: committerSide.reason, committerRoles: committerSide.roles,
+        verifierCustomerSide: verifierSide.customer_side, verifierSideReason: verifierSide.reason, verifierRoles: verifierSide.roles,
         assertedConfidence: vo.confidence,
       });
       const confidence = computeConfidence(confidenceInput);

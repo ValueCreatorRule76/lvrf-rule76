@@ -36,6 +36,9 @@ export function runsIndexRouter(pool: Pool): Router {
           vr.source_fixture,
           vr.locked_at,
           vr.walked_at,
+          -- C3: a run entered to exercise the system says so, here as everywhere; and its current errata, in one line.
+          lvrf_system_exercise_mark('value_runs', vr.id) AS system_exercise,
+          lvrf_run_erratum_line(vr.id) AS erratum_line,
           (e.deleted_at IS NOT NULL OR e.superseded_by_id IS NOT NULL) AS engagement_retired
         FROM value_runs vr
         -- L26 (11 Oct 2026): the engagement is joined WHATEVER its state, so a

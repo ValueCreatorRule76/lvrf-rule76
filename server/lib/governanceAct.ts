@@ -20,7 +20,7 @@ import type { PoolClient } from 'pg';
 export type GovernanceAct =
   | 'import' | 'validate' | 'approve' | 'certify' | 'activate' | 'supersede' | 'verify' | 'attest'
   | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit'
-  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum';
+  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant';
 
 export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'create-only'>> = {
   // Research: the import, and the review of each result.
@@ -57,6 +57,11 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/institutions/:institutionId/reference-example': ['mark'],
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support': ['correct'],
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw': ['withdraw'],
+  // C3 (26 Oct 2026)
+  'POST /api/institutions/:institutionId/customer-roles': ['grant'],
+  'POST /api/customer-roles/:id/revoke': ['withdraw'],
+  'POST /api/errata/non-customer-credit': ['record_erratum'],
+  'POST /api/system-exercise/marks': ['mark'],
   'POST /api/value-runs/:runId/errata': ['record_erratum'],
   // Create-only: left out of P2 by name (LVRF_PLAN §10, D3).
   'POST /api/account-inputs': 'create-only',

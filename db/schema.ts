@@ -177,6 +177,8 @@ export const governanceAct = pgEnum('governance_act', [
   'import', 'validate', 'approve', 'certify', 'activate', 'supersede', 'verify', 'attest',
   'open_citation', 'accept', 'reject', 'withdraw', 'ratify', 'demote', 'commit',
   'measure', 'lock', 'retire', 'exclude', 'mark', 'link', 'correct', 'record_erratum',
+  // C3 (Brad, 26 Oct 2026): a steward names a customer-side role, from a source (customer_role_grants).
+  'grant',
 ]);
 
 /* ================================================================== */
@@ -2440,6 +2442,63 @@ export const accountPersonLinks = pgTable('account_person_links', {
             AND char_length(btrim(${t.retirementReason})) >= 12)`),
 ]);
 
+/**
+ * C3 (Brad, 26 Oct 2026). A steward names a customer-side role — metric_owner or executive_sponsor — for a
+ * person of an account, FROM A SOURCE: an evidence row of that account showing the person holds the role
+ * there (the customer's org chart, an email from the customer, a filing naming them). No source, no grant.
+ * Confidence credit for an attestation, a commitment or a verification requires a current grant
+ * (lvrf_customer_side). Append-only but for one revocation (who, when, why); a run seals the role as it
+ * stood. Refused, in the database (customer_role_grants_guard, hardening section 28): a simulated person;
+ * a person not of that account; anyone linked or titled as an analyst of record or external; anyone with
+ * a vendor-side role or sign-in credentials; the steward themself.
+ */
+export const customerRoleGrants = pgTable('customer_role_grants', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  role: text('role').notNull(),
+  /** The evidence that shows the person holds the role at this account; its provenance names the source. */
+  sourceEvidenceId: uuid('source_evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  reason: text('reason').notNull(),
+  grantedByPersonId: uuid('granted_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  revokedByPersonId: uuid('revoked_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  revocationReason: text('revocation_reason'),
+}, (t) => [
+  uniqueIndex('customer_role_grants_current_key').on(t.institutionId, t.personId, t.role).where(sql`${t.revokedAt} IS NULL`),
+  index('customer_role_grants_person_idx').on(t.personId),
+  check('customer_role_grants_role_known', sql`${t.role} IN ('metric_owner', 'executive_sponsor')`),
+  check('customer_role_grants_reason_stated', sql`length(btrim(${t.reason})) >= 12`),
+  check('customer_role_grants_revocation_complete',
+    sql`(${t.revokedAt} IS NULL AND ${t.revokedByPersonId} IS NULL AND ${t.revocationReason} IS NULL)
+        OR (${t.revokedAt} IS NOT NULL AND ${t.revokedByPersonId} IS NOT NULL AND ${t.revocationReason} IS NOT NULL
+            AND length(btrim(coalesce(${t.revocationReason}, ''))) >= 12)`),
+]);
+
+/**
+ * C3 (Brad, 26 Oct 2026). An evidence row or a run entered on prod to exercise the system, not as case
+ * evidence, marked so — never deleted (CLAUDE.md rule 9). Append-only, steward-only, one per subject, each
+ * with its act ('mark'); the reason quotes the item's own note, built by the server. Shown wherever the item
+ * appears; a marked run is never a headline.
+ */
+export const systemExerciseMarks = pgTable('system_exercise_marks', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  subjectTable: text('subject_table').notNull(),
+  subjectId: uuid('subject_id').notNull(),
+  reason: text('reason').notNull(),
+  markedByPersonId: uuid('marked_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  markedAt: timestamp('marked_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('system_exercise_marks_one_per_subject').on(t.subjectTable, t.subjectId),
+  check('system_exercise_marks_subject_known', sql`${t.subjectTable} IN ('evidence', 'value_runs')`),
+  check('system_exercise_marks_reason_quotes_note',
+    // chr(59) is the semicolon: drizzle-kit cuts a CHECK at a literal one.
+    sql`${t.reason} LIKE 'Entered to exercise the system, not as case evidence' || chr(59) || ' its own note reads: %' AND length(btrim(${t.reason})) >= 80`),
+]);
+
 /* ================================================================== */
 /* P1 (0039, LVRF_PLAN §8) — the figure check, recorded               */
 /* ================================================================== */
@@ -2504,11 +2563,19 @@ export const runErrata = pgTable('run_errata', {
   id: id(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
   valueRunId: uuid('value_run_id').notNull().references(() => valueRuns.id, { onDelete: 'restrict' }),
-  /** The corrected link this erratum reflects: its outcome and evidence. */
+  /**
+   * C3 (Brad, 26 Oct 2026): what the erratum is about. 'link_correction' (C1): a link corrected since
+   * sealing. 'non_customer_credit': points the seal credited to a person not customer-side under the
+   * C3 rule, stated from the seal (points_not_credited), never a recomputed total.
+   */
+  kind: text('kind').notNull().default('link_correction'),
+  /** The run's outcome; for a link correction, the corrected link is this outcome's and the evidence's. */
   valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
-  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  evidenceId: uuid('evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
   /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. */
-  correctedToSupports: text('corrected_to_supports').notNull(),
+  correctedToSupports: text('corrected_to_supports'),
+  /** C3: for a 'non_customer_credit' erratum, the sealed points that rest on people not customer-side. */
+  pointsNotCredited: numeric('points_not_credited', { precision: 5, scale: 1 }),
   /**
    * C1 review (Brad, 25 Oct 2026): one erratum per run and correction. An
    * erratum is corrected only by a new one that supersedes it, naming it, with
@@ -2541,7 +2608,17 @@ export const runErrata = pgTable('run_errata', {
   index('run_errata_run_idx').on(t.valueRunId),
   uniqueIndex('run_errata_one_per_correction').on(t.valueRunId, t.evidenceId, t.correctedToSupports).where(sql`${t.supersedesId} IS NULL`),
   uniqueIndex('run_errata_superseded_once').on(t.supersedesId).where(sql`${t.supersedesId} IS NOT NULL`),
-  check('run_errata_supports_known', sql`${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification')`),
+  // C3: one credit erratum per run (a further finding would supersede it; none is planned).
+  uniqueIndex('run_errata_one_credit_erratum').on(t.valueRunId).where(sql`${t.kind} = 'non_customer_credit'`),
+  check('run_errata_kind_known', sql`${t.kind} IN ('link_correction', 'non_customer_credit')`),
+  /** C3: a link correction names its link; a credit erratum names none, states its points, and recomputes nothing. Every term definite under NULL. */
+  check('run_errata_kind_complete',
+    sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL)
+        OR (${t.kind} = 'non_customer_credit' AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL AND ${t.supersedesId} IS NULL
+            AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL
+            AND ${t.pointsNotCredited} IS NOT NULL AND ${t.pointsNotCredited} > 0 AND ${t.pointsNotCredited} <= 100
+            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')`),
+  check('run_errata_supports_known', sql`${t.correctedToSupports} IS NULL OR ${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification')`),
   check('run_errata_supersession_complete',
     // Every term definite: a NULL reason must make this false, never unknown (an unknown CHECK passes; P1's B3).
     sql`(${t.supersedesId} IS NULL AND ${t.supersessionReason} IS NULL) OR (${t.supersedesId} IS NOT NULL AND ${t.supersessionReason} IS NOT NULL AND length(btrim(coalesce(${t.supersessionReason}, ''))) >= 12)`),
@@ -2554,7 +2631,7 @@ export const runErrata = pgTable('run_errata', {
     sql`${t.sealedBand} IN ('low', 'medium', 'high') AND (${t.recomputedBand} IS NULL OR ${t.recomputedBand} IN ('low', 'medium', 'high'))`),
   /** C2: recomputed (score, band and model, the method not "Not recomputed:"), or not (score and band NULL, the method saying why). */
   check('run_errata_recompute_complete',
-    sql`(${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
+    sql`${t.kind} = 'non_customer_credit' OR (${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
          AND ${t.recomputeMethod} NOT LIKE 'Not recomputed:%')
         OR (${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.recomputeMethod} LIKE 'Not recomputed:%'
          AND (${t.modelVersion} IS NULL) = (${t.modelFingerprint} IS NULL))`),

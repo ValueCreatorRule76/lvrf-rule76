@@ -111,7 +111,10 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 <td className="border-b border-rule-soft px-3 py-[9px]">
                   <ProvenanceCell sourceFixture={r.source_fixture} />
                 </td>
-                <td className="border-b border-rule-soft px-3 py-[9px]">{r.confidence_score}</td>
+                <td className="border-b border-rule-soft px-3 py-[9px]">{r.confidence_score}
+                  {/* C3: a run's current errata, and its system-exercise mark, beside its score. */}
+                  {r.erratum_line && <span className="block text-[11px] text-warning" data-testid="runs-erratum">{r.erratum_line}</span>}
+                  {r.system_exercise && <span className="block text-[11px] font-semibold text-warning" data-testid="runs-system-exercise" title={r.system_exercise.reason}>SYSTEM EXERCISE</span>}</td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">
                   <Badge tone={CONFIDENCE_TONE[r.confidence_band] ?? 'neutral'}>
                     {r.confidence_band}

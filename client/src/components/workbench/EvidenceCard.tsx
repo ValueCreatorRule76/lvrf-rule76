@@ -1,3 +1,4 @@
+import { SystemExerciseLine } from '../SystemExercise';
 import type { Run } from '../../types/run';
 import { LineageLink } from '../LineageLink';
 import { Badge } from './Card';
@@ -46,6 +47,9 @@ export function EvidenceCard({ run }: { run: Run }) {
               {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
             </p>
             <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]" data-record>Source: {e.provenance}</p>
+            {/* C3: the evidence row this item was sealed from is marked as a system exercise. */}
+            {(() => { const m = (run.marked_evidence ?? []).find((x) => x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance);
+              return m ? <SystemExerciseLine mark={m.system_exercise} className="mt-0.5" /> : null; })()}
             {/* P2: the sealed item carries no evidence id (P2-D7); its outcome's figure is traced instead. */}
             {(e.supports === 'baseline' || e.supports === 'actual') && typeof run.payload.valueOutcomeId === 'string' && (
               <LineageLink table="value_outcomes" id={run.payload.valueOutcomeId} figure={e.supports} />

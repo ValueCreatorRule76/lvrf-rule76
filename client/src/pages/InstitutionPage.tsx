@@ -11,6 +11,7 @@ import {
 import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
+import { CustomerRoles } from '../components/CustomerRoles';
 import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
 import { STEP_TITLES, day, deriveSteps } from '../lib/workspaceStatus';
 import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
@@ -367,7 +368,8 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
   const steps = deriveSteps(research, walk, pov);
   const now = steps.findIndex((s) => s.status === 'now') + 1;
   const measuredIds = measuredIndustryMeasureIds(view.metrics);
-  const locked = walk ? [...walk.runs].reverse().find((x) => x.locked_at) : undefined;
+  // C3: the headline is the latest UNMARKED locked run (a system exercise is never the headline).
+  const locked = walk ? [...walk.runs].reverse().find((x) => x.locked_at && !x.system_exercise) : undefined;
   const marker = pov?.marker ? MARKER_KIND[pov.marker.kind] : null;
   const step = (i: number, body: ReactNode) => (
     <WorkspaceStep key={i} n={i + 1} title={STEP_TITLES[i]} status={steps[i].status} summary={steps[i].summary} testId={`ws-step-${i + 1}`}>{body}</WorkspaceStep>
@@ -393,7 +395,9 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
         <div data-testid="ws-confidence">
           <span className="block text-[10.5px] font-semibold uppercase tracking-[.14em] text-ink-45">Computed confidence</span>
           {locked
-            ? <><ConfidenceBadge score={locked.confidence_score} band={locked.confidence_band} /><span className="mt-1 block text-[12px] text-ink-45">from run {locked.run_number}, locked {day(locked.locked_at!)}</span></>
+            ? <><ConfidenceBadge score={locked.confidence_score} band={locked.confidence_band} /><span className="mt-1 block text-[12px] text-ink-45">from run {locked.run_number}, locked {day(locked.locked_at!)}</span>
+                {/* C3 (Brad's condition): beside a headline from a run that carries a current erratum. */}
+                {locked.erratum_line && <span className="mt-1 block text-[11px] text-warning" data-testid="headline-erratum">{locked.erratum_line}</span>}</>
             : <ConfidenceBadge score={null} band={null} />}
         </div>
       </header>
@@ -428,11 +432,15 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
             primary={now === 3 ? 'hypothesis' : now === 4 ? 'summary' : null} />
           <details className="mt-6 border border-rule bg-white" data-testid="account-detail">
             <summary className="cursor-pointer list-none px-[18px] py-3 text-[13px] font-semibold tracking-[.02em]">
-              Account detail ▸ <span className="font-normal text-ink-45">facts · what the industry says carries money · what this account measures · the gap · engagements · reference marker · retire the engagement</span>
+              Account detail ▸ <span className="font-normal text-ink-45">facts · customer-side roles · what the industry says carries money · what this account measures · the gap · engagements · reference marker · retire the engagement</span>
             </summary>
             <div className="px-4 pb-4 pt-2">
               <ClassificationSection view={view} />
               <AccountFactsCard n="01" institutionId={id} facts={view.facts} onRecorded={refresh} />
+              {/* C3: customer-side roles, each named from a source. */}
+              <Card n="01b" title="Customer-side roles">
+                <CustomerRoles institutionId={id} />
+              </Card>
               <PackSection pack={view.pack} measuredIds={measuredIds} isTenantSelf={false} />
               <MetricsSection metrics={view.metrics} isTenantSelf={false} />
               <GapSection gap={view.gap} pack={view.pack} />
@@ -524,6 +532,10 @@ export function InstitutionPage() {
               </Badge>
             ) : (
               <Badge tone="neutral">Not yet run</Badge>
+            )}
+            {/* C3 (Brad's condition): beside a headline from a run that carries a current erratum. */}
+            {view.runs.latest_confidence_band && view.runs.latest_erratum_line && (
+              <span className="text-[11px] text-warning" data-testid="headline-erratum">{view.runs.latest_erratum_line}</span>
             )}
             <span className="text-[10.5px] text-ink-45">
               {view.runs.count} {view.runs.count === 1 ? 'run' : 'runs'}

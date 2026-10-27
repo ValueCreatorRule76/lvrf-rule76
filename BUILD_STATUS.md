@@ -12965,3 +12965,149 @@ or text naming the tenant, Skillsoft):
       discriminant, findings and D0.
   - Scotts 1–2 and Skillsoft 1 read as case runs.
 - **For Brad's ruling, with C3.**
+
+## C3: credit only for customer-side people; errata on what the seals credited; system-exercise marks — Gate A, 26 October 2026 (UTC)
+
+Built as LVRF_PLAN §12, with Brad's rulings A–E, decisions D1–D7 (D5 and D6 changed), the headline
+condition and the roles act. **Value spine stages served:** `measure` and `verify` (what earns
+credit), `return` (errata and marks).
+
+**1. Who is customer-side, defined once** (hardening section 28; migration 0043):
+- **The definition:** `lvrf_customer_side(person, institution)`, with `lvrf_customer_side_reason`
+  and `lvrf_customer_roles`. A person is customer-side when they are:
+  - non-simulated and of the account;
+  - holding a current `metric_owner` or `executive_sponsor` grant;
+  - not an analyst of record.
+- **Who reads it:** produce-run, the gap register, the walk and `lvrf_evidence_basis`
+  (`client_stated`).
+- **Roles are named by a steward act.**
+  - The table is `customer_role_grants`. The act is `grant`, new in the act enum.
+  - The route: `POST /api/institutions/:institutionId/customer-roles`.
+  - Revocation is a later act (`withdraw`): `POST /api/customer-roles/:id/revoke`, with a reason;
+    a grant is never edited or deleted.
+- **The grant guard, in the database,** refuses:
+  - no source, or a source that is not this account's non-simulated evidence with provenance;
+  - a simulated person;
+  - a person of another account;
+  - an analyst of record, or anyone titled external or analyst;
+  - tenant staff, vendor-side roles and sign-in credentials;
+  - the steward themself.
+- **The display:** the account page's card "01b Customer-side roles". Every credit shows "metric
+  owner per <source>, named by <steward>, <date>" on the run page, the POV and the lineage.
+
+**2. Model 1.0.1** (`cf11d21c781a`; `ATTESTER_RULE` joins the fingerprint, D2):
+- Attestation, committer and verifier credit only for a customer-side person (D1).
+- 1.0.1 seals each attester, committer and verifier with their side, reason and roles (D3).
+- **1.0.0 is kept byte-for-byte** in `server/spine/models/confidence_1_0_0.ts` (`d4cf8f31472a`).
+  The registry `server/spine/scorers.ts` gives each run the scorer it was sealed with (M1).
+
+**3. Errata on what the seals credited** (`run_errata.kind`: `link_correction` |
+`non_customer_credit`; `points_not_credited`):
+- **The text:** read from each seal by the server: the points, "none of these earns credit", "the
+  sealed score stands". No recomputed total.
+- **The batch:** "Errata the seals call for" on the Runs list. The dry run comes first; one submit
+  carries the count and records one erratum and one act per run; it is refused if the count
+  changed.
+
+**4. System-exercise marks** (`system_exercise_marks`, append-only, steward-only, one per subject,
+with its act `mark`):
+- **The batch page** (D5, D6): every unmarked evidence row and run, each with its own note quoted;
+  nothing pre-ticked.
+  - Each mark's reason quotes that note.
+  - One submit carries the ticked count; it is refused if the count changed.
+- **Shown everywhere the item appears:** the run page (and on every printed page), the Runs list,
+  the POV, the walk and the lineage.
+- **Headlines use the latest unmarked locked run:** the POV, the account page, the accounts index
+  and the book's weakest-link card.
+
+**5. The headline erratum line** (Brad's condition): beside every headline taken from a run with a
+current erratum. That means the POV, the account page, the accounts index rows, and the book's
+weakest-link card (its score, its rows and by industry). Also shown on the Runs list, which closes
+L45.
+
+**Migration 0043: what it changes and what it could orphan.**
+- **Changes:**
+  - `run_errata` gains `kind` (every existing row reads `link_correction`) and
+    `points_not_credited`;
+  - `evidence_id` and `corrected_to_supports` become nullable, for the new kind only, by CHECK;
+  - two new tables.
+- **Orphans nothing.** `verify_c2` compares every existing erratum, less the two new columns:
+  unchanged. Every run is byte-identical.
+- **Counts:** 176 triggers (167 + section 28's 9; information_schema 274); 98 CHECKs, each with
+  its plain sentence (7 new); `ownership.sql` 37 INSERT / 22 UPDATE grants.
+
+**Found and fixed in Gate A:**
+- **The book's weakest-link card** (`/api/cohort`) still took the latest locked run, marked or
+  not, and showed no erratum line. Its run of record is now the latest unmarked one, with
+  `erratum_line` on each member, shown beside the score. Breaks B13 and B14 cover it.
+- **Brad's "no source" break was missing.** The route refused it, but nothing showed the database
+  would. B15 is added: with the route's check removed, the grant guard refuses it in words, and
+  the column is NOT NULL behind the guard.
+- **drizzle-kit cuts a CHECK at a literal `;`,** so the first 0043 migrated without error but
+  incomplete. The marks CHECK uses `chr(59)`.
+- **Two coverage guards caught the new routes, which is their job:**
+  - `list_api_routes` refuses a route file named with digits: `c3.ts` was renamed
+    `creditAndMarks.ts`;
+  - `verify_acts_lineage` needs `recordAct` to name its route literally.
+
+**Gate A:**
+- **`verify_c3.sh`: 199 passed, 0 failed.** New, on its own fixtures. Roles go through the act
+  only, with no SQL role insert even on the clone. The 1.0.0 runs are sealed by the 42e7fe4 code
+  itself.
+- **Breaks, each caught, every file restored byte-identical and every function restored:**
+  - B1–B4: the grant guard's analyst-of-record, vendor-side, steward and other-account-source
+    tests;
+  - B5: `lvrf_customer_side_reason`'s role test;
+  - B6: 1.0.1 crediting a non-customer-side attester;
+  - B7: `ATTESTER_RULE` left out of the fingerprint;
+  - B8: the 1.0.0 scorer dropped;
+  - B9: the errata batch without its count check;
+  - B10 and B11: the POV's headline taking a marked run, and without its erratum line;
+  - B12: the print without the mark;
+  - B13 and B14: the book taking a marked run, and its row without the erratum line;
+  - B15: a role with no source.
+- **On the clone,** the errata dry run lists Curia 5–21 (17): runs 5–12 at 15 points (sealed
+  45 / 100) and runs 13–21 at 25 points (sealed 55 / 100). Each says its sealed score stands.
+- **The full regression: all 42 scripts pass, and the build and lint are clean** (the 1
+  pre-existing warning). `verify_c3` was re-run alone after B15 was added.
+  - The bundle is `index-0G6nPUEN.js` / `index-pWZMR7ze.css`.
+  - The scripts updated for C3:
+    - trigger counts 167 → 176 (read from hardening.sql's Total line where scripts do);
+    - `acts_lineage` act_present 18 → 20;
+    - `steward_acts` 15 → 19 steward routes;
+    - `tenant_scope`: cases for the six new routes, a fixture grant through the act, and a step
+      F (B can neither mark nor record errata on A's rows);
+    - `accounts_home` reads the headline without its erratum line and checks that line apart;
+    - `value_levers` names the owner's role through the act;
+    - `corrections` and `run_page`: their break texts, and the current model read, not
+      hard-coded;
+    - `c2` seals its Curia-shaped runs under the 42e7fe4 code, checks 1.0.0 kept and 1.0.1
+      current, and compares errata without 0043's columns.
+- **Prod-copy equivalence against `42e7fe4`:** 58 GETs.
+  - **The harness was rebuilt** (the scratchpad was lost when the session restarted), so 58, not
+    C2c's 76.
+  - **Clone A is the deployed state:** the copy at 0042, with 42e7fe4's own `ownership.sql` and
+    `hardening.sql`. Clone B is the working tree's. So database-function changes show too.
+  - **With nothing allowed:** 10 identical. **With C3's new keys allowed:** 42 identical. These
+    keys are `system_exercise`, `erratum_line`, `latest_erratum_line`, `marked_evidence`,
+    `points_not_credited`, `attester_roles`, `attester_not_customer_side`, and the committer and
+    verifier roles and flags.
+  - **The 16 left, each expected:**
+    - Curia's commitment attestation, by the analyst of record, reads `assumed`, not
+      `client_stated`, on the POV and the walk (2 GETs). The plan said two items. The export
+      stays `system_of_record`, a basis it gets from its kind, so it is one.
+    - The lineage's new `attested_by` (12 GETs).
+    - The errata's `kind` on the two runs with errata (2 GETs; also in some lineage GETs).
+  - **The gap registers are identical:** Curia's live outcome has no attestation, and the
+    retired outcomes are frozen.
+  - **`/api/cohort` is identical:** on the copy every customer account is a reference example,
+    so the book is empty.
+- **Not fresh: the prod copy is from 25 Oct 15:18 (L39),** before C2, C2b, C2c and Brad's acts.
+  The LVRF key was not in the ssh agent, so no new dump could be fetched. The regression and
+  equivalence are to be re-run on a fresh copy before Gate B.
+- **The screenshots:** `~/lvrf-backups/c3-screens/`.
+- **Noted for Brad:**
+  - Once the first 1.0.1 run is sealed, the book shows "Mixed rulers" (1.0.0 and 1.0.1). This is
+    existing behaviour, and correct.
+  - Two throwaway databases from earlier work remain locally, `lvrf_c3try` and `lvrf_p1try`. They
+    have not been dropped.

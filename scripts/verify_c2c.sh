@@ -101,8 +101,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "167" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 167 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "176" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 176 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 link_of() { q "SELECT coalesce(string_agg(supports || ':' || CASE WHEN withdrawn_at IS NULL THEN 'current' ELSE 'withdrawn' END, ',' ORDER BY withdrawn_at NULLS LAST), '') FROM value_outcome_evidence WHERE value_outcome_id = '$1' AND evidence_id = '$2'"; }
 seals() { q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -116,7 +116,7 @@ dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "167" ] && ok "167 triggers (C2c adds none)" || bad "triggers: $(trig)"
+[ "$(trig)" = "176" ] && ok "176 triggers (with C3)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 

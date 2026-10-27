@@ -19,4 +19,7 @@ export interface RunListItem {
   source_fixture: string | null;
   locked_at: string | null;
   walked_at: string;
+  /** C3: the run's mark, and its current errata in one line. */
+  system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
+  erratum_line: string | null;
 }

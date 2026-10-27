@@ -161,6 +161,9 @@ rule "2 AI-sourced, citation unresolved, even a system export"  '{"ai_sourced":t
 rule "2 ...the same, citation resolved: rule 2 no longer holds"  '{"ai_sourced":true,"citation_resolved":true,"kind":"system_export"}' system_of_record
 rule "3 system export"                                          '{"kind":"system_export"}' system_of_record
 rule "4 public filing"                                          '{"kind":"public_filing"}' published
+rule "5 attestation, a customer person with no role named yet (C3)" "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\",\"attested_at\":\"$NOW\"}" assumed
+# C3: customer-side means a role named from a source, through the steward's act (never by SQL, even here).
+expect POST "/api/institutions/$INST/customer-roles" "{\"person_id\":\"$OWNER\",\"role\":\"metric_owner\",\"source_evidence_id\":\"$EV0\",\"reason\":\"Verification: named for the basis rules.\"}" 201 "  ...the steward names the owner metric owner, from a source (C3)"
 rule "5 attestation, customer-side attester, dated"            "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\",\"attested_at\":\"$NOW\"}" client_stated
 rule "6 attestation, customer-side attester, undated"           "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\"}" assumed
 rule "6 attestation, a SIMULATED customer attester, dated"     "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$SIM\",\"attested_at\":\"$NOW\"}" assumed

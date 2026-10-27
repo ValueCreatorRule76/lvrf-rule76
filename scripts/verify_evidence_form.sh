@@ -88,7 +88,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "167" ] && ok "167 triggers by pg_trigger (129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "176" ] && ok "176 triggers by pg_trigger (C3 section 28: +9; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 

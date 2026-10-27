@@ -67,6 +67,9 @@ export interface PovEngagement {
 }
 
 export interface PovLockedRun {
+  /** C3: the run's current errata in one line; its system-exercise mark (latest_locked_run is never a marked run). */
+  erratum_line?: string | null;
+  system_exercise?: { reason: string; marked_by: string; marked_on: string } | null;
   id: string;
   run_number: number;
   confidence_score: string | null;
@@ -92,6 +95,9 @@ export interface PovEvidence {
   evidence_form: string; quote_text: string | null; locator: EvidenceFormShown['locator']; how_read: string | null;
   /** The attester when there is one, otherwise the recorder. */
   stated_by: string; stated_on: string;
+  /** C3: an attester's customer-side roles with their sources, or why the attester is not customer-side; the row's mark. */
+  attester_roles: string | null; attester_not_customer_side: string | null;
+  system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
   figure_check: FigureCheckShown | null;
 }
 
@@ -117,6 +123,9 @@ export interface PovOutcome {
   target_value: string | null;
   committed_by: string | null;
   committed_on: string | null;
+  /** C3: the committer's and verifier's customer-side roles with their sources, or why not. */
+  committer_roles: string | null; committer_not_customer_side: string | null;
+  verifier_roles: string | null; verifier_not_customer_side: string | null;
   actual_value: string | null;
   actual_measured_on: string | null;
   verified_by: string | null;

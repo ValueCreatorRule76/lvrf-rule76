@@ -55,6 +55,12 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
           {MARKER_KIND[marker.kind].banner} · {compact ? 'Source on page 1' : <>Source: {marker.source_citation}</>}
         </div>
       )}
+      {/* C3: a run entered to exercise the system says so on screen and on every printed page; its full text once, on page 1. */}
+      {run.system_exercise && (
+        <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite [overflow-wrap:anywhere] sm:px-6' + line} data-testid="banner-system-exercise">
+          SYSTEM EXERCISE — entered to exercise the system, not as case evidence.{compact ? ' Full text on page 1.' : <> Marked by {run.system_exercise.marked_by}, {day(run.system_exercise.marked_on)}. {run.system_exercise.reason}</>}
+        </div>
+      )}
       {account.status === 'error' && (
         <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6' + line} data-testid="banner-marker-unavailable">
           Couldn&apos;t load this account&apos;s reference marker: read the account page before relying on this run.
@@ -79,7 +85,7 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
                 // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
-                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? 'credit to a person not customer-side' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
                 : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )
@@ -99,7 +105,10 @@ function ErratumBanner({ x }: { x: RunErratum }) {
       {' '}What was wrong: {sentence(x.what_was_wrong)}. What is right: {sentence(x.what_is_right)}. Why: {sentence(x.reason)}.
       {x.supersedes_id && <>{' '}It supersedes the erratum recorded {x.supersedes_recorded_at ? day(x.supersedes_recorded_at) : ''} by {x.supersedes_recorded_by}, because: {sentence(x.supersession_reason ?? '')}.</>}
       {' '}<span className="font-semibold">The sealed record below is unchanged.</span>
-      {x.recomputed_score === null || x.recomputed_band === null
+      {x.kind === 'non_customer_credit'
+        // C3: the points the seal credited to people not customer-side, read from the seal; no recomputed total.
+        ? <>{' '}<span data-testid="erratum-credit">{x.recompute_method}</span></>
+        : x.recomputed_score === null || x.recomputed_band === null
         // C2 (Brad, 25 Oct 2026): the server could not reproduce the seal; its sentence says why. No score is shown but the sealed one.
         ? <>{' '}<span data-testid="erratum-not-recomputed">{x.recompute_method.replace(/\s*The sealed run is unchanged\.$/, '').replace(/\.$/, '')}</span> (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>
         : <>{' '}Recomputed under model {x.model_version}, the one it was sealed with, with the correction: {Number(x.recomputed_score)} / 100 · {band(x.recomputed_band)} (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>}
@@ -111,11 +120,12 @@ function ErratumBanner({ x }: { x: RunErratum }) {
 function PrintPageOne({ run, account }: { run: Run; account: AccountRead }) {
   const marker = account.status === 'ok' ? account.pov.reference_example : null;
   const errata = (run.errata ?? []).filter((x) => x.superseded_by_id === null);
-  if (!marker && errata.length === 0 && !run.payload.bannerTitle) return null;
+  if (!marker && errata.length === 0 && !run.payload.bannerTitle && !run.system_exercise) return null;
   return (
     <div className="hidden print:block" data-testid="print-page-one">
       {marker && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]" data-testid="print-marker-full">{MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}</p>}
       {run.payload.bannerTitle && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]">{run.payload.bannerTitle} — as recorded at sealing</p>}
+      {run.system_exercise && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]" data-testid="print-system-exercise-full">SYSTEM EXERCISE — marked by {run.system_exercise.marked_by}, {day(run.system_exercise.marked_on)}. {run.system_exercise.reason}</p>}
       {errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
   );

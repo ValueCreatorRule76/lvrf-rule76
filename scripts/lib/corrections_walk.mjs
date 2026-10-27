@@ -134,7 +134,7 @@ if (MODE === 'display') {
     check(await open(`/runs/${RUN}`, runReady, width), `run page @${width} opens`);
     const b = await ev(`document.querySelector('[data-testid=banner-erratum]')?.textContent ?? ''`);
     check(b.startsWith('ERRATUM — recorded after sealing') && b.includes('The sealed record below is unchanged.'), `@${width}: the erratum reads "ERRATUM — recorded after sealing …" and "The sealed record below is unchanged."`, b.slice(0, 120));
-    check(/Recomputed under model 1\.0\.0, the one it was sealed with, with the correction: \d+ \/ 100 · \w+ \(sealed: \d+ \/ 100 · \w+\)/.test(b), `@${width}: it states the recompute under model 1.0.0 beside the sealed score`, b.slice(-160));
+    check(/Recomputed under model \d+\.\d+\.\d+, the one it was sealed with, with the correction: \d+ \/ 100 · \w+ \(sealed: \d+ \/ 100 · \w+\)/.test(b), `@${width}: it states the recompute under the model it was sealed with, beside the sealed score`, b.slice(-160));
     check(await ev(`(()=>{const s=[...document.querySelectorAll('[data-testid=banners]')].find(x=>x.offsetParent!==null);if(!s)return false;const kids=[...s.children].map(c=>c.dataset.testid);return kids.indexOf('banner-erratum')>kids.indexOf('banner-unverified')&&kids.indexOf('banner-unverified')>=0})()`),
       `@${width}: the erratum sits beneath the disclosure banner (LVRF_PLAN §9)`);
     check(await ev(`!!document.querySelector('[data-testid=banner-sealed]')?.textContent.includes('as recorded at sealing')`), `@${width}: the sealed banner still reads "as recorded at sealing" (standard 10), distinct from "recorded after sealing"`);

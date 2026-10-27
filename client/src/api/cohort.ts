@@ -22,6 +22,8 @@ export interface CohortMember {
   model_version: string | null;
   model_fingerprint: string | null;
   run_count: number;
+  /** C3: the run of record's current errata, in a line; null if none. */
+  erratum_line: string | null;
 }
 
 export interface Cohort {

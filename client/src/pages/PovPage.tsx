@@ -1,3 +1,4 @@
+import { SystemExerciseLine } from '../components/SystemExercise';
 import { useEffect, useState } from 'react';
 import { LineageLink } from '../components/LineageLink';
 import { Link, useParams } from 'react-router-dom';
@@ -119,6 +120,8 @@ function Confidence({ pov }: { pov: Pov }) {
         : runs.map((e) => (
           <p key={e.id} className="m-0 mt-1 text-[13px] text-ink">
             <ConfidenceBadge score={e.latest_locked_run!.confidence_score} band={e.latest_locked_run!.confidence_band} />
+            {/* C3 (Brad's condition): a headline from a run that carries a current erratum shows it beside the score. */}
+            {e.latest_locked_run!.erratum_line && <span className="mt-1 block text-[11px] text-warning" data-testid="headline-erratum">{e.latest_locked_run!.erratum_line}</span>}
             <span className="mt-1 block text-[11px] text-ink-45">
               run {e.latest_locked_run!.run_number}, locked {day(e.latest_locked_run!.locked_at)}
               <span className="print:hidden"> · <Link to={`/runs/${e.latest_locked_run!.id}`} className={'text-gold-ink hover:text-ink ' + FOCUS_RING}>open the run</Link></span>
@@ -161,6 +164,16 @@ function CorrectedNote({ e }: { e: PovOutcome['evidence'][number] }) {
   return <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="pov-corrected">Corrected by {e.corrected_by} from {supportsShort(e.corrects_supports)} to {supportsShort(e.supports)}: {e.correction_reason}</p>;
 }
 
+/**
+ * C3 (Brad, 26 Oct 2026): every credit a role earns shows its source — "metric owner per <source>, named by
+ * <steward>, <date>" — and a person who is not customer-side says so, and why.
+ */
+function RoleLine({ roles, not, who, testid }: { roles: string | null; not: string | null; who: string; testid: string }) {
+  if (roles) return <span className="block text-[11px] text-ink-45" data-testid={testid}>{who}: {roles}</span>;
+  if (not) return <span className="block text-[11px] text-warning" data-testid={testid}>{who} is not customer-side ({not}): no credit under the C3 rule.</span>;
+  return null;
+}
+
 function OutcomeDetail({ o }: { o: PovOutcome }) {
   const vendorClaims = o.evidence.filter((e) => e.kind === 'vendor_publication');
   const other = o.evidence.filter((e) => e.kind !== 'vendor_publication');
@@ -172,10 +185,12 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
           <tbody>
             <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)} <LineageLink table="value_outcomes" id={o.id} figure="baseline" /></td></tr>
             <tr><td className="py-1 text-ink-45">Target</td>{o.target_value !== null && o.committed_by
-              ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}</td></>
+              ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}
+                  <RoleLine roles={o.committer_roles} not={o.committer_not_customer_side} who={o.committed_by} testid="pov-committer-role" /></td></>
               : <td className="py-1" colSpan={2} data-testid="no-target">No target: a hypothesis.</td>}</tr>
             <tr><td className="py-1 text-ink-45">Actual</td>{o.actual_value !== null
-              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'} <LineageLink table="value_outcomes" id={o.id} figure="actual" /></td></>
+              ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'} <LineageLink table="value_outcomes" id={o.id} figure="actual" />
+                  {o.verified_by && <RoleLine roles={o.verifier_roles} not={o.verifier_not_customer_side} who={o.verified_by} testid="pov-verifier-role" />}</td></>
               : <td className="py-1 text-ink-45" colSpan={2}>Not measured yet.</td>}</tr>
           </tbody>
         </table>
@@ -186,6 +201,8 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             {other.map((e, i) => (
               <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {supportsShort(e.supports)}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
+                <RoleLine roles={e.attester_roles} not={e.attester_not_customer_side} who={e.stated_by} testid="pov-attester-role" />
+                {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
                 <CorrectedNote e={e} />
               </li>))}
           </ul>
@@ -205,6 +222,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             <p className="m-0 mt-1 text-[14px] font-semibold text-ink">{e.summary}</p>
             <p className="m-0 mt-1 text-[12px] text-ink-45">{e.provenance}. Never applied to this account's baseline, never a target.</p>
             <CorrectedNote e={e} />
+            {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-1" />}
           </div>
         ))}
         {o.pack_entry && (
@@ -394,6 +412,8 @@ function LockedRuns({ pov }: { pov: Pov }) {
           <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
           <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100{r.id === latest.id && e.locked_runs.length > 1 ? ' · the latest' : ''}</span>
           <span className="block text-[10.5px] text-ink-45">Record hash <span className="font-mono [overflow-wrap:anywhere]">{r.payload_hash}</span></span>
+          {r.erratum_line && <span className="block text-[11px] text-warning" data-testid="locked-run-erratum">{r.erratum_line}</span>}
+          {r.system_exercise && <SystemExerciseLine mark={r.system_exercise} className="mt-0.5" />}
         </li>));
       if (e.locked_runs.length < 2) return items;
       return [...items, (

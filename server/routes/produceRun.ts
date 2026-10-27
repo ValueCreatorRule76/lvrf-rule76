@@ -162,8 +162,9 @@ export function produceRunRouter(pool: Pool): Router {
         confidence: 'low' | 'medium' | 'high';
         committed_by_person_id: string | null;
         verified_by_person_id: string | null;
+        institution_id: string;
       }>(
-        `SELECT id, capability_id, business_metric_id, value_stage,
+        `SELECT id, institution_id, capability_id, business_metric_id, value_stage,
                 baseline_value, target_value, actual_value,
                 claimed_currency_impact, realized_currency_impact, impact_basis,
                 promised_measured_at, actual_measured_at,
@@ -247,6 +248,7 @@ export function produceRunRouter(pool: Pool): Router {
         attester_tenant_id: string | null;
         attester_institution_id: string | null;
         attester_simulated: boolean | null;
+        attester_customer_side: boolean | null; attester_side_reason: string | null; attester_roles: string | null;
         evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
         fc_result: string | null; fc_detail: string | null; fc_rules_version: number | null;
       }>(
@@ -260,7 +262,11 @@ export function produceRunRouter(pool: Pool): Router {
            p.full_name AS attester_name,
            p.tenant_id AS attester_tenant_id,
            p.institution_id AS attester_institution_id,
-           p.simulated AS attester_simulated
+           p.simulated AS attester_simulated,
+           -- C3 (1.0.1): whether the attester is customer-side at this account, why not, and their roles with sources.
+           CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_side(p.id, $2) END AS attester_customer_side,
+           CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(p.id, $2) END AS attester_side_reason,
+           CASE WHEN p.id IS NULL THEN NULL ELSE lvrf_customer_roles(p.id, $2) END AS attester_roles
          FROM value_outcome_evidence voe
          JOIN evidence e ON e.id = voe.evidence_id
          LEFT JOIN persons p ON p.id = e.attested_by_person_id
@@ -272,7 +278,7 @@ export function produceRunRouter(pool: Pool): Router {
          ) fc ON true
         WHERE voe.value_outcome_id = $1 AND voe.withdrawn_at IS NULL  -- C1: a withdrawn link supports nothing
         ORDER BY e.created_at`,
-        [vo.id],
+        [vo.id, vo.institution_id],
       );
 
       const rawEvidenceForConfidence: RawEvidenceForConfidence[] = evidenceRows.map((r) => ({
@@ -282,6 +288,9 @@ export function produceRunRouter(pool: Pool): Router {
         attesterName: r.attester_name,
         attesterInstitutionId: r.attester_institution_id,
         attesterSimulated: r.attester_simulated,
+        attesterCustomerSide: r.attester_customer_side,
+        attesterSideReason: r.attester_side_reason,
+        attesterRoles: r.attester_roles,
       }));
 
       // evidenceSnapshot per walkSpine.ts:870, plus `simulated` (a real
@@ -311,6 +320,11 @@ export function produceRunRouter(pool: Pool): Router {
         locator: r.locator,
         how_read: r.how_read,
         figure_check: r.fc_result ? { result: r.fc_result, detail: r.fc_detail, rules_version: r.fc_rules_version } : null,
+        // C3 (1.0.1; C3-D3): the attester as it stood — sealed so the run recomputes under 1.0.1.
+        attester: r.attester_name === null ? null : {
+          name: r.attester_name, simulated: Boolean(r.attester_simulated),
+          customer_side: r.attester_customer_side, reason: r.attester_side_reason, roles: r.attester_roles,
+        },
       }));
 
       // 3.0 ITEM 10 (O1): A RUN RENDERS FROM ITSELF. The account's current
@@ -410,6 +424,17 @@ export function produceRunRouter(pool: Pool): Router {
         verifierName = null;
       }
 
+      // C3 (1.0.1; C3-D1): whether the committer and the verifier are customer-side, as the attester's.
+      const sideOf = async (personId: string | null) => {
+        if (!personId) return { customer_side: null, reason: null, roles: null };
+        const { rows: [x] } = await client.query<{ customer_side: boolean; reason: string | null; roles: string | null }>(
+          'SELECT lvrf_customer_side($1, $2) AS customer_side, lvrf_customer_side_reason($1, $2) AS reason, lvrf_customer_roles($1, $2) AS roles',
+          [personId, vo.institution_id]);
+        return x;
+      };
+      const committerSide = await sideOf(vo.committed_by_person_id);
+      const verifierSide = await sideOf(vo.verified_by_person_id);
+
       const claimedCurrencyImpact = toNumber(vo.claimed_currency_impact);
       const realizedCurrencyImpact = toNumber(vo.realized_currency_impact);
 
@@ -431,6 +456,8 @@ export function produceRunRouter(pool: Pool): Router {
         committerSimulated: committerSynthetic,
         verifierName,
         verifierSimulated: verifierSynthetic,
+        committerCustomerSide: committerSide.customer_side, committerSideReason: committerSide.reason, committerRoles: committerSide.roles,
+        verifierCustomerSide: verifierSide.customer_side, verifierSideReason: verifierSide.reason, verifierRoles: verifierSide.roles,
         assertedConfidence: vo.confidence,
       });
       const confidence = computeConfidence(confidenceInput);
@@ -570,6 +597,11 @@ export function produceRunRouter(pool: Pool): Router {
         // check. A run without this key is version 1 and keeps its bytes;
         // check_run_hashes recomputes both from whatever keys a run has.
         payloadVersion: 2,
+        // C3 (1.0.1; C3-D3): the committer and the verifier as they stood, so the run recomputes under 1.0.1.
+        people: {
+          committer: committerName === null ? null : { name: committerName, simulated: committerSynthetic, customer_side: committerSide.customer_side, reason: committerSide.reason, roles: committerSide.roles },
+          verifier: verifierName === null ? null : { name: verifierName, simulated: verifierSynthetic, customer_side: verifierSide.customer_side, reason: verifierSide.reason, roles: verifierSide.roles },
+        },
         valueRunId,
         runNumber,
         sourceFixture,

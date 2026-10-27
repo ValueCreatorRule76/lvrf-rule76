@@ -1387,6 +1387,55 @@ CREATE TRIGGER lever_offerings_steward_only
 -- 6), and self-declared confidence never does. A customer-side attester is
 -- a non-simulated person of the evidence's own institution.
 
+-- C3 (Brad, 26 Oct 2026): who is customer-side, defined once — the confidence model's derivation and
+-- lvrf_evidence_basis both read it, so a score and a badge cannot disagree. A non-simulated person OF the
+-- institution, holding a current customer-side role named from a source (customer_role_grants), and not
+-- linked as analyst_of_record (the second guard).
+CREATE OR REPLACE FUNCTION lvrf_customer_side_reason(p_person uuid, p_institution uuid) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN p.id IS NULL THEN 'no person'
+    WHEN p.simulated THEN 'simulated'
+    WHEN p.institution_id IS DISTINCT FROM p_institution THEN CASE WHEN p.tenant_id IS NOT NULL THEN 'vendor-side' ELSE 'not of this account' END
+    WHEN EXISTS (SELECT 1 FROM account_person_links l WHERE l.person_id = p.id AND l.role = 'analyst_of_record' AND l.retired_at IS NULL)
+      THEN 'linked as analyst of record'
+    WHEN NOT EXISTS (SELECT 1 FROM customer_role_grants g WHERE g.person_id = p.id AND g.institution_id = p_institution AND g.revoked_at IS NULL)
+      THEN 'no customer-side role named from a source'
+    ELSE NULL END
+    FROM (SELECT 1) one LEFT JOIN persons p ON p.id = p_person
+$$;
+CREATE OR REPLACE FUNCTION lvrf_customer_side(p_person uuid, p_institution uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT lvrf_customer_side_reason(p_person, p_institution) IS NULL $$;
+-- Each current role, with its source: "metric owner per <source>, named by <steward>, <date>".
+CREATE OR REPLACE FUNCTION lvrf_customer_roles(p_person uuid, p_institution uuid) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT string_agg(replace(g.role, '_', ' ') || ' per ' || e.provenance || ', named by ' || s.full_name || ', '
+                    || to_char(g.granted_at AT TIME ZONE 'UTC', 'FMDD Mon YYYY'), '; ' ORDER BY g.granted_at)
+    FROM customer_role_grants g JOIN evidence e ON e.id = g.source_evidence_id JOIN persons s ON s.id = g.granted_by_person_id
+   WHERE g.person_id = p_person AND g.institution_id = p_institution AND g.revoked_at IS NULL
+$$;
+
+-- C3 (section 28's helpers, defined here: the lineage's SQL functions below read them).
+-- The mark on a row, if any, for every surface that shows the row.
+CREATE OR REPLACE FUNCTION lvrf_system_exercise_mark(p_table text, p_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT jsonb_build_object('reason', m.reason, 'marked_by', p.full_name, 'marked_on', to_char(m.marked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'))
+    FROM system_exercise_marks m JOIN persons p ON p.id = m.marked_by_person_id
+   WHERE m.subject_table = p_table AND m.subject_id = p_id
+$$;
+
+-- C3 (Brad's condition): beside a headline score taken from a run that carries a current erratum, one line.
+CREATE OR REPLACE FUNCTION lvrf_run_erratum_line(p_run uuid) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT string_agg(CASE
+           WHEN x.kind = 'non_customer_credit' THEN 'erratum: ' || trim(to_char(x.points_not_credited, 'FM999.9'), '.') || ' of these points rest on a person who is not customer-side'
+           WHEN x.recomputed_score IS NULL THEN 'erratum: a link corrected since sealing; not recomputed'
+           ELSE 'erratum: a link corrected since sealing; recomputed ' || trim(to_char(x.recomputed_score, 'FM999.9'), '.') || ' / 100' END,
+         '; ' ORDER BY x.recorded_at)
+    FROM run_errata x
+   WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
+$$;
+
 CREATE OR REPLACE FUNCTION lvrf_evidence_basis(e evidence) RETURNS text
 LANGUAGE sql STABLE AS $$
   SELECT CASE
@@ -1394,18 +1443,15 @@ LANGUAGE sql STABLE AS $$
     WHEN e.ai_sourced AND NOT e.citation_resolved THEN 'assumed'
     WHEN e.kind = 'system_export' THEN 'system_of_record'
     WHEN e.kind = 'public_filing' THEN 'published'
+    -- C3: client-stated only when the attester is customer-side (lvrf_customer_side).
     WHEN e.kind = 'attestation' THEN
-      CASE WHEN e.attested_at IS NOT NULL AND EXISTS (
-             SELECT 1 FROM persons p WHERE p.id = e.attested_by_person_id
-                AND p.institution_id = e.institution_id AND NOT p.simulated)
+      CASE WHEN e.attested_at IS NOT NULL AND lvrf_customer_side(e.attested_by_person_id, e.institution_id)
            THEN 'client_stated' ELSE 'assumed' END
     WHEN e.kind = 'vendor_publication' THEN
       CASE WHEN EXISTS (SELECT 1 FROM institutions i WHERE i.id = e.institution_id AND i.is_tenant_self)
            THEN 'published' ELSE 'inferred' END
     WHEN e.kind = 'artifact' THEN
-      CASE WHEN EXISTS (
-             SELECT 1 FROM persons p WHERE p.id = e.attested_by_person_id
-                AND p.institution_id = e.institution_id AND NOT p.simulated)
+      CASE WHEN lvrf_customer_side(e.attested_by_person_id, e.institution_id)
            THEN 'client_stated' ELSE 'inferred' END
     WHEN e.kind = 'observation' THEN
       CASE WHEN e.source_reference IS NOT NULL AND btrim(e.source_reference) <> ''
@@ -1842,7 +1888,7 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2141,12 +2187,17 @@ BEGIN
     RAISE EXCEPTION 'LVRF: run_errata: an erratum is recorded on a locked run; an unlocked run is replaced, not corrected.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
-  IF r.outcome IS DISTINCT FROM NEW.value_outcome_id::text THEN
+  -- C3: a run sealed before runs carried their outcome (Curia 5-6) is named by its engagement's outcome
+  -- (a credit erratum only); every other erratum names the outcome the run sealed.
+  IF r.outcome IS DISTINCT FROM NEW.value_outcome_id::text
+     AND NOT (NEW.kind = 'non_customer_credit' AND r.outcome IS NULL
+              AND EXISTS (SELECT 1 FROM value_outcomes vo JOIN value_runs vr ON vr.engagement_id = vo.engagement_id
+                           WHERE vr.id = NEW.value_run_id AND vo.id = NEW.value_outcome_id)) THEN
     RAISE EXCEPTION 'LVRF: run_errata: the erratum''s outcome is not the one run % sealed.', NEW.value_run_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
-  -- An erratum is about a correction: a current, correcting link of that support.
-  IF NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
+  -- An erratum is about a correction: a current, correcting link of that support (C3: a link correction's).
+  IF NEW.kind = 'link_correction' AND NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
                   WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id = NEW.evidence_id
                     AND l.supports = NEW.corrected_to_supports AND l.corrects_supports IS NOT NULL AND l.withdrawn_at IS NULL) THEN
     RAISE EXCEPTION 'LVRF: run_errata: an erratum is about a corrected link; this outcome has no current link of that evidence corrected to %.', NEW.corrected_to_supports
@@ -2227,7 +2278,7 @@ BEGIN
   IF t NOT IN ('research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
                'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-               'industry_measure_exclusions', 'run_errata') THEN
+               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2366,6 +2417,8 @@ BEGIN
           IF o->>'locked_at' IS NULL AND n->>'locked_at' IS NOT NULL THEN what := 'a lock'; END IF;
         WHEN 'value_outcome_evidence' THEN
           IF o->>'withdrawn_at' IS NULL AND n->>'withdrawn_at' IS NOT NULL THEN what := 'a withdrawal'; END IF;
+        WHEN 'customer_role_grants' THEN
+          IF o->>'revoked_at' IS NULL AND n->>'revoked_at' IS NOT NULL THEN what := 'a revocation'; END IF;
         ELSE NULL;
       END CASE;
     END IF;
@@ -2377,6 +2430,8 @@ BEGIN
       WHEN 'reference_example_markers' THEN what := 'a marker';
       WHEN 'run_errata' THEN what := 'an erratum';
       WHEN 'research_imports' THEN what := 'an import';
+      WHEN 'customer_role_grants' THEN what := 'a role named';
+      WHEN 'system_exercise_marks' THEN what := 'a mark';
       WHEN 'value_outcome_evidence' THEN
         IF n->>'corrects_supports' IS NOT NULL THEN what := 'a correcting link'; END IF;
       ELSE NULL;
@@ -2413,7 +2468,7 @@ BEGIN
     'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata']
+    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -2511,7 +2566,12 @@ BEGIN
   RETURN QUERY SELECT 'evidence'::text, 'evidence'::text, e.id, e.captured_by, e.created_at, 'record'::text,
     jsonb_build_object('kind', e.kind, 'summary', e.summary, 'provenance', e.provenance, 'basis', e.basis,
                        'evidence_form', e.evidence_form, 'quote_text', e.quote_text, 'locator', e.locator, 'how_read', e.how_read,
-                       'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified);
+                       'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified,
+                       -- C3: the row's system-exercise mark; an attester's customer-side role with its source, or why not.
+                       'system_exercise', lvrf_system_exercise_mark('evidence', e.id),
+                       'attested_by', (SELECT full_name FROM persons WHERE id = e.attested_by_person_id),
+                       'attester_roles', CASE WHEN e.attested_by_person_id IS NULL THEN NULL ELSE lvrf_customer_roles(e.attested_by_person_id, e.institution_id) END,
+                       'attester_not_customer_side', CASE WHEN e.attested_by_person_id IS NULL THEN NULL ELSE lvrf_customer_side_reason(e.attested_by_person_id, e.institution_id) END);
   IF e.citation_resolved THEN
     SELECT * INTO a FROM lvrf_lineage_act('evidence', e.id, ARRAY['open_citation']);
     IF a.actor IS NULL THEN
@@ -2584,6 +2644,7 @@ RETURNS jsonb LANGUAGE sql STABLE AS $$
   SELECT coalesce(jsonb_agg(jsonb_build_object(
            'id', x.id, 'recorded_by', p.full_name, 'recorded_at', x.recorded_at,
            'sealed', x.sealed_score, 'recomputed', x.recomputed_score, 'what_was_wrong', x.what_was_wrong,
+           'kind', x.kind, 'points_not_credited', x.points_not_credited,
            'supersedes', x.supersedes_id IS NOT NULL) ORDER BY x.recorded_at), '[]'::jsonb)
     FROM run_errata x JOIN persons p ON p.id = x.recorded_by_person_id
    WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
@@ -2595,7 +2656,7 @@ LANGUAGE sql STABLE AS $$
   SELECT 'seal'::text, 'value_runs'::text, r.id, (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
          coalesce(r.locked_at, r.walked_at), 'seal'::text,
          jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL,
-                            'errata', lvrf_lineage_run_errata(r.id))
+                            'errata', lvrf_lineage_run_errata(r.id), 'system_exercise', lvrf_system_exercise_mark('value_runs', r.id))
            || CASE WHEN p_where = 'outcome' THEN jsonb_build_object('sealed_baseline', r.payload->'baselineValue', 'sealed_actual', r.payload->'actualValue') ELSE '{}'::jsonb END
     FROM value_runs r
    WHERE r.deleted_at IS NULL
@@ -2777,6 +2838,133 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------
+-- 28. C3 (0043, 26 Oct 2026) — customer-side roles from a source; system-exercise marks; headlines
+-- ------------------------------------------------------------------
+-- customer_role_grants_guard (I+U), _audit (I+U), _no_delete (D), and _act_present (I+U, section 27);
+-- system_exercise_marks_guard (I), _immutable (U), _audit (I+U), _no_delete (D), and _act_present (I+U).
+-- Brad's guards on a role grant, in the database (26 Oct 2026): the grant names a source of that account;
+-- refused for a simulated person, a person not of that account, anyone linked or titled as an analyst of
+-- record or external, anyone with a vendor-side role or sign-in credentials, and the steward themself.
+
+CREATE OR REPLACE FUNCTION lvrf_customer_role_grant_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  p record;
+  steward uuid;
+  inst_tenant uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id OR NEW.institution_id IS DISTINCT FROM OLD.institution_id
+       OR NEW.person_id IS DISTINCT FROM OLD.person_id OR NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.source_evidence_id IS DISTINCT FROM OLD.source_evidence_id OR NEW.reason IS DISTINCT FROM OLD.reason
+       OR NEW.granted_by_person_id IS DISTINCT FROM OLD.granted_by_person_id OR NEW.granted_at IS DISTINCT FROM OLD.granted_at THEN
+      RAISE EXCEPTION 'LVRF: customer_role_grants: a role grant is never edited; revoke it, and name the role again from a source.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+    END IF;
+    IF OLD.revoked_at IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: customer_role_grants: this role is already revoked; a revocation is final.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+    END IF;
+    IF steward IS NULL OR NEW.revoked_by_person_id IS DISTINCT FROM steward
+       OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
+      RAISE EXCEPTION 'LVRF: customer_role_grants: only the tenant''s steward revokes a role.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+    END IF;
+    RETURN NEW;
+  END IF;
+  SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+  IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: the account is not of tenant %.', NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF steward IS NULL OR NEW.granted_by_person_id IS DISTINCT FROM steward
+     OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: only the tenant''s steward names a customer-side role.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  SELECT * INTO p FROM persons WHERE id = NEW.person_id;
+  IF NEW.person_id = steward THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: the steward does not name a customer-side role for themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF p.simulated THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: a simulated person holds no customer-side role.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF p.tenant_id IS NOT NULL
+     OR EXISTS (SELECT 1 FROM person_credentials c WHERE c.person_id = p.id)
+     OR EXISTS (SELECT 1 FROM person_roles pr WHERE pr.person_id = p.id AND pr.revoked_at IS NULL
+                  AND pr.role IN ('value_engineer', 'account_executive', 'revenue_leader', 'ai_steward', 'rule76_steward', 'administrator')) THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: % is vendor-side (tenant staff, a vendor-side role, or sign-in credentials), not the customer.', p.full_name
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF p.institution_id IS DISTINCT FROM NEW.institution_id THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: % is not a person of this account.', p.full_name
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF EXISTS (SELECT 1 FROM account_person_links l WHERE l.person_id = p.id AND l.role = 'analyst_of_record')
+     OR coalesce(p.title, '') ~* '(analyst|external)' THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: % is an analyst of record or external (linked or titled so), not the customer.', p.full_name
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM evidence e WHERE e.id = NEW.source_evidence_id AND e.institution_id = NEW.institution_id
+                   AND NOT e.simulated AND length(btrim(e.provenance)) >= 3) THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: a role is named from a source: evidence of this account, not simulated, with its provenance.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS customer_role_grants_guard ON customer_role_grants;
+CREATE TRIGGER customer_role_grants_guard BEFORE INSERT OR UPDATE ON customer_role_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_customer_role_grant_guard();
+DROP TRIGGER IF EXISTS customer_role_grants_audit ON customer_role_grants;
+CREATE TRIGGER customer_role_grants_audit AFTER INSERT OR UPDATE ON customer_role_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS customer_role_grants_no_delete ON customer_role_grants;
+CREATE TRIGGER customer_role_grants_no_delete BEFORE DELETE ON customer_role_grants
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A role named from a source is never deleted; it is revoked, with a reason.');
+
+CREATE OR REPLACE FUNCTION lvrf_system_exercise_mark_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  subject_tenant uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF steward IS NULL OR NEW.marked_by_person_id IS DISTINCT FROM steward
+     OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: system_exercise_marks: only the tenant''s steward marks an item as a system exercise.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'system_exercise_marks_guard';
+  END IF;
+  subject_tenant := lvrf_governed_row_tenant(NEW.subject_table, NEW.subject_id);
+  IF subject_tenant IS NULL OR subject_tenant IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: system_exercise_marks: % % does not exist in tenant %.', NEW.subject_table, NEW.subject_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'system_exercise_marks_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION lvrf_system_exercise_mark_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'LVRF: system-exercise mark % is final. It records that an item was entered to exercise the system; it is never edited.', OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+DROP TRIGGER IF EXISTS system_exercise_marks_guard ON system_exercise_marks;
+CREATE TRIGGER system_exercise_marks_guard BEFORE INSERT ON system_exercise_marks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_system_exercise_mark_guard();
+DROP TRIGGER IF EXISTS system_exercise_marks_immutable ON system_exercise_marks;
+CREATE TRIGGER system_exercise_marks_immutable BEFORE UPDATE ON system_exercise_marks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_system_exercise_mark_is_final();
+DROP TRIGGER IF EXISTS system_exercise_marks_audit ON system_exercise_marks;
+CREATE TRIGGER system_exercise_marks_audit AFTER INSERT OR UPDATE ON system_exercise_marks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS system_exercise_marks_no_delete ON system_exercise_marks;
+CREATE TRIGGER system_exercise_marks_no_delete BEFORE DELETE ON system_exercise_marks
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A system-exercise mark is never deleted: the item stays on the record, marked.');
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -2885,7 +3073,9 @@ COMMIT;
 --   research_imports_audit, _no_delete, _immutable,
 --   research_results_import_matches, and <t>_act_present on 18 tables
 --   (deferred constraint triggers) — 26
---   Total: 167 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   28: customer_role_grants_guard, _audit, _no_delete, _act_present;
+--   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
+--   Total: 176 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -2897,15 +3087,18 @@ COMMIT;
 --   0037 (W1 fix) took it 126 -> 129: section 23's three.
 --   0039 (P1) took it 129 -> 135: section 25's six.
 --   0040 (C1) took it 135 -> 141: section 26's six.
---   0041 (P2) took it 141 -> 167: section 27's twenty-six.)
+--   0041 (P2) took it 141 -> 167: section 27's twenty-six.
+--   0043 (C3) took it 167 -> 176: section 28's nine.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 167.
+-- TRUNCATE in section 14 fail. Total stays 176.
 --
--- Expect 260 rows here: information_schema.triggers emits one row per event
+-- Expect 274 rows here (260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
+-- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
+-- information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;
 -- no_ai_actual fires on INSERT and UPDATE (+2), locked_immutable on UPDATE
 -- (+1); value_runs's 5c triad contributes 4 (2 + 1 + 1); record_documents

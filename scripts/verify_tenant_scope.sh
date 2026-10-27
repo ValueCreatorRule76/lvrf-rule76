@@ -203,6 +203,11 @@ PA "/api/business-metrics/$METRIC_H/pack-basis" "{\"industry_measure_id\":\"$MEA
 PA "/api/institutions/$INST_H/hypotheses" "{\"value_outcome_id\":\"$OUTCOME_H\",\"value_lever_id\":\"$LEVER_A\",\"statement\":\"Tenant A hypothesis, stated through the route for the checks.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2030-01-01\",\"falsifier_conditions\":\"on the same population\"}"
 [ "$CODE" = "201" ] || { bad "fixture hypothesis: $CODE $PA_OUT"; exit 1; }
 HYP_A="$(pj .value_hypothesis_id)"
+# C3: a customer-side role of A's, named through the steward's act (no SQL role inserts, even on a clone),
+# from A's own evidence row: the revoke case's target.
+PA "/api/institutions/$INST_A/customer-roles" "{\"person_id\":\"$CUST_A\",\"role\":\"metric_owner\",\"source_evidence_id\":\"$EV_A\",\"reason\":\"Verification: a role named for the tenant scope checks.\"}"
+[ "$CODE" = "201" ] || { bad "fixture role grant: $CODE $PA_OUT"; exit 1; }
+GRANT_A="$(pj .customer_role_grant_id)"
 curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$PORT/api/auth/logout"; rm -f "$JAR_A"
 [ "$(q "SELECT reference_value::text || '|' || (SELECT direction FROM industry_measures WHERE id = '$MEASURE_A') || '|' || author_person_id || '|' || lvrf_hypothesis_verdict(h) FROM value_hypotheses h WHERE id = '$HYP_A'")" = "0.0000|increase|$STAFF_A|open" ] \
   && ok "HYP_A $HYP_A stated by A through the route: reference 0 (recorded baseline), the entry's direction increase, verdict open" || { bad "HYP_A row"; exit 1; }
@@ -211,7 +216,7 @@ curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A
+export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A GRANT_A
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

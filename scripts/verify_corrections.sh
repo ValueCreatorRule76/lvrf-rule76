@@ -52,7 +52,11 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_corr.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 CORR=server/routes/corrections.ts; PRODUCE=server/routes/produceRun.ts; BENCH=client/src/components/workbench/Workbench.tsx; MODEL=server/spine/confidenceModel.ts
 POVP=client/src/pages/PovPage.tsx
-EDITED=("$CORR" "$PRODUCE" "$BENCH" "$MODEL" "$POVP")
+SCORERS=server/spine/scorers.ts
+EDITED=("$CORR" "$PRODUCE" "$BENCH" "$MODEL" "$POVP" "$SCORERS")
+# The current model, read from the code (C3: runs seal 1.0.1; 1.0.0 is kept in the registry, M1).
+CUR="$(npx tsx -e "import('./server/spine/confidenceModel.ts').then(m=>console.log(m.MODEL_VERSION + ' ' + m.MODEL_FINGERPRINT))" 2>/dev/null | tail -1)"
+CUR_V="${CUR%% *}"; CUR_F="${CUR##* }"
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -115,8 +119,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "167" ] \
-    && ok "  ...hardening.sql re-applied: the function as declared, 167 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "176" ] \
+    && ok "  ...hardening.sql re-applied: the function as declared, 176 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 seals() { q "SELECT string_agg(r.id || ':' || md5(r::text), ' ' ORDER BY r.run_number) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -133,7 +137,7 @@ HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | t
 printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0040_corrections and later)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "167" ] && ok "167 triggers by pg_trigger (135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "176" ] && ok "176 triggers by pg_trigger (C3 section 28: +9; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 # (0040 orphaning nothing and leaving Scotts' runs byte-identical was proven at C1's Gate A, on a copy
@@ -146,6 +150,8 @@ files = sorted(glob.glob('server/**/*.ts', recursive=True)) + ['db/hardening.sql
 # Reads that are meant to see every link, whatever its state — named, each with its reason.
 EXEMPT = {
   ('db/hardening.sql', 'l.supports = NEW.corrects_supports'): 'the guard: a correction names a predecessor in any state',
+  # C3 (0043): the credit errata name the outcome a sealed attestation was linked to, in whatever state the link is now.
+  ('server/lib/nonCustomerCredit.ts', 'l.evidence_id = ANY'): 'the credit errata: the outcome a sealed item was linked to, the link in any state',
   # P2 (0041): lineage shows withdrawn links on purpose (struck through, with who and why); the act
   # guard asks only whether the link named exists, in any state.
   ('db/hardening.sql', 'l.evidence_id = NEW.result_id'): 'the act guard: the link an act names exists',
@@ -361,9 +367,9 @@ for pair in "1:$R1:$E1:$WANT1:$SEALED1" "2:$R2:$E2:$WANT2:$SEALED2"; do
   IND="$(indep "$RID")"
   [ "$STORED" = "$(printf '%s' "$IND" | awk -F'|' '{printf "%d|%s|%d|%s", $1, $2, $3, $4}')" ] && [ "${STORED%%|*}" = "$WANT" ] \
     && ok "run $N: the server's recompute ($STORED) equals the script's own, without the wrong row ($IND): $WANT / 100" || bad "run $N: stored $STORED, independent $IND, expected $WANT"
-  [ "$(q "SELECT model_version || '|' || model_fingerprint || '|' || (recorded_by_person_id = '$S') || '|' || (recompute_method LIKE 'Recomputed under model 1.0.0 (d4cf8f31472a), the model this run was sealed with%') || '|' || (recompute_method LIKE '%The sealed run is unchanged.') FROM run_errata WHERE id = '$EID'")" = "1.0.0|d4cf8f31472a|true|true|true" ] \
-    && ok "  ...stores model 1.0.0 (d4cf8f31472a), the one run $N sealed; the steward; the method, ending \"The sealed run is unchanged.\"" || bad "  ...run $N's erratum: $(q "SELECT model_version, recompute_method FROM run_errata WHERE id = '$EID'")"
-  [ "$(q "SELECT (payload->'confidence'->>'modelVersion') || '|' || confidence_score::numeric::int FROM value_runs WHERE id = '$RID'")" = "1.0.0|$SEALED" ] && ok "  ...run $N's own sealed score is still $SEALED, under 1.0.0" || bad "  ...run $N sealed"
+  [ "$(q "SELECT model_version || '|' || model_fingerprint || '|' || (recorded_by_person_id = '$S') || '|' || (recompute_method LIKE 'Recomputed under model $CUR_V ($CUR_F), the model this run was sealed with%') || '|' || (recompute_method LIKE '%The sealed run is unchanged.') FROM run_errata WHERE id = '$EID'")" = "$CUR_V|$CUR_F|true|true|true" ] \
+    && ok "  ...stores model $CUR_V ($CUR_F), the one run $N sealed; the steward; the method, ending \"The sealed run is unchanged.\"" || bad "  ...run $N's erratum: $(q "SELECT model_version, recompute_method FROM run_errata WHERE id = '$EID'")"
+  [ "$(q "SELECT (payload->'confidence'->>'modelVersion') || '|' || confidence_score::numeric::int FROM value_runs WHERE id = '$RID'")" = "$CUR_V|$SEALED" ] && ok "  ...run $N's own sealed score is still $SEALED, under $CUR_V" || bad "  ...run $N sealed"
 done
 expect GET "/api/runs/$R2" "" 200 "GET the run"
 [ "$(rj "b.errata.length + '|' + b.errata[0].recorded_by + '|' + Number(b.errata[0].recomputed_score)")" = "1|$S_NAME|$WANT2" ] && ok "  ...it carries the erratum: by $S_NAME, recomputed $WANT2" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
@@ -506,8 +512,8 @@ sleep 2; walk print "$TOKEN" "$R2" c1_run2_b8.pdf
 pages "B8: the erratum out of the printed header" "$SHOTS/c1_run2_b8.pdf" no
 restore "$BENCH"
 # B13 (L39) — the POV's correction note on vendor claims only, as C1 had it: the corrected filing's line loses it.
-edit "$POVP" '                <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
-                <CorrectedNote e={e} />' '                <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />'
+edit "$POVP" '                {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
+                <CorrectedNote e={e} />' '                {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}'
 sleep 2; node scripts/lib/corrections_walk.mjs povnote "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$INST_W" "$R2" "$EV_V" none.pdf "$WRONG" > "$W/walk.b13.log" 2>&1 || true
 grep -q "^  PASS  the POV opens" "$W/walk.b13.log" && grep -q "^  FAIL  the corrected link's own line" "$W/walk.b13.log" \
   && ok "B13: the note on vendor claims only → caught: the corrected filing's line has no correction" || bad "B13: not caught: $(cat "$W/walk.b13.log" | head -3)"
@@ -532,10 +538,13 @@ MATCH="$(q "SELECT json_build_object('kind', kind, 'summary', summary, 'provenan
 RC="$(npx tsx "$W/rc.ts" "$PAY" "$MATCH" 2>&1 | tail -1)"
 printf '%s' "$RC" | grep -qF "[\"ok:$WANT2\",\"This run was sealed under model 0.9.0" && printf '%s' "$RC" | grep -qF 'It cannot be recomputed under the model it was sealed with.' \
   && ok "B11: a payload sealed under model 0.9.0 → refused: \"It cannot be recomputed under the model it was sealed with.\" (under its own: $WANT2)" || bad "B11 (payload): $RC"
-edit "$MODEL" "export const MODEL_VERSION = '1.0.0'" "export const MODEL_VERSION = '1.0.1'"
+# M1 (C3): a run is recomputed under the scorer it was sealed with, kept in the registry; dropping that
+# scorer is what refuses it.
+edit "$SCORERS" "  [current.MODEL_VERSION]: { version: current.MODEL_VERSION, fingerprint: current.MODEL_FINGERPRINT, computeConfidence: current.computeConfidence },
+" ""
 RC2="$(npx tsx "$W/rc.ts" "$PAY" "$MATCH" 2>&1 | tail -1)"
-printf '%s' "$RC2" | grep -qF '["refused",' && ok "B11: the server's model bumped to 1.0.1 → run 2's recompute refused (sealed under 1.0.0)" || bad "B11 (source): $RC2"
-restore "$MODEL"
+printf '%s' "$RC2" | grep -qF '["refused",' && ok "B11: the scorer run 2 was sealed with ($CUR_V) dropped from the registry → its recompute refused" || bad "B11 (source): $RC2"
+restore "$SCORERS"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $SHOTS"
 

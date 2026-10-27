@@ -84,7 +84,16 @@ const CONFIDENCE_BANDS: ReadonlyArray<readonly [number, ConfidenceLevel]> = [
  * column) would not be. This is a partial detector, and knowing its edge
  * matters more than the coverage it does give.
  */
-export const MODEL_VERSION = '1.0.0';
+export const MODEL_VERSION = '1.0.1';
+
+/**
+ * C3 (Brad, 26 Oct 2026; C3-D2): who earns credit as an attester, a committer or a verifier. The
+ * fingerprint covers constants, not logic, so the rule in words joins it: changing who counts moves the
+ * fingerprint with the version. 1.0.0 (server/spine/models/confidence_1_0_0.ts) is kept, unchanged (M1).
+ */
+export const ATTESTER_RULE =
+  'Customer-side: a non-simulated person of the account, holding metric_owner or executive_sponsor named from a source '
+  + '(customer_role_grants), not linked as analyst_of_record. Only a customer-side person earns attestation, committer or verifier credit.';
 
 export const MODEL_FINGERPRINT = createHash('sha256')
   .update(
@@ -93,6 +102,7 @@ export const MODEL_FINGERPRINT = createHash('sha256')
       questions: CONFIDENCE_FACTOR_QUESTIONS,
       bands: CONFIDENCE_BANDS,
       attestationCredit: ATTESTATION_CREDIT,
+      attesterRule: ATTESTER_RULE,
     }),
   )
   .digest('hex')
@@ -108,6 +118,10 @@ export interface ConfidenceEvidenceInput {
   attestedByScope?: 'tenant' | 'institution' | null;
   /** Whether the named attester is a simulated identity, not a person of record. */
   attesterSimulated?: boolean;
+  /** C3 (1.0.1): whether the attester is customer-side (lvrf_customer_side); the reason when not; their roles, each with its source. */
+  attesterCustomerSide?: boolean | null;
+  attesterSideReason?: string | null;
+  attesterRoles?: string | null;
 }
 
 export interface ConfidenceFactorRow {
@@ -198,6 +212,13 @@ export interface ConfidenceInput {
   /** See committerName — same absent/simulated/real distinction, same reason. */
   verifierName: string | null;
   verifierSimulated: boolean;
+  /** C3 (1.0.1; C3-D1): whether the committer and the verifier are customer-side, why not, and their roles with sources. */
+  committerCustomerSide?: boolean | null;
+  committerSideReason?: string | null;
+  committerRoles?: string | null;
+  verifierCustomerSide?: boolean | null;
+  verifierSideReason?: string | null;
+  verifierRoles?: string | null;
   assertedConfidence: ConfidenceLevel | null;
 }
 
@@ -232,6 +253,10 @@ export interface RawEvidenceForConfidence {
   attesterName: string | null;
   attesterInstitutionId: string | null;
   attesterSimulated: boolean | null;
+  /** C3: lvrf_customer_side, its reason, and lvrf_customer_roles, for the attester at the outcome's account. */
+  attesterCustomerSide?: boolean | null;
+  attesterSideReason?: string | null;
+  attesterRoles?: string | null;
 }
 
 /**
@@ -254,6 +279,13 @@ export interface ConfidenceDerivationFacts {
   committerSimulated: boolean;
   verifierName: string | null;
   verifierSimulated: boolean;
+  /** C3: as the attester's, for the committer and the verifier. */
+  committerCustomerSide?: boolean | null;
+  committerSideReason?: string | null;
+  committerRoles?: string | null;
+  verifierCustomerSide?: boolean | null;
+  verifierSideReason?: string | null;
+  verifierRoles?: string | null;
   assertedConfidence: ConfidenceLevel | null;
 }
 
@@ -303,6 +335,9 @@ export function buildConfidenceInput(facts: ConfidenceDerivationFacts): Confiden
     attestedByName: e.attesterName,
     attestedByScope: e.attesterName != null ? (e.attesterInstitutionId ? 'institution' : 'tenant') : null,
     attesterSimulated: e.attesterSimulated ?? false,
+    attesterCustomerSide: e.attesterCustomerSide ?? null,
+    attesterSideReason: e.attesterSideReason ?? null,
+    attesterRoles: e.attesterRoles ?? null,
   }));
 
   return {
@@ -317,6 +352,12 @@ export function buildConfidenceInput(facts: ConfidenceDerivationFacts): Confiden
     committerSimulated: facts.committerSimulated,
     verifierName: facts.verifierName,
     verifierSimulated: facts.verifierSimulated,
+    committerCustomerSide: facts.committerCustomerSide ?? null,
+    committerSideReason: facts.committerSideReason ?? null,
+    committerRoles: facts.committerRoles ?? null,
+    verifierCustomerSide: facts.verifierCustomerSide ?? null,
+    verifierSideReason: facts.verifierSideReason ?? null,
+    verifierRoles: facts.verifierRoles ?? null,
     assertedConfidence: facts.assertedConfidence,
   };
 }
@@ -328,10 +369,11 @@ export function evidenceCredit(ev: ConfidenceEvidenceInput): { credit: number; n
     const name = ev.attestedByName;
     if (!name) return { credit: 0, note: 'attestation with no named attester' };
     if (ev.attesterSimulated) return { credit: 0, note: `attester synthetic (${name})` };
-    if (ev.attestedByScope !== 'institution') {
-      return { credit: 0, note: `attester is vendor-side (${name}) — not an authority on the customer's metric` };
+    // C3 (1.0.1): credit only for a customer-side attester — a role named from a source (ATTESTER_RULE).
+    if (ev.attesterCustomerSide !== true) {
+      return { credit: 0, note: `attester is not customer-side (${name}: ${ev.attesterSideReason ?? (ev.attestedByScope === 'tenant' ? 'vendor-side' : 'no customer-side role named from a source')})` };
     }
-    return { credit: ATTESTATION_CREDIT, note: `attested by ${name}` };
+    return { credit: ATTESTATION_CREDIT, note: `attested by ${name}${ev.attesterRoles ? ` (${ev.attesterRoles})` : ''}` };
   }
 
   return { credit: 1, note: 'independently source-verified' };
@@ -414,17 +456,22 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   // notes — no person named, a named-but-simulated person, and a named real
   // person — rather than collapsing "absent" into "simulated" the way a
   // manufactured placeholder name used to.
-  for (const [factor, verb, roleNoun, name, simulated] of [
-    ['human_commit_of_record', 'Committed by', 'committer', input.committerName, input.committerSimulated],
-    ['human_verifier_of_record', 'Verified by', 'verifier', input.verifierName, input.verifierSimulated],
+  // C3 (1.0.1; C3-D1): a named real person earns the factor only when customer-side; the note names the role's source.
+  for (const [factor, verb, roleNoun, name, simulated, side, why, roles] of [
+    ['human_commit_of_record', 'Committed by', 'committer', input.committerName, input.committerSimulated,
+      input.committerCustomerSide, input.committerSideReason, input.committerRoles],
+    ['human_verifier_of_record', 'Verified by', 'verifier', input.verifierName, input.verifierSimulated,
+      input.verifierCustomerSide, input.verifierSideReason, input.verifierRoles],
   ] as const) {
     const weight = CONFIDENCE_FACTOR_WEIGHTS[factor];
     if (name == null) {
       award(factor, 0, `No ${roleNoun} of record has been named.`, 'absent');
     } else if (simulated) {
       award(factor, 0, `${verb} ${name} — a simulated identity, not a person of record.`, 'simulated');
+    } else if (side !== true) {
+      award(factor, 0, `${verb} ${name} — not customer-side (${why ?? 'no customer-side role named from a source'}).`, 'not_customer_side');
     } else {
-      award(factor, weight, `${verb} ${name}.`, null);
+      award(factor, weight, `${verb} ${name}${roles ? ` (${roles})` : ''}.`, null);
     }
   }
 

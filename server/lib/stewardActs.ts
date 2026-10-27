@@ -46,6 +46,10 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   // C1 (LVRF_PLAN §9): correcting what a link supports, and an erratum on a sealed run.
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support': 'steward',
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw': 'steward',
+  'POST /api/institutions/:institutionId/customer-roles': 'steward',
+  'POST /api/customer-roles/:id/revoke': 'steward',
+  'POST /api/errata/non-customer-credit': 'steward',
+  'POST /api/system-exercise/marks': 'steward',
   'POST /api/value-runs/:runId/errata': 'steward',
   // O2: hypotheses and executive summaries are the account team's acts.
   'POST /api/institutions/:institutionId/hypotheses': 'authorized',
@@ -102,6 +106,10 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/reference-examples/:id/retire': 'Unmarking a reference example',
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support': 'Correcting what a link supports',
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw': 'Withdrawing an evidence link',
+  'POST /api/institutions/:institutionId/customer-roles': 'Naming a customer-side role',
+  'POST /api/customer-roles/:id/revoke': 'Revoking a customer-side role',
+  'POST /api/errata/non-customer-credit': 'Recording the errata the seals call for',
+  'POST /api/system-exercise/marks': 'Marking items as a system exercise',
   'POST /api/value-runs/:runId/errata': 'Recording an erratum',
 };
 
