@@ -63,6 +63,13 @@ These encode failures already paid for in CVAF 1.2. Violating them recreates kno
    system run on throwaway clones. Prod holds case evidence and the acts of named people only;
    a row entered on prod to exercise the system is marked as such and never deleted (C3, Brad,
    26 Oct 2026).
+10. **Steward acts are performed by the steward, never on their behalf.** No script, agent or
+   automation performs a steward act on prod — not by API, not by driving the browser, not by
+   SQL. Every act records the person who performed it, with its own governance act; an act
+   carried out for that person would record them doing something they did not personally do,
+   the same false attribution C3 corrected. Batch pages are the efficient path: a dry-run
+   count, then one confirmation by the steward. This follows from rule 4 (a human authorizes;
+   AI may draft but never records the decision), rule 9, and C2-D2 (Brad, 27 Oct 2026).
 
 ### The governing AI principle
 

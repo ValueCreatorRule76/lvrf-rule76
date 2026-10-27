@@ -13237,3 +13237,23 @@ Read-only over ssh, as `lvrf_app` with `default_transaction_read_only=on`.
   - Brad completed the marks afterwards.
 
 **C3 is closed.** Its credit errata are recorded in C3b's one batch.
+
+---
+
+## CLAUDE.md rule 10: steward acts are performed by the steward — 27 October 2026
+
+**Ruled by Brad, 27 Oct 2026**, after asking whether the C3 acts (17 errata, the withdrawal,
+21 marks) could be applied automatically. The answer is no, by design, and it is now a
+non-negotiable rule in `CLAUDE.md`:
+
+- **No script, agent or automation performs a steward act on prod**, by API, by driving the
+  browser, or by SQL.
+- **Why:** every act records "by Brad Piver" with its own governance act. An act carried out on
+  his behalf would record him doing something he did not personally do. That is the same false
+  attribution C3 corrected (the analyst of record credited as customer-side).
+- **It follows from** rule 4 (a human authorizes; AI may draft but never records the decision),
+  rule 9 (verification never writes on prod) and C2-D2 (errata through the UI, not a script).
+- **The efficient path is the batch page:** a dry-run count, then one confirmation by the
+  steward (C3's errata and marks batches).
+
+No code change. Docs only.
