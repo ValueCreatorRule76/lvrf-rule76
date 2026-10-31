@@ -692,7 +692,7 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
        WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
        ORDER BY vo.created_at`),
     q<{ value_outcome_id: string; basis: string | null } & Record<string, unknown>>(`
-      SELECT voe.value_outcome_id, voe.evidence_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis,
+      SELECT voe.value_outcome_id, voe.evidence_id, voe.supports, e.kind::text, e.summary, e.provenance, lvrf_evidence_basis(e) AS basis, lvrf_evidence_basis_reason(e) AS basis_reason,
              -- C1: a link that corrects what an earlier one supported, with who and why.
              voe.corrects_supports, (SELECT full_name FROM persons WHERE id = voe.corrected_by_person_id) AS corrected_by, voe.correction_reason,
              -- C2b: when — the withdrawal of the link it corrects, made in the same act (C1-D1); a link keeps no date of its own.

@@ -2605,7 +2605,7 @@ export const runErrata = pgTable('run_errata', {
   evidenceId: uuid('evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
   /** What the corrected link supports: with the run and the evidence, the correction this erratum is about. */
   correctedToSupports: text('corrected_to_supports'),
-  /** C3: for a 'non_customer_credit' erratum, the sealed points that rest on people not customer-side. */
+  /** C3: for a 'non_customer_credit' erratum, the sealed points that rest on people not customer-side. C3b: 0 when its only credit rests on a confirmer not recoverable from the seal. */
   pointsNotCredited: numeric('points_not_credited', { precision: 5, scale: 1 }),
   /** C3b: for an 'unsourced_figure' erratum, the finding it states, beside a run whose seal carries that figure. */
   figureFindingId: uuid('figure_finding_id').references(() => figureFindings.id, { onDelete: 'restrict' }),
@@ -2652,7 +2652,7 @@ export const runErrata = pgTable('run_errata', {
     sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL AND ${t.figureFindingId} IS NULL)
         OR (${t.kind} = 'non_customer_credit' AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL AND ${t.supersedesId} IS NULL
             AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.figureFindingId} IS NULL
-            AND ${t.pointsNotCredited} IS NOT NULL AND ${t.pointsNotCredited} > 0 AND ${t.pointsNotCredited} <= 100
+            AND ${t.pointsNotCredited} IS NOT NULL AND ${t.pointsNotCredited} >= 0 AND ${t.pointsNotCredited} <= 100
             AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')
         OR (${t.kind} = 'unsourced_figure' AND ${t.figureFindingId} IS NOT NULL AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL
             AND ${t.supersedesId} IS NULL AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.pointsNotCredited} IS NULL

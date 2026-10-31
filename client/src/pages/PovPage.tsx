@@ -202,7 +202,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {other.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {other.map((e, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} /> {supportsShort(e.supports)}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
+              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} />{e.basis_reason && <span className="text-[11px] text-warning" data-testid="basis-reason"> {e.basis_reason}</span>} {supportsShort(e.supports)}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
                 <RoleLine roles={e.attester_roles} not={e.attester_not_customer_side} who={e.stated_by} testid="pov-attester-role" />
                 {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
@@ -443,14 +443,16 @@ function LockedRuns({ pov }: { pov: Pov }) {
 function PrintFooter({ pov }: { pov: Pov }) {
   const sealed = pov.engagements.filter((e) => e.locked_runs.length > 0);
   const total = sealed.reduce((n, e) => n + e.locked_runs.length, 0);
-  const latest = (e: Pov['engagements'][number]) => e.locked_runs.reduce((a, r) => (r.run_number > a.run_number ? r : a));
+  // C3b (Brad, 27 Oct 2026): a marked run is never "the latest"; the footer names the headline run.
+  const pool = (e: Pov['engagements'][number]) => { const u = e.locked_runs.filter((r) => !r.system_exercise); return u.length > 0 ? u : e.locked_runs; };
+  const latest = (e: Pov['engagements'][number]) => pool(e).reduce((a, r) => (r.run_number > a.run_number ? r : a));
   return (
     <div className="mt-3 border-t border-ink pt-1.5 text-[9px] leading-snug text-ink-70">
       {sealed.length === 0
         ? <p className="m-0" data-testid="print-unsealed">No locked run: nothing on this page is sealed.</p>
         : <>
           {sealed.map((e) => { const r = latest(e); return (
-            <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}{e.retired ? ' (retired)' : ''}: latest locked run, run {r.run_number} · record hash <span className="font-mono">{r.payload_hash}</span></p>
+            <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}{e.retired ? ' (retired)' : ''}: {e.locked_runs.some((x) => x.system_exercise) ? 'latest unmarked run' : 'latest locked run'}, run {r.run_number} · record hash <span className="font-mono">{r.payload_hash}</span></p>
           ); })}
           <p className="m-0">{total} locked {total === 1 ? 'run' : 'runs'} in all; every run&apos;s full hash is listed under Locked runs.</p>
         </>}

@@ -176,14 +176,17 @@ txt = lambda *a: re.sub(r'\s+', '', subprocess.run(['pdftotext', *a, pdf, '-'], 
 n = int(re.search(r'Pages:\s+(\d+)', subprocess.run(['pdfinfo', pdf], capture_output=True, text=True).stdout).group(1))
 sealed = [e for e in pov['engagements'] if e['locked_runs']]
 runs = [r for e in sealed for r in e['locked_runs']]
-latest = [max(e['locked_runs'], key=lambda r: r['run_number']) for e in sealed]
+# C3b: a marked run is never "the latest"; the footer names the latest unmarked run of an engagement with marks.
+pool = lambda e: [r for r in e['locked_runs'] if not r.get('system_exercise')] or e['locked_runs']
+latest = [max(pool(e), key=lambda r: r['run_number']) for e in sealed]
+word = {r['id']: ('latestunmarkedrun' if any(x.get('system_exercise') for x in e['locked_runs']) else 'latestlockedrun') for e in sealed for r in e['locked_runs']}
 total = len(runs)
 line = re.sub(r'\s+', '', f"{total} locked {'run' if total == 1 else 'runs'} in all; every run's full hash is listed under Locked runs.")
 bad = []
 for p in range(1, n + 1):
     t = txt('-f', str(p), '-l', str(p))
     for r in latest:
-        if f"latestlockedrun,run{r['run_number']}·recordhash{r['payload_hash']}" not in t: bad.append(f"p{p}:latest-run-{r['run_number']}")
+        if f"{word[r['id']]},run{r['run_number']}·recordhash{r['payload_hash']}" not in t: bad.append(f"p{p}:latest-run-{r['run_number']}")
     if sealed and line not in t: bad.append(f"p{p}:count-line")
     if re.search(r'[0-9a-f]{8,63}…', t): bad.append(f"p{p}:shortened-hash")
 whole = txt()
@@ -237,7 +240,7 @@ step "3. Scotts (locked runs, a hypothesis, a lever, published facts)"
 look scotts "$SCOTTS" '{"confidence":"35 / 100 · Low","falsifiers":1,"lever":"ratified by Brad Piver, 19 Oct 2026","facts":["$3,413.1 million","5,200 people"],"labels":["Disclosure regime","Public filer","Stated priority","SEC CIK","General"],"verbatim":["provided that: Same TRIR definition and denominator as the published baseline"],"runs":{"latest":["Scotts Miracle-Gro — reference example, not an engagement (retired), run 2"],"buttons":["Show all 2 runs"],"total":2}}' "OUTSIDE-IN TEST" "record hash"
 SCOTTS_PAGES="$PAGES_N"
 step "4. Curia (a locked run, no hypothesis)"
-look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 21"],"buttons":["Show all 21 runs"],"total":22}}' "REFERENCE EXAMPLE" "record hash"
+look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 13"],"buttons":["Show all 21 runs"],"total":22}}' "REFERENCE EXAMPLE" "record hash"
 # C1b (Brad, 25 Oct 2026): every printed header line is bounded — in print emulation each line of the
 # printed header is one line tall; Curia's marker carries a 318-character citation.
 cat > "$W/header.mjs" <<'JS'
@@ -330,7 +333,7 @@ r="$(python3 "$W/hashes.py" "$B/ux1s3_pov_curia.pdf" "$W/pov.curia.json" 2>&1)"
 case "$r" in BAD*shortened-hash*) ok "B4: a shortened hash in the footer → caught (the footer carries full hashes only)" ;; *) bad "B4: not caught: $r" ;; esac
 restore "$POVPAGE"
 # B5 — the footer names the FIRST run, not the latest.
-edit "$POVPAGE" "const latest = (e: Pov['engagements'][number]) => e.locked_runs.reduce((a, r) => (r.run_number > a.run_number ? r : a));" "const latest = (e: Pov['engagements'][number]) => e.locked_runs.reduce((a, r) => (r.run_number < a.run_number ? r : a));"
+edit "$POVPAGE" "const latest = (e: Pov['engagements'][number]) => pool(e).reduce((a, r) => (r.run_number > a.run_number ? r : a));" "const latest = (e: Pov['engagements'][number]) => pool(e).reduce((a, r) => (r.run_number < a.run_number ? r : a));"
 sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" scotts "$SCOTTS" '{}' > /dev/null 2>&1 || true
 r="$(python3 "$W/hashes.py" "$B/ux1s3_pov_scotts.pdf" "$W/pov.scotts.json" 2>&1)"
 case "$r" in BAD*latest-run-2*) ok "B5: the first run's hash in the footer instead of the latest → caught (Scotts: run 2 is the latest)" ;; *) bad "B5: not caught: $r" ;; esac

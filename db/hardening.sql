@@ -1429,6 +1429,7 @@ $$;
 CREATE OR REPLACE FUNCTION lvrf_erratum_line(p_erratum uuid) RETURNS text
 LANGUAGE sql STABLE AS $$
   SELECT CASE
+           WHEN x.kind = 'non_customer_credit' AND x.points_not_credited = 0 THEN 'erratum: its definition rests on a confirmer not recoverable from the seal'
            WHEN x.kind = 'non_customer_credit' THEN 'erratum: ' || trim(to_char(x.points_not_credited, 'FM999.9'), '.') || ' of these points rest on a person who is not customer-side'
            -- C3b: the figure a seal carries with no source on record.
            WHEN x.kind = 'unsourced_figure' THEN (SELECT 'erratum: its ' || CASE f.field WHEN 'baseline_value' THEN 'baseline' WHEN 'actual_value' THEN 'actual'
@@ -1446,9 +1447,20 @@ LANGUAGE sql STABLE AS $$
    WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
 $$;
 
+-- C3b (Brad, 31 Oct 2026, ruling 1): evidence under a finding — it supported the figure when the finding was
+-- recorded: a link current then, or withdrawn after it (the finding's own withdrawal keeps it covered). A link
+-- withdrawn before the finding supported nothing then. Sealed runs keep their sealed basis.
+CREATE OR REPLACE FUNCTION lvrf_evidence_under_finding(p_evidence uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (SELECT 1 FROM value_outcome_evidence l JOIN figure_findings f ON f.value_outcome_id = l.value_outcome_id
+                  WHERE l.evidence_id = p_evidence
+                    AND l.supports = CASE f.field WHEN 'baseline_value' THEN 'baseline' WHEN 'actual_value' THEN 'actual' ELSE 'impact_basis' END
+                    AND (l.withdrawn_at IS NULL OR l.withdrawn_at >= f.recorded_at))
+$$;
 CREATE OR REPLACE FUNCTION lvrf_evidence_basis(e evidence) RETURNS text
 LANGUAGE sql STABLE AS $$
   SELECT CASE
+    WHEN lvrf_evidence_under_finding(e.id) THEN 'assumed'
     WHEN e.simulated THEN 'assumed'
     WHEN e.ai_sourced AND NOT e.citation_resolved THEN 'assumed'
     WHEN e.kind = 'system_export' THEN 'system_of_record'
@@ -1468,6 +1480,12 @@ LANGUAGE sql STABLE AS $$
            THEN 'inferred' ELSE 'assumed' END
     ELSE NULL  -- assessment_result: no basis (D2 rule 10)
   END
+$$;
+
+-- C3b: why the basis reads as it does, where a finding set it.
+CREATE OR REPLACE FUNCTION lvrf_evidence_basis_reason(e evidence) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT CASE WHEN lvrf_evidence_under_finding(e.id) THEN 'no source on record' END
 $$;
 
 -- ------------------------------------------------------------------
@@ -2594,6 +2612,7 @@ BEGIN
   END IF;
   RETURN QUERY SELECT 'evidence'::text, 'evidence'::text, e.id, e.captured_by, e.created_at, 'record'::text,
     jsonb_build_object('kind', e.kind, 'summary', e.summary, 'provenance', e.provenance, 'basis', e.basis,
+                       'basis_reason', CASE WHEN lvrf_evidence_under_finding(e.id) THEN 'no source on record' END,
                        'evidence_form', e.evidence_form, 'quote_text', e.quote_text, 'locator', e.locator, 'how_read', e.how_read,
                        'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified,
                        -- C3b (Brad's condition 2): a derived reading, changing nothing: verified, and no citation opened.

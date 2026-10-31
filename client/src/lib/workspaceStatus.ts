@@ -48,6 +48,8 @@ export interface WalkState {
         system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
         /** C3b (Brad's condition 2): verified with no citation opened (a derived reading). */
         verified_unopened?: boolean;
+        /** C3b: why the basis reads as it does, where a finding set it. */
+        basis_reason?: string | null;
       }[];
       /** C1: links withdrawn by a correction, kept and shown struck through. */
       withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];

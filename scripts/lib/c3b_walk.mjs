@@ -119,6 +119,7 @@ if (MODE === 'surfaces') {
   const pl = await text('[data-testid=outcome] [data-testid=no-source-line]');
   check(pl.includes('No source on record') && pl.includes(E.WOULD_SAY), "the POV's baseline: \"No source on record — found by …\" with the finding's text", pl.slice(0, 260));
   check((await text('[data-testid=outcome] [data-testid=verified-unopened]')).includes('verified without the source being opened'), '  ...the attested export: "verified without the source being opened"');
+  check((await text('[data-testid=outcome] [data-testid=basis-reason]')).includes('no source on record'), '  ...its basis reads with its reason, "no source on record"');
   const h = await ev(`document.querySelector('[data-testid=confidence] [data-testid=headline-erratum]')?.textContent ?? ''`);
   check(h.includes(LINE), `  ...its headline carries "${LINE}"`, h);
   await shot('c3b_pov_1280', 1280);
@@ -156,6 +157,7 @@ if (MODE === 'surfaces') {
   // The lineage of the baseline: the finding; the evidence step's reading.
   check(await open(`/lineage/value_outcomes/${E.OUTCOME}?figure=baseline`, `!!document.querySelector('[data-testid=lineage-steps]')`), "the baseline's lineage opens");
   check((await text('[data-testid=lineage-finding]')).includes(E.WOULD_SAY), '  ...its finding step, with the text and why');
+  check((await text('[data-testid=lineage-basis-reason]')).includes('no source on record'), '  ...its evidence step: the basis, with its reason');
   check((await text('[data-testid=lineage-steps] [data-testid=verified-unopened]')).includes('verified without the source being opened'), '  ...its evidence step: verified without the source being opened');
   await shot('c3b_lineage_1280', 1280);
 }

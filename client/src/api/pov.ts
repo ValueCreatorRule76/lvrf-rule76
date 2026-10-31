@@ -101,6 +101,8 @@ export interface PovEvidence {
   system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
   /** C3b (Brad's condition 2): verified with no citation opened (a derived reading). */
   verified_unopened?: boolean;
+  /** C3b: why the basis reads as it does, where a finding set it. */
+  basis_reason?: string | null;
   figure_check: FigureCheckShown | null;
 }
 

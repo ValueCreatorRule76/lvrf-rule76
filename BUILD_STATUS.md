@@ -13377,3 +13377,57 @@ the submit carries both counts and is refused if either changed.
 - **For Brad's ruling:** an evidence row's basis comes from its kind, so `1632a5e0` will still read
   `system_of_record` in the lineage after the finding, below "No source on record". Not changed.
 - **The screenshots:** `~/lvrf-backups/c3b-screens/`.
+
+### C3b, Brad's rulings of 31 Oct; Gate A on a fresh prod copy — 31 October 2026 (UTC)
+
+**The copy:** `lvrf_snapshot_20261031T223711Z.dump` (1,138,346 bytes, TOC 775), taken by Brad and
+restored as `lvrf_prodcopy` by the deployed code (`eaf29a3`), so at 0043: 176 triggers, 25 runs, 21
+marks, 36 acts, 14 errata.
+
+**Its growth, accounted for against the 27 Oct snapshot and accepted by Brad:**
+- **TOC +37, nothing removed:** every addition is 0043's.
+- **Rows, all 47 tables:** `system_exercise_marks` +21; `governance_acts` +22 (21 `mark`, 1
+  `withdraw`); `audit_log` +44 (those 22, the 21 marks, 1 link update); `hardening_manifest` +9;
+  drizzle +1.
+- **In place:** one link (`cee6fea9` withdrawn) and one session's `last_seen`; `run_errata` gains
+  0043's two columns.
+- **Unchanged in content:** all 354 older audit rows, 14 older acts, 25 runs and 34 evidence rows.
+- **The last write on prod** is Brad's last mark, 27 Oct 12:55:56 UTC. 0 refusals, 0 role grants.
+
+**Ruling 1, the basis:**
+- Where a recorded finding covers a figure, `lvrf_evidence_basis` returns `assumed` for its
+  evidence, and `lvrf_evidence_basis_reason` gives "no source on record", on the POV, the walk and
+  the lineage.
+- "Its evidence" means a link current when the finding was recorded, or withdrawn after it. So
+  `1632a5e0` stays covered after Brad's withdrawal, and `cee6fea9` and `f9775317`, withdrawn
+  earlier, keep `published`.
+- Sealed runs keep their sealed basis. The walk's W7 shows the erratum beneath it.
+- **B11:** a finding present, the rule removed: caught.
+
+**Ruling 2, the unrecoverable confirmer:**
+- A run whose only credit rests on it gets an erratum at 0 points (zero is data; 0044's CHECK is
+  `>= 0`). It says the points rest on a confirmer not recoverable, the C3 rule cannot be applied,
+  and the sealed score stands.
+- Tested on the function, and the 0-point row and its line at the database.
+
+**Found on the fresh copy:**
+- **Two scripts read prod's state, now that prod holds the marks:** `verify_pov_print` (run 21 as
+  Curia's visible run) and `verify_c3` (an empty marks table). `verify_c3` now reads only what it
+  wrote. `verify_pov_print`'s expected Curia run is now 13.
+- **The POV's print footer named a marked run** ("latest locked run, run 21"). It now reads "latest
+  unmarked run, run 13" where an engagement has marks; otherwise as ruled on 19 Oct.
+
+**Gate A on the fresh copy:**
+- **The full regression: all 42 scripts pass, and the build and lint are clean.** On the full run,
+  40 passed; `verify_pov_print` (116/0) and `verify_c3` (201/0) passed after the fixes above and
+  were re-run alone. `verify_c3b` 240/0. Bundle `index-DQN6sOQO.js` / `index-pWZMR7ze.css`.
+- **Equivalence against `eaf29a3`:** 58 GETs, 56 identical with C3b's new keys allowed. The 2 left
+  are the lineage's expected changes.
+- **A rehearsal of Brad's acts on a throwaway clone of the copy, migrated as Gate B will (dropped
+  after):**
+  - no blockers on Curia;
+  - the finding, then `1632a5e0`'s withdrawal: it reads `assumed`, "no source on record";
+  - the dry run: 19 credit (runs 3–4 at 20, 5–12 at 35, 13–21 at 45) and 18 unsourced (runs 4–21);
+  - the batch recorded 37;
+  - run hashes 25 of 25.
+- **The screenshots:** `~/lvrf-backups/c3b-screens/`.

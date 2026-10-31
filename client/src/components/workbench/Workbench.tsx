@@ -89,7 +89,7 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
                 // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
-                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? 'credit to a person not customer-side' : errata[0].kind === 'unsourced_figure' ? 'a figure with no source on record' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? (Number(errata[0].points_not_credited) === 0 ? 'a confirmer not recoverable from the seal' : 'credit to a person not customer-side') : errata[0].kind === 'unsourced_figure' ? 'a figure with no source on record' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
                 : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )

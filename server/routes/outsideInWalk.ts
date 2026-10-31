@@ -98,7 +98,7 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                          FROM figure_findings f JOIN persons fp ON fp.id = f.recorded_by_person_id WHERE f.value_outcome_id = vo.id),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
                                                                             'corrects_supports', voe.corrects_supports, 'correction_reason', voe.correction_reason,
-                                                                            'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),
+                                                                            'summary', ev.summary, 'basis', lvrf_evidence_basis(ev), 'basis_reason', lvrf_evidence_basis_reason(ev),
                                                                             -- C3: the row's system-exercise mark.
                                                                             'system_exercise', lvrf_system_exercise_mark('evidence', ev.id),
                                                                             -- Q4k: the citation state, for "Open the citation…"

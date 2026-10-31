@@ -48,7 +48,7 @@ function What({ s }: { s: Step }) {
       const loc = d.locator as Record<string, unknown> | null;
       return (
         <>
-          {str(d.kind).replace(/_/g, ' ')} · {str(d.basis)} — {str(d.summary)}
+          {str(d.kind).replace(/_/g, ' ')} · {str(d.basis)}{d.basis_reason ? <span className="text-warning" data-testid="lineage-basis-reason"> ({str(d.basis_reason)})</span> : null} — {str(d.summary)}
           {d.quote_text ? <span className="block">“{str(d.quote_text)}”</span> : null}
           {loc ? <span className="block">{[loc.document, loc.table, loc.row, loc.column].filter(Boolean).map(str).join(' · ')}: {str(loc.value)} ({str(loc.scale)})</span> : null}
           {d.how_read ? <span className="block text-ink-45">How it was read: {str(d.how_read)}</span> : null}

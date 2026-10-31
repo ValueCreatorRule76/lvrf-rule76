@@ -408,7 +408,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''}{e.basis_reason && <span className="text-warning" data-testid="basis-reason"> ({e.basis_reason})</span>} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
           )}
           {outcome && outcome.withdrawn_links.length > 0 && (
             <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
@@ -435,7 +435,6 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
                 <li key={r.id} className="py-1 text-[12.5px] text-ink" data-testid="w7-run" data-locked={r.locked_at ? 'true' : 'false'}>
                   <Link to={`/runs/${r.id}`} className={'font-semibold text-gold-ink ' + FOCUS_RING}>Run {r.run_number}</Link>
                   {' '}· {r.locked_at ? `locked ${r.locked_at.slice(0, 10)}` : 'not locked'} · confidence {r.confidence_band}{r.confidence_score !== null ? ` ${r.confidence_score}` : ''}
-                  {r.erratum_line && <span className="block text-[11px] text-warning">{r.erratum_line}</span>}
                   {r.system_exercise && <SystemExerciseLine mark={r.system_exercise} />}
                   <ul className="m-0 list-none pl-3 text-[11.5px] text-ink-45">
                     {r.sealed_evidence.length === 0 && <li>sealed no evidence</li>}
@@ -447,6 +446,8 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
                       </li>
                     ))}
                   </ul>
+                  {/* C3b (ruling 1): the sealed basis stays as sealed, with the erratum beneath. */}
+                  {r.erratum_line && <span className="block text-[11px] text-warning" data-testid="w7-erratum">{r.erratum_line}</span>}
                 </li>
               ))}
             </ul>

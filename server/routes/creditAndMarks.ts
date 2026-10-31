@@ -213,7 +213,7 @@ export function creditErrataRouter(pool: Pool): Router {
              model_version, model_fingerprint, sealed_score, sealed_band, points_not_credited, recompute_method, recorded_by_person_id)
            VALUES ($1, $2, $3, 'non_customer_credit', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
           [tenantId, e.run_id, e.value_outcome_id,
-            'The seal credited points to a person who is not customer-side under the C3 rule.',
+            e.unrecoverable_only ? 'The seal credited points to a confirmer not recoverable from it.' : 'The seal credited points to a person who is not customer-side under the C3 rule.',
             'Only a customer-side person, with a role named from a source, earns attestation, committer, verifier or definition credit (model 1.0.2).',
             reason, e.model_version, e.model_fingerprint, e.sealed_score, e.sealed_band, e.points, e.text, actor]);
         await recordAct(client, req, 'POST /api/errata/non-customer-credit', { act: 'record_erratum', tenantId, subjectTable: 'run_errata', subjectId: row.id, resultTable: 'value_runs', resultId: e.run_id, reason });

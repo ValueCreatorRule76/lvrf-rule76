@@ -25,6 +25,8 @@ export interface CreditErratum {
   value_outcome_id: string; sealed_score: number; sealed_band: string;
   model_version: string | null; model_fingerprint: string | null;
   points: number; parts: string[]; text: string;
+  /** C3b (ruling 2): its only credit rests on a confirmer not recoverable from the seal: points 0, the rule not applied. */
+  unrecoverable_only: boolean;
 }
 
 interface SealedFactor { factor: string; question?: string; weight?: number; earned: number; note?: string; gap?: string | null }
@@ -44,10 +46,22 @@ export function definitionPart(def: SealedFactor, who: { full_name: string; cust
   const q = `"${def.question ?? def.factor}"`;
   const earned = Number(def.earned);
   if (who === null) {
-    return { points: 0, part: `${q} (${n1(earned)} of ${def.weight ?? '?'} as sealed): the confirmer is not recoverable from this seal, so no points are counted for it` };
+    return { points: 0, part: `${n1(earned)} of ${def.weight ?? '?'} in ${q} rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it` };
   }
   if (who.customer_side) return { points: 0, part: null };
   return { points: earned, part: `${n1(earned)} of ${def.weight ?? '?'} in ${q} rest on a confirmation by ${who.full_name}` };
+}
+
+/**
+ * What a credit erratum says, from its parts. C3b (Brad, 31 Oct 2026, ruling 2): where credit rests on a confirmer
+ * not recoverable from the seal, it says the C3 rule cannot be applied to it; a run with nothing else still gets
+ * an erratum (points 0), saying so. Either way the sealed score stands.
+ */
+export function creditErratumText(parts: string[], whoNot: string, unrecoverable: boolean, score: number): string {
+  return `From this run's seal: ${parts.join('; ')}. `
+    + (whoNot ? `Under the C3 rule (model 1.0.2) none of these earns credit: ${whoNot}. ` : '')
+    + (unrecoverable ? 'The C3 rule cannot be applied to credit resting on a confirmer not recoverable from this seal. ' : '')
+    + `The sealed score, ${n1(score)} / 100, stands.`;
 }
 
 /**
@@ -116,6 +130,7 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
     const parts: string[] = [];
     const not: Map<string, string> = new Map();
     let points = 0;
+    let unrecoverable = false;
     const creditedEvidence: string[] = [];
     // C3b: the definition factor — its confirmer at sealing, read from the metric version the run sealed.
     const def = c.factors.find((f) => f.factor === 'metric_definition_confirmed');
@@ -123,6 +138,7 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
       const who = await confirmerAtSealing(client, r.id, r.created_at, r.outcome_at_sealing, r.payload.businessMetric);
       const p = who === null ? null : await person(who, r.institution_id);
       const d = definitionPart(def, who === null ? null : p);
+      unrecoverable = who === null;
       points += d.points;
       if (d.part) parts.push(d.part);
       if (p && !p.customer_side && d.points > 0) not.set(p.full_name, p.reason ?? 'not customer-side');
@@ -165,16 +181,15 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
       parts.push(`${n1(Number(f.earned))} of ${f.weight ?? '?'} in "${f.question ?? factor}" were credited to ${p.full_name} ${verb}`);
       not.set(p.full_name, p.reason ?? 'not customer-side');
     }
-    // An erratum states points; a run with none (a confirmer not recoverable, and nothing else) gets none.
-    if (points <= 0) continue;
+    // C3b (ruling 2): a run whose only credit rests on a confirmer not recoverable still gets an erratum, at 0 points.
+    if (points <= 0 && !unrecoverable) continue;
     const whoNot = [...not.entries()].map(([name, why]) => `${name} is not customer-side (${why})`).join('; ');
     out.push({
       run_id: r.id, run_number: r.run_number, engagement: r.engagement, account: r.account, institution_id: r.institution_id,
       value_outcome_id: outcomeId, sealed_score: Number(c.score), sealed_band: c.band,
       model_version: c.modelVersion ?? null, model_fingerprint: c.modelVersion ? (c.modelFingerprint ?? null) : null,
-      points, parts,
-      text: `From this run's seal: ${parts.join('; ')}. Under the C3 rule (model 1.0.2) none of these earns credit: ${whoNot}. `
-        + `The sealed score, ${n1(Number(c.score))} / 100, stands.`,
+      points, parts, unrecoverable_only: points <= 0,
+      text: creditErratumText(parts, whoNot, unrecoverable, Number(c.score)),
     });
   }
   return out;

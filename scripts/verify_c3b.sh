@@ -23,6 +23,7 @@
 #   B8  the run page's sealed banner without its unsourced line: the run-page check catches it
 #   B9  the erratum line without the unsourced kind: the headline check catches it
 #   B10 the POV's baseline without its finding line: the POV check catches it
+#   B11 a finding present, its evidence's basis still system_of_record (the rule removed): the basis check catches it
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -156,8 +157,13 @@ printf '%s' "$MOD1" | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"
 restore "$MODELF"
 # Condition 1, the wording: a confirmer not recoverable from the seal is said so, and counts nothing.
 DP="$(npx tsx -e "import('./$NCC').then(m=>{const f={factor:'metric_definition_confirmed',question:'Q?',weight:20,earned:20};console.log(JSON.stringify([m.definitionPart(f,null),m.definitionPart(f,{full_name:'A',customer_side:true}),m.definitionPart(f,{full_name:'A',customer_side:false})]))})" 2>&1 | tail -1)"
-[ "$DP" = '[{"points":0,"part":"\"Q?\" (20 of 20 as sealed): the confirmer is not recoverable from this seal, so no points are counted for it"},{"points":0,"part":null},{"points":20,"part":"20 of 20 in \"Q?\" rest on a confirmation by A"}]' ] \
+[ "$DP" = '[{"points":0,"part":"20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it"},{"points":0,"part":null},{"points":20,"part":"20 of 20 in \"Q?\" rest on a confirmation by A"}]' ] \
   && ok "the definition's part of a credit erratum: \"the confirmer is not recoverable from this seal\" with no points (condition 1); nothing for a customer-side confirmer; the points otherwise" || bad "definitionPart: $DP"
+
+# Ruling 2 (31 Oct): a run whose only credit rests on an unrecoverable confirmer still gets an erratum, saying the rule cannot be applied.
+CT="$(npx tsx -e "import('./$NCC').then(m=>console.log(m.creditErratumText(['20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it'],'',true,45)))" 2>&1 | tail -1)"
+[ "$CT" = "From this run's seal: 20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it. The C3 rule cannot be applied to credit resting on a confirmer not recoverable from this seal. The sealed score, 45 / 100, stands." ] \
+  && ok "a run with only that credit: its erratum says the points rest on a confirmer not recoverable, the rule cannot be applied, and the sealed score stands" || bad "creditErratumText: $CT"
 
 step "3. Clone the prod copy; migrate through 0044; harden; what 0044 orphans"
 dropdb --if-exists "$VERIFY_DB"
@@ -352,10 +358,25 @@ cw() {  # MODE [LOGNAME] (env per mode)
     [ "$rc" = "0" ] || bad "the $1 walk exited $rc (see $log)"
   fi
 }
+# A link withdrawn BEFORE the finding: it did not support the figure when the finding was recorded, and keeps its own basis.
+expect POST "/api/value-outcomes/$OV/evidence" "$(J kind public_filing provenance 'Fixture filing (not a source)' summary 'C3b filing, withdrawn before the finding (fixture)' supports baseline source_verified false ai_sourced false simulated false evidence_form quote quote_text 'Named in the filing.' how_read 'Read as published, from the fixture.')" 201 "a filing linked to V's baseline"
+EVEARLY="$(rj b.evidence_id)"
+expect POST "/api/value-outcomes/$OV/evidence/$EVEARLY/withdraw" "$(J reason 'Verification: withdrawn before the finding.')" 200 "  ...withdrawn before the finding"
+BAS() { q "SELECT lvrf_evidence_basis(e) || '|' || coalesce(lvrf_evidence_basis_reason(e), '-') FROM evidence e WHERE e.id = '$1'"; }
+[ "$(BAS "$EVV")" = "system_of_record|-" ] && ok "before the finding: the export reads system_of_record, from its kind" || bad "basis before: $(BAS "$EVV")"
 RUN="$RV3" WOULD_SAY="$WANT" cw finding
 FV="$(q "SELECT id FROM figure_findings WHERE value_outcome_id = '$OV'")"
 [ "$(q "SELECT finding_text FROM figure_findings WHERE id = '$FV'")" = "$WANT" ] && [ "$(q "SELECT (value = 214)::text || '|' || (SELECT string_agg(act::text, ',') FROM governance_acts WHERE subject_id = '$FV') FROM figure_findings WHERE id = '$FV'")" = "true|find" ] \
   && ok "  ...in the database: the finding as the form said, the figure 214, its act" || bad "  ...finding row: $(q "SELECT finding_text || ' | ' || value FROM figure_findings WHERE id = '$FV'")"
+# Ruling 1 (31 Oct): where a finding covers a figure, its evidence reads 'assumed', with the reason; sealed runs keep theirs.
+[ "$(BAS "$EVV")" = "assumed|no source on record" ] && ok "after the finding: the export reads assumed, \"no source on record\" (ruling 1)" || bad "basis after: $(BAS "$EVV")"
+[ "$(BAS "$EVEARLY")" = "published|-" ] && ok "  ...a link withdrawn before the finding keeps its own basis" || bad "  ...early: $(BAS "$EVEARLY")"
+[ "$(q "SELECT string_agg(DISTINCT x->>'basis', ',') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id IN ('$RV1', '$RV2', '$RV3') AND x->>'kind' = 'system_export'")" = "system_of_record" ] && ok "  ...the sealed runs keep their sealed basis" || bad "  ...sealed basis changed"
+# B11 — a finding present, the basis rule removed.
+fnbreak lvrf_evidence_basis "    WHEN lvrf_evidence_under_finding(e.id) THEN 'assumed'
+" ""
+[ "$(q "SELECT lvrf_evidence_basis(e) FROM evidence e WHERE e.id = '$EVV'")" = "system_of_record" ] && ok "B11: a finding present and the rule removed → caught: the basis would still read system_of_record" || bad "B11: $(BAS "$EVV")"
+reharden
 expect GET /api/errata/non-customer-credit "" 200 "the dry run"
 CREDIT="$(rj b.count)"; UNSOURCED="$(rj b.unsourced_count)"
 TXT() { rj "b.errata.find(x=>x.run_id==='$1')?.text ?? ''"; }
@@ -436,6 +457,15 @@ restore "$POVP"
 # Condition 2 on the API: every evidence row verified with no citation opened, as the row stands.
 expect GET "/api/institutions/$INSTV/pov" "" 200 "V's POV"
 [ "$(rj "b.outcomes.flatMap(o=>o.evidence).filter(e=>e.verified_unopened).map(e=>e.summary).join('|')")" = "C3b export attested by the analyst (fixture)" ] && ok "  ...verified_unopened on the attested export alone" || bad "  ...verified_unopened: $(rj "JSON.stringify(b.outcomes.flatMap(o=>o.evidence).map(e=>[e.summary,e.verified_unopened]))")"
+
+# Ruling 1: the finding's own withdrawal keeps its evidence covered.
+expect POST "/api/value-outcomes/$OV/evidence/$EVV/withdraw" "$(J reason 'Verification: withdrawn after the finding, as the acts run.')" 200 "the export's link withdrawn after the finding"
+[ "$(BAS "$EVV")" = "assumed|no source on record" ] && ok "  ...it still reads assumed, \"no source on record\"" || bad "  ...after the withdrawal: $(BAS "$EVV")"
+expect GET "/api/lineage/value_outcomes/$OV?figure=baseline" "" 200 "the baseline's lineage"
+[ "$(rj "(Array.isArray(b)?b:b.steps).filter(s=>s.kind==='evidence'&&s.detail.summary.startsWith('C3b export')).map(s=>s.detail.basis+'|'+s.detail.basis_reason).join()")" = "assumed|no source on record" ] && ok "  ...and in the lineage" || bad "  ...lineage: $(rj "JSON.stringify((Array.isArray(b)?b:b.steps).filter(s=>s.kind==='evidence').map(s=>s.detail))" | head -c 300)"
+# Ruling 2: a credit erratum may state no points; its line says why.
+Z1="$(printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nINSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, kind, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, points_not_credited, recompute_method, recorded_by_person_id) SELECT '%s', r.id, '%s', 'non_customer_credit', 'The seal credited points to a confirmer not recoverable from it.', 'Only a customer-side person earns the credit.', 'Verification: a zero-point erratum.', r.confidence_score, r.confidence_band, 0, 'From this run''s seal: the confirmer is not recoverable.', '%s' FROM value_runs r WHERE r.id = '%s';\nSELECT 'LINE:' || lvrf_run_erratum_line('%s');\nROLLBACK;\n" "$S" "$TEN" "$OZ" "$S" "$RZ1" "$RZ1" | psql -X -q -At -d "$VERIFY_DB" 2>&1 | grep -E 'LINE:|ERROR' | head -1)"
+[ "$Z1" = "LINE:erratum: its definition rests on a confirmer not recoverable from the seal" ] && ok "  ...its line: \"${Z1#LINE:}\" (rolled back)" || bad "  ...zero-point line: $Z1"
 
 step "10. M1 for 1.0.1 (B3), and the seals"
 cat > "$W/recompute.ts" <<TS

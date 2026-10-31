@@ -39,7 +39,7 @@ ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_kind_known" CHECK ("run_erra
 ALTER TABLE "run_errata" ADD CONSTRAINT "run_errata_kind_complete" CHECK (("run_errata"."kind" = 'link_correction' AND "run_errata"."evidence_id" IS NOT NULL AND "run_errata"."corrected_to_supports" IS NOT NULL AND "run_errata"."points_not_credited" IS NULL AND "run_errata"."figure_finding_id" IS NULL)
         OR ("run_errata"."kind" = 'non_customer_credit' AND "run_errata"."evidence_id" IS NULL AND "run_errata"."corrected_to_supports" IS NULL AND "run_errata"."supersedes_id" IS NULL
             AND "run_errata"."recomputed_score" IS NULL AND "run_errata"."recomputed_band" IS NULL AND "run_errata"."figure_finding_id" IS NULL
-            AND "run_errata"."points_not_credited" IS NOT NULL AND "run_errata"."points_not_credited" > 0 AND "run_errata"."points_not_credited" <= 100
+            AND "run_errata"."points_not_credited" IS NOT NULL AND "run_errata"."points_not_credited" >= 0 AND "run_errata"."points_not_credited" <= 100
             AND "run_errata"."recompute_method" LIKE 'From this run''s seal:%')
         OR ("run_errata"."kind" = 'unsourced_figure' AND "run_errata"."figure_finding_id" IS NOT NULL AND "run_errata"."evidence_id" IS NULL AND "run_errata"."corrected_to_supports" IS NULL
             AND "run_errata"."supersedes_id" IS NULL AND "run_errata"."recomputed_score" IS NULL AND "run_errata"."recomputed_band" IS NULL AND "run_errata"."points_not_credited" IS NULL
