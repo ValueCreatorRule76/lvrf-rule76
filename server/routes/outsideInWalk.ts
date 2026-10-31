@@ -92,6 +92,10 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
                     -- C2c: how many locked runs sealed this outcome, for the correction's confirmation.
                     'sealed_run_count', (SELECT count(*) FROM value_runs r WHERE r.locked_at IS NOT NULL AND r.deleted_at IS NULL AND r.payload->>'valueOutcomeId' = vo.id::text),
+                    -- C3b: a steward's finding that a figure has no source on record, shown beside the figure.
+                    'figure_findings', (SELECT coalesce(json_agg(json_build_object('field', f.field, 'value', trim_scale(f.value)::text, 'finding_text', f.finding_text,
+                                          'recorded_by', fp.full_name, 'recorded_on', to_char(f.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY f.field), '[]')
+                                         FROM figure_findings f JOIN persons fp ON fp.id = f.recorded_by_person_id WHERE f.value_outcome_id = vo.id),
                     'evidence', coalesce((SELECT json_agg(json_build_object('id', ev.id, 'kind', ev.kind, 'supports', voe.supports,
                                                                             'corrects_supports', voe.corrects_supports, 'correction_reason', voe.correction_reason,
                                                                             'summary', ev.summary, 'basis', lvrf_evidence_basis(ev),
@@ -100,6 +104,8 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                                             -- Q4k: the citation state, for "Open the citation…"
                                                                             'ai_sourced', ev.ai_sourced, 'source_verified', ev.source_verified,
                                                                             'citation_resolved', ev.citation_resolved,
+                                                                            -- C3b (Brad's condition 2): verified, with no citation opened (a derived reading).
+                                                                            'verified_unopened', ev.source_verified AND NOT ev.citation_resolved,
                                                                             'citation_resolved_by', (SELECT full_name FROM persons WHERE id = ev.citation_resolved_by_person_id),
                                                                             'citation_resolved_at', to_char(ev.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
                                                                             -- P1 (0039): what it rests on, and its latest figure check against this outcome.

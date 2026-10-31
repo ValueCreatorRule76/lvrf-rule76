@@ -1,3 +1,4 @@
+import type { FigureFinding } from '../components/RecordReadings';
 import type { EvidenceFormShown, FigureCheckShown } from '../components/EvidenceRestsOn';
 // GET /api/institutions/:id/pov — O2's one read for the account POV and the
 // account page's hypothesis, summary and reference-example cards. snake_case,
@@ -98,6 +99,8 @@ export interface PovEvidence {
   /** C3: an attester's customer-side roles with their sources, or why the attester is not customer-side; the row's mark. */
   attester_roles: string | null; attester_not_customer_side: string | null;
   system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
+  /** C3b (Brad's condition 2): verified with no citation opened (a derived reading). */
+  verified_unopened?: boolean;
   figure_check: FigureCheckShown | null;
 }
 
@@ -126,6 +129,8 @@ export interface PovOutcome {
   /** C3: the committer's and verifier's customer-side roles with their sources, or why not. */
   committer_roles: string | null; committer_not_customer_side: string | null;
   verifier_roles: string | null; verifier_not_customer_side: string | null;
+  /** C3b: a steward's finding that a figure has no source on record. */
+  figure_findings?: FigureFinding[];
   actual_value: string | null;
   actual_measured_on: string | null;
   verified_by: string | null;
@@ -136,7 +141,7 @@ export interface PovOutcome {
   evidence: PovEvidence[];
   /** C1: links withdrawn by a correction, listed apart. */
   /** C2c: link_evidence_id, and whether a correcting link replaced it (false: withdrawn alone). */
-  withdrawn_links: { supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string; link_evidence_id: string; replaced: boolean }[];
+  withdrawn_links: { supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string; link_evidence_id: string; replaced: boolean; verified_unopened?: boolean }[];
   /** C2c: how many locked runs sealed this outcome. */
   sealed_run_count: number;
 }

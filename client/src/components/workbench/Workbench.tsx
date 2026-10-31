@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { businessMetricName, isEnrichedBusinessMetric, type Run, type RunErratum } from '../../types/run';
 import { MARKER_KIND, type Pov } from '../../api/pov';
@@ -7,6 +7,7 @@ import { label, supportsChoices, supportsShort, DISCLOSURE, REALIZATION, STAGE_L
 import { GovernedAction } from '../GovernedAction';
 import { FOCUS_RING, GovernedForm } from '../GovernedForm';
 import { useActor } from '../../actor/ActorContext';
+import { apiFetch } from '../../api/http';
 import { ConfidenceBadge } from './Workspace';
 import { FigureCheckLine } from '../EvidenceRestsOn';
 import { EvidenceCard } from './EvidenceCard';
@@ -48,6 +49,8 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
   const marker = account.status === 'ok' ? account.pov.reference_example : null;
   const errata = (run.errata ?? []).filter((x) => x.superseded_by_id === null);
   const line = compact ? ' ' + HEADER_LINE : '';
+  // C3b (ruling 5): a sealed "validated" label is never shown without the erratum saying its figure has no source on record.
+  const unsourced = unsourcedLines(run);
   return (
     <div data-testid="banners">
       {marker && (
@@ -69,6 +72,7 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
       {p.bannerTitle && (
         <div className={'bg-ink px-4 py-2 font-mono text-[12px] tracking-[.04em] text-offwhite sm:px-6' + line} data-testid="banner-sealed">
           {p.bannerTitle} — as recorded at sealing
+          {unsourced && <span className="text-gold" data-testid="banner-sealed-unsourced"> · {unsourced}</span>}
         </div>
       )}
       {verified
@@ -85,13 +89,19 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
                 // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
-                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? 'credit to a person not customer-side' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? 'credit to a person not customer-side' : errata[0].kind === 'unsourced_figure' ? 'a figure with no source on record' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
                 : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )
         : errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
   );
+}
+
+/** C3b: the run's current unsourced-figure errata, as lines ("erratum: its baseline, 214, has no source on record"). */
+function unsourcedLines(run: Run): string | null {
+  const xs = (run.errata ?? []).filter((x) => x.superseded_by_id === null && x.kind === 'unsourced_figure' && x.line);
+  return xs.length > 0 ? xs.map((x) => x.line).join('; ') : null;
 }
 
 const band = (b: string) => b.charAt(0).toUpperCase() + b.slice(1);
@@ -108,6 +118,9 @@ function ErratumBanner({ x }: { x: RunErratum }) {
       {x.kind === 'non_customer_credit'
         // C3: the points the seal credited to people not customer-side, read from the seal; no recomputed total.
         ? <>{' '}<span data-testid="erratum-credit">{x.recompute_method}</span></>
+        : x.kind === 'unsourced_figure'
+        // C3b: the figure the seal carries with no source on record, read from the seal and the record; nothing recomputed.
+        ? <>{' '}<span data-testid="erratum-unsourced">{x.recompute_method.replace(/\s*The sealed record below is unchanged\.$/, '')}</span></>
         : x.recomputed_score === null || x.recomputed_band === null
         // C2 (Brad, 25 Oct 2026): the server could not reproduce the seal; its sentence says why. No score is shown but the sealed one.
         ? <>{' '}<span data-testid="erratum-not-recomputed">{x.recompute_method.replace(/\s*The sealed run is unchanged\.$/, '').replace(/\.$/, '')}</span> (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>
@@ -124,7 +137,7 @@ function PrintPageOne({ run, account }: { run: Run; account: AccountRead }) {
   return (
     <div className="hidden print:block" data-testid="print-page-one">
       {marker && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]" data-testid="print-marker-full">{MARKER_KIND[marker.kind].banner} · Source: {marker.source_citation}</p>}
-      {run.payload.bannerTitle && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]">{run.payload.bannerTitle} — as recorded at sealing</p>}
+      {run.payload.bannerTitle && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]">{run.payload.bannerTitle} — as recorded at sealing{unsourcedLines(run) ? ` · ${unsourcedLines(run)}` : ''}</p>}
       {run.system_exercise && <p className="m-0 mb-1 font-mono text-[10.5px] text-ink [overflow-wrap:anywhere]" data-testid="print-system-exercise-full">SYSTEM EXERCISE — marked by {run.system_exercise.marked_by}, {day(run.system_exercise.marked_on)}. {run.system_exercise.reason}</p>}
       {errata.map((x) => <ErratumBanner key={x.id} x={x} />)}
     </div>
@@ -372,6 +385,82 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
   );
 }
 
+interface FigureState {
+  field: string; label: string; value: string; unit: string | null; blockers: string[]; would_say: string | null;
+  finding: { finding_text: string; reason: string; recorded_by: string; recorded_on: string } | null;
+}
+
+/**
+ * C3b (Brad, 27 Oct 2026; C3b-D3): the steward records that a figure of this run's outcome has no source on record.
+ * The server reads the figure and builds what the finding says from the record; it refuses when the record holds
+ * something from the account (the three facts the finding states). No figure and no sealed run is changed: the
+ * errata batch then lists one erratum beside each sealed run that carries the figure.
+ */
+function FindingOnRun({ run, onChanged }: { run: Run; onChanged: () => void }) {
+  const { actor } = useActor();
+  const [state, setState] = useState<{ account: string; fields: FigureState[] } | null>(null);
+  const [reload, setReload] = useState(0);
+  const [open, setOpen] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const outcomeId = typeof run.payload.valueOutcomeId === 'string' ? run.payload.valueOutcomeId : null;
+  useEffect(() => {
+    if (!outcomeId || run.locked_at === null) return;
+    let cancelled = false;
+    apiFetch(`/api/value-outcomes/${outcomeId}/figure-findings`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelled) setState(j); }, () => undefined);
+    return () => { cancelled = true; };
+  }, [outcomeId, run.locked_at, reload]);
+  if (!outcomeId || run.locked_at === null || !state) return null;
+  const notSteward = actor?.is_steward ? undefined : `Recording a finding is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
+  const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
+  const btn = 'self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent';
+  const chosen = state.fields.find((f) => f.field === open);
+  return (
+    <section className="flex flex-col gap-1.5 border-t border-rule-soft pt-3 print:hidden" data-testid="finding-on-run" aria-label="The outcome's figures">
+      <p className="m-0 text-[11.5px] text-ink-45" data-testid="finding-on-run-says">
+        <span className="font-semibold text-ink">The outcome&apos;s figures</span> — records that a figure has no source on record; it changes no figure and no sealed run.
+      </p>
+      {state.fields.filter((f) => f.finding).map((f) => (
+        <p key={f.field} className="m-0 max-w-[90ch] text-[11.5px] text-warning" data-testid="finding-on-run-done">
+          No source on record (found {day(f.finding!.recorded_on)} by {f.finding!.recorded_by}): {f.finding!.finding_text}
+        </p>
+      ))}
+      {open === null && state.fields.filter((f) => !f.finding).map((f) => (
+        f.blockers.length > 0
+          ? <p key={f.field} className="m-0 max-w-[90ch] text-[11.5px] text-ink-45" data-testid="finding-on-run-blocked">
+              The {f.label} cannot be recorded as having no source: the record holds something from {state.account} ({f.blockers.join('; ')}).
+            </p>
+          : <div key={f.field} className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={Boolean(notSteward)} onClick={() => setOpen(f.field)} className={btn} data-testid="finding-on-run-open" data-field={f.field}>
+                Record that the {f.label}, {f.value}{f.unit ? ` ${f.unit}` : ''}, has no source on record…
+              </button>
+              {notSteward && <span className="max-w-[46ch] text-[11px] text-ink-45" data-testid="finding-on-run-reason">{notSteward}</span>}
+            </div>
+      ))}
+      {chosen && (
+        <div className="border-t border-rule-soft pt-3" data-testid="finding-on-run-form">
+          <GovernedForm<{ figure_finding_id: string; finding_text: string }>
+            path={`/api/value-outcomes/${outcomeId}/figure-findings`}
+            provenanceLabel="What this records"
+            provenance={<p className="m-0 text-[12.5px] text-ink">A finding on this outcome&apos;s {chosen.label}, by you, dated, with its act. The server writes what it says, from the record: <span data-testid="finding-would-say">“{chosen.would_say}”</span> <strong>No figure and no sealed run is changed</strong>; the errata batch on the Runs page then lists one erratum beside each sealed run that carries it.</p>}
+            fields={<label className="block"><span className={L}>Why</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>}
+            confirm={<span data-testid="confirm-text">Record that the {chosen.label}, {chosen.value}{chosen.unit ? ` ${chosen.unit}` : ''}, has no source on record. A finding is never edited or deleted.</span>}
+            disabledReason={notSteward}
+            canSubmit={reason.trim().length >= 12}
+            unmet={reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : []}
+            buildBody={() => ({ field: chosen.field, reason: reason.trim() })}
+            submitLabel="Record the finding"
+            onSuccess={() => { setOpen(null); setReason(''); setReload((n) => n + 1); onChanged(); }}
+            renderSuccess={() => <>Recorded.</>}
+          />
+          <button type="button" onClick={() => { setOpen(null); setReason(''); }} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * C1: the steward records an erratum on this sealed run, about a link since
  * corrected on its outcome. The recompute is the server's, under the model the
@@ -543,6 +632,7 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
               {p.note && (
                 <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-70" data-testid="run-note">
                   <span className={KICKER} data-testid="sealed-mark">{p.bannerTitle ?? 'Note'}, as recorded at sealing </span> <span data-record>{p.note}</span>
+                  {unsourcedLines(run) && <span className="block text-[11px] text-warning" data-testid="run-note-unsourced">{unsourcedLines(run)}</span>}
                 </p>
               )}
               <StageStrip run={run} />
@@ -552,6 +642,7 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
               </p>
               <Actions run={run} />
               <CorrectOnRun run={run} account={account} onChanged={onChanged} />
+              <FindingOnRun run={run} onChanged={onChanged} />
               <RecordErratum run={run} account={account} onChanged={onChanged} />
             </header>
 

@@ -673,6 +673,10 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              CASE WHEN vp.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(vp.id, vo.institution_id) END AS verifier_not_customer_side,
              vo.actual_value::text, to_char(vo.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS actual_measured_on,
              vp.full_name AS verified_by, vo.source_verified, vo.realization::text, bm.industry_measure_id,
+             -- C3b: a steward's finding that a figure has no source on record, shown beside the figure.
+             (SELECT coalesce(json_agg(json_build_object('field', f.field, 'value', trim_scale(f.value)::text, 'finding_text', f.finding_text,
+                       'reason', f.reason, 'recorded_by', fp.full_name, 'recorded_on', to_char(f.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY f.field), '[]')
+                FROM figure_findings f JOIN persons fp ON fp.id = f.recorded_by_person_id WHERE f.value_outcome_id = vo.id) AS figure_findings,
              -- Q4m: an outcome of a retired engagement is frozen; the POV says so
              -- rather than ask the gap register, which refuses it.
              EXISTS (SELECT 1 FROM engagements eg WHERE eg.id = vo.engagement_id
@@ -703,6 +707,8 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
              CASE WHEN ap.id IS NULL THEN NULL ELSE lvrf_customer_roles(ap.id, vo.institution_id) END AS attester_roles,
              CASE WHEN ap.id IS NULL THEN NULL ELSE lvrf_customer_side_reason(ap.id, vo.institution_id) END AS attester_not_customer_side,
              lvrf_system_exercise_mark('evidence', e.id) AS system_exercise,
+             -- C3b (Brad's condition 2): a derived reading, changing nothing — verified, with no citation opened.
+             (e.source_verified AND NOT e.citation_resolved) AS verified_unopened,
              to_char(coalesce(e.attested_at, e.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS stated_on,
              (SELECT jsonb_build_object('result', c.result, 'detail', c.detail, 'rules_version', c.rules_version)
                 FROM figure_checks c WHERE c.evidence_id = e.id AND c.subject_table = 'value_outcomes' AND c.subject_id = voe.value_outcome_id
@@ -770,7 +776,8 @@ async function assemblePov(pool: Pool, req: Request, institutionId: string) {
            -- (a correcting link in any state: corrected and later withdrawn, it was still replaced)
            EXISTS (SELECT 1 FROM value_outcome_evidence c WHERE c.value_outcome_id = w.value_outcome_id AND c.evidence_id = w.evidence_id
                      AND c.corrects_supports = w.supports) AS replaced,
-           to_char(w.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS withdrawn_on, w.withdrawal_reason AS reason
+           to_char(w.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS withdrawn_on, w.withdrawal_reason AS reason,
+           (e.source_verified AND NOT e.citation_resolved) AS verified_unopened
       FROM value_outcome_evidence w JOIN evidence e ON e.id = w.evidence_id
       JOIN persons wp ON wp.id = w.withdrawn_by_person_id
       JOIN value_outcomes vo ON vo.id = w.value_outcome_id

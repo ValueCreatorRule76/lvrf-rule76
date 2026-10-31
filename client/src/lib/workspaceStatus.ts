@@ -46,11 +46,15 @@ export interface WalkState {
         corrects_supports: string | null; correction_reason: string | null;
         /** C3: the row's system-exercise mark. */
         system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
+        /** C3b (Brad's condition 2): verified with no citation opened (a derived reading). */
+        verified_unopened?: boolean;
       }[];
       /** C1: links withdrawn by a correction, kept and shown struck through. */
       withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
       /** C2c: how many locked runs sealed this outcome. */
       sealed_run_count: number;
+      /** C3b: a steward's finding that a figure has no source on record. */
+      figure_findings?: { field: string; value: string; finding_text: string; recorded_by: string; recorded_on: string }[];
     }[];
     runs: {
       id: string; run_number: number; locked_at: string | null; confidence_band: string; confidence_score: string | null;

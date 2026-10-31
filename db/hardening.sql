@@ -1425,13 +1425,23 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- C3 (Brad's condition): beside a headline score taken from a run that carries a current erratum, one line.
+-- C3b: one erratum's line (lvrf_erratum_line), and the run's current errata joined (lvrf_run_erratum_line).
+CREATE OR REPLACE FUNCTION lvrf_erratum_line(p_erratum uuid) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT CASE
+           WHEN x.kind = 'non_customer_credit' THEN 'erratum: ' || trim(to_char(x.points_not_credited, 'FM999.9'), '.') || ' of these points rest on a person who is not customer-side'
+           -- C3b: the figure a seal carries with no source on record.
+           WHEN x.kind = 'unsourced_figure' THEN (SELECT 'erratum: its ' || CASE f.field WHEN 'baseline_value' THEN 'baseline' WHEN 'actual_value' THEN 'actual'
+                                                          ELSE 'claimed currency impact' END || ', ' || trim_scale(f.value)::text || ', has no source on record'
+                                                   FROM figure_findings f WHERE f.id = x.figure_finding_id)
+           WHEN x.recomputed_score IS NULL THEN 'erratum: a link corrected since sealing; not recomputed'
+           ELSE 'erratum: a link corrected since sealing; recomputed ' || trim(to_char(x.recomputed_score, 'FM999.9'), '.') || ' / 100' END
+    FROM run_errata x WHERE x.id = p_erratum
+$$;
 CREATE OR REPLACE FUNCTION lvrf_run_erratum_line(p_run uuid) RETURNS text
 LANGUAGE sql STABLE AS $$
-  SELECT string_agg(CASE
-           WHEN x.kind = 'non_customer_credit' THEN 'erratum: ' || trim(to_char(x.points_not_credited, 'FM999.9'), '.') || ' of these points rest on a person who is not customer-side'
-           WHEN x.recomputed_score IS NULL THEN 'erratum: a link corrected since sealing; not recomputed'
-           ELSE 'erratum: a link corrected since sealing; recomputed ' || trim(to_char(x.recomputed_score, 'FM999.9'), '.') || ' / 100' END,
-         '; ' ORDER BY x.recorded_at)
+  -- C3b: errata of one batch share their moment; the kind, then the id, keep the line's order fixed.
+  SELECT string_agg(lvrf_erratum_line(x.id), '; ' ORDER BY x.recorded_at, x.kind, x.id)
     FROM run_errata x
    WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
 $$;
@@ -1888,7 +1898,7 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks', 'figure_findings']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2187,13 +2197,31 @@ BEGIN
     RAISE EXCEPTION 'LVRF: run_errata: an erratum is recorded on a locked run; an unlocked run is replaced, not corrected.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
-  -- C3: a run sealed before runs carried their outcome (Curia 5-6) is named by its engagement's outcome
+  -- C3: a run sealed before runs carried their outcome (Curia 3-6) is named by its engagement's outcome
   -- (a credit erratum only); every other erratum names the outcome the run sealed.
+  -- C3b: an unsourced-figure erratum names the outcome the run sealed, read from the seal or, for a run that
+  -- sealed none, the engagement's outcome current at its sealing (lvrf_run_outcome_at_sealing; exact or NULL).
   IF r.outcome IS DISTINCT FROM NEW.value_outcome_id::text
      AND NOT (NEW.kind = 'non_customer_credit' AND r.outcome IS NULL
               AND EXISTS (SELECT 1 FROM value_outcomes vo JOIN value_runs vr ON vr.engagement_id = vo.engagement_id
-                           WHERE vr.id = NEW.value_run_id AND vo.id = NEW.value_outcome_id)) THEN
+                           WHERE vr.id = NEW.value_run_id AND vo.id = NEW.value_outcome_id))
+     AND NOT (NEW.kind = 'unsourced_figure' AND r.outcome IS NULL AND lvrf_run_outcome_at_sealing(NEW.value_run_id) = NEW.value_outcome_id) THEN
     RAISE EXCEPTION 'LVRF: run_errata: the erratum''s outcome is not the one run % sealed.', NEW.value_run_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- C3b: an unsourced-figure erratum is about its finding: the finding's outcome, and a seal carrying that figure at that value.
+  IF NEW.kind = 'unsourced_figure' AND NOT EXISTS (
+       SELECT 1 FROM figure_findings f JOIN value_runs vr ON vr.id = NEW.value_run_id
+        WHERE f.id = NEW.figure_finding_id AND f.value_outcome_id = NEW.value_outcome_id
+          AND (vr.payload->>(CASE f.field WHEN 'baseline_value' THEN 'baselineValue' WHEN 'actual_value' THEN 'actualValue' ELSE 'claimedCurrencyImpact' END))::numeric = f.value) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: an unsourced-figure erratum names its finding, beside a run whose seal carries that figure at that value.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- C3b (condition 3): what the erratum states of the account stays true whenever it is written.
+  IF NEW.kind = 'unsourced_figure' AND coalesce(array_length(lvrf_figure_finding_blockers(
+       (SELECT f.institution_id FROM figure_findings f WHERE f.id = NEW.figure_finding_id)), 1), 0) > 0 THEN
+    RAISE EXCEPTION 'LVRF: run_errata: the record now holds something from this account (%), so "no source on record" cannot be stated.',
+      array_to_string(lvrf_figure_finding_blockers((SELECT f.institution_id FROM figure_findings f WHERE f.id = NEW.figure_finding_id)), '; ')
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   -- An erratum is about a correction: a current, correcting link of that support (C3: a link correction's).
@@ -2278,7 +2306,7 @@ BEGIN
   IF t NOT IN ('research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
                'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks') THEN
+               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2432,6 +2460,7 @@ BEGIN
       WHEN 'research_imports' THEN what := 'an import';
       WHEN 'customer_role_grants' THEN what := 'a role named';
       WHEN 'system_exercise_marks' THEN what := 'a mark';
+      WHEN 'figure_findings' THEN what := 'a finding';
       WHEN 'value_outcome_evidence' THEN
         IF n->>'corrects_supports' IS NOT NULL THEN what := 'a correcting link'; END IF;
       ELSE NULL;
@@ -2468,7 +2497,7 @@ BEGIN
     'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks']
+    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -2567,6 +2596,8 @@ BEGIN
     jsonb_build_object('kind', e.kind, 'summary', e.summary, 'provenance', e.provenance, 'basis', e.basis,
                        'evidence_form', e.evidence_form, 'quote_text', e.quote_text, 'locator', e.locator, 'how_read', e.how_read,
                        'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified,
+                       -- C3b (Brad's condition 2): a derived reading, changing nothing: verified, and no citation opened.
+                       'verified_unopened', e.source_verified AND NOT e.citation_resolved,
                        -- C3: the row's system-exercise mark; an attester's customer-side role with its source, or why not.
                        'system_exercise', lvrf_system_exercise_mark('evidence', e.id),
                        'attested_by', (SELECT full_name FROM persons WHERE id = e.attested_by_person_id),
@@ -2587,8 +2618,11 @@ BEGIN
            ELSE jsonb_build_object('source_verified', e.source_verified, 'note', 'recorded before governance acts (25 Oct 2026)') END;
   END IF;
   IF e.attested_by_person_id IS NOT NULL THEN
+    -- C3b (Brad, 27 Oct 2026): the step states what was attested, by whom, and whether they are customer-side.
     RETURN QUERY SELECT 'attested'::text, 'evidence'::text, e.id, (SELECT full_name FROM persons WHERE id = e.attested_by_person_id), e.attested_at,
-      'record'::text, '{}'::jsonb;
+      'record'::text, jsonb_build_object('kind', e.kind, 'summary', e.summary,
+        'attester_roles', lvrf_customer_roles(e.attested_by_person_id, e.institution_id),
+        'attester_not_customer_side', lvrf_customer_side_reason(e.attested_by_person_id, e.institution_id));
   END IF;
   RETURN QUERY SELECT 'figure_check'::text, 'figure_checks'::text, f.id, (SELECT full_name FROM persons WHERE id = f.checked_by_person_id), f.checked_at,
     'record'::text, jsonb_build_object('result', f.result, 'detail', f.detail, 'subject', f.subject_table || '.' || f.subject_field)
@@ -2645,7 +2679,7 @@ RETURNS jsonb LANGUAGE sql STABLE AS $$
            'id', x.id, 'recorded_by', p.full_name, 'recorded_at', x.recorded_at,
            'sealed', x.sealed_score, 'recomputed', x.recomputed_score, 'what_was_wrong', x.what_was_wrong,
            'kind', x.kind, 'points_not_credited', x.points_not_credited,
-           'supersedes', x.supersedes_id IS NOT NULL) ORDER BY x.recorded_at), '[]'::jsonb)
+           'supersedes', x.supersedes_id IS NOT NULL) ORDER BY x.recorded_at, x.kind, x.id), '[]'::jsonb)
     FROM run_errata x JOIN persons p ON p.id = x.recorded_by_person_id
    WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
 $$;
@@ -2785,7 +2819,7 @@ BEGIN
                'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
                  'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x2.id))
                  || CASE WHEN ea.id IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END)
-               ORDER BY r.run_number, x2.recorded_at)
+               ORDER BY r.run_number, x2.recorded_at, x2.kind, x2.id)
         FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
         LEFT JOIN governance_acts ea ON ea.subject_table = 'run_errata' AND ea.subject_id = x2.id AND ea.act = 'record_erratum'
        WHERE x2.evidence_id = p_id), '[]'::jsonb);
@@ -2802,6 +2836,14 @@ BEGIN
             CASE WHEN p_figure = 'actual' AND a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
             jsonb_build_object('metric', o.metric, 'unit', o.unit, 'value', CASE WHEN p_figure = 'baseline' THEN o.baseline_value ELSE o.actual_value END,
                                'measured_at', CASE WHEN p_figure = 'baseline' THEN o.baseline_measured_at ELSE o.actual_measured_at END));
+    -- C3b: a steward's finding that this figure has no source on record, with its act.
+    st := st || coalesce((
+      SELECT jsonb_agg(jsonb_build_object('kind', 'finding', 'row_table', 'figure_findings', 'row_id', f.id, 'actor', fp.full_name, 'at', f.recorded_at,
+               'source', CASE WHEN fa.id IS NOT NULL THEN 'act' ELSE 'record' END,
+               'detail', jsonb_build_object('finding_text', f.finding_text, 'reason', f.reason, 'value', f.value)))
+        FROM figure_findings f JOIN persons fp ON fp.id = f.recorded_by_person_id
+        LEFT JOIN governance_acts fa ON fa.subject_table = 'figure_findings' AND fa.subject_id = f.id AND fa.act = 'find'
+       WHERE f.value_outcome_id = p_id AND f.field = CASE p_figure WHEN 'baseline' THEN 'baseline_value' ELSE 'actual_value' END), '[]'::jsonb);
     FOR ev IN SELECT v.evidence_id FROM value_outcome_evidence v JOIN evidence e ON e.id = v.evidence_id
                WHERE v.value_outcome_id = p_id AND (v.supports = p_figure OR v.corrects_supports = p_figure)
                GROUP BY v.evidence_id, e.created_at ORDER BY e.created_at, v.evidence_id LOOP
@@ -2821,10 +2863,11 @@ BEGIN
     st := st || coalesce((
       SELECT jsonb_agg(jsonb_build_object('kind', 'erratum', 'row_table', 'run_errata', 'row_id', x2.id, 'actor', p.full_name, 'at', x2.recorded_at,
                'source', CASE WHEN ea.id IS NOT NULL THEN 'act' ELSE 'record' END,
-               'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score,
+               'detail', jsonb_build_object('run_number', r.run_number, 'sealed', x2.sealed_score, 'recomputed', x2.recomputed_score, 'kind', x2.kind,
+                 'line', lvrf_run_erratum_line(r.id),
                  'supersedes', x2.supersedes_id, 'superseded', EXISTS (SELECT 1 FROM run_errata s2 WHERE s2.supersedes_id = x2.id))
                  || CASE WHEN ea.id IS NULL THEN jsonb_build_object('note', 'recorded before governance acts (25 Oct 2026)') ELSE '{}'::jsonb END)
-               ORDER BY r.run_number, x2.recorded_at)
+               ORDER BY r.run_number, x2.recorded_at, x2.kind, x2.id)
         FROM run_errata x2 JOIN value_runs r ON r.id = x2.value_run_id JOIN persons p ON p.id = x2.recorded_by_person_id
         LEFT JOIN governance_acts ea ON ea.subject_table = 'run_errata' AND ea.subject_id = x2.id AND ea.act = 'record_erratum'
        WHERE x2.value_outcome_id = p_id), '[]'::jsonb);
@@ -2965,6 +3008,95 @@ DROP TRIGGER IF EXISTS system_exercise_marks_no_delete ON system_exercise_marks;
 CREATE TRIGGER system_exercise_marks_no_delete BEFORE DELETE ON system_exercise_marks
   FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A system-exercise mark is never deleted: the item stays on the record, marked.');
 
+-- ------------------------------------------------------------------
+-- 29. C3b (0044, 27 Oct 2026) — figure findings: a figure with no source on record (LVRF_PLAN §15;
+--     Brad's rulings and conditions; C3b-D3, D4). Placed before section 14 so the manifest includes it.
+-- ------------------------------------------------------------------
+--   lvrf_run_outcome_at_sealing(run): the outcome a run sealed — from its seal, or for a run that sealed
+--     none, the engagement's one outcome current at the run's created_at (created at or before it, not yet
+--     superseded by a successor created at or before it). Exact, or NULL: never a guess (condition 1).
+--   lvrf_figure_finding_blockers(institution): which of the three facts a finding's text states is false.
+--   figure_findings_guard (I), _immutable (U), _audit (I+U), _no_delete (D), and _act_present (I+U, section 27).
+CREATE OR REPLACE FUNCTION lvrf_run_outcome_at_sealing(p_run uuid) RETURNS uuid
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  r record;
+  found_ids uuid[];
+BEGIN
+  SELECT id, engagement_id, created_at, payload->>'valueOutcomeId' AS sealed INTO r FROM value_runs WHERE id = p_run;
+  IF r.id IS NULL THEN RETURN NULL; END IF;
+  IF r.sealed IS NOT NULL THEN RETURN r.sealed::uuid; END IF;
+  SELECT array_agg(vo.id) INTO found_ids FROM value_outcomes vo
+   WHERE vo.engagement_id = r.engagement_id AND vo.created_at <= r.created_at
+     AND NOT EXISTS (SELECT 1 FROM value_outcomes s WHERE s.id = vo.superseded_by_id AND s.created_at <= r.created_at)
+     AND (vo.deleted_at IS NULL OR vo.deleted_at > r.created_at);
+  RETURN CASE WHEN coalesce(array_length(found_ids, 1), 0) = 1 THEN found_ids[1] ELSE NULL END;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_figure_finding_blockers(p_institution uuid) RETURNS text[]
+LANGUAGE sql STABLE AS $$
+  SELECT array_remove(ARRAY[
+    CASE WHEN EXISTS (SELECT 1 FROM persons p WHERE p.institution_id = p_institution AND p.deleted_at IS NULL AND lvrf_customer_side(p.id, p_institution))
+         THEN 'a person of this account is customer-side' END,
+    CASE WHEN EXISTS (SELECT 1 FROM evidence e WHERE e.institution_id = p_institution AND e.deleted_at IS NULL
+                        AND (e.citation_resolved OR (e.attested_by_person_id IS NOT NULL AND lvrf_customer_side(e.attested_by_person_id, p_institution))))
+         THEN 'evidence of this account has an opened citation or a customer-side attester' END,
+    CASE WHEN EXISTS (SELECT 1 FROM institution_facts f WHERE f.institution_id = p_institution)
+           OR EXISTS (SELECT 1 FROM research_results rr WHERE rr.institution_id = p_institution AND rr.review_state = 'accepted')
+         THEN 'a research result or fact about this account was accepted' END], NULL)
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_figure_finding_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+  vo record;
+  blockers text[];
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF steward IS NULL OR NEW.recorded_by_person_id IS DISTINCT FROM steward
+     OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
+    RAISE EXCEPTION 'LVRF: figure_findings: only the tenant''s steward records a finding.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
+  END IF;
+  SELECT o.id, o.institution_id, i.tenant_id, o.baseline_value, o.actual_value, o.claimed_currency_impact INTO vo
+    FROM value_outcomes o JOIN institutions i ON i.id = o.institution_id WHERE o.id = NEW.value_outcome_id;
+  IF vo.id IS NULL OR vo.tenant_id IS DISTINCT FROM NEW.tenant_id OR vo.institution_id IS DISTINCT FROM NEW.institution_id THEN
+    RAISE EXCEPTION 'LVRF: figure_findings: outcome % is not of this account and tenant.', NEW.value_outcome_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
+  END IF;
+  IF (CASE NEW.field WHEN 'baseline_value' THEN vo.baseline_value WHEN 'actual_value' THEN vo.actual_value ELSE vo.claimed_currency_impact END)
+       IS DISTINCT FROM NEW.value THEN
+    RAISE EXCEPTION 'LVRF: figure_findings: the finding names the figure as it stands; the outcome''s % is not %.', NEW.field, NEW.value
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
+  END IF;
+  blockers := lvrf_figure_finding_blockers(NEW.institution_id);
+  IF coalesce(array_length(blockers, 1), 0) > 0 THEN
+    RAISE EXCEPTION 'LVRF: figure_findings: the record holds something from this account (%), so "no source on record" cannot be stated.', array_to_string(blockers, '; ')
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION lvrf_figure_finding_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'LVRF: figure finding % is final. It records that a figure has no source on record; it is never edited.', OLD.id
+    USING ERRCODE = 'check_violation';
+END $$;
+
+DROP TRIGGER IF EXISTS figure_findings_guard ON figure_findings;
+CREATE TRIGGER figure_findings_guard BEFORE INSERT ON figure_findings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_figure_finding_guard();
+DROP TRIGGER IF EXISTS figure_findings_immutable ON figure_findings;
+CREATE TRIGGER figure_findings_immutable BEFORE UPDATE ON figure_findings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_figure_finding_is_final();
+DROP TRIGGER IF EXISTS figure_findings_audit ON figure_findings;
+CREATE TRIGGER figure_findings_audit AFTER INSERT OR UPDATE ON figure_findings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS figure_findings_no_delete ON figure_findings;
+CREATE TRIGGER figure_findings_no_delete BEFORE DELETE ON figure_findings
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A finding is never deleted: the figure stays on the record, with it.');
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -3075,7 +3207,8 @@ COMMIT;
 --   (deferred constraint triggers) — 26
 --   28: customer_role_grants_guard, _audit, _no_delete, _act_present;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
---   Total: 176 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
+--   Total: 181 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -3088,15 +3221,17 @@ COMMIT;
 --   0039 (P1) took it 129 -> 135: section 25's six.
 --   0040 (C1) took it 135 -> 141: section 26's six.
 --   0041 (P2) took it 141 -> 167: section 27's twenty-six.
---   0043 (C3) took it 167 -> 176: section 28's nine.)
+--   0043 (C3) took it 167 -> 176: section 28's nine.
+--   0044 (C3b) took it 176 -> 181: section 29's five.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 176.
+-- TRUNCATE in section 14 fail. Total stays 181.
 --
--- Expect 274 rows here (260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
+-- Expect 281 rows here (274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
+-- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
 -- information_schema.triggers emits one row per event
 -- manipulation. Each governed table contributes 4 rows (2 + 1 + 1), ×19 = 76;

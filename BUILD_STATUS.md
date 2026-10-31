@@ -13257,3 +13257,123 @@ non-negotiable rule in `CLAUDE.md`:
   steward (C3's errata and marks batches).
 
 No code change. Docs only.
+
+---
+
+## C3b: the definition under the C3 rule; a figure with no source on record; one errata batch — Gate A, 31 October 2026 (UTC)
+
+Built as LVRF_PLAN §15: Brad's rulings of 27 Oct, C3b-D1–D6 as recommended, and his five conditions.
+**Value spine stages served:** `baseline`, `measure` and `verify`, and `return`.
+
+**1. Model 1.0.2** (`676719880d8a`; `DEFINITION_RULE` joins the fingerprint):
+- The definition earns its 20 only for a customer-side confirmer. Otherwise 0, naming the confirmer
+  and why, and the gap register asks for a person.
+- 1.0.1 is frozen in `server/spine/models/confidence_1_0_1.ts`, identical to `eaf29a3` apart from
+  its header and import path. The registry keeps 1.0.0, 1.0.1 and 1.0.2, each at its fingerprint.
+- 1.0.2 seals the metric version's id and the confirmer with their side, reason and roles.
+
+**2. Credit errata gain the definition points** (condition 1):
+- The confirmer is read from the sealed metric id. Otherwise it comes from the one version
+  current at the run's sealing that matches the seal, and the audit log's row for that version as
+  it stood then.
+- If that is not exact, the erratum says "the confirmer is not recoverable from this seal" and
+  counts no points.
+- A run with no other points gets no erratum, because an erratum states points.
+
+**3. The finding and the unsourced-figure erratum** (migration 0044; hardening section 29):
+- **`figure_findings`:** append-only, steward-only, one per outcome and field, with its act `find`.
+  The route is `POST /api/value-outcomes/:outcomeId/figure-findings`; the run page gains "The
+  outcome's figures".
+- **The server builds its text from the record:** who entered the figure, from the audit log, and
+  the three facts.
+- **The three facts:**
+  - no person of the account is customer-side;
+  - no evidence of the account has an opened citation or a customer-side attester;
+  - no research result or fact about the account was accepted.
+
+  The route checks them; the database re-checks them on the finding and on every erratum
+  (condition 3).
+- **`run_errata.kind = 'unsourced_figure'`,** one per locked run whose seal carries the figure at
+  that value, for the outcome it sealed (`lvrf_run_outcome_at_sealing`: exact, or none).
+- **"No source on record", never "invented":** two CHECKs, on whole words, so "Inventec" and
+  "inventory" pass.
+
+**4. One batch** (condition 5): the Runs page shows both counts and both lists before the submit;
+the submit carries both counts and is refused if either changed.
+
+**5. The surfaces:**
+- **The finding's line** beside the figure: the POV, the walk's W4, and the lineage.
+- **The unsourced line** beneath the sealed banner and note ("as recorded at sealing"), on screen
+  and on every printed page, and beneath the provenance label on the Runs list.
+- **Headlines** carry every current erratum line, joined.
+- **"Verified without the source being opened"** (condition 2): a derived reading, on the POV, W6,
+  the run page's sealed items, and the lineage's evidence step.
+
+**Brad's notes from C3's screens:**
+- **Fixed:** on the POV's locked runs, the headline run reads "the latest unmarked" and a marked run
+  "system exercise", never "the latest". The lineage's "Attested" step states what was attested
+  and whether the attester is customer-side.
+- **L47, ruled:** built in the L41 + L42 slice, as a prerequisite of §14.
+  **HOLD: no customer-side role is granted on prod until L47 ships.**
+- **L46 recorded:** Curia's reference-example marker, for Brad's decision once the errata show.
+- **Rule 10 is noted in §15's Gate B:** no paste or script performs the finding, the withdrawal or
+  the batch.
+
+**Migration 0044: what it changes and what it could orphan.**
+- **Changes:** the act `find`; `figure_findings`; `run_errata.figure_finding_id` and the third kind,
+  with their CHECKs.
+- **Orphans nothing:** the existing errata are unchanged and all 25 runs byte-identical.
+- **Counts:** 181 triggers (176 + 5); 281 information_schema rows; 102 CHECKs, each with its plain
+  sentence; 45 migrations; `ownership.sql` 38 INSERT / 22 UPDATE grants; 21 `_act_present`
+  triggers; 20 steward routes.
+
+**Found and fixed in Gate A:**
+- **The "never invented" CHECK first matched any text containing "invent",** which would refuse real
+  names. It caught the script's own fixture account. It now matches whole words, with a check that
+  "Inventec inventory" passes.
+- **0044's regeneration left `ADD VALUE 'find'` in twice,** and drizzle-kit failed silently. Fixed,
+  and verified on a clone.
+- **Errata of one batch share a moment,** so their order in the line and the lineage was arbitrary.
+  It is now fixed by kind, then id.
+- **Screens from break walks were overwriting clean ones:**
+  - in C3 and C3b, a break's walk wrote to the same file as the clean walk;
+  - the saved `c3_book_1280` showed B14's broken page, and it was looked at without that being
+    noticed;
+  - the checks ran on the clean pages, so no result changes;
+  - break walks now save apart, and the shot in `~/lvrf-backups/c3-screens/` is replaced.
+
+**Gate A:**
+- **`verify_c3b.sh`: 224 passed, 0 failed.** New, on its own fixtures; runs sealed under 1.0.0 and
+  1.0.1 by that code itself; roles through the act only.
+- **Breaks, each caught, every file restored byte-identical and every function restored:**
+  - B1: 1.0.2 crediting a non-customer-side confirmer;
+  - B2: `DEFINITION_RULE` out of the fingerprint;
+  - B3: the 1.0.1 scorer dropped;
+  - B4: the confirmer read from the latest metric version;
+  - B5.1–B5.3: each of the finding's three checks removed;
+  - B6: "invented" in a finding and in an erratum;
+  - B7: the batch without its unsourced count check;
+  - B8: the sealed banner without its line;
+  - B9: the erratum line without the kind;
+  - B10: the POV's baseline without its finding line.
+- **The not-recoverable branch is tested on the function,** not end to end: no route can produce a
+  locked run whose metric version is ambiguous.
+- **The dry run on the copy's Curia runs: 19 credit errata**, runs 3–4 at 20 points, 5–12 at 35,
+  13–21 at 45.
+- **The full regression: all 42 scripts pass; the build and lint are clean** (the 1 pre-existing
+  warning; bundle `index-DmHx7DRf.js` / `index-pWZMR7ze.css`).
+  - The first pass had three failures, all script text behind the code: `verify_run_page`,
+    `verify_corrections` and `verify_c2`. Fixed, and each re-run: 273/0, 212/0, 159/0.
+  - The fixes to errata order and to break shots came after that pass. `verify_c3` (201/0),
+    `verify_c3b` and `verify_acts_lineage` (189/0) were re-run on them; the other scripts were
+    not.
+- **Prod-copy equivalence against the deployed `eaf29a3`:** 58 GETs.
+  - Clone A is the deployed state, by that commit's own migrations, ownership and hardening.
+  - Nothing allowed: 14 identical.
+  - With C3b's new keys allowed: **56 identical.** The 2 left are the lineage's expected changes:
+    the "Attested" step's new detail and the erratum step's `kind`.
+- **Not fresh:** the copy is the 27 Oct 02:06 UTC snapshot, from before Brad's withdrawal and 21
+  marks. The regression and equivalence are to be re-run on a fresh copy before Gate B.
+- **For Brad's ruling:** an evidence row's basis comes from its kind, so `1632a5e0` will still read
+  `system_of_record` in the lineage after the finding, below "No source on record". Not changed.
+- **The screenshots:** `~/lvrf-backups/c3b-screens/`.

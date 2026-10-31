@@ -8,6 +8,7 @@ import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { AddEvidenceCard } from './workbench/AddEvidenceCard';
 import { EvidenceRestsOn, FigureCheckLine } from './EvidenceRestsOn';
 import { label, supportsChoices, supportsShort, SUPPORTS } from '../lib/labels';
+import { NoSourceLine, VerifiedUnopenedLine } from './RecordReadings';
 import { SystemExerciseLine } from './SystemExercise';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 
@@ -354,6 +355,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
             <p className="m-0 mb-2 text-[12.5px] text-ink">
               {eng!.name}: {outcome.metric.name}, baseline <strong>{Number(outcome.baseline_value)}</strong> {outcome.metric.unit} at {outcome.baseline_measured_at.slice(0, 10)} ·
               target {outcome.target_value === null ? 'none (a hypothesis)' : Number(outcome.target_value)} · {outcome.realization}, {outcome.confidence}
+              {(outcome.figure_findings ?? []).map((f) => <NoSourceLine key={f.field} finding={f} className="mt-0.5" />)}
             </p>
           )}
           {/* P1: a figure check that flagged, or a statement backing a figure, beside the figures. */}
@@ -406,7 +408,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
           )}
           {outcome && outcome.withdrawn_links.length > 0 && (
             <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>

@@ -269,6 +269,8 @@ function buildRequirement(factor: string, gap: string): string {
           return 'The documented calculation method must be confirmed by a named, non-simulated person of record.';
         case 'confirmer_simulated':
           return 'The calculation method must be confirmed by a real person of record — the current confirmation names a simulated identity.';
+        case 'not_customer_side':
+          return 'The calculation method must be confirmed by a customer-side person: a person of the account whose customer-side role is named from a source (C3b).';
       }
       break;
     case 'baseline_evidence_verified':
@@ -381,9 +383,10 @@ export function gapRegisterRouter(pool: Pool): Router {
         definition_confirmed_by_person_id: string | null;
         definition_confirmed_at: Date | null;
         confirmer_simulated: boolean | null;
+        confirmer_name: string | null;
       }>(
         `SELECT bm.definition_notes, bm.definition_confirmed_by_person_id,
-                bm.definition_confirmed_at, p.simulated AS confirmer_simulated
+                bm.definition_confirmed_at, p.simulated AS confirmer_simulated, p.full_name AS confirmer_name
            FROM business_metrics bm
            LEFT JOIN persons p ON p.id = bm.definition_confirmed_by_person_id
           WHERE bm.id = $1 AND bm.deleted_at IS NULL`,
@@ -464,11 +467,16 @@ export function gapRegisterRouter(pool: Pool): Router {
       };
       const committerSide = await sideOf(vo.committed_by_person_id);
       const verifierSide = await sideOf(vo.verified_by_person_id);
+      const confirmerSide = await sideOf(bm.definition_confirmed_by_person_id);
       const confidenceInput = buildConfidenceInput({
         metricDefinitionNotes: bm.definition_notes,
         metricDefinitionConfirmedByPersonId: bm.definition_confirmed_by_person_id,
         metricDefinitionConfirmedAt: bm.definition_confirmed_at,
         metricDefinitionConfirmerSimulated: bm.confirmer_simulated,
+        metricDefinitionConfirmerName: bm.confirmer_name,
+        metricDefinitionConfirmerCustomerSide: confirmerSide.customer_side,
+        metricDefinitionConfirmerSideReason: confirmerSide.reason,
+        metricDefinitionConfirmerRoles: confirmerSide.roles,
         evidence: rawEvidenceForConfidence,
         claimedCurrencyImpact: vo.claimed_currency_impact === null ? null : Number(vo.claimed_currency_impact),
         realizedCurrencyImpact: vo.realized_currency_impact === null ? null : Number(vo.realized_currency_impact),

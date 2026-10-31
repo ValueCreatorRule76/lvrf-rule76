@@ -8,14 +8,17 @@ import { respondServerError } from '../lib/serverError.js';
 import { requireSteward } from '../lib/stewardActs.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { listCreditErrata } from '../lib/nonCustomerCredit.js';
+import { blockers, enteredBy, findingText, FIGURE_FIELDS, figureText, isFigureField, listUnsourcedErrata, type FigureField } from '../lib/figureFindings.js';
 
 /**
  * C3 (LVRF_PLAN §12; Brad's rulings, 26 Oct 2026) — the steward's acts:
  *
  *   POST /api/institutions/:institutionId/customer-roles   name a customer-side role, from a source
  *   POST /api/customer-roles/:id/revoke                    revoke it, with a reason (append-only)
- *   GET  /api/errata/non-customer-credit                    the dry run: the errata the seals call for
- *   POST /api/errata/non-customer-credit                    record them, one per run, refused if the count changed
+ *   GET  /api/errata/non-customer-credit                    the dry run: the errata the seals call for (C3b: both kinds)
+ *   POST /api/errata/non-customer-credit                    record them, one per run, refused if either count changed
+ *   GET  /api/value-outcomes/:outcomeId/figure-findings     C3b: each figure, its finding, and what a finding would say
+ *   POST /api/value-outcomes/:outcomeId/figure-findings     C3b: record that a figure has no source on record
  *   GET  /api/system-exercise/candidates                    every unmarked evidence row and run, with its own note
  *   POST /api/system-exercise/marks                         mark the ticked ones, refused if the count changed
  *
@@ -171,8 +174,10 @@ export function creditErrataRouter(pool: Pool): Router {
     try {
       await client.query('BEGIN READ ONLY');
       const list = await listCreditErrata(client, actorTenantId(req));
+      // C3b (condition 5): the same batch carries the unsourced-figure errata; the page shows both counts.
+      const unsourced = await listUnsourcedErrata(client, actorTenantId(req));
       await client.query('ROLLBACK');
-      res.json({ count: list.length, errata: list });
+      res.json({ count: list.length, errata: list, unsourced_count: unsourced.errata.length, unsourced: unsourced.errata, blocked_findings: unsourced.blocked });
     } catch (err) {
       await client.query('ROLLBACK').catch(() => undefined);
       respondServerError(res, err);
@@ -186,18 +191,20 @@ export function creditErrataRouter(pool: Pool): Router {
     const tenantId = actorTenantId(req);
     try {
       const actor = actorOf(req);
-      if (await refuseUnknownFields(pool, req, res, ['expected_count', 'reason'],
+      if (await refuseUnknownFields(pool, req, res, ['expected_count', 'expected_unsourced_count', 'reason'],
         { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId: null },
         (k) => (/score|point|band|text|method/.test(k) ? `body.${k} is not taken: what each erratum states is read from its run's seal by the server` : null))) return;
       const b = isRecord(req.body) ? req.body : {};
-      if (typeof b.expected_count !== 'number' || !Number.isInteger(b.expected_count) || b.expected_count < 1) {
-        throw new Refusal(422, 'Give the count the dry run showed (expected_count).');
+      const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+      if (!isCount(b.expected_count) || !isCount(b.expected_unsourced_count) || b.expected_count + b.expected_unsourced_count < 1) {
+        throw new Refusal(422, 'Give both counts the dry run showed (expected_count for the credit errata, expected_unsourced_count for the unsourced figures).');
       }
       const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
       if (reason.length < MIN_REASON) throw new Refusal(422, `Say why they are recorded, in at least ${MIN_REASON} characters.`);
       const list = await listCreditErrata(client, tenantId);
-      if (list.length !== b.expected_count) {
-        throw new Refusal(409, `The count changed: the seals now call for ${list.length} errata, not ${b.expected_count}. Nothing was recorded; read the list again.`);
+      const unsourced = (await listUnsourcedErrata(client, tenantId)).errata;
+      if (list.length !== b.expected_count || unsourced.length !== b.expected_unsourced_count) {
+        throw new Refusal(409, `The count changed: the record now calls for ${list.length} credit errata and ${unsourced.length} unsourced-figure errata, not ${b.expected_count} and ${b.expected_unsourced_count}. Nothing was recorded; read the list again.`);
       }
       const ids: string[] = [];
       for (const e of list) {
@@ -207,14 +214,115 @@ export function creditErrataRouter(pool: Pool): Router {
            VALUES ($1, $2, $3, 'non_customer_credit', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
           [tenantId, e.run_id, e.value_outcome_id,
             'The seal credited points to a person who is not customer-side under the C3 rule.',
-            'Only a customer-side person, with a role named from a source, earns attestation, committer or verifier credit (model 1.0.1).',
+            'Only a customer-side person, with a role named from a source, earns attestation, committer, verifier or definition credit (model 1.0.2).',
             reason, e.model_version, e.model_fingerprint, e.sealed_score, e.sealed_band, e.points, e.text, actor]);
         await recordAct(client, req, 'POST /api/errata/non-customer-credit', { act: 'record_erratum', tenantId, subjectTable: 'run_errata', subjectId: row.id, resultTable: 'value_runs', resultId: e.run_id, reason });
         ids.push(row.id);
       }
-      res.status(201).json({ recorded: ids.length, erratum_ids: ids });
+      for (const e of unsourced) {
+        const { rows: [row] } = await client.query<{ id: string }>(
+          `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, kind, figure_finding_id, what_was_wrong, what_is_right, reason,
+             model_version, model_fingerprint, sealed_score, sealed_band, recompute_method, recorded_by_person_id)
+           VALUES ($1, $2, $3, 'unsourced_figure', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+          [tenantId, e.run_id, e.value_outcome_id, e.figure_finding_id,
+            'The seal carries a figure that has no source on record.',
+            "A figure comes from the customer's own system of record, or the record says it has no source.",
+            reason, e.model_version, e.model_fingerprint, e.sealed_score, e.sealed_band, e.text, actor]);
+        await recordAct(client, req, 'POST /api/errata/non-customer-credit', { act: 'record_erratum', tenantId, subjectTable: 'run_errata', subjectId: row.id, resultTable: 'value_runs', resultId: e.run_id, reason });
+        ids.push(row.id);
+      }
+      res.status(201).json({ recorded: ids.length, credit: list.length, unsourced: unsourced.length, erratum_ids: ids });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId: null });
+    }
+  });
+  return router;
+}
+
+/** GET and POST /api/value-outcomes/:outcomeId/figure-findings (C3b) */
+export function figureFindingRouter(pool: Pool): Router {
+  const router = Router();
+  const outcomeOf = async (q: Pool | PoolClient, id: string) => (await q.query<{ id: string; tenant_id: string; institution_id: string; account: string; unit: string | null;
+    baseline_value: string | null; actual_value: string | null; claimed_currency_impact: string | null }>(
+    `SELECT vo.id, i.tenant_id, vo.institution_id, i.name AS account, bm.unit, vo.baseline_value::text, vo.actual_value::text, vo.claimed_currency_impact::text
+       FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id JOIN business_metrics bm ON bm.id = vo.business_metric_id
+      WHERE vo.id = $1`, [id])).rows[0];
+  router.get('/:outcomeId/figure-findings', async (req, res) => {
+    const { outcomeId } = req.params;
+    if (!isUuid(outcomeId)) { res.status(400).json({ message: 'invalid value outcome id' }); return; }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      const vo = await outcomeOf(client, outcomeId);
+      if (!vo || isOtherTenant(req, vo.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ message: `value outcome ${outcomeId} not found` });
+        return;
+      }
+      const why = await blockers(client, vo.institution_id);
+      const { rows: found } = await client.query<{ field: FigureField; value: string; finding_text: string; reason: string; recorded_by: string; recorded_on: string }>(
+        `SELECT f.field, f.value::text, f.finding_text, f.reason, p.full_name AS recorded_by, to_char(f.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS recorded_on
+           FROM figure_findings f JOIN persons p ON p.id = f.recorded_by_person_id WHERE f.value_outcome_id = $1`, [outcomeId]);
+      const fields = [];
+      for (const field of Object.keys(FIGURE_FIELDS) as FigureField[]) {
+        const value = vo[field];
+        if (value === null) continue;
+        const finding = found.find((f) => f.field === field) ?? null;
+        const who = await enteredBy(client, outcomeId, field, value, vo.account);
+        fields.push({ field, label: FIGURE_FIELDS[field].label, value: figureText(value), unit: vo.unit, finding,
+          blockers: why, would_say: finding ? null : findingText(field, value, vo.unit, who, vo.account) });
+      }
+      await client.query('ROLLBACK');
+      res.json({ value_outcome_id: outcomeId, account: vo.account, fields });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      respondServerError(res, err);
+    } finally {
+      client.release();
+    }
+  });
+  router.post('/:outcomeId/figure-findings', requireSteward(pool), async (req, res) => {
+    const endpoint = 'POST /api/value-outcomes/:outcomeId/figure-findings';
+    const client: PoolClient = req.dbClient!;
+    const { outcomeId } = req.params;
+    if (!isUuid(outcomeId)) { res.status(400).json({ message: 'invalid value outcome id' }); return; }
+    let tenantId: string | null = null;
+    let institutionId: string | null = null;
+    try {
+      const actor = actorOf(req);
+      const vo = await outcomeOf(client, outcomeId);
+      if (!vo || isOtherTenant(req, vo.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
+        res.status(404).json({ message: `value outcome ${outcomeId} not found` });
+        return;
+      }
+      tenantId = vo.tenant_id; institutionId = vo.institution_id;
+      if (await refuseUnknownFields(pool, req, res, ['field', 'reason'],
+        { endpoint, subjectTable: 'figure_findings', subjectId: null, tenantId, institutionId },
+        (k) => (/value|text|finding/.test(k) ? `body.${k} is not taken: the figure and what the finding says are read from the record by the server` : null))) return;
+      const b = isRecord(req.body) ? req.body : {};
+      if (!isFigureField(b.field)) throw new Refusal(422, "Name the figure: the outcome's baseline_value, actual_value or claimed_currency_impact.");
+      const field = b.field;
+      const value = vo[field];
+      if (value === null) throw new Refusal(422, `This outcome records no ${FIGURE_FIELDS[field].label}; there is no figure to find unsourced.`);
+      const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+      if (reason.length < MIN_REASON) throw new Refusal(422, `Say why, in at least ${MIN_REASON} characters.`);
+      if (/\b(invent(ed|s|ing)?|fabricat[a-z]*|made up)\b/i.test(reason)) throw new Refusal(422, 'A finding says the figure has no source on record; it never says the figure was invented (Brad, 27 Oct 2026).');
+      const why = await blockers(client, vo.institution_id);
+      if (why.length > 0) {
+        throw new Refusal(422, `The record holds something from ${vo.account} (${why.join('; ')}), so "no source on record" cannot be stated.`);
+      }
+      const who = await enteredBy(client, outcomeId, field, value, vo.account);
+      const text = findingText(field, value, vo.unit, who, vo.account);
+      const { rows: [row] } = await client.query<{ id: string }>(
+        `INSERT INTO figure_findings (tenant_id, institution_id, value_outcome_id, field, value, finding_text, reason, recorded_by_person_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [tenantId, institutionId, outcomeId, field, value, text, reason, actor]);
+      await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/figure-findings', {
+        act: 'find', tenantId, subjectTable: 'figure_findings', subjectId: row.id, resultTable: 'value_outcomes', resultId: outcomeId, reason,
+      });
+      res.status(201).json({ figure_finding_id: row.id, finding_text: text });
+    } catch (err) {
+      await answer(pool, err, req, res, { endpoint, subjectTable: 'figure_findings', subjectId: null, tenantId, institutionId });
     }
   });
   return router;

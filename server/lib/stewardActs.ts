@@ -50,6 +50,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/customer-roles/:id/revoke': 'steward',
   'POST /api/errata/non-customer-credit': 'steward',
   'POST /api/system-exercise/marks': 'steward',
+  'POST /api/value-outcomes/:outcomeId/figure-findings': 'steward',
   'POST /api/value-runs/:runId/errata': 'steward',
   // O2: hypotheses and executive summaries are the account team's acts.
   'POST /api/institutions/:institutionId/hypotheses': 'authorized',
@@ -110,6 +111,7 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/customer-roles/:id/revoke': 'Revoking a customer-side role',
   'POST /api/errata/non-customer-credit': 'Recording the errata the seals call for',
   'POST /api/system-exercise/marks': 'Marking items as a system exercise',
+  'POST /api/value-outcomes/:outcomeId/figure-findings': 'Recording that a figure has no source on record',
   'POST /api/value-runs/:runId/errata': 'Recording an erratum',
 };
 

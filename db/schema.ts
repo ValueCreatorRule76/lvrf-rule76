@@ -179,6 +179,8 @@ export const governanceAct = pgEnum('governance_act', [
   'measure', 'lock', 'retire', 'exclude', 'mark', 'link', 'correct', 'record_erratum',
   // C3 (Brad, 26 Oct 2026): a steward names a customer-side role, from a source (customer_role_grants).
   'grant',
+  // C3b (Brad, 27 Oct 2026; C3b-D6): a steward records that a figure has no source on record (figure_findings).
+  'find',
 ]);
 
 /* ================================================================== */
@@ -2559,6 +2561,35 @@ export const figureChecks = pgTable('figure_checks', {
  * it, unchanged. Append-only (hardening.sql section 26). The run page shows
  * it on screen and on every printed page.
  */
+/**
+ * C3b (Brad, 27 Oct 2026; C3b-D3): a steward's finding that an outcome's figure has no source on record. Append-only,
+ * steward-only, one per outcome and field, with its act ('find'). The server checks, and the database guard
+ * re-checks, the three facts its text states (C3b-D4): no person of the account is customer-side; no evidence of
+ * the account has an opened citation or a customer-side attester; no research result or fact about the account
+ * was accepted. It says "no source on record", never "invented" (Brad's ruling 2).
+ */
+export const figureFindings = pgTable('figure_findings', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  field: text('field').notNull(),
+  /** The figure as it stood when the finding was recorded (the guard requires it to be the outcome's current value). */
+  value: numeric('value', { precision: 18, scale: 4 }).notNull(),
+  /** Built by the server from the record: who entered the figure, when, and the three facts checked. */
+  findingText: text('finding_text').notNull(),
+  reason: text('reason').notNull(),
+  recordedByPersonId: uuid('recorded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('figure_findings_one_per_figure').on(t.valueOutcomeId, t.field),
+  check('figure_findings_field_known', sql`${t.field} IN ('baseline_value', 'actual_value', 'claimed_currency_impact')`),
+  check('figure_findings_texts_stated', sql`length(btrim(${t.reason})) >= 12 AND ${t.findingText} LIKE '% has no source on record%'`),
+  check('figure_findings_never_invented',
+    // Whole words only (\m … \M), so a name such as "Inventec" or the word "inventory" is not refused.
+    sql`(${t.findingText} || ' ' || ${t.reason}) !~* '\\m(invent(ed|s|ing)?|fabricat[a-z]*|made up)\\M'`),
+]);
+
 export const runErrata = pgTable('run_errata', {
   id: id(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
@@ -2576,6 +2607,8 @@ export const runErrata = pgTable('run_errata', {
   correctedToSupports: text('corrected_to_supports'),
   /** C3: for a 'non_customer_credit' erratum, the sealed points that rest on people not customer-side. */
   pointsNotCredited: numeric('points_not_credited', { precision: 5, scale: 1 }),
+  /** C3b: for an 'unsourced_figure' erratum, the finding it states, beside a run whose seal carries that figure. */
+  figureFindingId: uuid('figure_finding_id').references(() => figureFindings.id, { onDelete: 'restrict' }),
   /**
    * C1 review (Brad, 25 Oct 2026): one erratum per run and correction. An
    * erratum is corrected only by a new one that supersedes it, naming it, with
@@ -2610,14 +2643,23 @@ export const runErrata = pgTable('run_errata', {
   uniqueIndex('run_errata_superseded_once').on(t.supersedesId).where(sql`${t.supersedesId} IS NOT NULL`),
   // C3: one credit erratum per run (a further finding would supersede it; none is planned).
   uniqueIndex('run_errata_one_credit_erratum').on(t.valueRunId).where(sql`${t.kind} = 'non_customer_credit'`),
-  check('run_errata_kind_known', sql`${t.kind} IN ('link_correction', 'non_customer_credit')`),
+  // C3b: one unsourced-figure erratum per run and finding.
+  uniqueIndex('run_errata_one_per_finding').on(t.valueRunId, t.figureFindingId).where(sql`${t.kind} = 'unsourced_figure'`),
+  check('run_errata_kind_known', sql`${t.kind} IN ('link_correction', 'non_customer_credit', 'unsourced_figure')`),
   /** C3: a link correction names its link; a credit erratum names none, states its points, and recomputes nothing. Every term definite under NULL. */
+  /** C3b: an unsourced-figure erratum names its finding, no link and no points, and recomputes nothing. */
   check('run_errata_kind_complete',
-    sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL)
+    sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL AND ${t.figureFindingId} IS NULL)
         OR (${t.kind} = 'non_customer_credit' AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL AND ${t.supersedesId} IS NULL
-            AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL
+            AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.figureFindingId} IS NULL
             AND ${t.pointsNotCredited} IS NOT NULL AND ${t.pointsNotCredited} > 0 AND ${t.pointsNotCredited} <= 100
-            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')`),
+            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')
+        OR (${t.kind} = 'unsourced_figure' AND ${t.figureFindingId} IS NOT NULL AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL
+            AND ${t.supersedesId} IS NULL AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.pointsNotCredited} IS NULL
+            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%' AND ${t.recomputeMethod} LIKE '%has no source on record%')`),
+  /** C3b (Brad's ruling 2): an unsourced-figure erratum says "no source on record", never "invented". */
+  check('run_errata_never_invented',
+    sql`${t.kind} <> 'unsourced_figure' OR (${t.whatWasWrong} || ' ' || ${t.whatIsRight} || ' ' || ${t.reason} || ' ' || ${t.recomputeMethod}) !~* '\\m(invent(ed|s|ing)?|fabricat[a-z]*|made up)\\M'`),
   check('run_errata_supports_known', sql`${t.correctedToSupports} IS NULL OR ${t.correctedToSupports} IN ('baseline', 'actual', 'impact_basis', 'target_commitment', 'verification')`),
   check('run_errata_supersession_complete',
     // Every term definite: a NULL reason must make this false, never unknown (an unknown CHECK passes; P1's B3).
@@ -2631,7 +2673,7 @@ export const runErrata = pgTable('run_errata', {
     sql`${t.sealedBand} IN ('low', 'medium', 'high') AND (${t.recomputedBand} IS NULL OR ${t.recomputedBand} IN ('low', 'medium', 'high'))`),
   /** C2: recomputed (score, band and model, the method not "Not recomputed:"), or not (score and band NULL, the method saying why). */
   check('run_errata_recompute_complete',
-    sql`${t.kind} = 'non_customer_credit' OR (${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
+    sql`${t.kind} IN ('non_customer_credit', 'unsourced_figure') OR (${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
          AND ${t.recomputeMethod} NOT LIKE 'Not recomputed:%')
         OR (${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.recomputeMethod} LIKE 'Not recomputed:%'
          AND (${t.modelVersion} IS NULL) = (${t.modelFingerprint} IS NULL))`),

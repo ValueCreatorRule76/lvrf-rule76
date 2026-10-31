@@ -43,7 +43,7 @@ interface SealedPayload {
   evidence?: SealedItem[];
   claimedCurrencyImpact?: number | null;
   realizedCurrencyImpact?: number | null;
-  people?: { committer?: SealedPerson | null; verifier?: SealedPerson | null };
+  people?: { committer?: SealedPerson | null; verifier?: SealedPerson | null; definition_confirmer?: SealedPerson | null };
 }
 
 export type Recompute =
@@ -107,9 +107,18 @@ export function recomputeWithCorrection(
   const commit = actor('human_commit_of_record', payload.people?.committer);
   const verify = actor('human_verifier_of_record', payload.people?.verifier);
 
+  // C3b (1.0.2): a 1.0.2 seal carries the definition's confirmer; an earlier one is read back from its factor
+  // (full means the confirmation counted, which earlier models do not test for side).
+  const defGap = sealed.get('metric_definition_confirmed')?.gap ?? 'no_notes';
+  const definer = payload.people?.definition_confirmer;
+  const defConfirmed = full('metric_definition_confirmed') || defGap === 'not_customer_side';
   const input = (items: SealedItem[], impactBasisStated: boolean): ConfidenceInput => ({
-    metricDefinitionConfirmed: full('metric_definition_confirmed'),
-    metricDefinitionGap: full('metric_definition_confirmed') ? undefined : ((sealed.get('metric_definition_confirmed')?.gap ?? 'no_notes') as ConfidenceInput['metricDefinitionGap']),
+    metricDefinitionConfirmed: defConfirmed,
+    metricDefinitionGap: defConfirmed ? undefined : (defGap as ConfidenceInput['metricDefinitionGap']),
+    metricDefinitionConfirmerName: definer?.name ?? null,
+    metricDefinitionConfirmerCustomerSide: full('metric_definition_confirmed') ? true : defGap === 'not_customer_side' ? false : null,
+    metricDefinitionConfirmerSideReason: definer?.reason ?? null,
+    metricDefinitionConfirmerRoles: definer?.roles ?? null,
     evidence: items.map((e) => ({ kind: e.kind, sourceVerified: e.source_verified, supports: e.supports as Supports,
       attestedByName: e.attester?.name ?? null, attestedByScope: null, attesterSimulated: Boolean(e.attester?.simulated),
       attesterCustomerSide: e.attester?.customer_side ?? null, attesterSideReason: e.attester?.reason ?? null, attesterRoles: e.attester?.roles ?? null })),

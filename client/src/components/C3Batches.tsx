@@ -15,6 +15,8 @@ const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-
 const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 
 interface CreditErratum { run_id: string; run_number: number; engagement: string; account: string; points: number; sealed_score: number; text: string }
+interface UnsourcedErratum { run_id: string; run_number: number; engagement: string; account: string; sealed_score: number; line: string; text: string }
+interface ErrataDryRun { count: number; errata: CreditErratum[]; unsourced_count: number; unsourced: UnsourcedErratum[]; blocked_findings: { account: string; why: string[] }[] }
 interface Candidate { subject_table: 'evidence' | 'value_runs'; subject_id: string; account: string; label: string; note: string }
 interface Marked { subject_table: string; subject_id: string; reason: string; marked_by: string; marked_on: string }
 
@@ -33,21 +35,24 @@ export function CreditErrataBatch() {
   const { actor } = useActor();
   const [reload, setReload] = useState(0);
   const [reason, setReason] = useState('');
-  const data = useJson<{ count: number; errata: CreditErratum[] }>('/api/errata/non-customer-credit', reload);
+  const data = useJson<ErrataDryRun>('/api/errata/non-customer-credit', reload);
   const [recorded, setRecorded] = useState<number | null>(null);
   const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const total = data && data !== 'error' ? data.count + data.unsourced_count : 0;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   return (
     <section className="mt-8 flex flex-col gap-3" data-testid="credit-errata-batch">
-      <h2 className={H2}>Errata the seals call for</h2>
+      <h2 className={H2}>Errata the record calls for</h2>
       <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-45">
-        Each locked run whose seal credited points to a person who is not customer-side under the C3 rule (a role named from a source).
-        Read from each seal; the sealed scores stand. This list writes nothing.
+        Two kinds, recorded together (C3, C3b): each locked run whose seal credited points to a person who is not customer-side (a role named from a source),
+        and each locked run whose seal carries a figure a steward found to have no source on record. Read from each seal and the record; the sealed scores stand.
+        This list writes nothing.
       </p>
       {data === null ? <p className="m-0 text-[12.5px] text-ink-45">Reading the seals…</p>
         : data === 'error' ? <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the list.</p>
           : <>
             {recorded !== null && <p className="m-0 text-[13px] text-healthy" data-testid="credit-errata-recorded">Recorded {recorded}.</p>}
-            <p className="m-0 text-[13px] text-ink" data-testid="credit-errata-count">{data.count === 0 ? 'No run calls for one.' : `${data.count} run${data.count === 1 ? ' calls' : 's call'} for one.`}</p>
+            <p className="m-0 text-[13px] text-ink" data-testid="credit-errata-count">{data.count === 0 ? 'No run calls for a credit erratum.' : `${plural(data.count, 'run calls', 'runs call')} for a credit erratum.`}</p>
             {data.count > 0 && (
               <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="credit-errata-list">
                 {data.errata.map((e) => (
@@ -58,19 +63,33 @@ export function CreditErrataBatch() {
                   </li>))}
               </ul>
             )}
-            {data.count > 0 && (
+            <p className="m-0 text-[13px] text-ink" data-testid="unsourced-errata-count">{data.unsourced_count === 0 ? 'No run calls for an unsourced-figure erratum.' : `${plural(data.unsourced_count, 'run calls', 'runs call')} for an unsourced-figure erratum.`}</p>
+            {data.blocked_findings.map((b, i) => (
+              <p key={i} className="m-0 text-[12px] text-warning" data-testid="unsourced-blocked">A finding on {b.account} calls for none: the record now holds something from {b.account} ({b.why.join('; ')}).</p>
+            ))}
+            {data.unsourced_count > 0 && (
+              <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="unsourced-errata-list">
+                {data.unsourced.map((e) => (
+                  <li key={e.run_id} className="border-b border-rule-soft px-4 py-2 text-[12px] last:border-b-0" data-testid="unsourced-erratum-candidate">
+                    <Link to={`/runs/${e.run_id}`} className={'font-semibold text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.account} · {e.engagement}, run {e.run_number}</Link>
+                    <span className="text-ink-45"> · {e.line} · sealed {e.sealed_score} / 100</span>
+                    <span className="block text-ink-70">{e.text}</span>
+                  </li>))}
+              </ul>
+            )}
+            {total > 0 && (
               <GovernedForm<{ recorded: number }>
                 path="/api/errata/non-customer-credit"
                 provenanceLabel="What this records"
-                provenance={<p className="m-0 text-[12.5px] text-ink">One erratum beside each run listed, by you, dated, each with its act. <strong>No sealed run is changed</strong>, and no score is recomputed: each erratum states the points from its seal.</p>}
+                provenance={<p className="m-0 text-[12.5px] text-ink">One erratum beside each run listed, by you, dated, each with its act. <strong>No sealed run is changed</strong>, and no score is recomputed: each erratum states, from its seal, the points or the figure.</p>}
                 fields={<label className="block"><span className={L}>Why they are recorded</span>
                   <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>}
-                confirm={<span data-testid="confirm-text">Record {data.count} errata, one beside each run listed. If the seals now call for a different number, nothing is recorded.</span>}
+                confirm={<span data-testid="confirm-text">Record {plural(data.count, 'credit erratum', 'credit errata')} and {plural(data.unsourced_count, 'unsourced-figure erratum', 'unsourced-figure errata')}, {total} in all, one beside each run listed. If the record now calls for a different number of either, nothing is recorded.</span>}
                 disabledReason={notSteward}
                 canSubmit={reason.trim().length >= 12}
                 unmet={reason.trim().length < 12 ? ['say why, in at least 12 characters'] : []}
-                buildBody={() => ({ expected_count: data.count, reason: reason.trim() })}
-                submitLabel={`Record the ${data.count} errata`}
+                buildBody={() => ({ expected_count: data.count, expected_unsourced_count: data.unsourced_count, reason: reason.trim() })}
+                submitLabel={`Record the ${total} errata`}
                 onSuccess={(d) => { setReason(''); setRecorded(d.recorded); setReload((n) => n + 1); }}
                 renderSuccess={(d) => <>Recorded {d.recorded}.</>}
               />

@@ -885,11 +885,16 @@ export async function walkSpine(opts?: WalkOptions): Promise<WalkResult> {
       { side: boolean; reason: string | null; roles: string | null };
     const sponsorSide = await sideOf(seeded.persons.sponsor.id);
     const verifierSideRow = await sideOf(seeded.persons.verifier.id);
+    // C3b (1.0.2): the fixture's definition is the metric owner's to confirm (calculation_confirmed).
+    const confirmerSideRow = await sideOf(seeded.persons.metricOwner.id);
 
     // Computed, never asserted or estimated — db/CONFIDENCE_MODEL.md. The
     // computed band governs; value_outcomes.confidence is advisory only.
     const confidence = computeConfidence({
       metricDefinitionConfirmed: bm.calculation_confirmed,
+      metricDefinitionConfirmerName: seeded.persons.metricOwner.fullName,
+      metricDefinitionConfirmerCustomerSide: confirmerSideRow.side, metricDefinitionConfirmerSideReason: confirmerSideRow.reason,
+      metricDefinitionConfirmerRoles: confirmerSideRow.roles,
       evidence: evidenceForConfidence,
       claimedCurrencyImpact: vo.claimed_currency_impact,
       realizedCurrencyImpact: vo.realized_currency_impact,

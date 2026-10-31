@@ -1,3 +1,4 @@
+import { VerifiedUnopenedLine } from '../components/RecordReadings';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../api/http';
@@ -30,7 +31,7 @@ const KIND: Record<string, string> = {
   prompt: 'Research prompt', import: 'Research import', result: 'Research result', accept: 'Accepted', reject: 'Rejected', pending: 'Not yet reviewed',
   origin: 'Origin', evidence: 'Evidence', open_citation: 'Citation opened', attested: 'Attested', figure_check: 'Figure check',
   fact: 'The fact', entity: 'The entity', measure: 'The pack measure', supersedes: 'Corrects an earlier one', superseded_by: 'Corrected since',
-  withdrawn: 'Withdrawn', link: 'Linked to the outcome', correct: 'Link corrected', seal: 'Sealed in a run', erratum: 'Erratum',
+  withdrawn: 'Withdrawn', link: 'Linked to the outcome', correct: 'Link corrected', seal: 'Sealed in a run', erratum: 'Erratum', finding: 'No source on record',
   baseline: 'The baseline', actual: 'The actual', verify: 'Verified',
 };
 const SOURCE: Record<Step['source'], string> = { act: 'recorded as an act', record: 'from the record', seal: 'sealed' };
@@ -57,9 +58,17 @@ function What({ s }: { s: Step }) {
             ? <span className="block text-ink-45" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}: {str(d.attester_roles)}</span>
             : <span className="block text-warning" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}, who is not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule.</span>) : null}
           {isMark(d.system_exercise) ? <SystemExerciseLine mark={d.system_exercise} className="mt-0.5" /> : null}
+          {/* C3b (Brad's condition 2): verified with no citation opened, read from the row as it stands. */}
+          {d.verified_unopened === true ? <VerifiedUnopenedLine className="mt-0.5" /> : null}
         </>
       );
     }
+    // C3b (Brad, 27 Oct 2026): what was attested, and whether the attester is customer-side.
+    case 'attested': return <span data-testid="lineage-attested">{str(d.kind).replace(/_/g, ' ')}: “{str(d.summary)}”{d.attester_roles
+      ? <span className="block text-ink-45">{str(d.attester_roles)}</span>
+      : d.attester_not_customer_side ? <span className="block text-warning">not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule</span> : null}</span>;
+    // C3b: a steward's finding that this figure has no source on record.
+    case 'finding': return <span className="text-warning" data-testid="lineage-finding">{str(d.finding_text)} <span className="block text-ink-45">Why: {str(d.reason)}</span></span>;
     case 'open_citation': return <>{d.source_verified ? 'source verified' : 'opened; stays unverified'}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
     case 'figure_check': return <>{str(d.result)}: {str(d.detail)}</>;
     case 'fact': return <>{str(d.kind).replace(/_/g, ' ')}: {d.value_numeric !== null && d.value_numeric !== undefined ? formatQuantity(d.value_numeric as number | string, (d.unit as string | null) ?? null) : str(d.value_text)} (as of {day(str(d.as_of))})</>;
@@ -88,7 +97,7 @@ function What({ s }: { s: Step }) {
         {isMark(d.system_exercise) ? <SystemExerciseLine mark={d.system_exercise} className="mt-0.5" /> : null}
       </>
     );
-    case 'erratum': return <><span className={d.superseded ? 'line-through' : ''}>run {str(d.run_number)}: sealed {Number(d.sealed)} / 100, {d.recomputed === null ? 'not recomputed' : `recomputed ${Number(d.recomputed)} / 100`}{d.superseded ? ' (superseded)' : ''}</span>{note ? <span className="block text-ink-45">{note}</span> : null}</>;
+    case 'erratum': return <><span className={d.superseded ? 'line-through' : ''}>run {str(d.run_number)}: sealed {Number(d.sealed)} / 100, {d.kind === 'unsourced_figure' ? 'a figure with no source on record' : d.kind === 'non_customer_credit' ? 'credit to a person not customer-side' : d.recomputed === null ? 'not recomputed' : `recomputed ${Number(d.recomputed)} / 100`}{d.superseded ? ' (superseded)' : ''}</span>{note ? <span className="block text-ink-45">{note}</span> : null}</>;
     default: return <>{str(d.reason)}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
   }
 }

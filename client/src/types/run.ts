@@ -222,6 +222,8 @@ export interface Run {
   /** C3: the run's system-exercise mark, and the marks on the evidence it sealed (as the seal names it). */
   system_exercise?: SystemExerciseMark | null;
   marked_evidence?: { kind: string; summary: string; provenance: string; system_exercise: SystemExerciseMark }[];
+  /** C3b (Brad's condition 2): sealed items whose evidence row is verified with no citation opened (a derived reading). */
+  unopened_evidence?: { kind: string; summary: string; provenance: string }[];
 }
 
 /** C1 (LVRF_PLAN §9): what a sealed run got wrong, and the server's recompute under the model it was sealed with. */
@@ -231,7 +233,10 @@ export interface SystemExerciseMark { reason: string; marked_by: string; marked_
 export interface RunErratum {
   id: string;
   /** C3: 'link_correction' (C1), or 'non_customer_credit' (points the seal credited to a person not customer-side). */
-  kind: 'link_correction' | 'non_customer_credit';
+  kind: 'link_correction' | 'non_customer_credit' | 'unsourced_figure';
+  /** C3b: the finding an unsourced-figure erratum states; this erratum's one line (lvrf_erratum_line). */
+  figure_finding_id?: string | null;
+  line?: string | null;
   /** C3: for a credit erratum, the sealed points that rest on people not customer-side. */
   points_not_credited: string | null;
   /** A link correction's evidence; NULL on a credit erratum. */

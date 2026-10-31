@@ -150,7 +150,7 @@ for (const width of [1280, 390]) {
       const v1 = await vis();
       check(v1.length === X.runs.total && await ev(`[...document.querySelectorAll('[data-testid=show-all-runs]')].every(b=>b.getAttribute('aria-expanded')==='true')`), `${W}: expanded, every one of the ${X.runs.total} runs shows and aria-expanded is true`, String(v1.length));
       await ev(`document.querySelectorAll('[data-testid=show-all-runs]').forEach(b=>b.click())`); await sleep(300);
-      check((await vis()).length === X.runs.latest.length, `${W}: "Show the latest run only" folds them again`);
+      check((await vis()).length === X.runs.latest.length, `${W}: "Show the latest unmarked run only" folds them again`);
     }
   }
 }
@@ -218,7 +218,7 @@ pages_check() {  # NAME PDF BANNER SEAL [POV_JSON]
     printf '%s' "$txt" | grep -qF "rendered from the record as it stands" || bad_pages="$bad_pages p$p:rendered"
     printf '%s' "$txt" | grep -qF "Page $p of $n" || bad_pages="$bad_pages p$p:pageno"
     printf '%s' "$txt" | grep -qF "Signed in as" && bad_pages="$bad_pages p$p:app-header"
-    printf '%s' "$txt" | grep -qE "open the run|Show all [0-9]+ runs|Show the latest run only|the account page \(where" && bad_pages="$bad_pages p$p:screen-control"
+    printf '%s' "$txt" | grep -qE "open the run|Show all [0-9]+ runs|Show the latest (unmarked )?run only|the account page \(where" && bad_pages="$bad_pages p$p:screen-control"
     printf '%s' "$txt" | grep -qE "public_filer|subsidiary_of_filer|public_sector|sec_cik|sec cik|stated_priority|disclosure_regime|open, viable" && bad_pages="$bad_pages p$p:raw-value"
   done
   [ -z "$bad_pages" ] && ok "$name: printed, $n page(s), and EVERY page carries the banners, \"$seal\", the print date, \"rendered from the record as it stands\" and \"Page n of $n\"; no app header, no screen-only link or button, no raw stored value" || bad "$name: printed pages missing:$bad_pages"

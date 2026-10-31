@@ -1,4 +1,5 @@
 import { SystemExerciseLine } from '../components/SystemExercise';
+import { NoSourceLine, VerifiedUnopenedLine } from '../components/RecordReadings';
 import { useEffect, useState } from 'react';
 import { LineageLink } from '../components/LineageLink';
 import { Link, useParams } from 'react-router-dom';
@@ -183,14 +184,16 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         <span className={KICKER}>{o.metric_name}</span>
         <table className="mt-1 w-full border-collapse text-[13px]">
           <tbody>
-            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)} <LineageLink table="value_outcomes" id={o.id} figure="baseline" /></td></tr>
+            <tr><td className="py-1 text-ink-45">Baseline</td><td className="py-1 font-mono">{recorded(o.baseline_value)}{o.unit ? ` ${unitText(o.unit)}` : ''}</td><td className="py-1 text-ink-45">recorded {day(o.baseline_measured_on)} <LineageLink table="value_outcomes" id={o.id} figure="baseline" />
+              {(o.figure_findings ?? []).filter((f) => f.field === 'baseline_value').map((f) => <NoSourceLine key={f.field} finding={f} className="mt-0.5" />)}</td></tr>
             <tr><td className="py-1 text-ink-45">Target</td>{o.target_value !== null && o.committed_by
               ? <><td className="py-1 font-mono">{recorded(o.target_value)}</td><td className="py-1 text-ink-45">committed by {o.committed_by}, {o.committed_on ? day(o.committed_on) : 'date not recorded'}
                   <RoleLine roles={o.committer_roles} not={o.committer_not_customer_side} who={o.committed_by} testid="pov-committer-role" /></td></>
               : <td className="py-1" colSpan={2} data-testid="no-target">No target: a hypothesis.</td>}</tr>
             <tr><td className="py-1 text-ink-45">Actual</td>{o.actual_value !== null
               ? <><td className="py-1 font-mono">{recorded(o.actual_value)}</td><td className="py-1 text-ink-45">{o.actual_measured_on ? day(o.actual_measured_on) : 'date not recorded'} · {o.source_verified ? `verified by ${o.verified_by}` : 'not verified'} <LineageLink table="value_outcomes" id={o.id} figure="actual" />
-                  {o.verified_by && <RoleLine roles={o.verifier_roles} not={o.verifier_not_customer_side} who={o.verified_by} testid="pov-verifier-role" />}</td></>
+                  {o.verified_by && <RoleLine roles={o.verifier_roles} not={o.verifier_not_customer_side} who={o.verified_by} testid="pov-verifier-role" />}
+                  {(o.figure_findings ?? []).filter((f) => f.field === 'actual_value').map((f) => <NoSourceLine key={f.field} finding={f} className="mt-0.5" />)}</td></>
               : <td className="py-1 text-ink-45" colSpan={2}>Not measured yet.</td>}</tr>
           </tbody>
         </table>
@@ -203,6 +206,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
                 <RoleLine roles={e.attester_roles} not={e.attester_not_customer_side} who={e.stated_by} testid="pov-attester-role" />
                 {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
+                {e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}
                 <CorrectedNote e={e} />
               </li>))}
           </ul>
@@ -211,7 +215,8 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {o.withdrawn_links.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {o.withdrawn_links.map((l, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{supportsShort(l.supports)}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}</li>))}
+              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{supportsShort(l.supports)}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}
+                {l.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}</li>))}
           </ul>
         )}
       </div>
@@ -223,6 +228,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
             <p className="m-0 mt-1 text-[12px] text-ink-45">{e.provenance}. Never applied to this account's baseline, never a target.</p>
             <CorrectedNote e={e} />
             {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-1" />}
+            {e.verified_unopened && <VerifiedUnopenedLine className="mt-1" />}
           </div>
         ))}
         {o.pack_entry && (
@@ -404,13 +410,16 @@ function LockedRuns({ pov }: { pov: Pov }) {
   if (sealed.length === 0) return <p className="m-0 border border-dashed border-ink-45 bg-white px-4 py-3 text-[13px] text-ink-45">No locked run yet. A locked run is never rewritten.</p>;
   return (
     <ul className="m-0 list-none border border-rule bg-white p-0" data-testid="locked-runs">{sealed.flatMap((e) => {
-      const latest = e.locked_runs.reduce((a, r) => (r.run_number > a.run_number ? r : a));
+      // C3b (Brad, 27 Oct 2026): the headline run is the latest unmarked one; a marked run is never "the latest".
+      const unmarked = e.locked_runs.filter((r) => !r.system_exercise);
+      const pool = unmarked.length > 0 ? unmarked : e.locked_runs;
+      const latest = pool.reduce((a, r) => (r.run_number > a.run_number ? r : a));
       const all = open[e.id] === true;
       const items = e.locked_runs.map((r) => (
         <li key={r.id}
           className={'border-b border-rule-soft px-4 py-2 text-[12.5px] last:border-b-0 ' + (all || r.id === latest.id ? '' : 'hidden print:block')} data-testid="locked-run">
           <Link to={`/runs/${r.id}`} className={'text-ink hover:text-gold-ink ' + FOCUS_RING}>{e.name}{e.retired ? ' (retired)' : ''}, run {r.run_number}</Link>
-          <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100{r.id === latest.id && e.locked_runs.length > 1 ? ' · the latest' : ''}</span>
+          <span className="text-ink-45"> · locked {day(r.locked_at)} · {Number(r.confidence_score)} / 100{r.system_exercise ? ' · system exercise' : r.id === latest.id && e.locked_runs.length > 1 ? ' · the latest unmarked' : ''}</span>
           <span className="block text-[10.5px] text-ink-45">Record hash <span className="font-mono [overflow-wrap:anywhere]">{r.payload_hash}</span></span>
           {r.erratum_line && <span className="block text-[11px] text-warning" data-testid="locked-run-erratum">{r.erratum_line}</span>}
           {r.system_exercise && <SystemExerciseLine mark={r.system_exercise} className="mt-0.5" />}
@@ -421,7 +430,7 @@ function LockedRuns({ pov }: { pov: Pov }) {
           <button type="button" aria-expanded={all} data-testid="show-all-runs"
             onClick={() => setOpen((o) => ({ ...o, [e.id]: !all }))}
             className={'text-[11.5px] font-semibold text-gold-ink underline hover:text-ink ' + FOCUS_RING}>
-            {all ? 'Show the latest run only' : `Show all ${e.locked_runs.length} runs`}
+            {all ? 'Show the latest unmarked run only' : `Show all ${e.locked_runs.length} runs`}
           </button>
         </li>)];
     })}</ul>

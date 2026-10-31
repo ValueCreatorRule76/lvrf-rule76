@@ -129,6 +129,8 @@ on institution routes (P3).
 | L43 | **The account page's walk shows one engagement, the latest with an outcome, and only that engagement's last outcome; every per-engagement control for any other engagement or outcome is hidden** (C2b survey, read-only, 26 Oct 2026). Hidden, with where else each exists: W5 the metric's pack basis (nowhere else); W6 its evidence list (the POV shows it, read-only), add evidence (the run page, through a run of that outcome on a live engagement only), record an opened citation (nowhere else), correct what a link supports (the run page since C2b, for an outcome with a locked run only); W7 produce a run (nowhere else) and the run list (the runs list and the POV show it); W8 lock a run (nowhere else); W9 retire the engagement (nowhere else). Found when Curia's commitment attestation, on its retired reference engagement, could not be corrected: the walk shows the later lot-acceptance engagement. Commit, measure and verify have no client control at all (route only) | C2 Gate B, 26 Oct 2026 (Brad: list and record for slice 5) | **Slice 5:** the walk chooses its engagement and outcome (or lists every engagement), so no per-engagement act is reachable only through the latest |
 | L44 | **The walk's NEXT/DONE step tags look like buttons** (Brad, 26 Oct 2026, on Curia's account page) | C2 Gate B, 26 Oct 2026 (Brad: note for slice 5) | **Slice 5:** the tags read as state, not as controls |
 | L45 | **The Runs list gives no sign that a run carries an erratum** (Brad, 26 Oct 2026, after recording Curia's 9) | C2 Gate C, 26 Oct 2026 (Brad: note for slice 5) | **Slice 5:** a marker beside the score on any run with a current erratum |
+| L46 | **Curia's reference-example marker reads `published_case_study`; it may be `outside_in_test`** (Brad, 27 Oct 2026, C3b condition 4) | C3b approval, 27 Oct 2026 | **Brad decides once C3b's errata are visible on screen** |
+| L47 | **A customer-side role's source has to be linked to an outcome to exist** (Brad, 27 Oct 2026, from C3's fixture screens). The grant route and its guard require only evidence of the account (non-simulated, with provenance); neither needs an outcome link. But no route records account evidence without one: evidence is created only through `POST /api/value-outcomes/:outcomeId/evidence` (with a `supports`) or with a fact. So C3's and C3b's fixtures link the org chart as an outcome's impact basis, and on prod a steward naming a role would have to do the same, sealing it in the next run as outcome support | C3b Gate A, 27 Oct 2026 | **Ruled (Brad, 27 Oct 2026): built in the L41 + L42 slice (§13), as a prerequisite of §14.** Account evidence is born with the "about" field, the quote/locator form, and `source_verified` set only by an opened-the-source act. **HOLD: no customer-side role is granted on prod until L47 ships.** The fixtures then use it |
 
 ---
 
@@ -3354,11 +3356,24 @@ Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two 
     actual. Scotts' vendor publication, about another company, stays as the impact basis.
   - Existing rows need a backfill rule, decided in this slice's plan.
 - **L42, after C3:** what remains once C3 seals the attester (C3-D3).
+- **`source_verified` (Brad, 27 Oct 2026, C3b condition 2):** only an "opened the source" act by a named person
+  sets it, going forward, for every evidence row (Q4k's open-citation, widened). The route stops taking it from
+  the body. The backfill rule for the rows verified with no opening recorded is decided in this slice's plan.
+  Until then, C3b shows "verified without the source being opened" beside them.
+- **L47, in this slice (Brad, 27 Oct 2026), a prerequisite of §14:** account evidence, recorded with no
+  outcome link and no `supports`, so a customer-side role's source is account evidence and not outcome support.
+  - It is born with the "about" field (L41), the quote/locator form (P1), and `source_verified` set only by an
+    opened-the-source act.
+  - The account page's roles card gains "Record a source…"; the C3 and C3b fixtures then use it.
+  - **HOLD: no customer-side role is granted on prod until L47 ships.**
 - **First, a read-only report:** the two 23 Aug updates that set `simulated`, with no actor
   recorded. What changed, and whether any run sealed the value from before or after.
 
 
 ## 14. Commit, measure and verify in the client (ruled by Brad, 26 Oct 2026; **planned after C3; not built**)
+
+**Prerequisite (Brad, 27 Oct 2026): L47, in the L41 + L42 slice (§13).** A verifier or committer earns credit only
+when customer-side, and a role needs a source. **HOLD: no customer-side role is granted on prod until L47 ships.**
 
 **The finding (L43):** commit, measure and verify have no client control; they are callable only
 through the API.
@@ -3376,7 +3391,7 @@ through the API.
 
 The plan is written after C3, and nothing is built until Brad approves it.
 
-## 15. C3b: the definition factor under the C3 rule; an "unsourced figure" erratum; one errata batch (ruled by Brad, 27 Oct 2026; **plan for approval, not built**)
+## 15. C3b: the definition factor under the C3 rule; an "unsourced figure" erratum; one errata batch (ruled by Brad, 27 Oct 2026; **approved with D1–D6 as recommended and five conditions; built; Gate A 27 Oct 2026, BUILD_STATUS**)
 
 **Value spine stages served:** `baseline` (a figure with no source on record says so) and `measure`/`verify`
 (what earns confidence credit), and `return` (errata beside the runs that sealed them).
@@ -3553,6 +3568,9 @@ run, C3's kind; C3b-D2):
   - pull; migrate 0044 as `lvrf_migrate`; `ownership.sql`; `hardening.sql`;
   - the checks: triggers, plain sentences, ownership, run hashes 25/25, drift (45 migrations);
   - deploy.
+- **Rule 10 (CLAUDE.md, Brad, 27 Oct 2026):** steward acts are performed by the steward, never on their behalf.
+  No Gate B paste and no script performs the finding, the withdrawal or the batch, by API, browser or SQL. The
+  pastes deploy; Brad acts; Gate C reads.
 - **Brad's acts, through the UI:**
   1. the finding on Curia's reference outcome baseline (214);
   2. withdraw `1632a5e0`'s baseline link, with the finding's reason;
@@ -3593,6 +3611,30 @@ run, C3's kind; C3b-D2):
   - the finding uses a new act value, `find`;
   - the batch keeps `record_erratum`.
 
+### Brad's approval and conditions (27 Oct 2026)
+
+**D1–D6 approved as recommended,** with these conditions:
+
+1. **D1, exact or nothing.** The definition's confirmer is read from the metric version current when each run
+   was sealed: from the sealed metric id (1.0.2 seals it), or from supersession timestamps, matched to the
+   sealed metric. If a run's version at sealing cannot be determined exactly, its erratum says "the confirmer
+   is not recoverable from this seal" and counts no points for it. No guessing.
+2. **"Verified without the source being opened"** shows on live pages beside every evidence row whose
+   `source_verified` is true and that has no opened citation. On prod there are 4 such rows: Curia `1632a5e0`
+   and `f9775317`, Skillsoft `9765335f` and `271a449a`. It is a derived reading and changes nothing. The
+   backfill rule stays with L41.
+3. **"No source on record", never "invented"; the database check is kept.** The finding's three
+   preconditions stay server-checked, so "nothing from Curia exists in LVRF" is true whenever it is written.
+   As built, the database re-checks them on the finding and on every unsourced-figure erratum, and the check
+   matches whole words only. A name such as "Inventec", or the word "inventory", is not refused.
+4. **Recorded for later (L46):** whether Curia's reference-example marker should be `outside_in_test` rather
+   than `published_case_study`. Brad decides once C3b's errata are visible on screen.
+5. **Brad's acts after the deploy, in order:**
+   1. the finding;
+   2. the `1632a5e0` withdrawal;
+   3. the one batch: the dry run reading 37, 19 credit and 18 unsourced, with both counts shown before
+      the submit.
+
 ### L41: what it does not yet cover (checked 27 Oct 2026)
 
 **`source_verified` can be set true with no citation opened.**
@@ -3603,6 +3645,8 @@ run, C3's kind; C3b-D2):
   - Skillsoft `9765335f` and `271a449a`.
 - **L41 as written (§13)** makes `source_verified` final once set. It does not say who may set it
   or on what record.
+- **Ruled for L41's plan (Brad, 27 Oct 2026, condition 2):** going forward, only an "opened the source" act by a
+  named person sets `source_verified`.
 - **Proposed for L41's plan:** `source_verified` becomes true only through an act by a named
   person who opened the source. That is Q4k's open-citation, for every evidence row:
   - with the opener, the moment and what was read (quote, locator, how read);

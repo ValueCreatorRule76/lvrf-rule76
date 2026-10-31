@@ -98,28 +98,30 @@ step "1. Typecheck"
 npx tsc --noEmit -p . > "$W/tsc.log" 2>&1 && ok "server tsc" || bad "server tsc: $(head -5 "$W/tsc.log")"
 (cd client && npx tsc -b) > "$W/tsc2.log" 2>&1 && ok "client tsc -b" || bad "client tsc: $(head -5 "$W/tsc2.log")"
 
-step "2. C2-D1: the model's fingerprint, measured (C3: 1.0.1 current, 1.0.0 kept)"
+step "2. C2-D1: the model's fingerprint, measured (C3b: 1.0.2 current; 1.0.1 and 1.0.0 kept)"
 FP="$(npx tsx -e "import('./server/spine/confidenceModel.ts').then(m=>console.log(m.MODEL_VERSION + ' ' + m.MODEL_FINGERPRINT))" 2>&1 | tail -1)"
 FP0="$(npx tsx -e "import('./server/spine/scorers.ts').then(m=>{const s=m.SCORERS['1.0.0'];console.log(s.version + ' ' + s.fingerprint)})" 2>&1 | tail -1)"
 [ "$FP0" = "1.0.0 d4cf8f31472a" ] && ok "model 1.0.0 kept in the registry at its fingerprint, unchanged by widening supports' type: $FP0 (C2-D1; M1)" || bad "the 1.0.0 fingerprint moved: $FP0 — stop and bring it to Brad (C2-D1)"
-[ "$FP" = "1.0.1 cf11d21c781a" ] && ok "  ...the current model is C3's: $FP" || bad "  ...current model: $FP"
+[ "$FP" = "1.0.2 676719880d8a" ] && ok "  ...the current model is C3b's: $FP" || bad "  ...current model: $FP"
+FP1="$(npx tsx -e "import('./server/spine/scorers.ts').then(m=>{const s=m.SCORERS['1.0.1'];console.log(s.version + ' ' + s.fingerprint)})" 2>&1 | tail -1)"
+[ "$FP1" = "1.0.1 cf11d21c781a" ] && ok "  ...and C3's 1.0.1 kept in the registry: $FP1" || bad "  ...1.0.1: $FP1"
 
 step "3. Clone the prod copy; migrate through 0042; harden; what 0042 orphans"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 LINKS0="$(q "SELECT count(*) || '|' || coalesce(string_agg(supports || ':' || n, ',' ORDER BY supports), '') FROM (SELECT supports, count(*) n FROM value_outcome_evidence GROUP BY 1) x")"
-ERR0="$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'kind' - 'points_not_credited')::text), '' ORDER BY id), '') FROM run_errata e")"
+ERR0="$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'kind' - 'points_not_credited' - 'figure_finding_id')::text), '' ORDER BY id), '') FROM run_errata e")"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0042_c2_supports)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "176" ] && ok "176 triggers by pg_trigger (C3 section 28: +9; 0042 adds none)" || bad "triggers: $(trig)"
+[ "$(trig)" = "181" ] && ok "181 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 0042 adds none)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0042 ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^[0-9]+ CHECKs in the database: [0-9]+ with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain sentences: $PLAIN"
 [ "$(q "SELECT count(*) || '|' || coalesce(string_agg(supports || ':' || n, ',' ORDER BY supports), '') FROM (SELECT supports, count(*) n FROM value_outcome_evidence GROUP BY 1) x")" = "$LINKS0" ] \
   && ok "0042 orphans nothing: every link kept, with its supports ($LINKS0)" || bad "links after 0042"
-[ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'kind' - 'points_not_credited')::text), '' ORDER BY id), '') FROM run_errata e")" = "$ERR0" ] && ok "  ...every erratum unchanged (${ERR0%%|*}; compared without 0043's two new columns), each passing run_errata_recompute_complete" || bad "  ...errata changed"
+[ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'kind' - 'points_not_credited' - 'figure_finding_id')::text), '' ORDER BY id), '') FROM run_errata e")" = "$ERR0" ] && ok "  ...every erratum unchanged (${ERR0%%|*}; compared without the new columns of 0043 and 0044), each passing run_errata_recompute_complete" || bad "  ...errata changed"
 [ "$(q "SELECT count(*) FILTER (WHERE kind <> 'link_correction' OR points_not_credited IS NOT NULL) FROM run_errata")" = "0" ] && ok "  ...and 0043 reads each one as a link correction, with no points" || bad "  ...0043 kind/points: $(q "SELECT kind, points_not_credited FROM run_errata")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 for c in run_errata_scores_in_range run_errata_bands_known run_errata_recompute_complete; do

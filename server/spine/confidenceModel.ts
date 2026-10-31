@@ -84,7 +84,7 @@ const CONFIDENCE_BANDS: ReadonlyArray<readonly [number, ConfidenceLevel]> = [
  * column) would not be. This is a partial detector, and knowing its edge
  * matters more than the coverage it does give.
  */
-export const MODEL_VERSION = '1.0.1';
+export const MODEL_VERSION = '1.0.2';
 
 /**
  * C3 (Brad, 26 Oct 2026; C3-D2): who earns credit as an attester, a committer or a verifier. The
@@ -95,6 +95,13 @@ export const ATTESTER_RULE =
   'Customer-side: a non-simulated person of the account, holding metric_owner or executive_sponsor named from a source '
   + '(customer_role_grants), not linked as analyst_of_record. Only a customer-side person earns attestation, committer or verifier credit.';
 
+/**
+ * C3b (Brad, 27 Oct 2026; model 1.0.2): the same rule for the metric's definition. It joins the fingerprint,
+ * as ATTESTER_RULE does. 1.0.1 (server/spine/models/confidence_1_0_1.ts) is kept, unchanged (M1).
+ */
+export const DEFINITION_RULE =
+  "Only a customer-side person's confirmation earns the metric definition's credit: the confirmer is customer-side under ATTESTER_RULE.";
+
 export const MODEL_FINGERPRINT = createHash('sha256')
   .update(
     JSON.stringify({
@@ -103,6 +110,7 @@ export const MODEL_FINGERPRINT = createHash('sha256')
       bands: CONFIDENCE_BANDS,
       attestationCredit: ATTESTATION_CREDIT,
       attesterRule: ATTESTER_RULE,
+      definitionRule: DEFINITION_RULE,
     }),
   )
   .digest('hex')
@@ -166,7 +174,7 @@ const CONFIDENCE_METHOD =
  * unattested, and a simulated confirmer is not a person of record, the
  * same rule lvrf_block_simulated_attestor enforces at the database.
  */
-export type MetricDefinitionGap = 'no_notes' | 'unconfirmed' | 'confirmer_simulated';
+export type MetricDefinitionGap = 'no_notes' | 'unconfirmed' | 'confirmer_simulated' | 'not_customer_side';
 
 const METRIC_DEFINITION_GAP_NOTES: Record<MetricDefinitionGap, string> = {
   no_notes: 'Calculation method NOT disclosed by the source. The metric cannot be independently reproduced.',
@@ -174,6 +182,9 @@ const METRIC_DEFINITION_GAP_NOTES: Record<MetricDefinitionGap, string> = {
     'Calculation method documented, but not confirmed by a named person. Notes without a confirmer are unattested.',
   confirmer_simulated:
     'Calculation method documented and confirmation recorded, but the confirming person is simulated — not a person of record.',
+  // C3b (1.0.2): the note names the confirmer and why (computeConfidence); this is its fallback.
+  not_customer_side:
+    'Calculation method documented and confirmed, but the confirming person is not customer-side (no customer-side role named from a source).',
 };
 
 export interface ConfidenceInput {
@@ -193,6 +204,14 @@ export interface ConfidenceInput {
    * Zero's score and note text are not affected by this field's addition.
    */
   metricDefinitionGap?: MetricDefinitionGap;
+  /**
+   * C3b (1.0.2; DEFINITION_RULE): who confirmed the definition, whether they are customer-side, why not, and
+   * their roles with sources. A confirmed definition earns its weight only when the confirmer is customer-side.
+   */
+  metricDefinitionConfirmerName?: string | null;
+  metricDefinitionConfirmerCustomerSide?: boolean | null;
+  metricDefinitionConfirmerSideReason?: string | null;
+  metricDefinitionConfirmerRoles?: string | null;
   evidence: ConfidenceEvidenceInput[];
   claimedCurrencyImpact: number | null;
   realizedCurrencyImpact: number | null;
@@ -271,6 +290,11 @@ export interface ConfidenceDerivationFacts {
   metricDefinitionConfirmedByPersonId: string | null;
   metricDefinitionConfirmedAt: Date | null;
   metricDefinitionConfirmerSimulated: boolean | null;
+  /** C3b: the confirmer's name, and lvrf_customer_side, its reason and lvrf_customer_roles at the metric's account. */
+  metricDefinitionConfirmerName?: string | null;
+  metricDefinitionConfirmerCustomerSide?: boolean | null;
+  metricDefinitionConfirmerSideReason?: string | null;
+  metricDefinitionConfirmerRoles?: string | null;
   evidence: RawEvidenceForConfidence[];
   claimedCurrencyImpact: number | null;
   realizedCurrencyImpact: number | null;
@@ -343,6 +367,10 @@ export function buildConfidenceInput(facts: ConfidenceDerivationFacts): Confiden
   return {
     metricDefinitionConfirmed,
     metricDefinitionGap,
+    metricDefinitionConfirmerName: facts.metricDefinitionConfirmerName ?? null,
+    metricDefinitionConfirmerCustomerSide: facts.metricDefinitionConfirmerCustomerSide ?? null,
+    metricDefinitionConfirmerSideReason: facts.metricDefinitionConfirmerSideReason ?? null,
+    metricDefinitionConfirmerRoles: facts.metricDefinitionConfirmerRoles ?? null,
     evidence,
     claimedCurrencyImpact: facts.claimedCurrencyImpact,
     realizedCurrencyImpact: facts.realizedCurrencyImpact,
@@ -393,14 +421,20 @@ export function computeConfidence(input: ConfidenceInput): ConfidenceResult {
   };
 
   // 1. Metric definition confirmed — full weight or none, no partial credit.
-  award(
-    'metric_definition_confirmed',
-    input.metricDefinitionConfirmed ? CONFIDENCE_FACTOR_WEIGHTS.metric_definition_confirmed : 0,
-    input.metricDefinitionConfirmed
-      ? 'Calculation method documented.'
-      : METRIC_DEFINITION_GAP_NOTES[input.metricDefinitionGap ?? 'no_notes'],
-    input.metricDefinitionConfirmed ? null : (input.metricDefinitionGap ?? 'no_notes'),
-  );
+  // C3b (1.0.2; DEFINITION_RULE): a confirmed definition earns its weight only when the confirmer is customer-side.
+  const confirmer = input.metricDefinitionConfirmerName ?? 'the confirming person';
+  if (input.metricDefinitionConfirmed && input.metricDefinitionConfirmerCustomerSide === true) {
+    const roles = input.metricDefinitionConfirmerRoles;
+    award('metric_definition_confirmed', CONFIDENCE_FACTOR_WEIGHTS.metric_definition_confirmed,
+      `Calculation method documented, confirmed by ${confirmer}${roles ? ` (${roles})` : ''}.`, null);
+  } else if (input.metricDefinitionConfirmed) {
+    award('metric_definition_confirmed', 0,
+      `Calculation method documented and confirmed by ${confirmer}, who is not customer-side (${input.metricDefinitionConfirmerSideReason ?? 'no customer-side role named from a source'}).`,
+      'not_customer_side');
+  } else {
+    award('metric_definition_confirmed', 0,
+      METRIC_DEFINITION_GAP_NOTES[input.metricDefinitionGap ?? 'no_notes'], input.metricDefinitionGap ?? 'no_notes');
+  }
 
   // 2 & 3. Evidence strength by what it supports. Best item, not average.
   for (const [factor, supports] of [

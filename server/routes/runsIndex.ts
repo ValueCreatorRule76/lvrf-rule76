@@ -39,6 +39,9 @@ export function runsIndexRouter(pool: Pool): Router {
           -- C3: a run entered to exercise the system says so, here as everywhere; and its current errata, in one line.
           lvrf_system_exercise_mark('value_runs', vr.id) AS system_exercise,
           lvrf_run_erratum_line(vr.id) AS erratum_line,
+          -- C3b: the run's unsourced-figure erratum line, shown beneath its sealed provenance label ("as recorded at sealing").
+          (SELECT string_agg(lvrf_erratum_line(x.id), '; ' ORDER BY x.recorded_at, x.id) FROM run_errata x
+            WHERE x.value_run_id = vr.id AND x.kind = 'unsourced_figure' AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)) AS unsourced_line,
           (e.deleted_at IS NOT NULL OR e.superseded_by_id IS NOT NULL) AS engagement_retired
         FROM value_runs vr
         -- L26 (11 Oct 2026): the engagement is joined WHATEVER its state, so a

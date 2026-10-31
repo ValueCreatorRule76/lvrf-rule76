@@ -1,4 +1,5 @@
 import { SystemExerciseLine } from '../SystemExercise';
+import { VerifiedUnopenedLine } from '../RecordReadings';
 import type { Run } from '../../types/run';
 import { LineageLink } from '../LineageLink';
 import { Badge } from './Card';
@@ -50,6 +51,8 @@ export function EvidenceCard({ run }: { run: Run }) {
             {/* C3: the evidence row this item was sealed from is marked as a system exercise. */}
             {(() => { const m = (run.marked_evidence ?? []).find((x) => x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance);
               return m ? <SystemExerciseLine mark={m.system_exercise} className="mt-0.5" /> : null; })()}
+            {/* C3b: the evidence row it was sealed from is verified, with no citation opened (as the row stands). */}
+            {(run.unopened_evidence ?? []).some((x) => x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance) && <VerifiedUnopenedLine className="mt-0.5" />}
             {/* P2: the sealed item carries no evidence id (P2-D7); its outcome's figure is traced instead. */}
             {(e.supports === 'baseline' || e.supports === 'actual') && typeof run.payload.valueOutcomeId === 'string' && (
               <LineageLink table="value_outcomes" id={run.payload.valueOutcomeId} figure={e.supports} />

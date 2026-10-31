@@ -22,4 +22,6 @@ export interface RunListItem {
   /** C3: the run's mark, and its current errata in one line. */
   system_exercise: { reason: string; marked_by: string; marked_on: string } | null;
   erratum_line: string | null;
+  /** C3b: the run's unsourced-figure erratum line, beneath its sealed provenance label. */
+  unsourced_line?: string | null;
 }

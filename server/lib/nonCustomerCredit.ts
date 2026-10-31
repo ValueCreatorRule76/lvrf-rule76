@@ -7,6 +7,11 @@ import type { PoolClient } from 'pg';
  * first, then one erratum and one act per run, refused if the count changed.
  *
  * Which points, from the seal:
+ *   - C3b (Brad, 27 Oct 2026; C3b-D1, condition 1): the definition factor, earned, its confirmer at sealing not
+ *     customer-side. The seal does not name the confirmer (1.0.2 seals do), so it is read from the metric version
+ *     the run sealed — its sealed id, or the one version current at the run's sealing that matches the sealed
+ *     metric — and that version's confirmer as the audit log held it then. If either is not exact, the erratum
+ *     says "the confirmer is not recoverable from this seal" and counts no points for it. No guessing;
  *   - an evidence factor (baseline, actual) whose strongest item was an attestation (its sealed note:
  *     "Strongest — attested by <name>"), the attestation by a person not customer-side: all its earned
  *     points rest on that attestation (were an independent item stronger, the attestation would not be
@@ -23,17 +28,69 @@ export interface CreditErratum {
 }
 
 interface SealedFactor { factor: string; question?: string; weight?: number; earned: number; note?: string; gap?: string | null }
+interface SealedMetric { id?: string; name?: string; unit?: string; direction?: string; sourceSystem?: string }
 interface SealedItem { kind: string; summary: string; provenance: string; supports: string; source_verified: boolean }
 interface Person { id: string; full_name: string; customer_side: boolean; reason: string | null }
 
 const FACTOR_SUPPORT: Record<string, string> = { baseline_evidence_verified: 'baseline', actual_evidence_verified: 'actual' };
 const n1 = (x: number) => String(Math.round(x * 10) / 10);
 
+/**
+ * C3b (condition 1): what a credit erratum says of the definition factor, from its sealed row and the confirmer at
+ * sealing — null when that is not recoverable: then it says so, in Brad's words, and counts no points. A
+ * customer-side confirmer earns the credit, so nothing is said.
+ */
+export function definitionPart(def: SealedFactor, who: { full_name: string; customer_side: boolean } | null): { points: number; part: string | null } {
+  const q = `"${def.question ?? def.factor}"`;
+  const earned = Number(def.earned);
+  if (who === null) {
+    return { points: 0, part: `${q} (${n1(earned)} of ${def.weight ?? '?'} as sealed): the confirmer is not recoverable from this seal, so no points are counted for it` };
+  }
+  if (who.customer_side) return { points: 0, part: null };
+  return { points: earned, part: `${n1(earned)} of ${def.weight ?? '?'} in ${q} rest on a confirmation by ${who.full_name}` };
+}
+
+/**
+ * C3b-D1 (condition 1): the person who had confirmed the definition when the run was sealed, or null when that is
+ * not exact. The metric version: the run's sealed id; else, among the versions of the metric chain of the outcome
+ * the run sealed, the one current at its sealing (created at or before it, no successor created at or before it)
+ * whose name, unit, direction and source system match the seal — exactly one, or null. Its confirmer: the audit
+ * log's last row for that version at or before the sealing, with a confirmation dated at or before it.
+ */
+export async function confirmerAtSealing(client: PoolClient, runId: string, sealedAt: Date, outcomeId: string | null,
+  sealed: SealedMetric | undefined): Promise<string | null> {
+  void runId;
+  let metricId: string | null = sealed?.id ?? null;
+  if (!metricId) {
+    if (!outcomeId || !sealed) return null;
+    const { rows } = await client.query<{ id: string }>(
+      `WITH RECURSIVE start AS (SELECT business_metric_id AS id FROM value_outcomes WHERE id = $1),
+         back(id) AS (SELECT id FROM start UNION SELECT m.id FROM business_metrics m JOIN back b ON m.superseded_by_id = b.id),
+         fwd(id) AS (SELECT id FROM start UNION SELECT m.superseded_by_id FROM business_metrics m JOIN fwd f ON m.id = f.id WHERE m.superseded_by_id IS NOT NULL),
+         chain AS (SELECT id FROM back UNION SELECT id FROM fwd)
+       SELECT m.id FROM business_metrics m JOIN chain c ON c.id = m.id
+        WHERE m.created_at <= $2
+          AND NOT EXISTS (SELECT 1 FROM business_metrics s WHERE s.id = m.superseded_by_id AND s.created_at <= $2)
+          AND m.name = $3 AND m.unit = $4 AND m.direction::text = $5 AND m.source_system = $6`,
+      [outcomeId, sealedAt, sealed.name ?? '', sealed.unit ?? '', sealed.direction ?? '', sealed.sourceSystem ?? '']);
+    if (rows.length !== 1) return null;
+    metricId = rows[0].id;
+  }
+  const { rows: [a] } = await client.query<{ by: string | null; at: string | null }>(
+    `SELECT a.new_row->>'definition_confirmed_by_person_id' AS by, a.new_row->>'definition_confirmed_at' AS at
+       FROM audit_log a WHERE a.table_name = 'business_metrics' AND a.record_id = $1::text AND a.at <= $2
+      ORDER BY a.at DESC, a.id DESC LIMIT 1`, [metricId, sealedAt]);
+  if (!a || !a.by || !a.at || new Date(a.at) > sealedAt) return null;
+  return a.by;
+}
+
 export async function listCreditErrata(client: PoolClient, tenantId: string): Promise<CreditErratum[]> {
   const { rows: runs } = await client.query<{ id: string; run_number: number; engagement_id: string; engagement: string;
-    institution_id: string; account: string; payload: { confidence?: { score: number; band: string; modelVersion?: string; modelFingerprint?: string; factors?: SealedFactor[] };
-      evidence?: SealedItem[]; valueOutcomeId?: string } }>(
-    `SELECT r.id, r.run_number, g.id AS engagement_id, g.name AS engagement, i.id AS institution_id, i.name AS account, r.payload
+    institution_id: string; account: string; created_at: Date; outcome_at_sealing: string | null;
+    payload: { confidence?: { score: number; band: string; modelVersion?: string; modelFingerprint?: string; factors?: SealedFactor[] };
+      evidence?: SealedItem[]; valueOutcomeId?: string; businessMetric?: SealedMetric; people?: { definition_confirmer?: { name: string } | null } } }>(
+    `SELECT r.id, r.run_number, g.id AS engagement_id, g.name AS engagement, i.id AS institution_id, i.name AS account, r.payload,
+            r.created_at, lvrf_run_outcome_at_sealing(r.id) AS outcome_at_sealing
        FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id
       WHERE r.tenant_id = $1 AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM run_errata x WHERE x.value_run_id = r.id AND x.kind = 'non_customer_credit')
@@ -60,6 +117,16 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
     const not: Map<string, string> = new Map();
     let points = 0;
     const creditedEvidence: string[] = [];
+    // C3b: the definition factor — its confirmer at sealing, read from the metric version the run sealed.
+    const def = c.factors.find((f) => f.factor === 'metric_definition_confirmed');
+    if (def && Number(def.earned) > 0) {
+      const who = await confirmerAtSealing(client, r.id, r.created_at, r.outcome_at_sealing, r.payload.businessMetric);
+      const p = who === null ? null : await person(who, r.institution_id);
+      const d = definitionPart(def, who === null ? null : p);
+      points += d.points;
+      if (d.part) parts.push(d.part);
+      if (p && !p.customer_side && d.points > 0) not.set(p.full_name, p.reason ?? 'not customer-side');
+    }
     // The evidence factors: an attestation by a person not customer-side, strongest in the factor.
     for (const f of c.factors) {
       const support = FACTOR_SUPPORT[f.factor];
@@ -80,8 +147,8 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
         break;
       }
     }
-    // The committer and the verifier factors.
-    const outcomeId = r.payload.valueOutcomeId ?? (await client.query<{ id: string }>(
+    // The committer and the verifier factors. C3b: a run that sealed no outcome is named by the outcome current at its sealing.
+    const outcomeId = r.payload.valueOutcomeId ?? r.outcome_at_sealing ?? (await client.query<{ id: string }>(
       `SELECT vo.id FROM value_outcomes vo
         WHERE vo.engagement_id = $1 AND vo.deleted_at IS NULL
         ORDER BY (EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = vo.id AND l.evidence_id = ANY($2::uuid[]))) DESC, vo.created_at
@@ -98,6 +165,7 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
       parts.push(`${n1(Number(f.earned))} of ${f.weight ?? '?'} in "${f.question ?? factor}" were credited to ${p.full_name} ${verb}`);
       not.set(p.full_name, p.reason ?? 'not customer-side');
     }
+    // An erratum states points; a run with none (a confirmer not recoverable, and nothing else) gets none.
     if (points <= 0) continue;
     const whoNot = [...not.entries()].map(([name, why]) => `${name} is not customer-side (${why})`).join('; ');
     out.push({
@@ -105,7 +173,7 @@ export async function listCreditErrata(client: PoolClient, tenantId: string): Pr
       value_outcome_id: outcomeId, sealed_score: Number(c.score), sealed_band: c.band,
       model_version: c.modelVersion ?? null, model_fingerprint: c.modelVersion ? (c.modelFingerprint ?? null) : null,
       points, parts,
-      text: `From this run's seal: ${parts.join('; ')}. Under the C3 rule (model 1.0.1) none of these earns credit: ${whoNot}. `
+      text: `From this run's seal: ${parts.join('; ')}. Under the C3 rule (model 1.0.2) none of these earns credit: ${whoNot}. `
         + `The sealed score, ${n1(Number(c.score))} / 100, stands.`,
     });
   }

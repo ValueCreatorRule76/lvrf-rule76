@@ -142,6 +142,11 @@ const CASES = [
   { route: 'GET /api/system-exercise/candidates', kind: 'list', path: '/api/system-exercise/candidates', aIds: [E.EV_A, E.RUN_A], bIds: [] },
   { route: 'GET /api/errata/non-customer-credit', kind: 'list', path: '/api/errata/non-customer-credit', aIds: [], bIds: [] },
   { route: 'POST /api/errata/non-customer-credit', kind: 'actor' },
+  // C3b: a figure with no source on record, on an outcome.
+  { route: 'GET /api/value-outcomes/:outcomeId/figure-findings', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/figure-findings`,
+    notFound: [404, `value outcome ${E.OUTCOME_A} not found`], target: ['value_outcomes', E.OUTCOME_A] },
+  { route: 'POST /api/value-outcomes/:outcomeId/figure-findings', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/figure-findings`,
+    body: {}, controlBody: { x: 1 }, notFound: [404, `value outcome ${E.OUTCOME_A} not found`], target: ['value_outcomes', E.OUTCOME_A] },
   { route: 'POST /api/system-exercise/marks', kind: 'actor' },
   { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
     notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
@@ -438,8 +443,8 @@ step("F. C3's batches take the actor's tenant: B can neither mark nor record err
       : bad(`marks: B naming A's ${table} -> ${rOther.status} ${JSON.stringify(rOther.message)}; unknown -> ${rUnknown.status} ${JSON.stringify(rUnknown.message)}`);
   }
   const g = await call(cookieB, 'GET', '/api/errata/non-customer-credit');
-  const e = await call(cookieB, 'POST', '/api/errata/non-customer-credit', { expected_count: (g.json?.count ?? 0) + 1, reason: note('Verification: P3 tenant scope checks.') });
-  e.status === 409 && /^The count changed: the seals now call for \d+ errata/.test(e.message ?? '')
+  const e = await call(cookieB, 'POST', '/api/errata/non-customer-credit', { expected_count: (g.json?.count ?? 0) + 1, expected_unsourced_count: g.json?.unsourced_count ?? 0, reason: note('Verification: P3 tenant scope checks.') });
+  e.status === 409 && /^The count changed: the record now calls for \d+ credit errata and \d+ unsourced-figure errata/.test(e.message ?? '')
     ? ok(`credit errata: B's batch reads B's own seals only (B's count ${g.json?.count}); a count that is not B's -> 409`)
     : bad(`credit errata as B -> ${e.status} ${JSON.stringify(e.message)}`);
   const marksAfter = q('SELECT count(*) FROM system_exercise_marks');

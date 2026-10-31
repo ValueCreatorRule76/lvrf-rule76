@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #
 # C3 — credit only for customer-side people (a role named from a source); model 1.0.1 with 1.0.0 kept (M1);
+# C3b (27 Oct 2026): 1.0.1 is now frozen in server/spine/models/confidence_1_0_1.ts and 1.0.2 is current; C3's
+# model checks (B6, B7) read the frozen 1.0.1, where C3's rule is kept; runs this script seals are 1.0.2's, which
+# keeps C3's rule; the batch carries both counts (C3b's unsourced-figure errata: none here).
 # errata on what the seals credited; system-exercise marks; headlines (LVRF_PLAN §12; migration 0043;
 # hardening.sql section 28; Brad's rulings, 26 Oct 2026). Local verification.
 #
@@ -45,10 +48,10 @@ PORT=3103; VITE_PORT=5203; CDP_PORT=9363
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_c3.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
-PRODUCE=server/routes/produceRun.ts; MODELF=server/spine/confidenceModel.ts; SCORERS=server/spine/scorers.ts
+PRODUCE=server/routes/produceRun.ts; MODELF=server/spine/confidenceModel.ts; SCORERS=server/spine/scorers.ts; M101=server/spine/models/confidence_1_0_1.ts
 C3R=server/routes/creditAndMarks.ts; VH=server/routes/valueHypotheses.ts; POVP=client/src/pages/PovPage.tsx; BENCH=client/src/components/workbench/Workbench.tsx
 COH=server/routes/cohort.ts; CARD=client/src/components/CohortCard.tsx
-EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$VH" "$POVP" "$BENCH" "$COH" "$CARD")
+EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$VH" "$POVP" "$BENCH" "$COH" "$CARD" "$M101")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PRE_C3=42e7fe4
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
@@ -112,8 +115,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "176" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 176 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "181" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 181 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 pre_c3() {  # the pre-C3 code itself, for sealing runs under model 1.0.0
   git show "$PRE_C3:$PRODUCE" > "$PRODUCE"; git show "$PRE_C3:$MODELF" > "$MODELF"; stop_server; start_server
@@ -125,19 +128,19 @@ step "1. Typecheck"
 npx tsc --noEmit -p . > "$W/tsc.log" 2>&1 && ok "server tsc" || bad "server tsc: $(head -5 "$W/tsc.log")"
 (cd client && npx tsc -b) > "$W/tsc2.log" 2>&1 && ok "client tsc -b" || bad "client tsc: $(head -5 "$W/tsc2.log")"
 
-step "2. The models: 1.0.1 current, 1.0.0 kept (M1; C3-D2)"
-F100="$(FP server/spine/models/confidence_1_0_0.ts)"; F101="$(FP "$MODELF")"
+step "2. The models: 1.0.1 (C3), frozen since C3b; 1.0.0 kept (M1; C3-D2)"
+F100="$(FP server/spine/models/confidence_1_0_0.ts)"; F101="$(FP "$M101")"
 [ "$F100" = "1.0.0 d4cf8f31472a" ] && ok "the kept 1.0.0 scorer: $F100, the fingerprint every 1.0.0 run sealed" || bad "1.0.0: $F100"
-[ "${F101%% *}" = "1.0.1" ] && [ "${F101##* }" != "d4cf8f31472a" ] && ok "the current model: $F101 (ATTESTER_RULE moves the fingerprint with the version)" || bad "1.0.1: $F101"
+[ "${F101%% *}" = "1.0.1" ] && [ "${F101##* }" != "d4cf8f31472a" ] && ok "C3's model: $F101 (ATTESTER_RULE moves the fingerprint with the version)" || bad "1.0.1: $F101"
 REG="$(npx tsx -e "import('./$SCORERS').then(m=>console.log(Object.keys(m.SCORERS).sort().join(',')))" 2>&1 | tail -1)"
-[ "$REG" = "1.0.0,1.0.1" ] && ok "the scorer registry keeps both: $REG" || bad "registry: $REG"
+[ "$REG" = "1.0.0,1.0.1,1.0.2" ] && ok "the scorer registry keeps all three: $REG" || bad "registry: $REG"
 # B7 — ATTESTER_RULE out of the fingerprint: 1.0.1's fingerprint falls back to 1.0.0's.
-edit "$MODELF" "      attesterRule: ATTESTER_RULE," ""
-F7="$(FP "$MODELF")"
+edit "$M101" "      attesterRule: ATTESTER_RULE," ""
+F7="$(FP "$M101")"
 [ "${F7##* }" = "d4cf8f31472a" ] && ok "B7: ATTESTER_RULE left out → caught: 1.0.1 would carry 1.0.0's fingerprint ($F7) — the version moved, the fingerprint did not" || bad "B7: $F7"
-restore "$MODELF"
+restore "$M101"
 cat > "$W/model.ts" <<TS
-import { evidenceCredit } from '$(pwd)/$MODELF';
+import { evidenceCredit } from '$(pwd)/$M101';
 const base = { kind: 'system_export', sourceVerified: true, supports: 'baseline' as const, attestedByName: 'P', attestedByScope: 'institution' as const, attesterSimulated: false };
 console.log(JSON.stringify([
   evidenceCredit({ ...base, attesterCustomerSide: true, attesterRoles: 'metric owner per X, named by S, 1 Jan 2026' }),
@@ -149,18 +152,18 @@ MOD="$(npx tsx "$W/model.ts" 2>&1 | tail -1)"
 [ "$MOD" = '["0.6:attested by P (metric owner per X, named by S, 1 Jan 2026)","0:attester is not customer-side (P: no customer-side role named from a source)","0:attester is not customer-side (P: no customer-side role named from a source)"]' ] \
   && ok "1.0.1 credits an attestation (0.6) only from a customer-side attester, naming the role's source; otherwise 0, saying why" || bad "model: $MOD"
 # B6 — 1.0.1 crediting a non-customer-side attester.
-edit "$MODELF" "    if (ev.attesterCustomerSide !== true) {" "    if (false) {"
+edit "$M101" "    if (ev.attesterCustomerSide !== true) {" "    if (false) {"
 MOD6="$(npx tsx "$W/model.ts" 2>&1 | tail -1)"
 printf '%s' "$MOD6" | grep -q '"0.6:attested by P"' && ok "B6: 1.0.1 crediting a non-customer-side attester → caught (0.6 for an attester with no role)" || bad "B6: $MOD6"
-restore "$MODELF"
+restore "$M101"
 
 step "3. Clone the prod copy; migrate through 0043; harden; what 0043 orphans"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 ERR0="$(q "SELECT count(*) FROM run_errata")"; RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
-migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0043_c3_credit_marks)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "176" ] && ok "176 triggers (167 + section 28's nine)" || bad "triggers: $(trig)"
+[ "$(trig)" = "181" ] && ok "181 triggers (167 + section 28's nine + section 29's five, C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
@@ -284,7 +287,7 @@ sqlrefused "an edit of a grant's source" "UPDATE customer_role_grants SET source
 sqlrefused "a DELETE of a grant" "DELETE FROM customer_role_grants WHERE id = '$G1'" "never deleted"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$G2' AND act = 'withdraw'")" = "1" ] && ok "  ...the revocation with its act (withdraw)" || bad "  ...revocation act"
 
-step "6. Sealing under 1.0.1: credit only for the customer-side person, each credit naming its source; the basis badge agrees"
+step "6. Sealing under the current model (1.0.2, which keeps C3's rule): credit only for the customer-side person, each credit naming its source; the basis badge agrees"
 seal "$ENG2" "Verification: the role-holder's run, under 1.0.1."; R2="$RUN"
 seal "$ENG4" "Verification: the run of a person with no role, under 1.0.1."; R4="$RUN"
 F2="$(q "SELECT string_agg(f->>'factor' || '=' || (f->>'earned'), ',' ORDER BY f->>'factor') FROM value_runs r, jsonb_array_elements(r.payload->'confidence'->'factors') f WHERE r.id = '$R2'")"
@@ -293,8 +296,8 @@ printf '%s' "$F2" | grep -q "baseline_evidence_verified=15" && printf '%s' "$F2"
 printf '%s' "$F4" | grep -q "baseline_evidence_verified=0" && printf '%s' "$F4" | grep -q "human_commit_of_record=0" && ok "the run of a person with no role: baseline 0, committer 0" || bad "R4: $F4"
 N4="$(q "SELECT f->>'note' FROM value_runs r, jsonb_array_elements(r.payload->'confidence'->'factors') f WHERE r.id = '$R4' AND f->>'factor' = 'human_commit_of_record'")"
 [ "$N4" = "Committed by C3 colleague (invented) — not customer-side (no customer-side role named from a source)." ] && ok "  ...its note: \"$N4\"" || bad "  ...note: $N4"
-[ "$(q "SELECT (r.payload->'confidence'->>'modelVersion') || '|' || (x->'attester'->>'customer_side') || '|' || (r.payload->'people'->'committer'->>'customer_side') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$R2' AND x->>'kind' = 'system_export'")" = "1.0.1|true|true" ] \
-  && ok "  ...1.0.1 seals the attester and the committer as they stood (C3-D3)" || bad "  ...sealed people"
+[ "$(q "SELECT (r.payload->'confidence'->>'modelVersion') || '|' || (x->'attester'->>'customer_side') || '|' || (r.payload->'people'->'committer'->>'customer_side') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$R2' AND x->>'kind' = 'system_export'")" = "1.0.2|true|true" ] \
+  && ok "  ...the current model seals the attester and the committer as they stood (C3-D3)" || bad "  ...sealed people"
 q "SELECT 1" > /dev/null
 expect POST "/api/value-outcomes/$O2/evidence" "$(J kind attestation provenance 'Fixture attestation (owner)' summary 'C3 owner attestation (fixture)' supports impact_basis source_verified false ai_sourced false simulated false evidence_form statement attested_by_person_id "$OWNER2" attested_at 2025-10-01T00:00:00Z)" 201 "  ...an attestation by the role-holder"
 A_OWN="$(rj b.evidence_id)"
@@ -318,7 +321,7 @@ PAY3="$(q "SELECT payload FROM value_runs WHERE id = '$R3'")"; M3="$(q "SELECT j
 PAY2="$(q "SELECT payload FROM value_runs WHERE id = '$R2'")"; M2="$(q "SELECT json_build_object('kind', kind, 'summary', summary, 'provenance', provenance) FROM evidence e WHERE e.institution_id = '$INST2' AND e.summary = 'C3 export attested by the owner (fixture)'")"
 RC3="$(npx tsx "$W/rc.ts" "$PAY3" "$M3" 2>&1 | tail -1)"; RC2="$(npx tsx "$W/rc.ts" "$PAY2" "$M2" 2>&1 | tail -1)"
 printf '%s' "$RC3" | grep -q "^ok:1.0.0:" && ok "a 1.0.0 run recomputes under the kept 1.0.0 scorer ($RC3)" || bad "1.0.0 recompute: $RC3"
-printf '%s' "$RC2" | grep -q "^ok:1.0.1:" && ok "a 1.0.1 run with an attested item recomputes under 1.0.1: its seal carries the attester ($RC2)" || bad "1.0.1 recompute: $RC2"
+printf '%s' "$RC2" | grep -q "^ok:1.0.2:" && ok "a current-model (1.0.2) run with an attested item recomputes under its model: its seal carries the attester ($RC2)" || bad "1.0.2 recompute: $RC2"
 # B8 — the 1.0.0 scorer dropped from the registry.
 edit "$SCORERS" "  [v100.MODEL_VERSION]: { version: v100.MODEL_VERSION, fingerprint: v100.MODEL_FINGERPRINT, computeConfidence: v100.computeConfidence as (i: ConfidenceInput) => ConfidenceResult },
 " ""
@@ -335,9 +338,9 @@ printf '%s' "$LINE_OLD" | grep -qF "$EXPECT_TEXT" && [ "$PTS_OLD" = "25" ] && ok
 [ "$(rj "[b.errata.some(x=>x.run_id==='$R2'), b.errata.some(x=>x.run_id==='$R4'), b.errata.some(x=>x.run_id==='$R3')].join(',')")" = "false,false,false" ] \
   && ok "  ...not the role-holder's run (customer-side), nor the no-role run (1.0.1 credited nothing), nor the plain run" || bad "  ...listed: $(rj "b.errata.map(x=>x.run_number).join(',')")"
 rj "b.errata.filter(x=>x.run_id!=='$R_OLD').map(x=>'  NOTE  (the copy'+String.fromCharCode(39)+'s own, not judged) '+x.account+' run '+x.run_number+': '+x.points+' points').join('\n')" | head -20
-expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" reason 'Verification: X records them.')" 403 "X records the batch" "steward" "$X"
-expect POST /api/errata/non-customer-credit "$(J expected_count "$((COUNT + 1))" reason 'Verification: a count that was off.')" 409 "the batch with a count that is off" "The count changed: the seals now call for $COUNT errata, not $((COUNT + 1))"
-expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" reason 'Verification: a typed figure.' points_not_credited 5)" 400 "a typed point figure" "what each erratum states is read from its run's seal by the server"
+expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" expected_unsourced_count 0 reason 'Verification: X records them.')" 403 "X records the batch" "steward" "$X"
+expect POST /api/errata/non-customer-credit "$(J expected_count "$((COUNT + 1))" expected_unsourced_count 0 reason 'Verification: a count that was off.')" 409 "the batch with a count that is off" "The count changed: the record now calls for $COUNT credit errata and 0 unsourced-figure errata, not $((COUNT + 1)) and 0"
+expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" expected_unsourced_count 0 reason 'Verification: a typed figure.' points_not_credited 5)" 400 "a typed point figure" "what each erratum states is read from its run's seal by the server"
 [ "$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
 
 step "9. The browser: roles, the two batches (each confirmed, with its count), marks, credit errata, headlines, lineage"
@@ -348,7 +351,8 @@ TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -
 [ -n "$TOKEN" ] && ok "the steward signed in by session" || { bad "no session"; exit 1; }
 cw() {  # MODE [LOGNAME] (env per mode)
   local log="$W/walk.${2:-$1}.log"
-  node scripts/lib/c3_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$log" 2>&1; local rc=$?
+  # A break's screens never land on the clean ones: they show the page broken.
+  node scripts/lib/c3_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "${BREAK_SHOTS:-$SHOTS}" "$TOKEN" > "$log" 2>&1; local rc=$?
   if [ -z "${2:-}" ]; then
     PASS=$((PASS + $(grep -c '^  PASS' "$log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$log" || true)))
     grep -E '^  (PASS|FAIL)' "$log" || true
@@ -366,11 +370,11 @@ COUNT="$COUNT" EXPECT_TEXT="$EXPECT_TEXT" cw errata_batch
 [ "$(q "SELECT md5(r::text) FROM value_runs r WHERE r.id = '$R_OLD'")" = "$SEAL_OLD" ] && ok "  ...the sealed run byte-identical" || bad "  ...the sealed run changed"
 expect GET /api/errata/non-customer-credit "" 200 "the dry run again"
 [ "$(rj b.count)" = "0" ] && ok "  ...calls for none: each run's erratum is recorded" || bad "  ...count $(rj b.count)"
-expect POST /api/errata/non-customer-credit "$(J expected_count 1 reason 'Verification: once more.')" 409 "  ...a second batch, the count off" "The count changed: the seals now call for 0 errata, not 1"
+expect POST /api/errata/non-customer-credit "$(J expected_count 1 expected_unsourced_count 0 reason 'Verification: once more.')" 409 "  ...a second batch, the count off" "The count changed: the record now calls for 0 credit errata and 0 unsourced-figure errata, not 1 and 0"
 # B9 — the batch without its count check: a count that was off is accepted.
-edit "$C3R" "      if (list.length !== b.expected_count) {" "      if (false) {"
+edit "$C3R" "      if (list.length !== b.expected_count || unsourced.length !== b.expected_unsourced_count) {" "      if (false) {"
 stop_server; start_server
-expect POST /api/errata/non-customer-credit "$(J expected_count 3 reason 'Verification: B9, a count that was off.')" 201 "B9: without the count check, a count that was off → accepted (caught: the batch must refuse it)"
+expect POST /api/errata/non-customer-credit "$(J expected_count 3 expected_unsourced_count 0 reason 'Verification: B9, a count that was off.')" 201 "B9: without the count check, a count that was off → accepted (caught: the batch must refuse it)"
 restore "$C3R"; stop_server; start_server
 # Marks: the API's refusals, then the batch in the browser.
 expect GET /api/system-exercise/candidates "" 200 "the marks' candidates"
@@ -423,20 +427,20 @@ O_ROLE="$O2" O_ANALYST="$O1" cw lineage
 edit "$VH" "                 AND lvrf_system_exercise_mark('value_runs', r.id) IS NULL
                ORDER BY r.run_number DESC LIMIT 1) AS latest_locked_run," "               ORDER BY r.run_number DESC LIMIT 1) AS latest_locked_run,"
 stop_server; start_server; sleep 2
-INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b10
+BREAK_SHOTS="$W" INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b10
 grep -q "^  FAIL  its headline is run" "$W/walk.b10.log" && ok "B10: the POV's headline taking a marked run → caught" || bad "B10: not caught: $(grep -m2 'headline is run' "$W/walk.b10.log")"
 restore "$VH"; stop_server; start_server
 # B11 — the POV's headline without its erratum line.
 edit "$POVP" "            {e.latest_locked_run!.erratum_line && <span className=\"mt-1 block text-[11px] text-warning\" data-testid=\"headline-erratum\">{e.latest_locked_run!.erratum_line}</span>}" ""
 sleep 3
-INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b11
+BREAK_SHOTS="$W" INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b11
 grep -q "^  FAIL  the POV's headline shows" "$W/walk.b11.log" && ok "B11: the POV's headline without its erratum line → caught" || bad "B11: not caught: $(grep -m2 "POV's headline" "$W/walk.b11.log")"
 restore "$POVP"
 # B14 — the book's row without its erratum line.
 edit "$CARD" "                      {m.erratum_line && <span className=\"mt-1 block text-[11px] text-warning\" data-testid=\"book-member-erratum\">{m.erratum_line}</span>}
 " ""
 sleep 3
-INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b14
+BREAK_SHOTS="$W" INST1="$INST1" INST2="$INST2" LINE="$LINE" HEADLINE_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2'")" MARKED_RUN="$(q "SELECT run_number FROM value_runs WHERE id = '$R2B'")" cw headlines b14
 grep -q "^  FAIL  the book's weakest-link table shows" "$W/walk.b14.log" && ok "B14: the book's row without its erratum line → caught" || bad "B14: not caught: $(grep -m2 "weakest-link" "$W/walk.b14.log")"
 restore "$CARD"
 # B12 — the print without the system-exercise line.

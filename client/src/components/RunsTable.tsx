@@ -110,6 +110,8 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">
                   <ProvenanceCell sourceFixture={r.source_fixture} />
+                  {/* C3b (ruling 5): a sealed label is shown as recorded at sealing, with its unsourced-figure erratum beneath. */}
+                  {r.unsourced_line && <span className="block text-[11px] text-warning" data-testid="runs-unsourced"><span className="text-ink-45">as recorded at sealing · </span>{r.unsourced_line}</span>}
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">{r.confidence_score}
                   {/* C3: a run's current errata, and its system-exercise mark, beside its score. */}

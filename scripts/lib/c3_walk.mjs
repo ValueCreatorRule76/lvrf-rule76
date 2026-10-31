@@ -81,9 +81,11 @@ if (MODE === 'roles') {
 }
 
 if (MODE === 'errata_batch') {
-  check(await open('/runs', `!!document.querySelector('[data-testid=credit-errata-count]')`), 'the Runs page shows "Errata the seals call for"');
+  check(await open('/runs', `!!document.querySelector('[data-testid=credit-errata-count]')`), 'the Runs page shows "Errata the record calls for"');
   const count = await ev(`document.querySelector('[data-testid=credit-errata-count]').textContent`);
-  check(count === `${E.COUNT} runs call for one.`, `the dry run counts ${E.COUNT}`, count);
+  check(count === `${E.COUNT} runs call for a credit erratum.`, `the dry run counts ${E.COUNT}`, count);
+  // C3b: the same batch shows its unsourced-figure count (none here).
+  check((await ev(`document.querySelector('[data-testid=unsourced-errata-count]')?.textContent ?? ''`)) === 'No run calls for an unsourced-figure erratum.', '  ...and its unsourced-figure count: none');
   const list = await text('[data-testid=credit-erratum-candidate]');
   check(list.includes(E.EXPECT_TEXT), "  ...and lists the fixture's run with the points read from its seal", list.slice(0, 300));
   const f = `document.querySelector('[data-testid=credit-errata-batch]')`;
@@ -93,7 +95,7 @@ if (MODE === 'errata_batch') {
   await sleep(600);
   check(posted('/api/errata/non-customer-credit') - before === 0, '  ...nothing is sent before the confirmation');
   const conf = await ev(`${f}.querySelector('[data-testid=form-confirm]')?.textContent ?? ''`);
-  check(conf.includes(`Record ${E.COUNT} errata, one beside each run listed.`), '  ...the confirmation states the count', conf);
+  check(conf.includes(`Record ${E.COUNT} credit errata and 0 unsourced-figure errata, ${E.COUNT} in all, one beside each run listed.`), '  ...the confirmation states both counts', conf);
   await shot('c3_errata_batch_confirm_1280', 1280);
   await confirmIn(f);
   check(await waitFor(`document.querySelector('[data-testid=credit-errata-recorded]')?.textContent === 'Recorded ${E.COUNT}.'`), `on "Confirm", "Recorded ${E.COUNT}."`);
