@@ -13431,3 +13431,49 @@ marks, 36 acts, 14 errata.
   - the batch recorded 37;
   - run hashes 25 of 25.
 - **The screenshots:** `~/lvrf-backups/c3b-screens/`.
+
+## C3b: deployed, Brad's acts, Gate C — 1 November 2026 (UTC)
+
+**Deployed at `b410b30`.** Backup `~/lvrf-pre-c3b-20261101T002023Z.dump` on the box: 600, 1,138,346
+bytes, TOC 775. Service up 00:21:38. Bundle `index-DQN6sOQO.js` / `index-pWZMR7ze.css`, tree clean.
+
+**Brad's acts, in order, through the UI (rule 10):**
+1. **The finding,** 00:41:02: the baseline, 214 days, on Curia's outcome, with its `find` act naming
+   it, the same reason and the same person.
+2. **`1632a5e0`'s baseline link withdrawn,** 00:55:58, after the finding, with its `withdraw` act.
+3. **The one batch,** 01:11:54, in one transaction: 19 `non_customer_credit` (runs 3–4 at 20
+   points, 5–12 at 35, 13–21 at 45) and 18 `unsourced_figure` (runs 4–21). Each of the 37 has
+   exactly one act.
+
+**Gate C, read-only over ssh as `lvrf_app`:**
+- **Counts:** 51 errata (14 + 19 + 18), 1 finding, 21 marks, 0 role grants, 13 links, 75 acts.
+  Since C3: 1 `find`, 1 `withdraw`, 37 `record_erratum`, all by Brad.
+- **The basis:** `1632a5e0` reads `assumed`, "no source on record"; `cee6fea9` and `f9775317` stay
+  `published`, with no reason, because their links were withdrawn before the finding.
+- **All 25 runs are byte-identical to the 31 Oct snapshot** (md5 of each row, time zone pinned to
+  UTC). **Run hashes:** 25 of 25.
+- **The headlines:**
+  - Curia's reference engagement stays run 13 (55 / 100), with three lines: the link correction, "45
+    of these points rest on a person who is not customer-side", and "its baseline, 214, has no
+    source on record";
+  - Scotts' run 2, Curia's lot acceptance and Customer Zero are unchanged.
+- **"Validated baseline":** the 18 Curia runs that seal it as a claim (4–21) each carry the line
+  naming the baseline. Run 1 has the words in the future tense only ("to be superseded by a
+  validated baseline"), on its inferred 180, and rightly carries no line.
+- **Guards:** 181 triggers; drift none (45 migrations, 1116 objects).
+- **No refusals of anything governed.** The journal since the deploy holds three 401s, none of them
+  a refused act: two are the deploy's own probes at 00:21:40, and one is an expired session on
+  `/api/auth/me` just before Brad signed in. The three act POSTs returned 201, 200 and 201.
+
+**Noted at Gate C:**
+- **Credit errata state no confirmer on runs 3–21.** All 19 state their points from the seal, none
+  is the 0-point row, and the sealed payloads predate 1.0.2's `definition_confirmer` field.
+- **The npm audit (L27):** the root count of 6 is `drizzle-kit`'s four, `body-parser` (high) and
+  `qs` (the one that took it from 5 to 6). No dependency changed; no action, by Brad's ruling.
+
+**Retention:** `lvrf_snapshot_20261027T020605Z.dump` removed from `~/lvrf-backups/`, as Brad ruled.
+The 31 Oct snapshot is the latest prod copy.
+
+**C3b is closed.** Next: L41 + L42 with L47 (no customer-side role is granted on prod until L47
+ships), then §14, then slice 5's walk rework. L46, Curia's marker, is Brad's to decide now the
+errata show.
