@@ -104,7 +104,6 @@ function FactForm({
   const [provenance, setProvenance] = useState('');
   const [sourceReference, setSourceReference] = useState('');
   const [confidence, setConfidence] = useState('');
-  const [sourceVerified, setSourceVerified] = useState<YesNo>('');
   const [aiSourced, setAiSourced] = useState<YesNo>('');
   const [researchQuery, setResearchQuery] = useState('');
   const [researchTool, setResearchTool] = useState('');
@@ -135,7 +134,6 @@ function FactForm({
     evidenceKind !== '' &&
     provenance.trim().length >= 12 &&
     confidence !== '' &&
-    sourceVerified !== '' &&
     aiSourced !== '' &&
     aiFieldsValid &&
     evidenceForm.unmet.length === 0 &&
@@ -151,7 +149,6 @@ function FactForm({
     ...(evidenceKind === '' ? ['choose the evidence kind'] : []),
     ...evidenceForm.unmet,
     ...(confidence === '' ? ['choose the confidence you state'] : []),
-    ...(sourceVerified === '' ? ['say whether the source was opened and confirmed'] : []),
     ...(aiSourced === '' ? ['say whether a model located it'] : []),
     ...(aiSourced === 'true' && !aiFieldsValid ? ['name the research query and tool'] : []),
   ];
@@ -183,7 +180,6 @@ function FactForm({
         provenance,
         confidence,
         ...(sourceReference.trim() !== '' ? { source_reference: sourceReference } : {}),
-        source_verified: sourceVerified === 'true',
         ai_sourced: aiSourced === 'true',
         ...(aiSourced === 'true' ? { research_query: researchQuery, research_tool: researchTool } : {}),
       })}
@@ -244,14 +240,6 @@ function FactForm({
               <p className={HELP_CLASS}>Citation, filing reference, export ID or URL.</p>
             </label>
             <div className="sm:col-span-2">{evidenceForm.fields}</div>
-            <label className="block">
-              <span className={LABEL_CLASS}>Source opened and confirmed?</span>
-              <select value={sourceVerified} onChange={(e) => setSourceVerified(e.target.value as YesNo)} className={INPUT_CLASS}>
-                <option value="" disabled>— choose —</option>
-                <option value="false">No — unverified</option>
-                <option value="true">Yes — verified</option>
-              </select>
-            </label>
             <label className="block">
               <span className={LABEL_CLASS}>Located by a model?</span>
               <select value={aiSourced} onChange={(e) => setAiSourced(e.target.value as YesNo)} className={INPUT_CLASS}>

@@ -6,6 +6,7 @@ import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 import { EvidenceFormError, parseEvidenceForm } from '../lib/evidenceFormBody.js';
+import { parseAbout } from '../lib/evidenceAbout.js';
 import { checkFigure, recordFigureCheck } from '../lib/figureCheck.js';
 
 /**
@@ -165,7 +166,8 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       // it), and every display labels it "stated by the analyst".
       const confidence = 'medium';
       const sourceReference = optionalNullableString(body, 'source_reference', 'body');
-      const sourceVerified = optionalBoolean(body, 'source_verified', 'body', false);
+      // L41 (Brad, 27 Oct 2026, condition 2): only a person opening the source verifies it.
+      const offeredVerified = body.source_verified !== undefined;
       const aiSourced = optionalBoolean(body, 'ai_sourced', 'body', false);
       const simulated = optionalBoolean(body, 'simulated', 'body', false);
 
@@ -242,20 +244,12 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
         });
         return;
       }
-      // Q4k: evidence_ai_verify_requires_resolution refuses this at the
-      // schema; the route says it first, in the same plain words. AI-sourced
-      // evidence is recorded unverified; it is verified when a person opens
-      // its citation (POST /api/evidence/:id/open-citation). The attempt is
-      // RECORDED (source 'route', with its outcome and payload), as the
-      // database's refusal was: the gap register reads it as "refused".
-      if (aiSourced && sourceVerified) {
-        const message = "AI-sourced evidence is verified after its citation is opened, not when it's recorded. Record it unverified, then open its citation.";
-        await recordRouteRefusal(pool, req, {
-          endpoint: 'POST /api/value-outcomes/:outcomeId/evidence', subjectTable: 'evidence', subjectId: null,
-          tenantId: outcome.tenant_id, institutionId: outcome.institution_id, valueOutcomeId: outcome.id, attemptedPayload: req.body,
-        }, message);
-        res.status(422).json({ message });
-        return;
+      // L41: the attempt is RECORDED (source 'route', with its outcome and payload), as Q4k's refusal of AI-sourced
+      // evidence offered as verified was: the gap register reads it as "refused".
+      if (offeredVerified) {
+        throw new EvidenceFormError(aiSourced
+          ? "AI-sourced evidence is verified after its citation is opened, not when it's recorded. Record it unverified, then open its citation."
+          : 'body.source_verified is not taken: evidence is recorded unverified, and a person verifies it by opening its source.');
       }
 
       // Read from the database rather than hardcoding the enum's members —
@@ -277,6 +271,8 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       // allowed for an observation citing no source, or an attestation
       // (Brad, 24 Oct 2026); every other kind rests on a quote or a locator.
       const form = parseEvidenceForm(body, { allowStatement: true, kind, sourceReference });
+      // L41: what it is about, stated; the about guard refuses another party's as baseline or actual support.
+      const about = await parseAbout(client, body.about, outcome.institution_id, outcome.tenant_id);
 
       // The attestor must be a real person of record at the OUTCOME's
       // institution — not simulated, not the vendor asserting on the
@@ -302,15 +298,16 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
            institution_id, kind, summary, provenance, source_reference,
            confidence, source_verified, ai_sourced, research_query, research_tool,
            simulated, captured_by_person_id, attested_by_person_id, attested_at,
-           evidence_form, quote_text, locator, how_read
+           evidence_form, quote_text, locator, how_read, about_institution_id, about_other_party
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
          RETURNING id`,
         [
           outcome.institution_id, kind, summary, provenance, sourceReference,
-          confidence, sourceVerified, aiSourced, researchQuery, researchTool,
+          confidence, aiSourced, researchQuery, researchTool,
           simulated, actorPersonId, attestedByPersonId, attestedAt,
           form.evidenceForm, form.quoteText, form.locator === null ? null : JSON.stringify(form.locator), form.howRead,
+          about.aboutInstitutionId, about.aboutOtherParty,
         ],
       );
       refusalEvidenceId = evidence.id;

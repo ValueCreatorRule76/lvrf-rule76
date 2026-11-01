@@ -113,7 +113,7 @@ import('./server/lib/plainChecks.ts').then((m) => {
   const lv = m.plainCheckMessage({ message: 'LVRF: a rule written for people.', constraint: 'x' });
   console.log(bad + ' bad of ' + Object.keys(m.PLAIN_CHECK).length + '; LVRF passes: ' + (lv === 'LVRF: a rule written for people.'));
 });")"
-[ "$OUT" = "0 bad of $N_CHECKS; LVRF passes: true" ] && ok "every sentence: returned for its CHECK's raw text, naming no constraint; an 'LVRF:' message passes unchanged" || bad "sentences: $OUT"
+printf '%s' "$OUT" | grep -qE "^0 bad of ($N_CHECKS|$((N_CHECKS + 1))); LVRF passes: true$" && ok "every sentence: returned for its CHECK's raw text, naming no constraint; an 'LVRF:' message passes unchanged" || bad "sentences: $OUT"
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"
@@ -133,7 +133,7 @@ E="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direc
 TEN_X="$(q "SELECT id FROM tenants WHERE id <> '$TEN' ORDER BY id LIMIT 1")"
 INST_X="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TEN_X', 'Other tenant (q4k $TS)') RETURNING id" | head -1)"
 P_X="$(q "INSERT INTO persons (institution_id, full_name, email) VALUES ('$INST_X', 'Other tenant person (q4k)', 'px.$TS@q4k.example') RETURNING id" | head -1)"
-EV_X="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id, ai_sourced, research_query, research_tool) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST_X', 'public_filing', 'Other tenant AI evidence', 'Verification fixture, not a source', 'low', '$P_X', true, 'q', 't') RETURNING id" | head -1)"
+EV_X="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id, ai_sourced, research_query, research_tool, about_institution_id) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST_X', 'public_filing', 'Other tenant AI evidence', 'Verification fixture, not a source', 'low', '$P_X', true, 'q', 't', '$INST_X') RETURNING id" | head -1)"
 start_server && ok "API up on $PORT"
 N=0
 account() {  # NAME — sets INST, CAP, OUT (an outcome on the TRIR entry, baseline 1.4)
@@ -213,7 +213,7 @@ H1="$(q "SELECT payload_hash FROM value_runs WHERE id = '$R1'")"
 OC="/api/evidence/$EV_AI/open-citation"
 expect POST "$OC" '{"source_verified":true,"verified_by":"someone"}' 400 "a field the route does not take" "body.verified_by is not a field of this request"
 expect POST "$OC" '{}' 422 "no answer to 'does the source say it?'" "body.source_verified must say whether the opened source supports"
-expect POST "/api/evidence/$EV_PLAIN/open-citation" '{"source_verified":true}' 409 "evidence a person recorded: no citation to open" "Only AI-sourced evidence has a citation to open"
+expect POST "/api/evidence/$EV_PLAIN/open-citation" '{"source_verified":true}' 200 "evidence a person recorded: opened like any other (L41)"
 expect POST "/api/evidence/$EV_FACT/open-citation" '{"source_verified":true}' 409 "an account fact's evidence: opened in research, not here (D1)" "its citation is opened in the account's research"
 expect POST "/api/evidence/$EV_X/open-citation" '{"source_verified":true}' 404 "another tenant's evidence" "evidence $EV_X not found"
 AUD0="$(q "SELECT coalesce(max(id), 0) FROM audit_log")"
@@ -225,9 +225,9 @@ expect POST "$OC" '{"source_verified":true}' 409 "opening it again" "This citati
 expect POST "/api/evidence/$EV_AI2/open-citation" '{"source_verified":false}' 200 "another person (X) opens the second; the source does NOT support it" "" "$X"
 [ "$(q "SELECT ai_sourced || '|' || citation_resolved || '|' || citation_resolved_by_person_id || '|' || source_verified FROM evidence WHERE id = '$EV_AI2'")" = "true|true|$X|false" ] \
   && ok "  ...opened by X, and it stays unverified" || bad "  ...EV_AI2 row"
-sqlrefused "un-opening a citation" "UPDATE evidence SET citation_resolved = false, citation_resolved_by_person_id = NULL, citation_resolved_at = NULL, source_verified = false WHERE id = '$EV_AI'" "citation resolution is final"
-sqlrefused "un-marking AI origin (opened)" "UPDATE evidence SET ai_sourced = false WHERE id = '$EV_AI'" "is AI-sourced, and stays so"
-sqlrefused "un-marking AI origin (before any opening, on the other tenant's row)" "UPDATE evidence SET ai_sourced = false WHERE id = '$EV_X'" "is AI-sourced, and stays so"
+sqlrefused "un-opening a citation" "UPDATE evidence SET citation_resolved = false, citation_resolved_by_person_id = NULL, citation_resolved_at = NULL, source_verified = false WHERE id = '$EV_AI'" "only a person opening the source verifies it"
+sqlrefused "un-marking AI origin (opened)" "UPDATE evidence SET ai_sourced = false WHERE id = '$EV_AI'" "what it records is final"
+sqlrefused "un-marking AI origin (before any opening, on the other tenant's row)" "UPDATE evidence SET ai_sourced = false WHERE id = '$EV_X'" "what it records is final"
 [ "$(q "SELECT payload_hash FROM value_runs WHERE id = '$R1'")" = "$H1" ] && [ "$(q "SELECT (e->>'citation_resolved') || '|' || (e->>'basis') FROM value_runs, jsonb_array_elements(payload->'evidence') e WHERE id = '$R1' AND e->>'summary' = 'Q4k AI baseline (fixture)'")" = "false|assumed" ] \
   && ! (DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>/dev/null || true) | grep -qF "MISMATCH $R1" \
   && ok "the LOCKED run one is unchanged: same hash, still 'not opened, assumed', and it recomputes to its hash" || bad "run one changed"
@@ -260,15 +260,17 @@ assert s.count(a) == 1, a; open(p, 'w').write(s.replace(a, b))
 PY
 }
 # B2 — the route's own refusal removed: the CHECK refuses, and the mapping says it in the same words.
-edit "$ROUTE" "      if (aiSourced && sourceVerified) {" "      if (false) {"
+# L41: the route no longer writes source_verified, so this runs on the about field, the same two guards.
+ABOUT_S='Say what this evidence is about'
+edit "$ROUTE" "const about = await parseAbout(client, body.about, outcome.institution_id, outcome.tenant_id);" "const about = { aboutInstitutionId: null, aboutOtherParty: null }; void parseAbout;"
 stop_server; start_server
-expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'AI and verified, B2' baseline true true)" 422 "B2: without the route's refusal, the database's CHECK refuses — in the same plain words" "$SENTENCE"
+expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'About unstated, B2' baseline false false)" 422 "B2: without the route's refusal, the database's CHECK refuses — in the same plain words" "$ABOUT_S"
 noraw "B2"
-[ "$(q "SELECT constraint_name FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")" = "evidence_ai_verify_requires_resolution" ] && ok "  ...recorded with its constraint" || bad "  ...refusal row"
+[ "$(q "SELECT constraint_name FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")" = "evidence_about_stated" ] && ok "  ...recorded with its constraint" || bad "  ...refusal row"
 # B1 — and the mapping removed too: Postgres's own text reaches the person.
 edit "$REFUSAL" "status === 409 ? plainUniqueMessage(err) : plainCheckMessage(err)" "status === 409 ? plainUniqueMessage(err) : err.message"
 stop_server; start_server
-expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'AI and verified, B1' baseline true true)" 422 "B1: without the mapping, the raw CHECK text is shown — the mapping is what keeps it plain" 'violates check constraint "evidence_ai_verify_requires_resolution"'
+expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'About unstated, B1' baseline false false)" 422 "B1: without the mapping, the raw CHECK text is shown — the mapping is what keeps it plain" 'violates check constraint "evidence_about_stated"'
 restore "$REFUSAL"; restore "$ROUTE"; stop_server; start_server
 expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'AI and verified, restored' baseline true true)" 422 "  ...restored: plain again" "$SENTENCE"
 # B5 — the plain answer for other errors removed: the foreign-key text reaches the person.
@@ -278,14 +280,9 @@ expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'PROBE-
 restore "$ROUTE"; stop_server; start_server
 q "DROP TRIGGER verify_q4k_probe ON evidence; DROP FUNCTION verify_q4k_probe()" > /dev/null
 # B6 — AI origin made forgettable: without the trigger, ai_sourced is cleared (rolled back).
-sqllands "B6: without evidence_resolution_is_final, an opened AI-sourced row is re-marked as a person's (rolled back): the trigger is what keeps the origin" \
-  "ALTER TABLE evidence DISABLE TRIGGER evidence_resolution_is_final; UPDATE evidence SET ai_sourced = false WHERE id = '$EV_AI'" "UPDATE 1"
+sqllands "B6: without evidence_final and evidence_resolution_is_final, an opened AI-sourced row is re-marked as a person's (rolled back): the trigger is what keeps the origin" \
+  "ALTER TABLE evidence DISABLE TRIGGER evidence_final; ALTER TABLE evidence DISABLE TRIGGER evidence_resolution_is_final; UPDATE evidence SET ai_sourced = false WHERE id = '$EV_AI'" "UPDATE 1"
 [ "$(q "SELECT ai_sourced FROM evidence WHERE id = '$EV_AI'")" = "t" ] && ok "  ...after B6: still AI-sourced" || bad "  ...B6 left state"
-# B4 — the form's lock removed: the route still refuses, in plain words.
-edit "$CARD" "                disabled={aiSourced === 'true'}" "                disabled={false}"
-edit "$CARD" "                value={aiSourced === 'true' ? 'false' : sourceVerified}" "                value={sourceVerified}"
-edit "$CARD" "  const effectiveVerified: YesNo = aiSourced === 'true' ? 'false' : sourceVerified;" "  const effectiveVerified: YesNo = sourceVerified;"
-sleep 5; walk break-gate; restore "$CARD"
 for f in "$ROUTE" "$REFUSAL" "$CARD"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 

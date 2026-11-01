@@ -524,7 +524,7 @@ export function accountResearchRouter(pool: Pool): Router {
         `Entity: ${describe(entity)} (corrects ${describe(old)})`,
         {
           evidenceKind: evidenceKindFor(entity.source_kind), provenance: entity.citation, confidence: 'medium',
-          sourceReference: entity.citation, sourceVerified: false, aiSourced: false, researchQuery: null, researchTool: null,
+          sourceReference: entity.citation, aiSourced: false, researchQuery: null, researchTool: null,
           ...form,
         }, actorPersonId);
       refusalTable = 'institution_entities';
@@ -673,7 +673,6 @@ export function accountResearchReviewRouter(pool: Pool): Router {
         provenance: `Research (${c.research_tool}): ${citation}${extra}`,
         confidence: 'low' as const,
         sourceReference: citation,
-        sourceVerified: false,
         aiSourced,
         researchQuery: aiSourced ? c.research_query : null,
         researchTool: aiSourced ? c.research_tool : null,

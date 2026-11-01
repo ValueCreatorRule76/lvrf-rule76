@@ -181,6 +181,8 @@ export const governanceAct = pgEnum('governance_act', [
   'grant',
   // C3b (Brad, 27 Oct 2026; C3b-D6): a steward records that a figure has no source on record (figure_findings).
   'find',
+  // L41 (Brad, 1 Nov 2026; L41-D3): a steward states what a row from before the "about" field is about.
+  'state_about',
 ]);
 
 /* ================================================================== */
@@ -720,8 +722,29 @@ export const evidence = pgTable('evidence', {
   locator: jsonb('locator'),
   /** form = quote or locator: how the value was read from the source, not a restatement of it. */
   howRead: text('how_read'),
+
+  /* ── L41 (0045) · what the evidence is about, and what an opening rested on ── */
+  /** The institution this evidence is about, which need not be the one it sits on (L41; L41-D1). Set once. */
+  aboutInstitutionId: uuid('about_institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
+  /** A company that is not an account: named here, so no account nobody works is created for it (L41-D1). Set once. */
+  aboutOtherParty: text('about_other_party'),
+  /** Condition 1: a verified attestation rests on a document from the attester: 'email', 'signed_statement' or 'letter'. */
+  attesterDocument: text('attester_document'),
   ...governance(),
 }, (t) => [
+  /**
+   * L41-D1: exactly one. Added NOT VALID (0045): the 34 rows from before it are stated by the steward's
+   * batch, never by a migration (L41-D3); hardening.sql validates it once none is unset.
+   */
+  check('evidence_about_stated',
+    sql`(${t.aboutInstitutionId} IS NOT NULL AND ${t.aboutOtherParty} IS NULL)
+        OR (${t.aboutInstitutionId} IS NULL AND ${t.aboutOtherParty} IS NOT NULL AND length(btrim(${t.aboutOtherParty})) >= 3)`),
+  /** Condition 1: an attestation is verified on the attester's own words, in a document from them. */
+  check('evidence_attestation_opened',
+    sql`NOT (${t.sourceVerified} AND ${t.citationResolved} AND (${t.kind} = 'attestation' OR ${t.attestedByPersonId} IS NOT NULL))
+        OR (${t.attesterDocument} IS NOT NULL AND ${t.evidenceForm} IN ('quote', 'locator'))`),
+  check('evidence_attester_document_known',
+    sql`${t.attesterDocument} IS NULL OR ${t.attesterDocument} IN ('email', 'signed_statement', 'letter')`),
   /** P1: one rule per form. A statement is an observation citing no source, or an attestation (Brad, 24 Oct 2026). */
   check('evidence_form_shape',
     sql`(${t.evidenceForm} = 'quote' AND ${t.locator} IS NULL AND ${t.quoteText} IS NOT NULL

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api/http';
 import { useActor } from '../actor/ActorContext';
+import { RecordSource } from './AccountEvidence';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
 import { day } from '../lib/workspaceStatus';
 
@@ -107,7 +108,7 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
                   <option value="" disabled>— choose —</option>
                   {data.sources.map((s) => <option key={s.id} value={s.id}>{s.summary.slice(0, 70)} — {s.provenance.slice(0, 60)}</option>)}
                 </select>
-                <p className="m-0 mt-1 text-[11px] text-ink-45">Evidence of this account. No source, no role: record the source as evidence first.</p></label>
+                <p className="m-0 mt-1 text-[11px] text-ink-45">Current evidence about this account that a person has opened and found to support it. No source, no role: record it below, then open it on the account&apos;s evidence.</p></label>
               <label className="block"><span className={L}>Why</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>
             </div>}
             confirm={person && source && role !== '' && <span data-testid="confirm-text">Name {person.full_name} the {ROLE(role)} of this account, per {source.provenance}. Their attestations, commitments and verifications earn credit in runs produced from now on; runs already sealed are unchanged.</span>}
@@ -118,6 +119,8 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
           />
           <button type="button" onClick={close} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
         </div>}
+      {/* L47: the source a role is named from is account evidence, not outcome support. */}
+      <RecordSource institutionId={institutionId} onRecorded={() => setReload((n) => n + 1)} />
     </div>
   );
 }

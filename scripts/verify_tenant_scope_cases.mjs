@@ -148,6 +148,17 @@ const CASES = [
   { route: 'POST /api/value-outcomes/:outcomeId/figure-findings', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/figure-findings`,
     body: {}, controlBody: { x: 1 }, notFound: [404, `value outcome ${E.OUTCOME_A} not found`], target: ['value_outcomes', E.OUTCOME_A] },
   { route: 'POST /api/system-exercise/marks', kind: 'actor' },
+  // L41 + L47: account evidence, the about batch, a withdrawn verification, a supersession.
+  { route: 'GET /api/institutions/:institutionId/evidence', kind: 'id', path: `/api/institutions/${E.INST_A}/evidence`,
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/institutions/:institutionId/evidence', kind: 'id', path: `/api/institutions/${E.INST_A}/evidence`, body: {},
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'GET /api/evidence/about-batch', kind: 'list', path: '/api/evidence/about-batch', aIds: [], bIds: [] },
+  { route: 'POST /api/evidence/about-batch', kind: 'actor' },
+  { route: 'POST /api/evidence/:id/withdraw-verification', kind: 'id', path: `/api/evidence/${E.EV_A}/withdraw-verification`, body: {},
+    notFound: [404, `evidence ${E.EV_A} not found`], target: ['evidence', E.EV_A] },
+  { route: 'POST /api/evidence/:id/supersede', kind: 'id', path: `/api/evidence/${E.EV_A}/supersede`, body: {},
+    notFound: [404, `evidence ${E.EV_A} not found`], target: ['evidence', E.EV_A] },
   { route: 'POST /api/value-runs/:runId/errata', kind: 'id', path: `/api/value-runs/${E.RUN_A}/errata`, body: {},
     notFound: [404, `run ${E.RUN_A} not found`], target: ['value_runs', E.RUN_A] },
   // P2: where a figure came from (read-only).

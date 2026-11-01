@@ -4,6 +4,7 @@ import { Card, Badge } from './Card';
 import { GovernedForm, FOCUS_RING } from '../GovernedForm';
 import { label, EVIDENCE_KIND } from '../../lib/labels';
 import { useEvidenceForm } from '../EvidenceFormInput';
+import { useAbout } from '../useAbout';
 
 // The supports options in words (the stored values are unchanged).
 const SUPPORTS_LABEL: Record<string, string> = { baseline: 'The baseline', actual: 'The actual', impact_basis: 'The impact basis' };
@@ -35,8 +36,8 @@ interface AddEvidenceResponse {
   supports: string;
 }
 
-// A tri-state select, not a checkbox: 'source_verified'/'ai_sourced'/
-// 'simulated' all carry meaning, and a checkbox defaults to unchecked
+// A tri-state select, not a checkbox: 'ai_sourced' and
+// 'simulated' both carry meaning, and a checkbox defaults to unchecked
 // without the visitor ever choosing false. This type's '' state is what
 // keeps that choice unmade until someone makes it.
 type YesNo = '' | 'true' | 'false';
@@ -68,13 +69,13 @@ export function AddEvidenceCard({
   const [sourceReference, setSourceReference] = useState('');
   const [summary, setSummary] = useState('');
   const [supports, setSupports] = useState('');
-  const [sourceVerified, setSourceVerified] = useState<YesNo>('');
   const [aiSourced, setAiSourced] = useState<YesNo>('');
   const [researchQuery, setResearchQuery] = useState('');
   const [researchTool, setResearchTool] = useState('');
   const [simulated, setSimulated] = useState<YesNo>('');
   // P1: called before any early return (a hook runs on every render).
   const evidenceForm = useEvidenceForm({ allowed: ['quote', 'locator', 'statement'], kind, sourceReference });
+  const about = useAbout(run?.institution_id ?? undefined);
 
   if (!outcomeId) {
     // Same pattern EvidenceCard.tsx already uses for a run walked before
@@ -103,26 +104,24 @@ export function AddEvidenceCard({
   // the disabled '— choose —' option, and canSubmit stays false until each
   // one has been explicitly set — including the three yes/no fields, which
   // a checkbox would have silently resolved to false on page load.
-  // Q4k: AI-sourced evidence is always recorded unverified.
-  const effectiveVerified: YesNo = aiSourced === 'true' ? 'false' : sourceVerified;
   const canSubmit =
     provenanceValid &&
     kind !== '' &&
     summary.trim() !== '' &&
     supports !== '' &&
-    effectiveVerified !== '' &&
     aiSourced !== '' &&
     simulated !== '' &&
     aiFieldsValid &&
+    about.unmet.length === 0 &&
     evidenceForm.unmet.length === 0;
   // Every reason the submit waits, in words (Q4l: a silent failure is a bug).
   const unmet = [
     ...(!provenanceValid ? ['state the provenance, in at least 12 characters'] : []),
     ...(kind === '' ? ['choose the kind'] : []),
     ...evidenceForm.unmet,
+    ...about.unmet,
     ...(summary.trim() === '' ? ['write the summary'] : []),
     ...(supports === '' ? ['choose what it supports'] : []),
-    ...(effectiveVerified === '' ? ['say whether the source was verified'] : []),
     ...(aiSourced === '' ? ['say whether it was AI-sourced'] : []),
     ...(aiSourced === 'true' && !aiFieldsValid ? ['name the research query and tool'] : []),
     ...(simulated === '' ? ['say whether it is simulated'] : []),
@@ -143,7 +142,7 @@ export function AddEvidenceCard({
           supports,
           ...evidenceForm.body(),
           ...(sourceReference.trim() !== '' ? { source_reference: sourceReference } : {}),
-          source_verified: effectiveVerified === 'true',
+          about: about.body(),
           ai_sourced: aiSourced === 'true',
           simulated: simulated === 'true',
           ...(aiSourced === 'true'
@@ -241,32 +240,11 @@ export function AddEvidenceCard({
             </label>
 
 
-            <label className="mb-3 block">
-              <span className={LABEL_CLASS}>Source verified</span>
-              {/* Q4k: AI-sourced evidence is recorded unverified and verified when a
-                  person opens its citation (AMENDMENT-005 Article III); the route and
-                  the CHECK refuse the combination, so the form does not offer it. */}
-              <select
-                required
-                value={aiSourced === 'true' ? 'false' : sourceVerified}
-                disabled={aiSourced === 'true'}
-                onChange={(e) => setSourceVerified(e.target.value as YesNo)}
-                className={INPUT_CLASS + (aiSourced === 'true' ? ' cursor-not-allowed bg-offwhite text-ink-45' : '')}
-                data-testid="source-verified"
-              >
-                <option value="" disabled>
-                  — choose —
-                </option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
-            </label>
-            {aiSourced === 'true' && (
-              <p className="-mt-2 mb-3 text-[11px] text-ink-45" data-testid="source-verified-reason">
-                AI-sourced evidence is verified after its citation is opened, not when it's recorded (AMENDMENT-005,
-                Article III). Record it unverified; then open its citation.
-              </p>
-            )}
+            {/* L41: recorded unverified, always; a person verifies it by opening the source, on the account page. */}
+            <p className="mb-3 text-[11px] text-ink-45" data-testid="recorded-unverified">
+              Recorded unverified. A person verifies it by opening the source, on the account&apos;s evidence.
+            </p>
+            {about.fields}
 
             <label className="mb-3 block">
               <span className={LABEL_CLASS}>AI-sourced</span>

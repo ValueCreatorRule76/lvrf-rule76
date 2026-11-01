@@ -108,8 +108,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "181" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 181 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "183" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 183 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 code_at() {  # REF — that commit's produce-run and model, for sealing under its model
   git show "$1:$PRODUCE" > "$PRODUCE"; git show "$1:$MODELF" > "$MODELF"; stop_server; start_server
@@ -169,17 +169,17 @@ step "3. Clone the prod copy; migrate through 0044; harden; what 0044 orphans"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 ERR0="$(q "SELECT count(*) || '|' || coalesce(string_agg(md5(e::text), '' ORDER BY id), '') FROM run_errata e")"
+CRED0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")"; UNS0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'unsourced_figure'")"; FIND0="$(q "SELECT count(*) FROM figure_findings")"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "181" ] && ok "181 triggers (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "281" ] && ok "  ...281 information_schema rows (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "183" ] && ok "183 triggers (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "284" ] && ok "  ...284 information_schema rows (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 45 migrations, newest 0044_c3b_findings" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 46 migrations, newest 0045_l41_evidence_final" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^[0-9]+ CHECKs in the database: [0-9]+ with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
-[ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'figure_finding_id')::text), '' ORDER BY id), '') FROM run_errata e")" = "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'figure_finding_id')::text), '' ORDER BY id), '') FROM run_errata e WHERE figure_finding_id IS NULL")" ] \
-  && [ "${ERR0%%|*}" = "$(q "SELECT count(*) FROM run_errata")" ] && ok "0044 orphans nothing: all ${ERR0%%|*} errata kept, none naming a finding" || bad "errata after 0044"
+[ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5(e::text), '' ORDER BY id), '') FROM run_errata e")" = "$ERR0" ] && ok "0044 orphans nothing: all ${ERR0%%|*} errata kept, each unchanged" || bad "errata after 0044"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 for c in figure_findings_never_invented run_errata_never_invented run_errata_kind_complete; do
   [ -n "$(q "SELECT 1 FROM pg_constraint WHERE conname = '$c'")" ] && ok "CHECK $c present" || bad "CHECK $c missing"
@@ -218,8 +218,8 @@ validate() {  # METRIC CONFIRMER BASELINE -> O (the new outcome), MET (the new m
   O="$(rj b.outcomes[0].new_outcome_id)"; MET="$(rj b.new_metric_id)"
 }
 evid() {  # OUTCOME KIND SUMMARY SUPPORTS [ATTESTER] -> EV
-  if [ -n "${5:-}" ]; then expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified true ai_sourced false simulated false evidence_form quote quote_text 'Mean 214 days, from the export.' how_read 'The mean, read from the export.' attested_by_person_id "$5" attested_at 2025-10-01T00:00:00Z)" 201 "  ...evidence: $3"
-  else expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified true ai_sourced false simulated false evidence_form quote quote_text 'Named in the org chart.' how_read 'The name, read as published.')" 201 "  ...evidence: $3"; fi
+  if [ -n "${5:-}" ]; then expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified "${EVID_VERIFIED:-true}" ai_sourced false simulated false evidence_form quote quote_text 'Mean 214 days, from the export.' how_read 'The mean, read from the export.' attested_by_person_id "$5" attested_at 2025-10-01T00:00:00Z)" 201 "  ...evidence: $3"
+  else expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified "${EVID_VERIFIED:-true}" ai_sourced false simulated false evidence_form quote quote_text 'Named in the org chart.' how_read 'The name, read as published.')" 201 "  ...evidence: $3"; fi
   EV="$(rj b.evidence_id)"
 }
 seal() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'VALIDATED BASELINE' note "$2" source_fixture c3b_validated)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; expect POST "/api/value-runs/$RUN/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"; }
@@ -230,7 +230,9 @@ acct "C3b vendor-alone account (fixture)" "[$(J full_name "$ANALYST_NAME" email 
 INSTV="$INST"; ACCTV="$ACCT"; ANALYST="$P0"
 outcome V "$ANALYST" 214; ENGV="$ENG"
 validate "$MET" "$ANALYST" 214; OV="$O"; METV="$MET"
-evid "$OV" system_export 'C3b export attested by the analyst (fixture)' baseline "$ANALYST"; EVV="$EV"
+# L41: a row verified with no opening cannot be made any more, so V's row is unverified; an opening would block the
+# finding. "verified without the source being opened" is read below from a row of the copy that holds it.
+EVID_VERIFIED=false evid "$OV" system_export 'C3b export attested by the analyst (fixture)' baseline "$ANALYST"; EVV="$EV"
 expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed by the analyst.')" 201 "  ...committed by the analyst"
 # The POV shows an outcome's figures and evidence under its hypothesis (C2's fixture shape): a pack entry, its lever, the claim, the basis.
 IND="$(q "SELECT id FROM industries WHERE tenant_id = '$TEN' AND slug = 'manufacturing'")"
@@ -248,7 +250,7 @@ code_now
 seal "$ENGV" "Verification: run 3, under 1.0.2."; RV3="$RUN"
 [ "$(q "SELECT string_agg(payload->'confidence'->>'modelVersion', ',' ORDER BY run_number) FROM value_runs WHERE id IN ('$RV1', '$RV2', '$RV3')")" = "1.0.0,1.0.1,1.0.2" ] && ok "three runs, sealed under 1.0.0, 1.0.1 and 1.0.2" || bad "models: $(q "SELECT string_agg(payload->'confidence'->>'modelVersion', ',' ORDER BY run_number) FROM value_runs WHERE id IN ('$RV1', '$RV2', '$RV3')")"
 F1="$(factors "$RV1")"; F2r="$(factors "$RV2")"; F3="$(factors "$RV3")"
-printf '%s' "$F1" | grep -q "metric_definition_confirmed=20" && printf '%s' "$F1" | grep -q "baseline_evidence_verified=15" && printf '%s' "$F1" | grep -q "human_commit_of_record=10" && ok "  ...1.0.0 credited the analyst: definition 20, baseline 15, committer 10 (Curia runs 13–21's shape)" || bad "  ...RV1: $F1"
+printf '%s' "$F1" | grep -q "metric_definition_confirmed=20" && printf '%s' "$F1" | grep -q "baseline_evidence_verified=0" && printf '%s' "$F1" | grep -q "human_commit_of_record=10" && ok "  ...1.0.0 credited the analyst: definition 20, committer 10 (the export unverified, L41) (Curia runs 13–21's shape)" || bad "  ...RV1: $F1"
 printf '%s' "$F2r" | grep -q "metric_definition_confirmed=20" && printf '%s' "$F2r" | grep -q "baseline_evidence_verified=0" && printf '%s' "$F2r" | grep -q "human_commit_of_record=0" && ok "  ...1.0.1 credited only the definition (20): C3's rule did not reach it" || bad "  ...RV2: $F2r"
 printf '%s' "$F3" | grep -q "metric_definition_confirmed=0" && printf '%s' "$F3" | grep -q "baseline_evidence_verified=0" && ok "  ...1.0.2 credits none of it" || bad "  ...RV3: $F3"
 N3="$(q "SELECT f->>'note' FROM value_runs r, jsonb_array_elements(r.payload->'confidence'->'factors') f WHERE r.id = '$RV3' AND f->>'factor' = 'metric_definition_confirmed'")"
@@ -262,7 +264,8 @@ SEALS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_run
 acct "C3b version account (fixture)" "[$(J full_name 'C3b owner (fixture)' email "ownerw.$TS@c3b.example" title Owner),$(J full_name 'C3b analyst W (fixture)' email "analystw.$TS@c3b.example" title 'External analyst of record — not an employee')]"
 INSTW="$INST"; OWNERW="$P0"; ANALYSTW="$P1"
 outcome W "$OWNERW" 30; ENGW="$ENG"
-evid "$O" public_filing 'C3b org chart naming the owner as metric owner' impact_basis; SRCW="$EV"
+csrc() { expect POST "/api/institutions/$1/evidence" "$(J about account kind artifact provenance "Fixture source for: $2" summary "$2" evidence_form quote quote_text 'Named in the fixture org chart.' how_read 'Read from the fixture org chart, top box.')" 201 "  ...the source, as account evidence (L47)"; EV="$(rj b.evidence_id)"; expect POST "/api/evidence/$EV/open-citation" '{"source_verified":true}' 200 "  ...opened by a person"; }
+csrc "$INSTW" 'C3b org chart naming the owner as metric owner'; SRCW="$EV"
 expect POST "/api/institutions/$INSTW/customer-roles" "$(J person_id "$OWNERW" role metric_owner source_evidence_id "$SRCW" reason 'Verification: named from the org chart.')" 201 "  ...the owner named metric owner, from the org chart (the act)"
 validate "$MET" "$OWNERW" 30; MW1="$MET"
 code_at "$V101"
@@ -286,7 +289,7 @@ expect POST "$(FF "$OV")" "$(J field actual_value reason 'Verification: no actua
 expect POST "$(FF "$OV")" "$(J field baseline_value reason 'Short')" 422 "a 5-character reason" "in at least 12 characters"
 expect POST "$(FF "$OV")" "$(J field baseline_value reason 'Verification: the figure was invented.')" 422 "a reason saying \"invented\"" "never says the figure was invented"
 expect POST "$(FF "$OV")" "$(J field baseline_value value 214 reason 'Verification: a typed figure.')" 400 "a typed figure" "read from the record by the server"
-[ "$(q "SELECT count(*) FROM figure_findings")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused finding wrote"
+[ "$(q "SELECT count(*) FROM figure_findings")" = "$FIND0" ] && ok "  ...none of them wrote" || bad "  ...a refused finding wrote"
 FSQL() { printf "INSERT INTO figure_findings (tenant_id, institution_id, value_outcome_id, field, value, finding_text, reason, recorded_by_person_id) VALUES ('%s', '%s', '%s', 'baseline_value', %s, 'The baseline has no source on record: verification.', '%s', '%s')" "$TEN" "$1" "$2" "$3" "${4:-Verification: a finding by SQL.}" "${5:-$S}"; }
 sqlrefused "B6: \"invented\" in a finding, at the database" "$(FSQL "$INSTV" "$OV" 214 'Verification: the figure was invented.')" "figure_findings_never_invented"
 [ "$(sqlaccepted "$(FSQL "$INSTV" "$OV" 214 'Verification: the Inventec inventory export.')")" = "ACCEPTED" ] && ok "  ...whole words only: a name such as \"Inventec\" or the word \"inventory\" is not refused (rolled back)" || bad "  ...a false refusal: $(sqlaccepted "$(FSQL "$INSTV" "$OV" 214 'Verification: the Inventec inventory export.')")"
@@ -298,7 +301,7 @@ blk() {  # NAME -> INST, O (an outcome with baseline 214, the owner P0)
   outcome "$1" "$P0" 214
 }
 blk "C3b blocker one (fixture)"; IB1="$INST"; OB1="$O"
-evid "$OB1" public_filing 'C3b org chart naming the person (blocker one)' impact_basis
+csrc "$IB1" 'C3b org chart naming the person (blocker one)'
 expect POST "/api/institutions/$IB1/customer-roles" "$(J person_id "$P0" role metric_owner source_evidence_id "$EV" reason 'Verification: named from the org chart.')" 201 "  ...a customer-side person, named through the act"
 blk "C3b blocker two (fixture)"; IB2="$INST"; OB2="$O"
 expect POST "/api/value-outcomes/$OB2/evidence" "$(J kind public_filing provenance 'Fixture AI search (not a source)' summary 'C3b AI-found filing (blocker two)' supports baseline source_verified false ai_sourced true research_query 'C3b (fixture)' research_tool 'Verification tool' simulated false evidence_form quote quote_text 'A fixture sentence.' how_read 'Read as written, from the fixture.')" 201 "  ...AI-sourced evidence"
@@ -311,16 +314,25 @@ for n in 1 2 3; do
              2) WHY='evidence of this account has an opened citation or a customer-side attester'; CUT="CASE WHEN EXISTS (SELECT 1 FROM evidence e WHERE e.institution_id = p_institution AND e.deleted_at IS NULL" ;;
              3) WHY='a research result or fact about this account was accepted'; CUT="CASE WHEN EXISTS (SELECT 1 FROM institution_facts f WHERE f.institution_id = p_institution)" ;; esac
   expect GET "$(FF "$O")" "" 200 "blocker $n: the figures read"
-  [ "$(rj "b.fields[0].blockers.join('|')")" = "$WHY" ] && ok "  ...and name the blocker: \"$WHY\"" || bad "  ...blockers: $(rj "b.fields[0].blockers.join('|')")"
+  # L41-D6: a role's source is opened evidence, so blocker one holds the second as well.
+  [ "$(rj "b.fields[0].blockers.join('|')" | sed 's/|evidence of this account.*//')" = "$WHY" ] && ok "  ...and name the blocker: \"$WHY\"" || bad "  ...blockers: $(rj "b.fields[0].blockers.join('|')")"
   expect POST "$(FF "$O")" "$(J field baseline_value reason 'Verification: no source on record.')" 422 "  ...a finding is refused, in words" "$WHY"
   sqlrefused "  ...and at the database" "$(FSQL "$I" "$O" 214)" "$WHY"
   case $n in 1|3) NEWCUT="CASE WHEN false AND EXISTS (SELECT 1 FROM $( [ $n = 1 ] && echo "persons p WHERE p.institution_id = p_institution AND p.deleted_at IS NULL AND lvrf_customer_side(p.id, p_institution))" || echo "institution_facts f WHERE f.institution_id = p_institution)")" ;;
              2) NEWCUT="CASE WHEN false AND EXISTS (SELECT 1 FROM evidence e WHERE e.institution_id = p_institution AND e.deleted_at IS NULL" ;; esac
   fnbreak lvrf_figure_finding_blockers "$CUT" "$NEWCUT"
+  if [ "$n" = 1 ]; then  # the second check goes too: an opened source sits under every role.
+    python3 - "$W/fnbreak.sql" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read()
+a = "CASE WHEN EXISTS (SELECT 1 FROM evidence e WHERE e.institution_id = p_institution AND e.deleted_at IS NULL"
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, a.replace('CASE WHEN EXISTS', 'CASE WHEN false AND EXISTS')))
+PY
+    psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
+  fi
   [ "$(sqlaccepted "$(FSQL "$I" "$O" 214)")" = "ACCEPTED" ] && ok "B5.$n: the check \"$WHY\" removed → caught: a finding is accepted on an account that holds it" || bad "B5.$n: $(sqlaccepted "$(FSQL "$I" "$O" 214)")"
   reharden
 done
-[ "$(q "SELECT count(*) FROM figure_findings")" = "0" ] && ok "  ...nothing written by the breaks (rolled back)" || bad "  ...a finding written"
+[ "$(q "SELECT count(*) FROM figure_findings")" = "$FIND0" ] && ok "  ...nothing written by the breaks (rolled back)" || bad "  ...a finding written"
 
 step "6. Account Z: a finding, then the record gains a fact (condition 3: the sentence stays true whenever written)"
 acct "C3b account Z (fixture)" "[$(J full_name "C3b analyst Z (fixture)" email "analystz.$TS@c3b.example" title 'External analyst of record — not an employee')]"
@@ -382,8 +394,8 @@ CREDIT="$(rj b.count)"; UNSOURCED="$(rj b.unsourced_count)"
 TXT() { rj "b.errata.find(x=>x.run_id==='$1')?.text ?? ''"; }
 PTS() { rj "b.errata.find(x=>x.run_id==='$1')?.points ?? 'none'"; }
 Q_DEF='"Is the metric'"'"'s calculation method known and documented?"'
-[ "$(PTS "$RV1")" = "45" ] && printf '%s' "$(TXT "$RV1")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME; 15 of 25 in \"Is the baseline supported by confirmed evidence?\" rest on an attestation by $ANALYST_NAME; 10 of 10" \
-  && ok "the 1.0.0 run: 45 points (definition 20, attestation 15, committer 10), read from its seal and the metric version it sealed" || bad "RV1: $(PTS "$RV1") $(TXT "$RV1")"
+[ "$(PTS "$RV1")" = "30" ] && printf '%s' "$(TXT "$RV1")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME; 10 of 10" \
+  && ok "the 1.0.0 run: 30 points (definition 20, committer 10), read from its seal and the metric version it sealed" || bad "RV1: $(PTS "$RV1") $(TXT "$RV1")"
 [ "$(PTS "$RV2")" = "20" ] && printf '%s' "$(TXT "$RV2")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME. Under the C3 rule (model 1.0.2) none of these earns credit" \
   && ok "the 1.0.1 run: 20 points, the definition alone" || bad "RV2: $(PTS "$RV2") $(TXT "$RV2")"
 [ "$(PTS "$RV3")" = "none" ] && ok "the 1.0.2 run: not listed (1.0.2 credited none of it)" || bad "RV3 listed: $(PTS "$RV3")"
@@ -413,15 +425,15 @@ expect POST /api/errata/non-customer-credit "$(B "$CREDIT" "$((UNSOURCED + 1))")
 expect POST /api/errata/non-customer-credit "$(B "$CREDIT" "$UNSOURCED")" 403 "X records the batch" "steward" "$X"
 sqlrefused "B6: \"invented\" in an unsourced-figure erratum, at the database" "$(USQL "$RV1" "$OV" "$FV" 'Verification: the baseline was invented.' | sed "s/From this run seal/From this run''s seal/")" "run_errata_never_invented"
 sqlrefused "an unsourced-figure erratum on a run that does not seal the figure (W run 1, with V's finding)" "$(USQL "$RW1" "$OV" "$FV" | sed "s/From this run seal/From this run''s seal/")" "the erratum's outcome is not the one run"
-[ "$(q "SELECT count(*) FROM run_errata WHERE kind IN ('non_customer_credit', 'unsourced_figure')")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
+[ "$(q "SELECT count(*) FROM run_errata WHERE kind IN ('non_customer_credit', 'unsourced_figure')")" = "$((CRED0 + UNS0))" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
 CREDIT="$CREDIT" UNSOURCED="$UNSOURCED" UNSOURCED_TEXT="$UWANT" cw batch
-[ "$(q "SELECT count(*) FILTER (WHERE kind = 'non_customer_credit') || '|' || count(*) FILTER (WHERE kind = 'unsourced_figure') FROM run_errata")" = "$CREDIT|$UNSOURCED" ] && ok "  ...in the database: $CREDIT credit errata and $UNSOURCED unsourced-figure errata" || bad "  ...recorded: $(q "SELECT kind, count(*) FROM run_errata GROUP BY 1")"
-[ "$(q "SELECT count(*) FROM governance_acts a JOIN run_errata x ON x.id = a.subject_id WHERE x.kind IN ('non_customer_credit', 'unsourced_figure') AND a.act = 'record_erratum'")" = "$((CREDIT + UNSOURCED))" ] && ok "  ...one act each" || bad "  ...acts"
+[ "$(q "SELECT count(*) FILTER (WHERE kind = 'non_customer_credit') || '|' || count(*) FILTER (WHERE kind = 'unsourced_figure') FROM run_errata")" = "$((CRED0 + CREDIT))|$((UNS0 + UNSOURCED))" ] && ok "  ...in the database: $CREDIT credit errata and $UNSOURCED unsourced-figure errata" || bad "  ...recorded: $(q "SELECT kind, count(*) FROM run_errata GROUP BY 1")"
+[ "$(q "SELECT count(*) FROM governance_acts a JOIN run_errata x ON x.id = a.subject_id WHERE x.kind IN ('non_customer_credit', 'unsourced_figure') AND a.act = 'record_erratum'")" = "$((CRED0 + UNS0 + CREDIT + UNSOURCED))" ] && ok "  ...one act each" || bad "  ...acts"
 [ "$(q "SELECT (recompute_method = \$\$$UWANT\$\$) || '|' || (recomputed_score IS NULL) || '|' || (points_not_credited IS NULL) || '|' || (figure_finding_id = '$FV') FROM run_errata WHERE value_run_id = '$RV1' AND kind = 'unsourced_figure'")" = "true|true|true|true" ] \
   && ok "  ...V run 1's unsourced-figure erratum: the text from its seal, nothing recomputed, no points, naming the finding" || bad "  ...RV1 erratum"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.id IN ('$RV1', '$RV2', '$RV3')")" = "$SEALS0" ] && ok "  ...V's sealed runs byte-identical" || bad "  ...a sealed run changed"
 L1="$(q "SELECT lvrf_run_erratum_line('$RV1')")"
-[ "$L1" = "erratum: 45 of these points rest on a person who is not customer-side; erratum: its baseline, 214, has no source on record" ] && ok "the headline line, both errata: \"$L1\"" || bad "line: $L1"
+[ "$L1" = "erratum: 30 of these points rest on a person who is not customer-side; erratum: its baseline, 214, has no source on record" ] && ok "the headline line, both errata: \"$L1\"" || bad "line: $L1"
 LINE="erratum: its baseline, 214, has no source on record"
 # B7 — the batch without its unsourced-figure count check: a count that was off is accepted.
 expect POST /api/errata/non-customer-credit "$(B 0 2)" 409 "  ...a second batch, the unsourced count off" "not 0 and 2"
@@ -456,7 +468,7 @@ grep -q "^  FAIL  the POV's baseline" "$W/walk.b10.log" && ok "B10: the POV's ba
 restore "$POVP"
 # Condition 2 on the API: every evidence row verified with no citation opened, as the row stands.
 expect GET "/api/institutions/$INSTV/pov" "" 200 "V's POV"
-[ "$(rj "b.outcomes.flatMap(o=>o.evidence).filter(e=>e.verified_unopened).map(e=>e.summary).join('|')")" = "C3b export attested by the analyst (fixture)" ] && ok "  ...verified_unopened on the attested export alone" || bad "  ...verified_unopened: $(rj "JSON.stringify(b.outcomes.flatMap(o=>o.evidence).map(e=>[e.summary,e.verified_unopened]))")"
+[ -z "$(rj "b.outcomes.flatMap(o=>o.evidence).filter(e=>e.verified_unopened).map(e=>e.summary).join('|')")" ] && ok "  ...verified_unopened on none of V's rows (L41: read from the copy's own rows in verify_evidence_final)" || bad "  ...verified_unopened: $(rj "JSON.stringify(b.outcomes.flatMap(o=>o.evidence).map(e=>[e.summary,e.verified_unopened]))")"
 
 # Ruling 1: the finding's own withdrawal keeps its evidence covered.
 expect POST "/api/value-outcomes/$OV/evidence/$EVV/withdraw" "$(J reason 'Verification: withdrawn after the finding, as the acts run.')" 200 "the export's link withdrawn after the finding"

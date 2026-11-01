@@ -34,3 +34,5 @@ migrate_clone() {  # DB [drizzle-kit args...]
   DATABASE_URL="$(migrate_url "$db")" npx drizzle-kit migrate "$@" \
     && psql -X -q -v ON_ERROR_STOP=1 -d "$db" -f db/ownership.sql > /dev/null 2>&1
 }
+
+. scripts/lib/evidence_fixture.sh

@@ -43,7 +43,6 @@ export interface FactFields extends EvidenceFormFields {
   provenance: string;
   confidence: 'low' | 'medium' | 'high';
   sourceReference: string | null;
-  sourceVerified: boolean;
   aiSourced: boolean;
   researchQuery: string | null;
   researchTool: string | null;
@@ -71,14 +70,14 @@ export async function insertEvidence(
        confidence, source_verified, ai_sourced, research_query, research_tool,
        simulated, captured_by_person_id,
        citation_resolved, citation_resolved_by_person_id, citation_resolved_at,
-       evidence_form, quote_text, locator, how_read
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, $11,
-               $12::uuid IS NOT NULL, $12::uuid, CASE WHEN $12::uuid IS NULL THEN NULL ELSE now() END,
-               $13, $14, $15, $16)
+       evidence_form, quote_text, locator, how_read, about_institution_id
+     ) VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, false, $10,
+               $11::uuid IS NOT NULL, $11::uuid, CASE WHEN $11::uuid IS NULL THEN NULL ELSE now() END,
+               $12, $13, $14, $15, $1)
      RETURNING id`,
     [
       institutionId, f.evidenceKind, summary, f.provenance, f.sourceReference,
-      f.confidence, f.sourceVerified, f.aiSourced, f.researchQuery, f.researchTool,
+      f.confidence, f.aiSourced, f.researchQuery, f.researchTool,
       actorPersonId, resolvedBy,
       f.evidenceForm, f.quoteText, f.locator === null ? null : JSON.stringify(f.locator), f.howRead,
     ],

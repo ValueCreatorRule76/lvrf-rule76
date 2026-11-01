@@ -88,7 +88,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "181" ] && ok "181 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "183" ] && ok "183 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -243,8 +243,8 @@ SCOTTS_INST="$(q "SELECT id FROM institutions WHERE name ILIKE 'Scotts%' LIMIT 1
 expect POST "/api/institutions/$SCOTTS_INST/facts/$SCOTTS_FACT/supersede" "$(CF 3413100000 "$FL")" 201 "a legacy predecessor (Scotts' revenue, on this clone) corrected with a locator: an upgrade, allowed"
 
 step "9. A run sealed after 0039: payloadVersion 2; every run still hashes"
-[ "$(q "SELECT (payload->>'payloadVersion') || '|' || (payload->'institutionFacts'->0 ? 'evidenceForm') || '|' || (payload->'evidence'->0 ? 'evidence_form') || '|' || (payload->'evidence' @> '[{\"figure_check\":{\"result\":\"flag\"}}]') FROM value_runs WHERE id = '$RUN'")" = "2|true|true|true" ] \
-  && ok "the run seals payloadVersion 2: each fact's and evidence item's form, and the figure check (P1-D4)" || bad "payload: $(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RUN'")"
+[ "$(q "SELECT (payload->>'payloadVersion') || '|' || (payload->'institutionFacts'->0 ? 'evidenceForm') || '|' || (payload->'evidence'->0 ? 'evidence_form') || '|' || (payload->'evidence' @> '[{\"figure_check\":{\"result\":\"flag\"}}]') FROM value_runs WHERE id = '$RUN'")" = "3|true|true|true" ] \
+  && ok "the run seals payloadVersion 3: each fact's and evidence item's form, and the figure check (P1-D4)" || bad "payload: $(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RUN'")"
 HASHES="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 printf '%s' "$HASHES" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $HASHES (versions 1 and 2)" || bad "hashes: $HASHES"
 
@@ -313,16 +313,16 @@ if [ -f "$SHOTS/p1_pov_fixture.pdf" ]; then
 else bad "no PDF printed"; fi
 
 step "12. Deliberate breaks"
-sqlrefused "B1: an INSERT with form legacy" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form) VALUES ('$INST', 'observation', 'b1', 'Verification break B1', '$S', 'legacy')" 'is the form of evidence recorded before evidence forms'
+sqlrefused "B1: an INSERT with form legacy" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, about_institution_id) VALUES ('$INST', 'observation', 'b1', 'Verification break B1', '$S', 'legacy', '$INST')" 'is the form of evidence recorded before evidence forms'
 Q41="$(node -e "console.log(Array.from({length:41},(_,i)=>'w'+i).join(' '))")"
 expect POST "/api/institutions/$INST/facts" "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2025-09-30\",$(FQ "$Q41" 'Verification: a quote of forty-one words.')}" 422 "B2: a 41-word quote, at the route" "The quote is 41 words; a quote is at most 40"
-sqlrefused "B2: a 41-word quote, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$INST', 'public_filing', 'b2', 'Verification break B2', '$S', 'quote', '$Q41', 'Verification: forty-one words in a quote.')" 'evidence_form_shape'
+sqlrefused "B2: a 41-word quote, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read, about_institution_id) VALUES ('$INST', 'public_filing', 'b2', 'Verification break B2', '$S', 'quote', '$Q41', 'Verification: forty-one words in a quote.', '$INST')" 'evidence_form_shape'
 expect POST "/api/value-outcomes/$(q "SELECT id FROM value_outcomes WHERE institution_id = '$INST' AND id <> '$O1' LIMIT 1")/evidence" "$(EVB system_export 'No scale (fixture)' baseline '"evidence_form":"locator","locator":{"document":"Fixture extract","value":2},"how_read":"Verification: a locator with no scale given."')" 422 "B3: a locator missing scale, at the route" "Give the locator's scale"
-sqlrefused "B3: a locator missing scale, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, locator, how_read) VALUES ('$INST', 'system_export', 'b3', 'Verification break B3', '$S', 'locator', '{\"document\":\"d\",\"value\":2}', 'Verification: a locator with no scale given.')" 'evidence_form_shape'
+sqlrefused "B3: a locator missing scale, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, locator, how_read, about_institution_id) VALUES ('$INST', 'system_export', 'b3', 'Verification break B3', '$S', 'locator', '{\"document\":\"d\",\"value\":2}', 'Verification: a locator with no scale given.', '$INST')" 'evidence_form_shape'
 expect POST "/api/value-outcomes/$(q "SELECT id FROM value_outcomes WHERE institution_id = '$INST' AND id <> '$O1' LIMIT 1")/evidence" "$(EVB public_filing 'A filing as a statement (fixture)' baseline '"evidence_form":"statement"')" 422 "B4: a statement on a public_filing, at the route" "this evidence's kind rests on a source"
-sqlrefused "B4: a statement on a public_filing, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form) VALUES ('$INST', 'public_filing', 'b4', 'Verification break B4', '$S', 'statement')" 'evidence_form_shape'
+sqlrefused "B4: a statement on a public_filing, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, about_institution_id) VALUES ('$INST', 'public_filing', 'b4', 'Verification break B4', '$S', 'statement', '$INST')" 'evidence_form_shape'
 expect POST "/api/institutions/$INST/facts" "{\"kind\":\"system\",\"value_text\":\"SAP\",\"as_of\":\"2025-09-30\",$(FQ 'We run SAP.' 'Too short.')}" 422 "B5: a quote with a 10-character how-read, at the route" "in at least 24 characters"
-sqlrefused "B5: a 10-character how-read, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read) VALUES ('$INST', 'public_filing', 'b5', 'Verification break B5', '$S', 'quote', 'We run SAP.', 'Too short.')" 'evidence_how_read'
+sqlrefused "B5: a 10-character how-read, at the database" "INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read, about_institution_id) VALUES ('$INST', 'public_filing', 'b5', 'Verification break B5', '$S', 'quote', 'We run SAP.', 'Too short.', '$INST')" 'evidence_how_read'
 sqlrefused "B6: an UPDATE of quote_text after insert" "UPDATE evidence SET quote_text = 'A quietly better quote.' WHERE id = '$EV_Q'" 'its form, quote, locator and how-read are final once recorded'
 expect POST "/api/institutions/$INST/facts/$F_HC/supersede" "{\"supersession_reason\":\"Verification: swap the form.\",\"value_numeric\":5200,\"unit\":\"people\",\"as_of\":\"2025-09-30\",$FL}" 422 "B7: a quote's successor resting on a locator" "a correction keeps its evidence form"
 sqlrefused "B10: a DELETE on figure_checks" "DELETE FROM figure_checks WHERE evidence_id = '$EV_Q'" 'cannot be deleted'

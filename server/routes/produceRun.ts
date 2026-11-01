@@ -246,6 +246,7 @@ export function produceRunRouter(pool: Pool): Router {
         simulated: boolean;
         supports: string;
         basis: string | null;
+        attester_document: string | null; evidence_id: string; about: string | null; opened_by: string | null; opened_on: string | null;
         attester_name: string | null;
         attester_tenant_id: string | null;
         attester_institution_id: string | null;
@@ -259,8 +260,12 @@ export function produceRunRouter(pool: Pool): Router {
            fc.result::text AS fc_result, fc.detail AS fc_detail, fc.rules_version AS fc_rules_version,
            e.kind, e.summary, e.provenance, e.source_reference,
            e.confidence AS confidence_level, e.source_verified, e.ai_sourced,
-           e.citation_resolved, e.simulated,
+           e.citation_resolved, e.simulated, e.attester_document,
            voe.supports, lvrf_evidence_basis(e) AS basis,
+           -- L42 (payloadVersion 3): the row, what it is about, and who opened it.
+           e.id AS evidence_id, lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about,
+           (SELECT full_name FROM persons WHERE id = e.citation_resolved_by_person_id) AS opened_by,
+           to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opened_on,
            p.full_name AS attester_name,
            p.tenant_id AS attester_tenant_id,
            p.institution_id AS attester_institution_id,
@@ -327,6 +332,12 @@ export function produceRunRouter(pool: Pool): Router {
           name: r.attester_name, simulated: Boolean(r.attester_simulated),
           customer_side: r.attester_customer_side, reason: r.attester_side_reason, roles: r.attester_roles,
         },
+        // L42 (payloadVersion 3; L41-D8): the row itself, so a later reading matches by id; what it is about;
+        // who opened it. Condition 3: "verified without the source being opened", sealed beside such an item.
+        evidence_id: r.evidence_id,
+        about: r.about,
+        opened: r.citation_resolved ? { by: r.opened_by, on: r.opened_on, attester_document: r.attester_document } : null,
+        verified_unopened: r.source_verified && !r.citation_resolved,
       }));
 
       // 3.0 ITEM 10 (O1): A RUN RENDERS FROM ITSELF. The account's current
@@ -341,10 +352,14 @@ export function produceRunRouter(pool: Pool): Router {
         as_of: string; evidence_id: string; evidence_kind: string; basis: string | null; citation_resolved: boolean;
         evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
         fc_result: string | null; fc_detail: string | null; fc_rules_version: number | null;
+        about: string | null; opened_by: string | null; opened_on: string | null;
       }>(
         `SELECT f.id, f.kind::text, f.value_numeric::text, f.value_text, f.unit, to_char(f.as_of, 'YYYY-MM-DD') AS as_of,
                 e.id AS evidence_id, e.kind::text AS evidence_kind, lvrf_evidence_basis(e) AS basis, e.citation_resolved,
                 e.evidence_form::text, e.quote_text, e.locator, e.how_read,
+                lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about,
+                (SELECT full_name FROM persons WHERE id = e.citation_resolved_by_person_id) AS opened_by,
+                to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opened_on,
                 fc.result::text AS fc_result, fc.detail AS fc_detail, fc.rules_version AS fc_rules_version
            FROM institution_facts f JOIN evidence e ON e.id = f.evidence_id
            -- P1-D4: the latest figure check of this fact.
@@ -374,6 +389,8 @@ export function produceRunRouter(pool: Pool): Router {
         // P1-D4 (payloadVersion 2): the evidence form, its quote or locator, how it was read, and the latest figure check.
         evidenceForm: f.evidence_form, quoteText: f.quote_text, locator: f.locator, howRead: f.how_read,
         figureCheck: f.fc_result ? { result: f.fc_result, detail: f.fc_detail, rulesVersion: f.fc_rules_version } : null,
+        // L42 (payloadVersion 3): what it is about, and who opened it.
+        about: f.about, opened: f.citation_resolved ? { by: f.opened_by, on: f.opened_on } : null,
       }));
       const entity = entityRow
         ? { id: entityRow.id, legalName: entityRow.legal_name, identifierType: entityRow.identifier_type,
@@ -604,7 +621,8 @@ export function produceRunRouter(pool: Pool): Router {
         // P1-D4: version 2 seals each fact's and evidence item's form and figure
         // check. A run without this key is version 1 and keeps its bytes;
         // check_run_hashes recomputes both from whatever keys a run has.
-        payloadVersion: 2,
+        // L42: version 3 also seals each item's row, what it is about, who opened it, and any verified unopened.
+        payloadVersion: 3,
         // C3 (1.0.1; C3-D3): the committer and the verifier as they stood, so the run recomputes under 1.0.1.
         people: {
           committer: committerName === null ? null : { name: committerName, simulated: committerSynthetic, customer_side: committerSide.customer_side, reason: committerSide.reason, roles: committerSide.roles },

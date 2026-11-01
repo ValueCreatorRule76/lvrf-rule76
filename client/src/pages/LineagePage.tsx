@@ -29,7 +29,7 @@ const TITLE: Record<string, string> = {
 };
 const KIND: Record<string, string> = {
   prompt: 'Research prompt', import: 'Research import', result: 'Research result', accept: 'Accepted', reject: 'Rejected', pending: 'Not yet reviewed',
-  origin: 'Origin', evidence: 'Evidence', open_citation: 'Citation opened', attested: 'Attested', figure_check: 'Figure check',
+  origin: 'Origin', evidence: 'Evidence', migration_rule: 'A migration', state_about: 'What it is about', open_citation: 'Citation opened', attested: 'Attested', figure_check: 'Figure check',
   fact: 'The fact', entity: 'The entity', measure: 'The pack measure', supersedes: 'Corrects an earlier one', superseded_by: 'Corrected since',
   withdrawn: 'Withdrawn', link: 'Linked to the outcome', correct: 'Link corrected', seal: 'Sealed in a run', erratum: 'Erratum', finding: 'No source on record',
   baseline: 'The baseline', actual: 'The actual', verify: 'Verified',
@@ -64,6 +64,7 @@ function What({ s }: { s: Step }) {
       );
     }
     // C3b (Brad, 27 Oct 2026): what was attested, and whether the attester is customer-side.
+    case 'state_about': return <span data-testid="lineage-about">About {str(d.about)}{d.reason ? ` — ${str(d.reason)}` : ''}</span>;
     case 'attested': return <span data-testid="lineage-attested">{str(d.kind).replace(/_/g, ' ')}: “{str(d.summary)}”{d.attester_roles
       ? <span className="block text-ink-45">{str(d.attester_roles)}</span>
       : d.attester_not_customer_side ? <span className="block text-warning">not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule</span> : null}</span>;

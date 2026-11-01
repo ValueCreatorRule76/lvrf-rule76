@@ -111,16 +111,9 @@ if (MODE === 'form') {
   const help = await ev(`(${form}).querySelector('[data-testid=kind-help]')?.textContent ?? ''`);
   check(help.includes('10-K') && help.includes('Public filing') && help.includes('Observation') && help.includes('press release') && !/public_filing|observation\b/.test(help),
     "R1's help text under Kind, in the option's own words (UX-1 standard 6): formal annual disclosure reports are Public filing, looser material Observation", help.slice(0, 120));
-  check(await ev(`(${form}).querySelector('[data-testid=source-verified]').disabled === false`), 'Source verified is open while AI-sourced is unchosen');
-  await setField(form, 'AI-sourced', 'true');
-  await sleep(300);
-  check(await ev(`(()=>{const s=(${form}).querySelector('[data-testid=source-verified]');return s.disabled===true&&s.value==='false'})()`),
-    'AI-sourced = Yes: Source verified is set to No and disabled');
-  check(await ev(`(${form}).querySelector('[data-testid=source-verified-reason]')?.textContent.includes(${JSON.stringify(SENTENCE)})`), '  ...with the reason beside it');
+  check(!(await ev(`!!(${form}).querySelector('[data-testid=source-verified]')`)), 'L41: the form does not ask whether the source is verified');
+  check(await ev(`!!(${form}).querySelector('[data-testid=recorded-unverified]')`), '  ...it says evidence is recorded unverified');
   await markShot(form); await shot('q4k_1_form_lock', '[data-shot="1"]');
-  await setField(form, 'AI-sourced', 'false');
-  await sleep(300);
-  check(await ev(`(${form}).querySelector('[data-testid=source-verified]').disabled === false`), 'AI-sourced back to No: Source verified opens again');
   // Open the citation on the AI-sourced evidence already recorded.
   const li = `([...document.querySelectorAll('[data-testid=w6-evidence]')].find(l=>l.textContent.includes('Walk AI evidence (fixture)')))`;
   check(await ev(`!!${li} && ${li}.textContent.includes('citation not yet opened')`), "W6 lists the AI-sourced evidence as 'citation not yet opened'");
@@ -136,29 +129,6 @@ if (MODE === 'form') {
   check(psql(`SELECT ai_sourced || '|' || citation_resolved || '|' || source_verified || '|' || (citation_resolved_at IS NOT NULL) FROM evidence WHERE summary = 'Walk AI evidence (fixture)'`) === 'true|true|true|true',
     '  ...the row: still ai_sourced, citation resolved with a time, source verified');
   await markShot(w6); await shot('q4k_3_citation_opened', '[data-shot="1"]');
-} else {
-  // break-gate: the client's lock removed; the route still refuses, in plain words.
-  await setField(form, 'Provenance', 'Walk break-gate fixture, not a source');
-  await setField(form, 'Kind', 'public_filing');
-  await setField(form, 'Summary', 'Walk break-gate evidence');
-  await setField(form, 'Supports', 'baseline');
-  await setField(form, 'What it rests on', 'quote');
-  await sleep(250);
-  await setField(form, 'Quote (the source', 'Walk break-gate fixture quote, not a source.');
-  await setField(form, 'How it was read', 'Verification fixture: read from the fixture quote as written.');
-  await setField(form, 'AI-sourced', 'true');
-  await sleep(200);
-  await setField(form, 'Source verified', 'true');
-  await setField(form, 'Research query', 'walk query');
-  await setField(form, 'Research tool', 'walk tool');
-  await setField(form, 'Simulated', 'false');
-  await sleep(300);
-  check(await ev(`(${form}).querySelector('[data-testid=source-verified]').disabled === false`), 'break-gate: with the lock removed, Source verified = Yes can be chosen with AI-sourced = Yes');
-  await click(form, 'Submit');
-  check(await waitFor(`(${form}).textContent.includes(${JSON.stringify(SENTENCE)})`), '  ...and the ROUTE refuses it in the same plain words — the lock is a courtesy, the route and the CHECK the authority');
-  check(await ev(`!/violates|check constraint|relation "/.test((${form}).textContent)`), '  ...no Postgres text on the page');
-  check(psql(`SELECT count(*) FROM evidence WHERE summary = 'Walk break-gate evidence'`) === '0', '  ...nothing written');
-  await markShot(form); await shot('q4k_4_break_gate_refused', '[data-shot="1"]');
 }
 ws.close();
 process.exit(0);

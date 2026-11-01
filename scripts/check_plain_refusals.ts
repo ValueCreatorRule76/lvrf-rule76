@@ -21,7 +21,8 @@ await client.query('ROLLBACK');
 await client.end();
 const inDb = new Set(rows.map((r) => r.conname));
 const missing = rows.filter((r) => !(r.conname in PLAIN_CHECK));
-const stale = Object.keys(PLAIN_CHECK).filter((k) => !inDb.has(k));
+// L41 (condition 4): hardening.sql adds evidence_verified_opened once no row breaks it; until then its sentence waits.
+const stale = Object.keys(PLAIN_CHECK).filter((k) => !inDb.has(k) && k !== 'evidence_verified_opened');
 for (const m of missing) console.log(`NO SENTENCE ${m.rel}.${m.conname}`);
 for (const k of stale) console.log(`STALE SENTENCE ${k} (no such CHECK in the database)`);
 console.log(`${rows.length} CHECKs in the database: ${rows.length - missing.length} with a plain sentence, ${missing.length} without; ${stale.length} stale sentence(s)`);

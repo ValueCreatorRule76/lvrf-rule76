@@ -240,7 +240,7 @@ step "3. Scotts (locked runs, a hypothesis, a lever, published facts)"
 look scotts "$SCOTTS" '{"confidence":"35 / 100 · Low","falsifiers":1,"lever":"ratified by Brad Piver, 19 Oct 2026","facts":["$3,413.1 million","5,200 people"],"labels":["Disclosure regime","Public filer","Stated priority","SEC CIK","General"],"verbatim":["provided that: Same TRIR definition and denominator as the published baseline"],"runs":{"latest":["Scotts Miracle-Gro — reference example, not an engagement (retired), run 2"],"buttons":["Show all 2 runs"],"total":2}}' "OUTSIDE-IN TEST" "record hash"
 SCOTTS_PAGES="$PAGES_N"
 step "4. Curia (a locked run, no hypothesis)"
-look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 13"],"buttons":["Show all 21 runs"],"total":22}}' "REFERENCE EXAMPLE" "record hash"
+look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 13"],"buttons":["Show all 21 runs"],"total":22}}' "OUTSIDE-IN TEST" "record hash"
 # C1b (Brad, 25 Oct 2026): every printed header line is bounded — in print emulation each line of the
 # printed header is one line tall; Curia's marker carries a 318-character citation.
 cat > "$W/header.mjs" <<'JS'

@@ -1,6 +1,6 @@
 import { SystemExerciseLine } from '../SystemExercise';
 import { VerifiedUnopenedLine } from '../RecordReadings';
-import type { Run } from '../../types/run';
+import type { EvidenceItem, Run } from '../../types/run';
 import { LineageLink } from '../LineageLink';
 import { Badge } from './Card';
 import { label, EVIDENCE_KIND, SUPPORTS } from '../../lib/labels';
@@ -15,6 +15,10 @@ import { EvidenceRestsOn, FigureCheckLine } from '../EvidenceRestsOn';
 //
 // UX-1 slice 4: one row per sealed item, stacked (no table), every value in
 // words; the provenance as recorded.
+/** L42: a v3 item names its row; an older one is matched as it was sealed. */
+const sameItem = (x: { evidence_id?: string | null; kind: string; summary: string; provenance: string }, e: EvidenceItem) =>
+  (e.evidence_id ? x.evidence_id === e.evidence_id : x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance);
+
 export function EvidenceCard({ run }: { run: Run }) {
   const evidence = run.payload.evidence;
 
@@ -49,10 +53,13 @@ export function EvidenceCard({ run }: { run: Run }) {
             </p>
             <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]" data-record>Source: {e.provenance}</p>
             {/* C3: the evidence row this item was sealed from is marked as a system exercise. */}
-            {(() => { const m = (run.marked_evidence ?? []).find((x) => x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance);
+            {(() => { const m = (run.marked_evidence ?? []).find((x) => sameItem(x, e));
               return m ? <SystemExerciseLine mark={m.system_exercise} className="mt-0.5" /> : null; })()}
             {/* C3b: the evidence row it was sealed from is verified, with no citation opened (as the row stands). */}
-            {(run.unopened_evidence ?? []).some((x) => x.kind === e.kind && x.summary === e.summary && x.provenance === e.provenance) && <VerifiedUnopenedLine className="mt-0.5" />}
+            {(e.verified_unopened || (run.unopened_evidence ?? []).some((x) => sameItem(x, e))) && <VerifiedUnopenedLine className="mt-0.5" />}
+            {/* L42 (payloadVersion 3): what it is about, and who opened it, as sealed. */}
+            {e.about && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-record data-testid="sealed-about">About {e.about}</p>}
+            {e.opened && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-record data-testid="sealed-opened">Opened by {e.opened.by}, {e.opened.on}{e.opened.attester_document ? `, from a ${e.opened.attester_document.replace('_', ' ')} from the attester` : ''}</p>}
             {/* P2: the sealed item carries no evidence id (P2-D7); its outcome's figure is traced instead. */}
             {(e.supports === 'baseline' || e.supports === 'actual') && typeof run.payload.valueOutcomeId === 'string' && (
               <LineageLink table="value_outcomes" id={run.payload.valueOutcomeId} figure={e.supports} />

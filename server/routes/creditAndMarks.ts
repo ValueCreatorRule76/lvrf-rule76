@@ -87,7 +87,10 @@ export function customerRoleGrantRouter(pool: Pool): Router {
           WHERE g.institution_id = $1 ORDER BY g.granted_at`, [institutionId]);
       const { rows: sources } = await pool.query(
         `SELECT e.id, e.kind::text, e.summary, e.provenance FROM evidence e
-          WHERE e.institution_id = $1 AND NOT e.simulated AND e.deleted_at IS NULL AND length(btrim(e.provenance)) >= 3 ORDER BY e.created_at`, [institutionId]);
+          WHERE e.institution_id = $1 AND NOT e.simulated AND e.deleted_at IS NULL AND length(btrim(e.provenance)) >= 3
+            -- L41-D6: the guard's own rule: current, about this account, opened and found to support it.
+            AND e.superseded_by_id IS NULL AND e.about_institution_id = $1 AND e.citation_resolved AND e.source_verified
+          ORDER BY e.created_at`, [institutionId]);
       res.json({ persons, grants, sources });
     } catch (err) {
       respondServerError(res, err);

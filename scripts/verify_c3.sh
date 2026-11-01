@@ -115,8 +115,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "181" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 181 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "183" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 183 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 pre_c3() {  # the pre-C3 code itself, for sealing runs under model 1.0.0
   git show "$PRE_C3:$PRODUCE" > "$PRODUCE"; git show "$PRE_C3:$MODELF" > "$MODELF"; stop_server; start_server
@@ -160,15 +160,15 @@ restore "$M101"
 step "3. Clone the prod copy; migrate through 0043; harden; what 0043 orphans"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
-ERR0="$(q "SELECT count(*) FROM run_errata")"; RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
+ERR0="$(q "SELECT count(*) FROM run_errata")"; LC0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'link_correction'")"; CRED0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")"; RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "181" ] && ok "181 triggers (167 + section 28's nine + section 29's five, C3b)" || bad "triggers: $(trig)"
+[ "$(trig)" = "183" ] && ok "183 triggers (167 + section 28's nine + section 29's five, C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^[0-9]+ CHECKs in the database: [0-9]+ with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
-[ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE kind = 'link_correction')  FROM run_errata")" = "$ERR0|$ERR0" ] && ok "0043 orphans nothing: all $ERR0 errata kept, each a link correction" || bad "errata after 0043"
+[ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE kind = 'link_correction')  FROM run_errata")" = "$ERR0|$LC0" ] && ok "0043 orphans nothing: all $ERR0 errata kept, $LC0 link corrections" || bad "errata after 0043"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 
 step "4. Fixtures and the server"
@@ -223,7 +223,8 @@ q "INSERT INTO person_credentials (person_id, password_hash, set_via) VALUES ('$
 ok "  ...a simulated person and a customer person given sign-in credentials (fixture persons, not roles)"
 outcome role "$OWNER2"; O2="$O"; ENG2="$ENG"
 SOURCE="Fixture source for: C3 org chart naming the owner as metric owner"
-evid "$O2" public_filing 'C3 org chart naming the owner as metric owner' impact_basis; SRC="$EV"
+csrc() { expect POST "/api/institutions/$1/evidence" "$(J about account kind artifact provenance "Fixture source for: $2" summary "$2" evidence_form quote quote_text 'Named in the fixture org chart.' how_read 'Read from the fixture org chart, top box.')" 201 "  ...the source, as account evidence (L47)"; EV="$(rj b.evidence_id)"; expect POST "/api/evidence/$EV/open-citation" '{"source_verified":true}' 200 "  ...opened by a person"; }
+csrc "$INST2" 'C3 org chart naming the owner as metric owner'; SRC="$EV"
 evid "$O2" system_export 'C3 export attested by the owner (fixture)' baseline "$OWNER2"
 commit "$O2" "$OWNER2" owner
 evid "$O2" observation 'Entered to exercise the accept path (fixture test row)' impact_basis; EV_TEST="$EV"
@@ -243,7 +244,7 @@ expect POST "$(CR "$INST2")" "$(GR "$SIGNER")" 422 "a person with sign-in creden
 expect POST "$(CR "$INST2")" "$(GR "$S")" 422 "the steward themself" "the steward does not name a customer-side role for themself"
 expect POST "$(CR "$INST2")" "$(GR "$SIMP")" 422 "a simulated person" "a simulated person holds no customer-side role"
 expect POST "$(CR "$INST2")" "$(GR "$OWNER1")" 422 "a person of another account" "is not a person of this account"
-expect POST "$(CR "$INST2")" "$(GR "$OWNER2" metric_owner "$EV3")" 422 "a source from another account" "a role is named from a source: evidence of this account"
+expect POST "$(CR "$INST2")" "$(GR "$OWNER2" metric_owner "$EV3")" 422 "a source from another account" "a role is named from a source: current evidence about this account"
 [ "$(q "SELECT count(*) FROM customer_role_grants")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused grant wrote"
 GSQL() { printf "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) VALUES ('%s', '%s', '%s', 'metric_owner', '%s', 'Verification: a break.', '%s')" "$TEN" "$1" "$2" "$3" "$S"; }
 fnbreak lvrf_customer_role_grant_guard "  IF EXISTS (SELECT 1 FROM account_person_links l WHERE l.person_id = p.id AND l.role = 'analyst_of_record')
@@ -263,7 +264,7 @@ fnbreak lvrf_customer_role_grant_guard "  IF NOT EXISTS (SELECT 1 FROM evidence 
 [ "$(sqlaccepted "$(GSQL "$INST2" "$OWNER2" "$EV3")")" = "ACCEPTED" ] && ok "B4: the source test removed → caught: a role named from another account's evidence is accepted" || bad "B4: $(sqlaccepted "$(GSQL "$INST2" "$OWNER2" "$EV3")")"
 reharden
 # B15 — a role with no source, the route's check removed: the database refuses it.
-sqlrefused "a grant with no source, at the database" "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) VALUES ('$TEN', '$INST2', '$OWNER2', 'metric_owner', NULL, 'Verification: no source.', '$S')" "a role is named from a source: evidence of this account"
+sqlrefused "a grant with no source, at the database" "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) VALUES ('$TEN', '$INST2', '$OWNER2', 'metric_owner', NULL, 'Verification: no source.', '$S')" "a role is named from a source: current evidence about this account"
 [ "$(q "SELECT attnotnull FROM pg_attribute WHERE attrelid = 'customer_role_grants'::regclass AND attname = 'source_evidence_id'")" = "t" ] && ok "  ...and the column is NOT NULL behind the guard" || bad "  ...source_evidence_id is nullable"
 edit "$C3R" "      if (typeof b.source_evidence_id !== 'string' || !isUuid(b.source_evidence_id)) {" "      if (false) {"
 stop_server; start_server
@@ -341,7 +342,7 @@ rj "b.errata.filter(x=>x.run_id!=='$R_OLD').map(x=>'  NOTE  (the copy'+String.fr
 expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" expected_unsourced_count 0 reason 'Verification: X records them.')" 403 "X records the batch" "steward" "$X"
 expect POST /api/errata/non-customer-credit "$(J expected_count "$((COUNT + 1))" expected_unsourced_count 0 reason 'Verification: a count that was off.')" 409 "the batch with a count that is off" "The count changed: the record now calls for $COUNT credit errata and 0 unsourced-figure errata, not $((COUNT + 1)) and 0"
 expect POST /api/errata/non-customer-credit "$(J expected_count "$COUNT" expected_unsourced_count 0 reason 'Verification: a typed figure.' points_not_credited 5)" 400 "a typed point figure" "what each erratum states is read from its run's seal by the server"
-[ "$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
+[ "$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")" = "$CRED0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
 
 step "9. The browser: roles, the two batches (each confirmed, with its count), marks, credit errata, headlines, lineage"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) & VITE_PID=$!
@@ -363,8 +364,8 @@ export OWNER_NAME ANALYST_NAME SOURCE STEWARD_NAME="$S_NAME"
 INST="$INST2" GRANT_CHECK=1 cw roles
 INST="$INST1" ANALYST_CHECK=1 cw roles
 COUNT="$COUNT" EXPECT_TEXT="$EXPECT_TEXT" cw errata_batch
-[ "$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")" = "$COUNT" ] && ok "  ...$COUNT errata recorded" || bad "  ...recorded: $(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")"
-[ "$(q "SELECT count(*) FROM governance_acts a JOIN run_errata x ON x.id = a.subject_id WHERE x.kind = 'non_customer_credit' AND a.act = 'record_erratum'")" = "$COUNT" ] && ok "  ...one act each" || bad "  ...acts"
+[ "$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")" = "$((CRED0 + COUNT))" ] && ok "  ...$COUNT errata recorded" || bad "  ...recorded: $(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")"
+[ "$(q "SELECT count(*) FROM governance_acts a JOIN run_errata x ON x.id = a.subject_id WHERE x.kind = 'non_customer_credit' AND a.act = 'record_erratum'")" = "$((CRED0 + COUNT))" ] && ok "  ...one act each" || bad "  ...acts"
 [ "$(q "SELECT points_not_credited::numeric::int || '|' || (recomputed_score IS NULL) || '|' || (recompute_method LIKE '%The sealed score, 35 / 100, stands.') FROM run_errata WHERE value_run_id = '$R_OLD' AND kind = 'non_customer_credit'")" = "25|true|true" ] \
   && ok "  ...the analyst's run: 25 points, nothing recomputed, \"The sealed score, 35 / 100, stands.\"" || bad "  ...R_OLD erratum: $(q "SELECT points_not_credited, recompute_method FROM run_errata WHERE value_run_id = '$R_OLD' AND kind = 'non_customer_credit'")"
 [ "$(q "SELECT md5(r::text) FROM value_runs r WHERE r.id = '$R_OLD'")" = "$SEAL_OLD" ] && ok "  ...the sealed run byte-identical" || bad "  ...the sealed run changed"

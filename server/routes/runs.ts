@@ -62,17 +62,18 @@ export function runsRouter(pool: Pool): Router {
       // seal names it: kind, summary and provenance, within the run's account).
       const { rows: [mark] } = await pool.query<{ m: unknown }>('SELECT lvrf_system_exercise_mark($1, $2::uuid) AS m', ['value_runs', req.params.id]);
       const { rows: markedEvidence } = await pool.query(
-        `SELECT x->>'kind' AS kind, x->>'summary' AS summary, x->>'provenance' AS provenance, lvrf_system_exercise_mark('evidence', e.id) AS system_exercise
+        `SELECT x->>'evidence_id' AS evidence_id, x->>'kind' AS kind, x->>'summary' AS summary, x->>'provenance' AS provenance, lvrf_system_exercise_mark('evidence', e.id) AS system_exercise
            FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x
-           JOIN evidence e ON e.institution_id = $2 AND e.kind::text = x->>'kind' AND e.summary = x->>'summary' AND e.provenance = x->>'provenance'
+           -- L42: a v3 item names its row; an older one is matched as it was sealed.
+           JOIN evidence e ON e.institution_id = $2 AND (e.id::text = x->>'evidence_id' OR (x->>'evidence_id' IS NULL AND e.kind::text = x->>'kind' AND e.summary = x->>'summary' AND e.provenance = x->>'provenance'))
           WHERE r.id = $1 AND lvrf_system_exercise_mark('evidence', e.id) IS NOT NULL`,
         [req.params.id, run.institution_id]);
       // C3b (Brad's condition 2): the sealed items whose evidence row is verified with no citation opened (a
       // derived reading of the row as it stands, matched as the marks are; it changes nothing sealed).
       const { rows: unopenedEvidence } = await pool.query(
-        `SELECT DISTINCT x->>'kind' AS kind, x->>'summary' AS summary, x->>'provenance' AS provenance
+        `SELECT DISTINCT x->>'evidence_id' AS evidence_id, x->>'kind' AS kind, x->>'summary' AS summary, x->>'provenance' AS provenance
            FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x
-           JOIN evidence e ON e.institution_id = $2 AND e.kind::text = x->>'kind' AND e.summary = x->>'summary' AND e.provenance = x->>'provenance'
+           JOIN evidence e ON e.institution_id = $2 AND (e.id::text = x->>'evidence_id' OR (x->>'evidence_id' IS NULL AND e.kind::text = x->>'kind' AND e.summary = x->>'summary' AND e.provenance = x->>'provenance'))
           WHERE r.id = $1 AND e.source_verified AND NOT e.citation_resolved`,
         [req.params.id, run.institution_id]);
       res.json({ ...run, errata, system_exercise: mark?.m ?? null, marked_evidence: markedEvidence, unopened_evidence: unopenedEvidence });

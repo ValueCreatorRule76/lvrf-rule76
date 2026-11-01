@@ -52,6 +52,10 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/system-exercise/marks': 'steward',
   'POST /api/value-outcomes/:outcomeId/figure-findings': 'steward',
   'POST /api/value-runs/:runId/errata': 'steward',
+  // L41 + L47 (1 Nov 2026): stating a legacy row's about, withdrawing a verification, superseding evidence.
+  'POST /api/evidence/about-batch': 'steward',
+  'POST /api/evidence/:id/withdraw-verification': 'steward',
+  'POST /api/evidence/:id/supersede': 'steward',
   // O2: hypotheses and executive summaries are the account team's acts.
   'POST /api/institutions/:institutionId/hypotheses': 'authorized',
   'POST /api/value-hypotheses/:id/supersede': 'authorized',
@@ -75,6 +79,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/industries/:industryId/research-prompts': 'authorized',
   'POST /api/industries/:industryId/research-results': 'authorized',
   'POST /api/institutions/:institutionId/entity/supersede': 'authorized',
+  'POST /api/institutions/:institutionId/evidence': 'authorized',
   'POST /api/institutions/:institutionId/facts': 'authorized',
   'POST /api/institutions/:institutionId/facts/:factId/supersede': 'authorized',
   'POST /api/institutions/:institutionId/industry': 'authorized',
@@ -110,6 +115,9 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/institutions/:institutionId/customer-roles': 'Naming a customer-side role',
   'POST /api/customer-roles/:id/revoke': 'Revoking a customer-side role',
   'POST /api/errata/non-customer-credit': 'Recording the errata the seals call for',
+  'POST /api/evidence/about-batch': 'Stating what evidence from before this field is about',
+  'POST /api/evidence/:id/withdraw-verification': 'Withdrawing a verification',
+  'POST /api/evidence/:id/supersede': 'Superseding evidence',
   'POST /api/system-exercise/marks': 'Marking items as a system exercise',
   'POST /api/value-outcomes/:outcomeId/figure-findings': 'Recording that a figure has no source on record',
   'POST /api/value-runs/:runId/errata': 'Recording an erratum',

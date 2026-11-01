@@ -37,7 +37,7 @@ type Supports = ConfidenceEvidenceInput['supports'];
 interface SealedFactor { factor: keyof typeof CONFIDENCE_FACTOR_WEIGHTS; earned: number; gap?: string | null; weight?: number; question?: string; note?: string }
 /** C3: what a 1.0.1 seal carries of a person it credited (an attester, the committer, the verifier). */
 interface SealedPerson { name: string; simulated?: boolean; customer_side: boolean | null; reason?: string | null; roles?: string | null }
-interface SealedItem { kind: string; summary: string; provenance: string; supports: string; source_verified: boolean; attester?: SealedPerson | null }
+interface SealedItem { evidence_id?: string; kind: string; summary: string; provenance: string; supports: string; source_verified: boolean; attester?: SealedPerson | null }
 interface SealedPayload {
   confidence?: { score: number; band: string; modelVersion?: string; modelFingerprint?: string; factors?: SealedFactor[] };
   evidence?: SealedItem[];
@@ -58,14 +58,15 @@ const FACTOR_OF: Partial<Record<string, SealedFactor['factor']>> = {
 
 export function recomputeWithCorrection(
   payload: SealedPayload,
-  match: { kind: string; summary: string; provenance: string },
+  match: { id?: string; kind: string; summary: string; provenance: string },
   supportsNow: Supports,
 ): Recompute {
   const c = payload.confidence;
   if (!c || !c.factors) return { ok: false, reason: 'This run sealed no confidence factors, so it cannot be recomputed.' };
   const sealedItems = payload.evidence;
   if (!sealedItems) return { ok: false, reason: 'This run sealed no evidence, so it cannot be recomputed.' };
-  const hits = sealedItems.filter((e) => e.kind === match.kind && e.summary === match.summary && e.provenance === match.provenance);
+  // L42: a v3 item names its row; an older one is matched as it was sealed.
+  const hits = sealedItems.filter((e) => (e.evidence_id && match.id ? e.evidence_id === match.id : e.kind === match.kind && e.summary === match.summary && e.provenance === match.provenance));
   if (hits.length !== 1) {
     return { ok: false, reason: `The corrected evidence appears ${hits.length} times in this run's sealed evidence, not once; nothing is stated.` };
   }

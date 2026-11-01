@@ -128,7 +128,7 @@ PRE_ACT_IDS="$(q "SELECT coalesce(string_agg(quote_literal(id::text), ',' ORDER 
 HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0041_acts_and_lineage)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "181" ] && ok "181 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "183" ] && ok "183 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
@@ -250,6 +250,7 @@ expect POST "/api/business-metrics/$M_1/pack-basis" "{\"industry_measure_id\":\"
 EVB() { printf '{"kind":"%s","provenance":"Fixture %s (not a source)","summary":"%s","supports":"%s","source_verified":%s,"ai_sourced":%s,%s"simulated":false,"evidence_form":"quote","quote_text":"Our total recordable incident rate was 1.4 in FY25.","how_read":"The FY25 TRIR, from the fixture report, read as published."}' "$1" "$2" "$3" "$4" "${5:-false}" "${6:-false}" "$([ "${6:-false}" = true ] && printf '"research_query":"TRIR FY25 (fixture)","research_tool":"Verification tool",')"; }
 expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing filing 'TRIR FY25 (fixture)' baseline true)" 201 "baseline evidence (create-only)"
 EV1="$(rj b.evidence_id)"
+act_is "  ...the fixture's second request, as a person would: its opening (L41), and that alone" "open_citation:evidence:-:true:POST /api/evidence/:id/open-citation"
 expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing 'AI search' 'TRIR FY25, AI-found (fixture)' baseline false true)" 201 "AI-sourced evidence (create-only)"
 EV_AI="$(rj b.evidence_id)"
 act_is "create-only routes write no act" ""
@@ -257,7 +258,7 @@ expect POST "/api/evidence/$EV_AI/open-citation" '{"source_verified":true}' 200 
 act_is "open_citation" "open_citation:evidence:-:true:POST /api/evidence/:id/open-citation"
 # P2 review (Brad): the standalone opening writes its own act; the row, as recorded.
 echo "  ROW   $(q "SELECT 'act=' || act || ' subject=' || subject_table || '/' || subject_id || ' actor=' || (SELECT full_name FROM persons WHERE id = actor_person_id) || ' route=' || route || ' reason=' || coalesce(reason, 'NULL') || ' txid=' || txid || ' at=' || to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') FROM governance_acts WHERE subject_table = 'evidence' AND subject_id = '$EV_AI'")"
-[ "$(q "SELECT count(*) || '|' || bool_and(subject_id = '$EV_AI' AND result_table IS NULL AND evidence_ids = '{}') FROM governance_acts WHERE act = 'open_citation'")" = "1|true" ] \
+[ "$(q "SELECT count(*) || '|' || bool_and(subject_id = '$EV_AI' AND result_table IS NULL AND evidence_ids = '{}') FROM governance_acts WHERE act = 'open_citation' AND subject_id = '$EV_AI'")" = "1|true" ] \
   && ok "  ...one open_citation act, its subject the evidence opened, standing on its own (no accept involved)" || bad "  ...open_citation acts: $(q "SELECT count(*) FROM governance_acts WHERE act = 'open_citation'")"
 expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing 'AI search two' 'TRIR FY25, AI-found again (fixture)' baseline false true)" 201 "a second AI-sourced item (create-only)"
 EV_AI2="$(rj b.evidence_id)"; acts_new
@@ -329,8 +330,8 @@ act_is "supersede (entity)" "supersede:institution_entities:institution_entities
 SCRIPT_ROUTES="$(q "SELECT string_agg(DISTINCT route, E'\n' ORDER BY route) FROM governance_acts WHERE id::text NOT IN ($PRE_ACT_IDS)")"
 ACT_ROUTES="$(npx tsx -e "import('$(pwd)/server/lib/governanceAct.ts').then(m => console.log(Object.entries(m.ROUTE_ACTS).filter(([, a]) => a !== 'create-only').map(([r]) => r).sort().join('\n')))" 2>/dev/null)"
 NOT_HERE="$(comm -23 <(printf '%s\n' "$ACT_ROUTES") <(printf '%s\n' "$SCRIPT_ROUTES" | sort) | paste -sd'|' -)"
-[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/errata/non-customer-credit|POST /api/institutions/:institutionId/customer-roles|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings" ] \
-  && ok "29 distinct act routes exercised by this script; the other 6 act routes in ROUTE_ACTS by their own scripts (withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
+[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/institutions/:institutionId/customer-roles|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings" ] \
+  && ok "29 distinct act routes exercised by this script; the other 9 act routes in ROUTE_ACTS by their own scripts (withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
 
 step "8. Lineage — a fixture chain made after P2"
 LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvrf_lineage('$1', '$2'${3:+, '$3'})"; }
@@ -338,14 +339,14 @@ LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvr
   && ok "the researched fact: prompt > import (act) > result > accept (act) > evidence > citation opened (in the accept act) > figure check > fact > superseded (act) > run's seal" || bad "fact lineage: $(LN institution_facts "$F_HC")"
 [ "$(LN institution_facts "$F_HC2")" = "origin:record > evidence:record > figure_check:record > fact:record > supersedes:act > seal:seal" ] && ok "its correction: recorded directly > evidence > figure check > fact > supersedes (act) > a later run's seal" || bad "successor lineage: $(LN institution_facts "$F_HC2")"
 [ "$(q "SELECT actor || '|' || (at IS NOT NULL) FROM lvrf_lineage('institution_facts', '$F_HC') WHERE kind = 'accept'")" = "$S_NAME|true" ] && ok "  ...each step names who and when (the accept: $S_NAME)" || bad "  ...accept step who/when"
-[ "$(LN evidence "$EV3")" = "evidence:record > figure_check:record > link:record > withdrawn:act > correct:act > seal:seal > erratum:act" ] \
+[ "$(LN evidence "$EV3")" = "evidence:record > open_citation:act > figure_check:record > link:record > withdrawn:act > correct:act > seal:seal > erratum:act" ] \
   && ok "corrected evidence: evidence > figure check > link > withdrawn (act) > corrected link (act) > the run's seal (matched) > erratum" || bad "evidence lineage: $(LN evidence "$EV3")"
-[ "$(q "SELECT detail->>'matched' FROM lvrf_lineage('evidence', '$EV3') WHERE kind = 'seal'")" = "matched by kind, summary and source; not sealed by id" ] \
-  && ok "  ...the seal labelled \"matched by kind, summary and source; not sealed by id\" (P2-D7)" || bad "  ...seal label"
+[ -z "$(q "SELECT detail->>'matched' FROM lvrf_lineage('evidence', '$EV3') WHERE kind = 'seal'")" ] \
+  && ok "  ...a v3 seal names the row, so it carries no \"matched\" label (L41-D8; older runs keep P2-D7's)" || bad "  ...seal label"
 # P2 review (Brad): an outcome's baseline after a correction — the withdrawn link with name, date and
 # reason; the correcting link; the run's seal noting the erratum recorded after it.
 LB3="$(LN value_outcomes "$O3" baseline)"
-[ "$LB3" = "baseline:record > evidence:record > figure_check:record > link:record > withdrawn:act > correct:act > seal:seal > erratum:act" ] \
+[ "$LB3" = "baseline:record > evidence:record > open_citation:act > figure_check:record > link:record > withdrawn:act > correct:act > seal:seal > erratum:act" ] \
   && ok "a corrected baseline: baseline > evidence > figure check > link > withdrawn (act) > corrected link (act) > the run's seal > erratum" || bad "corrected baseline: $LB3"
 [ "$(q "SELECT (detail->>'current') || '|' || (detail->>'supports') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'link'")|$(q "SELECT actor || '|' || (at::date = now()::date) || '|' || (detail->>'reason') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'withdrawn'")" = "false|baseline|$S_NAME|true|Verification: this filing bases the impact, not the baseline." ] \
   && ok "  ...the withdrawn link: not current; withdrawn by $S_NAME, today, with the reason" || bad "  ...withdrawn step: $(q "SELECT detail FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'withdrawn'")"
@@ -457,8 +458,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b10.sql" > /dev/null
 [ "$(LN institution_facts "$F_HC")" = "prompt:record > import:act > result:record > accept:act > evidence:record > open_citation:act > figure_check:record > fact:record > seal:seal" ] \
   && ok "B10: caught — without the supersession steps the chain loses \"superseded_by\"; the script names the missing step" || bad "B10: not caught: $(LN institution_facts "$F_HC")"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "181" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
-  && ok "  ...hardening.sql re-applied: the step back, 181 triggers" || bad "  ...B10 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "183" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
+  && ok "  ...hardening.sql re-applied: the step back, 183 triggers" || bad "  ...B10 restore"
 # B13 (P2 review) — the errata note on a seal step removed (on the clone).
 python3 - "$W/b13.sql" <<'PY'
 import re, sys
@@ -471,8 +472,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b13.sql" > /dev/null
 [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "0" ] \
   && ok "B13: caught — without the errata note the seal step reads as if nothing were recorded after it" || bad "B13: not caught"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "181" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
-  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 181 triggers" || bad "  ...B13 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "183" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
+  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 183 triggers" || bad "  ...B13 restore"
 # B11 — a paste over 512 KB; and a parser refusal recorded by hash and size, never text.
 BIG="$(node -e "process.stdout.write(JSON.stringify({prompt_id:'$PF', pad:'x'.repeat(530000)}))")"
 REF0="$(q "SELECT count(*) FROM refusals")"

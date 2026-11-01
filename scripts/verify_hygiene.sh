@@ -57,7 +57,7 @@ step "3. L3 — the CHECK holds outside the route"
 STAFF="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"
 OUTCOME="$(q "SELECT vo.id FROM value_outcomes vo JOIN engagements e ON e.id = vo.engagement_id WHERE vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL AND e.deleted_at IS NULL ORDER BY vo.created_at LIMIT 1")"
 INST="$(q "SELECT institution_id FROM value_outcomes WHERE id = '$OUTCOME'")"
-ev() { q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'Hygiene fixture', 'Verification fixture, not a source', 'low', '$STAFF') RETURNING id" | head -1; }
+ev() { q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id, about_institution_id) VALUES ('statement', '$INST', 'observation', 'Hygiene fixture', 'Verification fixture, not a source', 'low', '$STAFF', '$INST') RETURNING id" | head -1; }
 for bad_value in Actual actuals ''; do
   OUT="$(qerr "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OUTCOME', '$(ev)', '$bad_value')")"
   case "$OUT" in *value_outcome_evidence_supports_known*) ok "supports '$bad_value', by SQL -> refused by the CHECK" ;; *) bad "supports '$bad_value': $OUT" ;; esac

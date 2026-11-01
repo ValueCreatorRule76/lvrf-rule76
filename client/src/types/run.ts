@@ -113,6 +113,11 @@ export interface EvidenceItem {
   locator?: { document: string; value: number; scale: string; table?: string; row?: string; column?: string } | null;
   how_read?: string | null;
   figure_check?: { result: string; detail: string; rules_version: number } | null;
+  // L42 (payloadVersion 3). Absent on older runs; never filled in afterwards.
+  evidence_id?: string;
+  about?: string | null;
+  opened?: { by: string | null; on: string | null; attester_document?: string | null } | null;
+  verified_unopened?: boolean;
 }
 
 export interface RunDeltaCurrency {
@@ -221,9 +226,9 @@ export interface Run {
   errata?: RunErratum[];
   /** C3: the run's system-exercise mark, and the marks on the evidence it sealed (as the seal names it). */
   system_exercise?: SystemExerciseMark | null;
-  marked_evidence?: { kind: string; summary: string; provenance: string; system_exercise: SystemExerciseMark }[];
+  marked_evidence?: { evidence_id?: string | null; kind: string; summary: string; provenance: string; system_exercise: SystemExerciseMark }[];
   /** C3b (Brad's condition 2): sealed items whose evidence row is verified with no citation opened (a derived reading). */
-  unopened_evidence?: { kind: string; summary: string; provenance: string }[];
+  unopened_evidence?: { evidence_id?: string | null; kind: string; summary: string; provenance: string }[];
 }
 
 /** C1 (LVRF_PLAN §9): what a sealed run got wrong, and the server's recompute under the model it was sealed with. */

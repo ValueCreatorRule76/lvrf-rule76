@@ -160,7 +160,10 @@ function parseFactFields(body: Record<string, unknown>): FactFields {
   // value nobody stated.
   const confidence = requireOneOf(body, 'confidence', 'body', CONFIDENCE_LEVELS);
   const sourceReference = optionalNullableString(body, 'source_reference', 'body');
-  const sourceVerified = optionalBoolean(body, 'source_verified', 'body', false);
+  // L41 (Brad, 27 Oct 2026, condition 2): only a person opening the source verifies it.
+  if (body.source_verified !== undefined) {
+    throw new ValidationError('body.source_verified is not taken: evidence is recorded unverified, and a person verifies it by opening its source.');
+  }
   const aiSourced = optionalBoolean(body, 'ai_sourced', 'body', false);
 
   // evidence_ai_requires_query enforces this at the schema; a clear 422
@@ -175,7 +178,7 @@ function parseFactFields(body: Record<string, unknown>): FactFields {
   const form = parseEvidenceForm(body, { allowStatement: false, kind: evidenceKind, sourceReference });
   return {
     valueNumeric, valueText, unit, asOf, evidenceKind, provenance, confidence,
-    sourceReference, sourceVerified, aiSourced, researchQuery, researchTool, ...form,
+    sourceReference, aiSourced, researchQuery, researchTool, ...form,
   };
 }
 

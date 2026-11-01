@@ -13480,3 +13480,59 @@ The 31 Oct snapshot is the latest prod copy.
 **C3b is closed.** Next: L41 + L42 with L47 (no customer-side role is granted on prod until L47
 ships), then §14, then slice 5's walk rework. L46, Curia's marker, is Brad's to decide now the
 errata show.
+
+## L41 + L42 + L47: evidence the score reads is final; an opening is what verifies; what evidence is about; account evidence — Gate A, 1 November 2026 (UTC)
+
+**Built as approved (LVRF_PLAN §13; D1–D8 as recommended, Brad's four conditions), migration 0045, hardening section 30.**
+
+- **The evidence row:** `lvrf_evidence_final` is an allowlist: every column is final after insert but the few it names. An insert is never verified. `source_verified` moves only in an opening, or by the steward's withdrawal of a verification on a row with no opening recorded. What a row is about is set once, by the steward.
+- **The opening:** `POST /api/evidence/:id/open-citation` reaches every current row. A `legacy` row gives what was read and takes that form, once. An attestation needs the attester's own words: a quote or locator, and the document named as an email, a signed statement or a letter (condition 1; `evidence_attestation_opened`). Refused: a statement observation, a simulated row, a row under a finding.
+- **"About":** `about_institution_id` or `about_other_party`, exactly one (D1). `value_outcome_evidence_about_guard` refuses evidence about anyone else, or with nothing stated, as baseline or actual support.
+- **L47:** `POST /api/institutions/:institutionId/evidence`; "The account's evidence" (card 01c) lists every row with its acts; "Record a source…" on it and on the roles card. A role's source must be current, about the account, opened and supporting (D6), in the guard and the list.
+- **Correction:** `POST /api/evidence/:id/supersede` (D2); refused while a current role names the row.
+- **The batch:** on the Runs page: every row, its summary and source, its proposal, one submit with the count (condition 2).
+- **L42:** `payloadVersion` 3 seals each item's `evidence_id`, `about`, `opened` and `verified_unopened` (condition 3), and each fact's `about` and `opened`. New reads match a v3 item by id. No model change.
+- **D7:** the lineage reads the two 23 Aug updates as migration 0011's rule; nothing is written.
+
+**Departures from the plan, each decided in the build:**
+- **`evidence_verified_opened` is added by hardening.sql, not 0045.** A NOT VALID CHECK binds every update of an old row, so the batch could not write "about" on the 4 rows, and withdrawing them first would break `evidence_about_stated`. `evidence_final` holds the rule until no row breaks it. The drift check expects the CHECK's absence while a row breaks it, and reports it due once none does.
+- **The batch pre-fills 30, not 32.** The rule is derived: a filing or vendor publication on a customer account, backing no fact or entity, is not pre-filled. That leaves the 2 exceptions and `cee6fea9` and `092c46b6`. The report's count of 32 understated this: `cee6fea9`'s source is Skillsoft's earnings release.
+- **Simulated rows cannot be opened (added):** the screens showed "this figure does not exist" offering an opening. In the route and, by Brad's change of 1 Nov 2026, in `evidence_final`: a simulated row has no source to open. Break B9 removes the route's check and the trigger refuses.
+- **The form's "Record a source…" takes a quote or locator.** A `statement` attestation is taken by the route; the form does not offer it.
+
+**Gate A, on the 31 Oct prod copy:**
+- **Full regression: all 43 scripts pass, build and lint clean** (42 in the full run; `verify_plain_refusals` 76/0 after a corrected test, re-run alone). `verify_evidence_final` is new, with breaks B1–B8. Bundle `index-wmj6nOMC.js` / `index-DEawJdNq.css`. One lint warning, in `ActorContext.tsx`, is not new.
+- **Equivalence against `b410b30`:** 58 GETs, 58 identical with the new keys allowed; the only differences are 4 additive paths.
+- **On the clone:** 183 triggers, 284 rows, drift none at 46 migrations and 1123 objects, 105 CHECKs (106 after the validating re-run), 0045 and hardening write no evidence row, all 25 runs byte-identical.
+- **Screens:** `~/lvrf-backups/l41-screens/`.
+
+**Test changes that matter:**
+- **`scripts/lib/evidence_fixture.sh`:** a fixture saying `source_verified: true` records the row and then makes the opening request, through the routes, with every guard on.
+- **The C3 and C3b fixtures name roles from account evidence (L47).**
+- **C3b's account V now uses an unverified row.** A verified row with no opening can no longer be made, and an opening blocks a finding. "Verified without the source being opened" is checked on the copy's own rows: on the card, the v3 run page, the POV and lineage responses. Its browser check on the POV, W6 and lineage pages is gone.
+- **`verify_plain_refusals`' break of the client's lock is gone,** with the lock. Its B1 and B2 now run on `evidence_about_stated`.
+
+**Gate A finished on the 1 Nov copy (Brad's snapshot, after C3b's acts and L46; 1,190,732 bytes, TOC 798).** Restored by `scripts/restore_prod_copy.sh` from the deployed `b410b30`.
+
+**The growth from the 31 Oct copy, table by table:**
+- **TOC 775 → 798, +23, all C3b's schema (0044), none removed:** `figure_findings` with its data entry, ACL, primary key, 4 foreign keys, index and 5 triggers (14); `run_errata`'s foreign key and index to it (2); 7 functions (7).
+- **Rows:** `audit_log` +87; `governance_acts` +42 (1 `find`, 1 `withdraw`, 37 `record_erratum`, 3 `supersede`); `run_errata` +37; `hardening_manifest` +5; `reference_example_markers` +3; `figure_findings` +1; `sessions` +1; `value_outcome_evidence` no new row, 1 update (the withdrawal). The rows add about 178 KB before compression, which accounts for the dump's 52 KB.
+- **The markers are the one surprise (L50).** L46 took 3 supersessions on Curia, not 1, each Brad's with its act: 01:39 kept `published_case_study`, 02:42 moved to `outside_in_test`, 12:31 kept it. The same reason on each. The current marker reads `outside_in_test`.
+
+**Brad's two changes:**
+- **The trigger for simulated openings,** above: refused at the database with and without `source_verified`, and nothing written.
+- **The browser checks against the four real rows.** What they found (L51):
+
+| Row | POV | W6 | Lineage | Evidence card |
+|---|---|---|---|---|
+| `9765335f`, `271a449a` (Skillsoft) | not drawn: no hypothesis | no walk: the tenant's own account | the line | the line |
+| `1632a5e0`, `f9775317` (Curia) | not drawn: no hypothesis | not reached: W6 shows lot acceptance (L43) | the line | the line |
+
+Each absence is asserted, so a change is seen. **On the clone only,** a fixture lever and hypothesis on Curia's lot-acceptance outcome, with both Curia rows linked as impact basis, put the real rows on the POV and in W6, and each carries the line (screens `l41_real_*`). Skillsoft's two cannot be shown so: no walk, no pack.
+
+**Gate A on this copy:**
+- **Full regression: all 44 scripts pass, build and lint clean** (40 in the full run; `verify_pov_print`, `verify_c2`, `verify_c3`, `verify_c3b` after corrected tests, re-run alone: 116/0, 159/0, 202/0, 237/0). `verify_evidence_final` 243/0, breaks B1–B9. The four read a pre-C3b copy: absolute errata and finding counts, now relative to a count read at the start, and Curia's banner, now "OUTSIDE-IN TEST". No application code changed for them.
+- **Equivalence against `b410b30`:** 58 GETs, 58 identical with the new keys allowed; the same 4 additive paths.
+- **Bundle unchanged:** `index-wmj6nOMC.js` / `index-DEawJdNq.css`.
+- **Rehearsal on a clone:** 183 triggers; `51|13|78|0|21|1`; 34 rows with no about, 4 verified unopened; drift none at 1123 objects; 105 CHECKs; 25 of 25 hashes. After the acts and the second hardening: 1124 objects, 106 CHECKs.
+

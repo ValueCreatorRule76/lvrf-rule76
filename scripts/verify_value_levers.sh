@@ -146,7 +146,7 @@ start_server && ok "API up on $PORT"
 expect POST /api/account-inputs "{\"institution\":{\"name\":\"Levers account $TS\",\"industry_slug\":\"$SLUG\",\"classification_note\":\"Verification: classified for O1.\"},\"persons\":[{\"full_name\":\"Customer owner (verification)\",\"email\":\"owner.$TS@levers.example\",\"title\":\"Verification owner\"}]}" 201 "an account with a customer-side person"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"
 SIM="$(q "INSERT INTO persons (institution_id, full_name, email, simulated) VALUES ('$INST', 'Simulated customer (verification)', 'sim.$TS@levers.example', true) RETURNING id" | head -1)"
-EV0="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST', 'observation', 'Basis rule fixture', 'Verification fixture, not a source', 'low', '$S') RETURNING id" | head -1)"
+EV0="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id, about_institution_id) VALUES ('statement', '$INST', 'observation', 'Basis rule fixture', 'Verification fixture, not a source', 'low', '$S', '$INST') RETURNING id" | head -1)"
 [ -n "$SIM" ] && [ -n "$EV0" ] && ok "a simulated customer person; one evidence row for the in-memory basis cases" || { bad "basis fixtures"; exit 1; }
 
 step "4. The D2 basis: one function, ten rules, first match decides"
@@ -163,6 +163,7 @@ rule "3 system export"                                          '{"kind":"system
 rule "4 public filing"                                          '{"kind":"public_filing"}' published
 rule "5 attestation, a customer person with no role named yet (C3)" "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\",\"attested_at\":\"$NOW\"}" assumed
 # C3: customer-side means a role named from a source, through the steward's act (never by SQL, even here).
+q "UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = '$S', citation_resolved_at = now(), source_verified = true WHERE id = '$EV0'; $(act_sql open_citation evidence "$EV0" "$S" 'POST /api/evidence/:id/open-citation')" > /dev/null  # L41-D6: a role's source is opened
 expect POST "/api/institutions/$INST/customer-roles" "{\"person_id\":\"$OWNER\",\"role\":\"metric_owner\",\"source_evidence_id\":\"$EV0\",\"reason\":\"Verification: named for the basis rules.\"}" 201 "  ...the steward names the owner metric owner, from a source (C3)"
 rule "5 attestation, customer-side attester, dated"            "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\",\"attested_at\":\"$NOW\"}" client_stated
 rule "6 attestation, customer-side attester, undated"           "{\"kind\":\"attestation\",\"attested_by_person_id\":\"$OWNER\"}" assumed
@@ -195,7 +196,7 @@ expect GET "/api/institutions/$INST/view" "" 200 "the account view"
   && ok "  ...the same answer as the function in SQL, row by row" || bad "  ...SQL disagrees"
 
 step "6. A run seals the account's facts and entity, with their basis, under its hash"
-EV_ENT="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST', 'public_filing', 'Entity fixture', 'Verification fixture registry extract, not a source', 'medium', '$S') RETURNING id" | head -1)"
+EV_ENT="$(q "INSERT INTO evidence (evidence_form, quote_text, how_read, institution_id, kind, summary, provenance, confidence, captured_by_person_id, about_institution_id) VALUES ('quote', 'Verification fixture quote, not a source.', 'Verification fixture: read from the fixture quote as written.', '$INST', 'public_filing', 'Entity fixture', 'Verification fixture registry extract, not a source', 'medium', '$S', '$INST') RETURNING id" | head -1)"
 q "INSERT INTO institution_entities (institution_id, legal_name, identifier_type, identifier, evidence_id, captured_by_person_id) VALUES ('$INST', 'Levers Fixture Corp', 'sec_cik', '0000000042', '$EV_ENT', '$S')" > /dev/null
 expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Levers capability\",\"owner_person_id\":\"$OWNER\",\"is_primary\":false,\"basis\":\"Verification: attached for O1.\"}" 201 "an offering creates a capability"
 expect POST "/api/institutions/$INST/value-outcomes" "{\"engagement_name\":\"Levers engagement\",\"engagement_owner_person_id\":\"$OWNER\",\"capability_name\":\"Levers capability\",\"metric\":{\"name\":\"Levers TRIR $TS\",\"unit\":\"incidents per 200,000 hours\",\"direction\":\"decrease\",\"source_system\":\"verification system of record\",\"owner_person_id\":\"$OWNER\"},\"baseline_value\":0,\"baseline_measured_at\":\"2026-09-30T00:00:00Z\"}" 201 "an outcome, baseline 0 (zero is data)"

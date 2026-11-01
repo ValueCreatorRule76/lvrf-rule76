@@ -99,7 +99,7 @@ INST_A="$(A1 "SELECT id FROM institutions WHERE tenant_id = '$TENANT_A' AND NOT 
 INST_A_NAME="$(q "SELECT name FROM institutions WHERE id = '$INST_A'")"
 INST_A_UNCLASSIFIED="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TENANT_A', 'Unclassified A (verification $TS)') RETURNING id" | head -1)"
 CUST_A="$(A1 "SELECT id FROM persons WHERE institution_id = '$INST_A' AND NOT simulated AND deleted_at IS NULL ORDER BY created_at")"
-EV_A="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id) VALUES ('statement', '$INST_A', 'observation', 'System: Fact A (verification)', 'Verification fixture, not a source', 'low', '$STAFF_A') RETURNING id" | head -1)"
+EV_A="$(q "INSERT INTO evidence (evidence_form, institution_id, kind, summary, provenance, confidence, captured_by_person_id, about_institution_id) VALUES ('statement', '$INST_A', 'observation', 'System: Fact A (verification)', 'Verification fixture, not a source', 'low', '$STAFF_A', '$INST_A') RETURNING id" | head -1)"
 FACT_A="$(q "INSERT INTO institution_facts (institution_id, kind, value_text, as_of, evidence_id, captured_by_person_id) VALUES ('$INST_A', 'system', 'Fact A (verification)', '2026-10-01', '$EV_A', '$STAFF_A') RETURNING id" | head -1)"
 CAPNAME_A="$(A1 "SELECT name FROM capabilities WHERE institution_id = '$INST_A' AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at")"
 ENG_A="$(A1 "SELECT e.id FROM engagements e WHERE e.tenant_id = '$TENANT_A' AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND (SELECT count(*) FROM value_runs v WHERE v.engagement_id = e.id AND v.locked_at IS NOT NULL) >= 2 ORDER BY e.created_at")"
@@ -205,6 +205,7 @@ PA "/api/institutions/$INST_H/hypotheses" "{\"value_outcome_id\":\"$OUTCOME_H\",
 HYP_A="$(pj .value_hypothesis_id)"
 # C3: a customer-side role of A's, named through the steward's act (no SQL role inserts, even on a clone),
 # from A's own evidence row: the revoke case's target.
+q "UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = '$STAFF_A', citation_resolved_at = now(), source_verified = true WHERE id = '$EV_A'; $(act_sql open_citation evidence "$EV_A" "$STAFF_A" 'POST /api/evidence/:id/open-citation')" > /dev/null  # L41-D6: a role's source is opened
 PA "/api/institutions/$INST_A/customer-roles" "{\"person_id\":\"$CUST_A\",\"role\":\"metric_owner\",\"source_evidence_id\":\"$EV_A\",\"reason\":\"Verification: a role named for the tenant scope checks.\"}"
 [ "$CODE" = "201" ] || { bad "fixture role grant: $CODE $PA_OUT"; exit 1; }
 GRANT_A="$(pj .customer_role_grant_id)"

@@ -210,8 +210,8 @@ export function outcomeWalkRouter(pool: Pool): Router {
            institution_id, kind, summary, provenance, confidence,
            source_verified, ai_sourced, simulated, captured_by_person_id,
            evidence_form,
-           attested_by_person_id, attested_at
-         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6)
+           attested_by_person_id, attested_at, about_institution_id
+         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6, $1)
          RETURNING id`,
         [
           outcome.institution_id,
@@ -595,8 +595,8 @@ export function outcomeWalkRouter(pool: Pool): Router {
            institution_id, kind, summary, provenance, confidence,
            source_verified, ai_sourced, simulated, captured_by_person_id,
            evidence_form,
-           attested_by_person_id, attested_at
-         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6)
+           attested_by_person_id, attested_at, about_institution_id
+         ) VALUES ($1, 'attestation', $2, $3, 'medium', false, false, false, $4, 'statement', $5, $6, $1)
          RETURNING id`,
         [
           outcome.institution_id,

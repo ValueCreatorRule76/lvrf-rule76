@@ -12,6 +12,7 @@ import { Card, Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
 import { CustomerRoles } from '../components/CustomerRoles';
+import { AccountEvidence } from '../components/AccountEvidence';
 import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
 import { STEP_TITLES, day, deriveSteps } from '../lib/workspaceStatus';
 import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
@@ -432,7 +433,7 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
             primary={now === 3 ? 'hypothesis' : now === 4 ? 'summary' : null} />
           <details className="mt-6 border border-rule bg-white" data-testid="account-detail">
             <summary className="cursor-pointer list-none px-[18px] py-3 text-[13px] font-semibold tracking-[.02em]">
-              Account detail ▸ <span className="font-normal text-ink-45">facts · customer-side roles · what the industry says carries money · what this account measures · the gap · engagements · reference marker · retire the engagement</span>
+              Account detail ▸ <span className="font-normal text-ink-45">facts · customer-side roles · the account's evidence · what the industry says carries money · what this account measures · the gap · engagements · reference marker · retire the engagement</span>
             </summary>
             <div className="px-4 pb-4 pt-2">
               <ClassificationSection view={view} />
@@ -440,6 +441,10 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
               {/* C3: customer-side roles, each named from a source. */}
               <Card n="01b" title="Customer-side roles">
                 <CustomerRoles institutionId={id} />
+              </Card>
+              {/* L41 + L47: every evidence row of the account, and the acts on it. */}
+              <Card n="01c" title="The account's evidence">
+                <AccountEvidence institutionId={id} />
               </Card>
               <PackSection pack={view.pack} measuredIds={measuredIds} isTenantSelf={false} />
               <MetricsSection metrics={view.metrics} isTenantSelf={false} />
@@ -563,6 +568,11 @@ export function InstitutionPage() {
         facts={view.facts}
         onRecorded={refresh}
       />
+
+      {/* L41: the tenant's own evidence is reachable as an account's is. */}
+      <Card n="01c" title="The account's evidence">
+        <AccountEvidence institutionId={view.institution.id} />
+      </Card>
       {/* Q4c2: the outside-in walk, below the facts (LVRF_PLAN §4c). */}
       {!view.institution.is_tenant_self && (
         <OutsideInWalk institutionId={view.institution.id} onChanged={refresh} />

@@ -282,7 +282,7 @@ export function erratumRouter(pool: Pool): Router {
           throw new Refusal(422, "The reason for superseding repeats the erratum's own text: say why the earlier erratum is superseded.");
         }
       }
-      const rc = recomputeWithCorrection(run.payload as never, { kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
+      const rc = recomputeWithCorrection(run.payload as never, { id: b.evidence_id, kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
       // C2 (Brad, 25 Oct 2026): a seal that cannot be reproduced is recorded NOT RECOMPUTED, saying why; any other refusal stands.
       if (!rc.ok && !rc.notRecomputed) throw new Refusal(422, rc.reason);
       const r = rc.ok ? rc : { ...rc, score: null, band: null };

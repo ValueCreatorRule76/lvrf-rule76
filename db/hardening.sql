@@ -1447,6 +1447,12 @@ LANGUAGE sql STABLE AS $$
    WHERE x.value_run_id = p_run AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
 $$;
 
+-- L41: what evidence is about, in words: the institution's name, or the company named.
+CREATE OR REPLACE FUNCTION lvrf_evidence_about(p_institution uuid, p_other text) RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT coalesce((SELECT name FROM institutions WHERE id = p_institution), p_other)
+$$;
+
 -- C3b (Brad, 31 Oct 2026, ruling 1): evidence under a finding — it supported the figure when the finding was
 -- recorded: a link current then, or withdrawn after it (the finding's own withdrawal keeps it covered). A link
 -- withdrawn before the finding supported nothing then. Sealed runs keep their sealed basis.
@@ -1977,6 +1983,12 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
+  -- L41: one exception. An opening records what was read: a row from before forms, or a person's statement
+  -- attested (condition 1), takes a quote or a locator, once, in the act that opens it.
+  IF NOT OLD.citation_resolved AND NEW.citation_resolved AND NEW.evidence_form IN ('quote', 'locator')
+     AND (OLD.evidence_form = 'legacy' OR (OLD.evidence_form = 'statement' AND OLD.kind = 'attestation')) THEN
+    RETURN NEW;
+  END IF;
   IF NEW.evidence_form IS DISTINCT FROM OLD.evidence_form
      OR NEW.quote_text IS DISTINCT FROM OLD.quote_text
      OR NEW.locator IS DISTINCT FROM OLD.locator
@@ -2453,7 +2465,11 @@ BEGIN
         WHEN 'research_results' THEN
           IF o->>'review_state' = 'pending' AND n->>'review_state' <> 'pending' THEN what := 'a review (' || (n->>'review_state') || ')'; END IF;
         WHEN 'evidence' THEN
-          IF NOT (o->>'citation_resolved')::boolean AND (n->>'citation_resolved')::boolean THEN what := 'a citation opened'; END IF;
+          IF NOT (o->>'citation_resolved')::boolean AND (n->>'citation_resolved')::boolean THEN what := 'a citation opened';
+          ELSIF (o->>'source_verified')::boolean AND NOT (n->>'source_verified')::boolean THEN what := 'a verification withdrawn';
+          ELSIF (o->'about_institution_id') IS DISTINCT FROM (n->'about_institution_id')
+             OR (o->'about_other_party') IS DISTINCT FROM (n->'about_other_party') THEN what := 'what it is about stated';
+          END IF;
         WHEN 'value_outcomes' THEN
           IF (o->'committed_at') IS DISTINCT FROM (n->'committed_at') OR (o->'target_value') IS DISTINCT FROM (n->'target_value') THEN what := 'a commitment';
           ELSIF (o->'actual_value') IS DISTINCT FROM (n->'actual_value') OR (o->'actual_measured_at') IS DISTINCT FROM (n->'actual_measured_at') THEN what := 'a measurement';
@@ -2615,6 +2631,9 @@ BEGIN
                        'basis_reason', CASE WHEN lvrf_evidence_under_finding(e.id) THEN 'no source on record' END,
                        'evidence_form', e.evidence_form, 'quote_text', e.quote_text, 'locator', e.locator, 'how_read', e.how_read,
                        'ai_sourced', e.ai_sourced, 'source_verified', e.source_verified,
+                       -- L41: what it is about, as stated; NULL until stated.
+                       'about', lvrf_evidence_about(e.about_institution_id, e.about_other_party),
+                       'attester_document', e.attester_document,
                        -- C3b (Brad's condition 2): a derived reading, changing nothing: verified, and no citation opened.
                        'verified_unopened', e.source_verified AND NOT e.citation_resolved,
                        -- C3: the row's system-exercise mark; an attester's customer-side role with its source, or why not.
@@ -2622,6 +2641,17 @@ BEGIN
                        'attested_by', (SELECT full_name FROM persons WHERE id = e.attested_by_person_id),
                        'attester_roles', CASE WHEN e.attested_by_person_id IS NULL THEN NULL ELSE lvrf_customer_roles(e.attested_by_person_id, e.institution_id) END,
                        'attester_not_customer_side', CASE WHEN e.attested_by_person_id IS NULL THEN NULL ELSE lvrf_customer_side_reason(e.attested_by_person_id, e.institution_id) END);
+  -- L41-D7: an update with no actor is a migration's rule, and says so; nothing is written over it.
+  RETURN QUERY SELECT 'migration_rule'::text, 'evidence'::text, e.id, NULL::text, al.at, 'record'::text,
+    jsonb_build_object('note', 'Set simulated by migration 0011''s rule (provenance beginning [SIM]); no person acted.')
+    FROM audit_log al
+   WHERE al.table_name = 'evidence' AND al.record_id = e.id::text AND al.operation = 'update' AND al.actor_person_id IS NULL
+     AND al.old_row->>'simulated' = 'false' AND al.new_row->>'simulated' = 'true';
+  SELECT * INTO a FROM lvrf_lineage_act('evidence', e.id, ARRAY['state_about']);
+  IF a.actor IS NOT NULL THEN
+    RETURN QUERY SELECT 'state_about'::text, 'evidence'::text, e.id, a.actor, a.at, 'act'::text,
+      jsonb_build_object('about', lvrf_evidence_about(e.about_institution_id, e.about_other_party), 'reason', a.reason);
+  END IF;
   IF e.citation_resolved THEN
     SELECT * INTO a FROM lvrf_lineage_act('evidence', e.id, ARRAY['open_citation']);
     IF a.actor IS NULL THEN
@@ -2826,7 +2856,9 @@ BEGIN
                'actor', (SELECT full_name FROM persons WHERE id = coalesce(r.locked_by_person_id, r.walked_by_person_id)),
                'at', coalesce(r.locked_at, r.walked_at), 'source', 'seal',
                'detail', jsonb_build_object('run_number', r.run_number, 'payload_hash', r.payload->>'payloadHash', 'locked', r.locked_at IS NOT NULL,
-                                            'sealed_supports', item->>'supports', 'matched', matched, 'errata', lvrf_lineage_run_errata(r.id))) ORDER BY r.run_number)
+                                            'sealed_supports', item->>'supports',
+                                            -- L42: a v3 item names its row; only an older one is matched.
+                                            'matched', CASE WHEN item ? 'evidence_id' THEN NULL ELSE matched END, 'errata', lvrf_lineage_run_errata(r.id))) ORDER BY r.run_number)
         FROM evidence e
         JOIN (SELECT DISTINCT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = p_id) lo ON true
         JOIN value_runs r ON r.payload->>'valueOutcomeId' = lo.value_outcome_id::text AND r.deleted_at IS NULL
@@ -2970,9 +3002,13 @@ BEGIN
     RAISE EXCEPTION 'LVRF: customer_role_grants: % is an analyst of record or external (linked or titled so), not the customer.', p.full_name
       USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
   END IF;
+  -- L41-D6: the source is current, about this account, and opened by a person who says it supports what it states.
   IF NOT EXISTS (SELECT 1 FROM evidence e WHERE e.id = NEW.source_evidence_id AND e.institution_id = NEW.institution_id
-                   AND NOT e.simulated AND length(btrim(e.provenance)) >= 3) THEN
-    RAISE EXCEPTION 'LVRF: customer_role_grants: a role is named from a source: evidence of this account, not simulated, with its provenance.'
+                   AND NOT e.simulated AND length(btrim(e.provenance)) >= 3
+                   AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
+                   AND e.about_institution_id IS NOT DISTINCT FROM NEW.institution_id
+                   AND e.citation_resolved AND e.source_verified) THEN
+    RAISE EXCEPTION 'LVRF: customer_role_grants: a role is named from a source: current evidence about this account, not simulated, with its provenance, opened by a person who says it supports what it states.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
   END IF;
   RETURN NEW;
@@ -3116,6 +3152,130 @@ DROP TRIGGER IF EXISTS figure_findings_no_delete ON figure_findings;
 CREATE TRIGGER figure_findings_no_delete BEFORE DELETE ON figure_findings
   FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A finding is never deleted: the figure stays on the record, with it.');
 
+-- ------------------------------------------------------------------
+-- 30. L41 + L42 + L47 (0045, 1 Nov 2026) — evidence the score reads is final (LVRF_PLAN §13; Brad's
+--     D1–D8 and four conditions). Placed before section 14 so the manifest includes it.
+-- ------------------------------------------------------------------
+--   evidence_final (I+U): an allowlist. Every column is final after insert but the few below, so a column
+--     added later is final by default. An insert is never verified: only an opening verifies.
+--     source_verified moves in an opening, or (true to false, steward) on a row with no opening recorded.
+--     A simulated row has no source, so it is never opened (Brad, 1 Nov 2026: in the database, not the route alone).
+--     What a row is about is set once, by the steward. A superseded row names no current role grant.
+--   value_outcome_evidence_about_guard (I): baseline or actual support is evidence about the outcome's own
+--     institution. Unset, another institution and another company are all refused. Impact basis stays open.
+--   evidence_verified_opened: a CHECK added here, not in 0045, because a NOT VALID CHECK binds every update
+--     of an old row, and the batch must write about on the 4 rows verified with no opening. evidence_final
+--     holds the rule until then. This section adds it, and validates evidence_about_stated, on the re-run
+--     once no row breaks them (condition 4), and at once on a database with none.
+CREATE OR REPLACE FUNCTION lvrf_evidence_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  free CONSTANT text[] := ARRAY['updated_at', 'status', 'version', 'deleted_at', 'superseded_by_id',
+    'source_verified', 'citation_resolved', 'citation_resolved_by_person_id', 'citation_resolved_at',
+    'about_institution_id', 'about_other_party', 'attester_document',
+    'evidence_form', 'quote_text', 'locator', 'how_read'];
+  opening boolean;
+  steward uuid;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.source_verified THEN
+      RAISE EXCEPTION 'LVRF: evidence is recorded unverified. A person verifies it by opening the source, and that act is recorded.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+    END IF;
+    IF NEW.attester_document IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: the attester''s document is named when the attestation is opened, not when it is recorded.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF (to_jsonb(NEW) - free) IS DISTINCT FROM (to_jsonb(OLD) - free) THEN
+    RAISE EXCEPTION 'LVRF: evidence %: what it records is final. Correct it by supersession: a new row, under a person''s act.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_final';
+  END IF;
+  opening := NOT OLD.citation_resolved AND NEW.citation_resolved;
+  SELECT t.steward_person_id INTO steward FROM institutions i JOIN tenants t ON t.id = i.tenant_id WHERE i.id = OLD.institution_id;
+  IF NEW.about_institution_id IS DISTINCT FROM OLD.about_institution_id OR NEW.about_other_party IS DISTINCT FROM OLD.about_other_party THEN
+    IF OLD.about_institution_id IS NOT NULL OR OLD.about_other_party IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: evidence %: what it is about is stated once. Correct it by supersession.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_about_final';
+    END IF;
+    IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: evidence %: only the tenant''s steward states what a row from before this field is about.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_about_final';
+    END IF;
+  END IF;
+  IF NEW.source_verified IS DISTINCT FROM OLD.source_verified AND NOT opening THEN
+    IF NOT (OLD.source_verified AND NOT OLD.citation_resolved AND NOT NEW.source_verified) THEN
+      RAISE EXCEPTION 'LVRF: evidence %: only a person opening the source verifies it, once.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+    END IF;
+    IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
+      RAISE EXCEPTION 'LVRF: evidence %: only the tenant''s steward withdraws a verification.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+    END IF;
+  END IF;
+  IF opening AND NEW.simulated THEN
+    RAISE EXCEPTION 'LVRF: evidence %: it is simulated, so there is no source to open.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+  END IF;
+  IF opening AND NEW.source_verified AND lvrf_evidence_under_finding(NEW.id) THEN
+    RAISE EXCEPTION 'LVRF: evidence %: its figure has no source on record, so this evidence cannot be verified.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
+  END IF;
+  IF NEW.attester_document IS DISTINCT FROM OLD.attester_document AND NOT opening THEN
+    RAISE EXCEPTION 'LVRF: evidence %: the attester''s document is named in the opening, once.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_final';
+  END IF;
+  IF OLD.superseded_by_id IS NULL AND NEW.superseded_by_id IS NOT NULL AND EXISTS
+     (SELECT 1 FROM customer_role_grants g WHERE g.source_evidence_id = OLD.id AND g.revoked_at IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: evidence %: a current customer-side role is named from it. Revoke the role first.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_source_of_role';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS evidence_final ON evidence;
+CREATE TRIGGER evidence_final
+  BEFORE INSERT OR UPDATE ON evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_evidence_final();
+
+CREATE OR REPLACE FUNCTION lvrf_outcome_evidence_about_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  own uuid;
+  about uuid;
+  other text;
+BEGIN
+  IF NEW.supports IS DISTINCT FROM 'baseline' AND NEW.supports IS DISTINCT FROM 'actual' THEN RETURN NEW; END IF;
+  SELECT institution_id INTO own FROM value_outcomes WHERE id = NEW.value_outcome_id;
+  SELECT about_institution_id, about_other_party INTO about, other FROM evidence WHERE id = NEW.evidence_id;
+  IF about IS NULL OR about IS DISTINCT FROM own THEN
+    RAISE EXCEPTION 'LVRF: evidence about %, not about this account, may not support its %: it may support the impact basis only.',
+      coalesce(lvrf_evidence_about(about, other), 'nothing yet stated'), NEW.supports
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_about_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcome_evidence_about_guard ON value_outcome_evidence;
+CREATE TRIGGER value_outcome_evidence_about_guard
+  BEFORE INSERT ON value_outcome_evidence
+  FOR EACH ROW EXECUTE FUNCTION lvrf_outcome_evidence_about_guard();
+
+-- Condition 4: both are decided by the rows, so a re-run after Brad's acts completes them, and changes nothing
+-- before.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'evidence_verified_opened' AND conrelid = 'evidence'::regclass)
+     AND NOT EXISTS (SELECT 1 FROM evidence WHERE source_verified AND NOT citation_resolved) THEN
+    ALTER TABLE evidence ADD CONSTRAINT evidence_verified_opened CHECK (NOT source_verified OR citation_resolved);
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'evidence_about_stated' AND conrelid = 'evidence'::regclass AND NOT convalidated)
+     AND NOT EXISTS (SELECT 1 FROM evidence WHERE about_institution_id IS NULL AND about_other_party IS NULL) THEN
+    ALTER TABLE evidence VALIDATE CONSTRAINT evidence_about_stated;
+  END IF;
+END $$;
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -3227,7 +3387,8 @@ COMMIT;
 --   28: customer_role_grants_guard, _audit, _no_delete, _act_present;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
---   Total: 181 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   30: evidence_final, value_outcome_evidence_about_guard — 2
+--   Total: 183 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -3241,15 +3402,16 @@ COMMIT;
 --   0040 (C1) took it 135 -> 141: section 26's six.
 --   0041 (P2) took it 141 -> 167: section 27's twenty-six.
 --   0043 (C3) took it 167 -> 176: section 28's nine.
---   0044 (C3b) took it 176 -> 181: section 29's five.)
+--   0044 (C3b) took it 176 -> 181: section 29's five.
+--   0045 (L41) took it 181 -> 183: section 30's two.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 181.
+-- TRUNCATE in section 14 fail. Total stays 183.
 --
--- Expect 281 rows here (274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
+-- Expect 284 rows here (281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
 -- information_schema.triggers emits one row per event

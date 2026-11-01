@@ -334,8 +334,8 @@ export function validateMetricRouter(pool: Pool): Router {
         `INSERT INTO evidence (
            institution_id, kind, summary, provenance, confidence,
            source_verified, ai_sourced, simulated, captured_by_person_id,
-           evidence_form
-         ) VALUES ($1, 'observation', $2, $3, 'medium', false, false, false, $4, 'statement')
+           evidence_form, about_institution_id
+         ) VALUES ($1, 'observation', $2, $3, 'medium', false, false, false, $4, 'statement', $1)
          RETURNING id`,
         [
           oldMetric.institution_id,

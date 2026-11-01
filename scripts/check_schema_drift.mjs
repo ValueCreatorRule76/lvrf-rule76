@@ -91,6 +91,10 @@ try {
       UNION ALL SELECT 'index ' || tablename || '.' || indexname FROM pg_indexes
                  WHERE schemaname = 'public' AND indexname NOT IN (SELECT conname FROM pg_constraint WHERE contype IN ('u', 'p'))`);
     const actual = new Set(rows.map((r) => r.k));
+    // L41 (condition 4): hardening.sql adds this CHECK once no row breaks it. While a row verified with no
+    // opening remains, its absence is expected; with none left, it is drift until hardening.sql is re-run.
+    const { rows: [{ pending }] } = await client.query('SELECT EXISTS (SELECT 1 FROM evidence WHERE source_verified AND NOT citation_resolved) AS pending');
+    if (pending) expected.delete('check evidence.evidence_verified_opened');
     const missing = [...expected].filter((k) => !actual.has(k)).sort();
     const extra = [...actual].filter((k) => !expected.has(k)).sort();
     if (missing.length > 0) problems.push(`in ${snapFile} but not in the database: ${missing.join('; ')}`);

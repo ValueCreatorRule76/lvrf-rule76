@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchRuns, type FetchRunsResult } from '../api/runsIndex';
 import { RunsTable } from '../components/RunsTable';
-import { CreditErrataBatch, SystemExerciseBatch } from '../components/C3Batches';
+import { AboutBatch, CreditErrataBatch, SystemExerciseBatch } from '../components/C3Batches';
 
 export function RunsIndexPage() {
   const [result, setResult] = useState<FetchRunsResult | null>(null);
@@ -41,6 +41,8 @@ export function RunsIndexPage() {
       {/* C3: the steward's two batches, each read first and submitted once with its count. */}
       <CreditErrataBatch />
       <SystemExerciseBatch />
+      {/* L41: the steward's batch; it shows only while a row waits. */}
+      <AboutBatch />
     </div>
   );
 }

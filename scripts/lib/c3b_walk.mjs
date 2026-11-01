@@ -118,7 +118,6 @@ if (MODE === 'surfaces') {
   check(await open(`/accounts/${E.INST}/pov`, `!!document.querySelector('[data-testid=pov] h1')`), "the vendor-alone account's POV opens");
   const pl = await text('[data-testid=outcome] [data-testid=no-source-line]');
   check(pl.includes('No source on record') && pl.includes(E.WOULD_SAY), "the POV's baseline: \"No source on record — found by …\" with the finding's text", pl.slice(0, 260));
-  check((await text('[data-testid=outcome] [data-testid=verified-unopened]')).includes('verified without the source being opened'), '  ...the attested export: "verified without the source being opened"');
   check((await text('[data-testid=outcome] [data-testid=basis-reason]')).includes('no source on record'), '  ...its basis reads with its reason, "no source on record"');
   const h = await ev(`document.querySelector('[data-testid=confidence] [data-testid=headline-erratum]')?.textContent ?? ''`);
   check(h.includes(LINE), `  ...its headline carries "${LINE}"`, h);
@@ -131,7 +130,6 @@ if (MODE === 'surfaces') {
   check((await text('[data-testid=headline-erratum]')).includes(LINE), `  ..."${LINE}"`);
   await ev(`document.querySelectorAll('[data-testid=w4] button, [data-testid=w6] button').forEach(b=>{ if(/^Show/.test(b.textContent)) b.click() })`); await sleep(400);
   check((await text('[data-testid=w4] [data-testid=no-source-line]')).includes('No source on record'), "  ...the walk's W4: the baseline with its finding");
-  check((await text('[data-testid=w6-evidence] [data-testid=verified-unopened]')).includes('verified without the source being opened'), "  ...the walk's W6: the export, verified without the source being opened");
   await shot('c3b_account_1280', 1280);
   // The book.
   check(await open('/', `!!document.querySelector('[data-testid=book-scope]')`), 'the book opens');
@@ -148,7 +146,6 @@ if (MODE === 'surfaces') {
     check((await text('[data-testid=run-note-unsourced]')).includes(LINE), `@${width}: so does the sealed note`);
     const eb = await ev(`[...document.querySelectorAll('[data-testid=erratum-unsourced]')].find(x=>x.offsetParent!==null)?.textContent ?? ''`);
     check(eb.includes(E.UNSOURCED_TEXT.replace(/\s*The sealed record below is unchanged\.$/, '')), `@${width}: the erratum states the figure, from the seal and the record`, eb.slice(0, 200));
-    check((await text('[data-testid=sealed-item] [data-testid=verified-unopened]')).includes('verified without the source being opened'), `@${width}: the sealed export: "verified without the source being opened"`);
     check((await ev('document.documentElement.scrollWidth')) <= width, `@${width}: no sideways scroll`);
     await shot(`c3b_run_${width}`, width);
   }
@@ -158,7 +155,6 @@ if (MODE === 'surfaces') {
   check(await open(`/lineage/value_outcomes/${E.OUTCOME}?figure=baseline`, `!!document.querySelector('[data-testid=lineage-steps]')`), "the baseline's lineage opens");
   check((await text('[data-testid=lineage-finding]')).includes(E.WOULD_SAY), '  ...its finding step, with the text and why');
   check((await text('[data-testid=lineage-basis-reason]')).includes('no source on record'), '  ...its evidence step: the basis, with its reason');
-  check((await text('[data-testid=lineage-steps] [data-testid=verified-unopened]')).includes('verified without the source being opened'), '  ...its evidence step: verified without the source being opened');
   await shot('c3b_lineage_1280', 1280);
 }
 

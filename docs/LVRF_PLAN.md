@@ -129,8 +129,12 @@ on institution routes (P3).
 | L43 | **The account page's walk shows one engagement, the latest with an outcome, and only that engagement's last outcome; every per-engagement control for any other engagement or outcome is hidden** (C2b survey, read-only, 26 Oct 2026). Hidden, with where else each exists: W5 the metric's pack basis (nowhere else); W6 its evidence list (the POV shows it, read-only), add evidence (the run page, through a run of that outcome on a live engagement only), record an opened citation (nowhere else), correct what a link supports (the run page since C2b, for an outcome with a locked run only); W7 produce a run (nowhere else) and the run list (the runs list and the POV show it); W8 lock a run (nowhere else); W9 retire the engagement (nowhere else). Found when Curia's commitment attestation, on its retired reference engagement, could not be corrected: the walk shows the later lot-acceptance engagement. Commit, measure and verify have no client control at all (route only) | C2 Gate B, 26 Oct 2026 (Brad: list and record for slice 5) | **Slice 5:** the walk chooses its engagement and outcome (or lists every engagement), so no per-engagement act is reachable only through the latest |
 | L44 | **The walk's NEXT/DONE step tags look like buttons** (Brad, 26 Oct 2026, on Curia's account page) | C2 Gate B, 26 Oct 2026 (Brad: note for slice 5) | **Slice 5:** the tags read as state, not as controls |
 | L45 | **The Runs list gives no sign that a run carries an erratum** (Brad, 26 Oct 2026, after recording Curia's 9) | C2 Gate C, 26 Oct 2026 (Brad: note for slice 5) | **Slice 5:** a marker beside the score on any run with a current erratum |
-| L46 | **Curia's reference-example marker reads `published_case_study`; it may be `outside_in_test`** (Brad, 27 Oct 2026, C3b condition 4) | C3b approval, 27 Oct 2026 | **Brad decides once C3b's errata are visible on screen** |
+| ~~L46~~ **DONE 1 Nov 2026** | **Curia's reference-example marker reads `published_case_study`; it may be `outside_in_test`** (Brad, 27 Oct 2026, C3b condition 4) | C3b approval, 27 Oct 2026 | Brad corrected it to `outside_in_test` through the UI, 1 Nov 2026 (three supersessions: L50) |
 | L47 | **A customer-side role's source has to be linked to an outcome to exist** (Brad, 27 Oct 2026, from C3's fixture screens). The grant route and its guard require only evidence of the account (non-simulated, with provenance); neither needs an outcome link. But no route records account evidence without one: evidence is created only through `POST /api/value-outcomes/:outcomeId/evidence` (with a `supports`) or with a fact. So C3's and C3b's fixtures link the org chart as an outcome's impact basis, and on prod a steward naming a role would have to do the same, sealing it in the next run as outcome support | C3b Gate A, 27 Oct 2026 | **Ruled (Brad, 27 Oct 2026): built in the L41 + L42 slice (§13), as a prerequisite of §14.** Account evidence is born with the "about" field, the quote/locator form, and `source_verified` set only by an opened-the-source act. **HOLD: no customer-side role is granted on prod until L47 ships.** The fixtures then use it |
+| L48 | **Curia lot acceptance: W6 stays open, and the hypothesis waits** (Brad, 1 Nov 2026). The 95.3% is an ISPE industry median, not Curia evidence | Brad, 1 Nov 2026 | **Open; ruled in §17.** The hypothesis follows a LAR lever, which Brad authors once a citation for the deviation-to-rejection mechanism is found and opened |
+| L49 | **A lever's citation records no opening.** `value_levers.citation` is required text. Nothing records that anyone opened the source, who, or what they read, so the opening L48 asks for would not be on the record | §17, 1 Nov 2026 | **Open (Brad, 1 Nov 2026): a lever's citation becomes a reference to an evidence row, not free text.** Until then, the LAR lever's citation names an opened evidence row (§17). A schema change on `value_levers`, in a slice of its own; the 1 lever on prod needs a rule before the column changes |
+| L50 | **A marker correction that changes nothing is accepted.** The form pre-fills the current kind, and the route takes a supersession with the same kind, citation and note. Curia's three on 1 Nov 2026: 01:39 kind unchanged, 02:42 to `outside_in_test`, 12:31 unchanged. Scotts' on 19 Oct did the same. Each is a permanent row with its act | L41 growth accounting, 1 Nov 2026 | Open: the route refuses a supersession that changes nothing, and the form leaves the kind unchosen. Small; with slice 5 |
+| L51 | **The four real rows reach neither the POV nor W6.** The POV draws an outcome's evidence only under a hypothesis (`PovPage`), and neither Skillsoft nor Curia has one. Skillsoft is the tenant's own account, so it has no walk. Curia's walk shows lot acceptance (L43). The evidence card, the lineage and each run's seal do show them. W6's withdrawn list also carries no "verified without…" line, where the POV's does | L41 Gate A, 1 Nov 2026 | Open: decide with slice 5 whether the POV lists evidence with no hypothesis. A checked gap, not a fault in L41 |
 
 ---
 
@@ -3343,7 +3347,7 @@ Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two 
     revocation. The seed's two `person_roles` rows carry no source and do not count.
   - **The act:** `grant` joins the act enum. Revocation uses `withdraw`.
 
-## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **planned 1 Nov 2026; approved with D1–D8 as recommended and four conditions; being built**)
+## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **planned 1 Nov 2026; approved with D1–D8 as recommended and four conditions; built; Gate A finished on the 1 Nov copy, BUILD_STATUS**)
 
 - **What becomes one-way or final:** `source_verified`, `attested_by_person_id`, `kind`,
   `simulated`, and any other column the score or the disclosure gate reads.
@@ -3594,11 +3598,12 @@ through the API.
   things: a committed target, a measured actual and a named verifier.
 - None of the three can be recorded through the UI today.
 
-**The order (Brad, 26 Oct 2026):**
+**The order (Brad, 26 Oct 2026; the case snapshot added 1 Nov 2026, §16):**
 1. C3;
 2. L41 + L42;
-3. **this slice**;
-4. then slice 5's walk rework (L43, L44).
+3. the case snapshot (§16);
+4. **this slice**;
+5. then slice 5's walk rework (L43, L44).
 
 The plan is written after C3, and nothing is built until Brad approves it.
 
@@ -3864,3 +3869,172 @@ run, C3's kind; C3b-D2):
   - the route stops taking it from the body;
   - existing rows: a backfill rule decided in L41's plan. For example, the 4 rows are shown
     "verified when entered, no opening recorded" until an opening is recorded.
+
+## 16. The case snapshot: a run seals the whole case (planned 1 Nov 2026; **approved by Brad, 1 Nov 2026, with CS-D1–D6 as recommended and the two additions below; not built; after §13 closes, before §14**)
+
+**The ask (Brad, 1 Nov 2026):** after L41 and before §14, payload v4 seals the case chain per run, CVAF-style, so a
+locked run shows the whole case at that moment. A per-engagement snapshots view shows each run's case, the confidence
+curve and what changed between runs, building on compare.
+
+**Value spine:** `verify` and `return`. This is the renewal's proof: what was claimed at each run, and what moved it.
+
+**Why now:** a run seals the score and the evidence, but not the argument. The hypothesis, lever, offerings, summary
+and pack entry are read live on the POV, so a sealed run cannot show the case it was scored under. §14 starts
+verifying actuals, which moves verdicts, so the seal has to be in place first.
+
+### What the code holds today (31 Oct copy, read-only)
+
+| Fact | Count or state |
+|---|---|
+| Runs | 25, all locked; 23 on retired reference engagements |
+| Hypotheses | 1 (Scotts) |
+| Levers | 1, stored `proposed` |
+| Executive summaries | 5 (Scotts 4, Curia 1), per account and lens; none names a run |
+| Pack entries | 26: 20 `proposed`, 6 retired, all `version` 1. **No pack version exists** |
+
+- A run's payload is hashed when it is **produced**. Locking changes no payload byte. CVAF seals at the lock.
+- `GET /api/engagements/:id/runs` refuses a retired engagement, so the view needs its own read.
+- `compareRuns.ts` compares confidence, health, stage and claim, for any two locked runs of one engagement. It
+  persists nothing, which CVAF also ruled. It holds nothing on the case chain or on evidence.
+
+### Conflicts to name
+
+1. **O2-D1 says no stored verdict.** The seal records the verdict as it read at that moment, as it does the score. The
+   live verdict stays computed by `lvrf_hypothesis_verdict()`, and nobody decides either.
+2. **"Pack version" has no object behind it** (CS-D3).
+3. **"Its ratification":** a lever's stored status is `proposed`, while its display says ratified (O-D2a, L32). The
+   seal carries `ratification {by, on}` beside the stored status, so renaming the status later changes no sealed
+   reading.
+4. **A summary belongs to the account, not the engagement.** Curia's two engagements would seal the same summary.
+
+### The seal
+
+One function, `lvrf_case_chain(outcome_id) RETURNS jsonb` (hardening section 31), is the only reader of the chain. The
+seal and the lock guard both call it, so they cannot disagree. It reads:
+
+| Sealed | What it holds |
+|---|---|
+| Hypotheses on the run's outcome | Every version: statement, falsifier (reference, value, recorded date, due date, conditions), `post_hoc`, author, the verdict as it read, superseded or withdrawn with reason |
+| The lever of each | Name, mechanism, leading indicator, citation, stored status, `ratification {by, on}`, withdrawn |
+| Offerings | Those on the outcome's capability (key, name, primary, evidence class, verification source), and those on each lever with the steward's basis |
+| Executive summaries | The current version per lens on the account: body, position in its version chain, author, AI disclosure, date, the run it names if any |
+| Pack entry | Name, unit, direction, definition, confounders, status, stored version, and its fingerprint (CS-D3); `null` where the metric has no pack entry |
+| Marker and findings (CS-D4) | The current reference-example marker, and any figure finding on this outcome |
+
+The result goes in as `payload.case`, with `payloadVersion: 4`, under the same `payloadHash`.
+
+**Unchanged:**
+- the confidence model stays 1.0.2 and reads nothing in `case`;
+- walkSpine is untouched;
+- older runs keep their bytes and are never filled in; each reads "This run was sealed before the case was";
+- the POV stays live;
+- `record_documents` is out of scope (L37).
+
+**Before the build (the convention):** no table, no column and no migration. Hardening adds one function and one
+trigger, 183 → 184 distinct, with journal and snapshot unchanged. It orphans nothing, because no row is written.
+
+### The view
+
+- **Page:** `/engagements/:id/snapshots`, linked from the run page and the POV's run list.
+- **Read:** `GET /api/engagements/:id/snapshots`, tenant-scoped, which also reads retired engagements. It persists
+  nothing.
+- **Banners:** rule 6's disclosure banner, and O-D3's reference-example banner where one applies.
+- **Each locked run, oldest first:** number, date, who locked it and why, score and band, stage, realization, baseline,
+  target and actual, model version, hash, erratum line, system-exercise mark, and its case as sealed.
+- **The curve:** inline SVG, by run number, using the Rule76 tokens. Rules in CS-D5. The list beside it holds the same
+  numbers, so a screen reader and a phone at 390 lose nothing.
+- **What changed:** compare gains a `case` block, additive: hypotheses added or superseded, verdicts moved, lever
+  status, offerings added or removed, summary versions, pack fingerprint, evidence added or removed. Evidence matches
+  by `evidence_id`, falling back to the kind, summary and provenance as sealed on older runs. Adjacent pairs show
+  by default, and any two locked runs can be chosen.
+- **Compare keeps its rule:** no narrative and no recommendation.
+
+### Decisions for Brad
+
+| # | Question | Recommendation |
+|---|---|---|
+| CS-D1 | Seal at produce or at lock? | **At produce, with the lock refused if the chain has moved.** Sealing at lock (CVAF) means rewriting the payload and hash at the lock, which breaks "the hash is the run". Instead a trigger compares `payload.case` with `lvrf_case_chain()` at the lock and refuses: "The case changed after this run was produced; produce a new run and lock that." So a locked v4 run always shows the case at its lock. The guard lives in the database, and runs without `case` lock as they do now |
+| CS-D2 | Which hypotheses? | **Every version on the outcome, not only the current one.** Otherwise a supersession between runs reads as a change of mind with no record of what was replaced |
+| CS-D3 | What is "pack version"? | **Seal the entry itself, plus a SHA-256 of its fields.** A pack-wide version would move when a sibling entry changes, showing changes that have nothing to do with this case. A real versioned pack is a new governed object, and a slice of its own if you want one |
+| CS-D4 | Beyond your list: the marker and findings? | **Include both.** "The whole case" should say a run was a reference example as it stood, and L46 shows a marker can change. Errata stay live, read beside the seal |
+| CS-D5 | What does the curve plot? | **Sealed scores only, and it never recomputes.** The line breaks where the model fingerprint differs or is unknown, or where the outcome changes, since a slope across either would be false. An erratum marks its point, and shows a corrected score only where the erratum recorded one. No score is derived by subtraction. System-exercise runs show as hollow points, not hidden. Older payloads with no `valueOutcomeId` are one unnamed series |
+| CS-D6 | How is "no record" shown? | **Three states, as CVAF's:** both runs sealed the case; one did; neither did. One-sided or empty reads "this run sealed no case, so nothing can be said", never "no change" |
+
+**Brad's additions (1 Nov 2026):**
+1. **CS-D5:** a curve point carrying a current erratum shows the erratum mark.
+2. **CS-D3:** when certified pack versions arrive, the seal adds the version beside the entry hash. The entry hash stays.
+
+### Gate A
+
+`verify_case_snapshot.sh` runs on throwaway clones, with a fixture holding a lever, a hypothesis and its supersession,
+offerings, two summary versions and a marker.
+
+| Break | Must be caught |
+|---|---|
+| B1 | A chain item dropped from `lvrf_case_chain()` |
+| B2 | The lock guard removed: a superseded hypothesis, a new summary and a withdrawn lever must each refuse the lock |
+| B3 | The verdict moved after produce (actual verified): lock refused |
+| B4 | A v3 run must still lock, and its bytes must not change |
+| B5 | The view on a retired engagement, and on another tenant's (404) |
+| B6 | The curve joined across a model change, or an outcome change; an erratum's mark dropped from its point |
+| B7 | A one-sided compare reading "no change" |
+| B8 | An erratum's corrected score derived rather than read |
+
+- NULL inputs on every chain field, and a pack-less metric, which must seal `null` rather than fail.
+- The full regression, 44 scripts, on a fresh prod copy.
+- Equivalence: every GET identical apart from new additive keys.
+- `check_run_hashes` on every run; all locked runs byte-identical.
+- Screens at 1280 and 390, looked at: a v4 run's case, the snapshots view on Curia's 21-run reference engagement, a
+  mixed v3/v4 compare.
+- Print to PDF and look at every page: the banner and the hash on each.
+- Stop for Brad's review.
+
+### Gate B
+
+1. Backup: `pg_dump -Fc`, `chmod 600`, `ls -l`, TOC count, STOP.
+2. Pull, `ownership.sql`, `hardening.sql` as postgres with ON_ERROR_STOP, print the exit and ERROR count, STOP.
+3. Deploy, STOP.
+
+There is no migration and no steward act. **Prerequisite:** §13 closed, including its validating paste, and its
+fresh-copy addendum done.
+
+### Gate C
+
+Read-only:
+- 184 triggers; no schema drift;
+- run count unchanged and every run's hash and bytes unchanged;
+- the function and trigger present; hardening recorded in the manifest;
+- no refused act.
+
+**What Gate C cannot show:** a v4 run on prod. Under rule 9 none is produced to exercise the system, so the first real
+run is read-checked when you produce one.
+
+## 17. Curia lot acceptance: W6 stays open (ruled by Brad, 1 Nov 2026; **both questions approved as recommended, 1 Nov 2026**; L48)
+
+**The ruling:**
+- W6 stays open. The 95.3% is an ISPE industry median, not Curia evidence, and L41's about-rule would refuse it as
+  baseline support.
+- The hypothesis waits for a ratified LAR lever.
+- Brad authors the lever once a citation for the deviation-to-rejection mechanism is found and opened.
+
+**Where it stands (31 Oct copy, read-only):** outcome `31d097a6`, baseline 95.3, has no evidence links, no hypothesis,
+no target and no committer. Run 1 is locked at 10 / 100. The LAR pack entry has no levers. The capability already
+claims the entry, so the chain the hypothesis guard requires is one lever short.
+
+**The acts are Brad's (rule 10):** the lever, then the hypothesis. A steward's lever reads ratified under O-D2a. The
+author of the hypothesis may not verify that outcome's actual (O2-D1).
+
+**Two questions the ruling left open, both approved as recommended (Brad, 1 Nov 2026):**
+
+1. **What does the falsifier measure against?** The database quotes the reference from the outcome at INSERT and
+   freezes it. A `baseline` falsifier written while W6 is open is frozen at the ISPE median, so the test of a Curia
+   claim would rest on a figure that is not Curia's. A `committed_target` falsifier needs a target a named person
+   committed to, which needs §14. **Approved:** the hypothesis also waits for W6 or a commitment, whichever comes
+   first.
+2. **How is the opening recorded? (L49)** The lever's citation is text, so "found and opened" would not be on the
+   record. **Approved:** before the lever is authored, record the source as evidence through the opened-source act, and
+   name that row in the lever's citation. This needs no build. The citation becoming a reference to an evidence row is
+   L49, in a slice of its own.
+
+**W6 closes** only with evidence about Curia itself. The search that found ISPE found no rate in the Samsung Biologics,
+Catalent or Lonza filings, so that most likely means a Curia source, not more outside-in research.

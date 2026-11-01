@@ -154,3 +154,68 @@ export function SystemExerciseBatch() {
     </section>
   );
 }
+
+interface AboutRow { id: string; account: string; kind: string; summary: string; provenance: string; proposed: 'account' | null }
+
+/**
+ * L41-D3 and Brad's condition 2 — what each row from before the "about" field is about. Every row, with its own
+ * summary and its proposal; a row is pre-filled only where the server derived it, and the rows it cannot derive
+ * are left for the steward. One submit with the count; the server refuses if it changed. Hidden once none waits.
+ */
+export function AboutBatch() {
+  const { actor } = useActor();
+  const [reload, setReload] = useState(0);
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [named, setNamed] = useState<Record<string, string>>({});
+  const [reason, setReason] = useState('');
+  const data = useJson<{ count: number; rows: AboutRow[]; accounts: { id: string; name: string }[] }>('/api/evidence/about-batch', reload);
+  if (data === null || data === 'error' || data.count === 0) return null;
+  const notSteward = actor?.is_steward ? undefined : `Stating what evidence from before this field is about is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const choice = (r: AboutRow) => picked[r.id] ?? r.proposed ?? '';
+  const stated = (r: AboutRow) => { const c = choice(r); return c !== '' && (c !== 'other_party' || (named[r.id] ?? '').trim().length >= 3); };
+  const waiting = data.rows.filter((r) => !stated(r)).length;
+  const unmet = [...(waiting > 0 ? [`state the ${waiting} row${waiting === 1 ? '' : 's'} left open`] : []), ...(reason.trim().length < 12 ? ['say why, in at least 12 characters'] : [])];
+  const aboutOf = (r: AboutRow) => { const c = choice(r); return c === 'account' ? 'account' : c === 'other_party' ? { other_party: (named[r.id] ?? '').trim() } : { institution_id: c }; };
+  return (
+    <section className="mt-8 flex flex-col gap-3" data-testid="about-batch">
+      <h2 className={H2}>What each row from before &ldquo;about&rdquo; is about</h2>
+      <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-45">
+        {data.count} evidence rows were recorded before LVRF asked what evidence is about. Each is shown with its own summary. A row is filled in only where the record shows it can
+        be about nothing but its account; a filing or vendor publication on a customer account is left for you. Nothing is written until you submit, and each statement is final.
+      </p>
+      <p className="m-0 text-[13px] text-ink" data-testid="about-batch-count">{data.count} rows; {data.rows.filter((r) => r.proposed === null).length} left for you to state.</p>
+      <ul className="m-0 max-h-[70vh] list-none overflow-y-auto border border-rule bg-white p-0" data-testid="about-batch-rows">
+        {data.rows.map((r) => (
+          <li key={r.id} className="border-b border-rule-soft px-4 py-2 text-[12px] last:border-b-0" data-testid="about-batch-row" data-evidence={r.id} data-proposed={r.proposed ?? ''}>
+            <span className="font-semibold text-ink">{r.account} · {r.kind.replace(/_/g, ' ')}</span>
+            <span className="block text-ink-70 [overflow-wrap:anywhere]">{r.summary}</span>
+            <span className="block text-ink-45 [overflow-wrap:anywhere]">Source: {r.provenance}</span>
+            <span className="mt-1 flex flex-wrap items-center gap-2">
+              <select className={I + ' max-w-[280px]'} disabled={Boolean(notSteward)} value={choice(r)} data-testid="about-batch-choice"
+                onChange={(ev) => setPicked((p) => ({ ...p, [r.id]: ev.target.value }))}>
+                <option value="" disabled>— choose —</option>
+                <option value="account">{r.account} (this account)</option>
+                {data.accounts.filter((a) => a.name !== r.account).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                <option value="other_party">Another company, named</option>
+              </select>
+              {choice(r) === 'other_party' && <input className={I + ' max-w-[280px]'} placeholder="The company" value={named[r.id] ?? ''} data-testid="about-batch-party"
+                onChange={(ev) => setNamed((n) => ({ ...n, [r.id]: ev.target.value }))} />}
+            </span>
+          </li>))}
+      </ul>
+      <GovernedForm<{ stated: number }>
+        path="/api/evidence/about-batch" provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">What each row is about, by you, dated, each with its act. A statement is <strong>final</strong>: a wrong one is corrected by superseding the evidence. <strong>No sealed run changes.</strong></p>}
+        fields={<label className="block"><span className={L}>Why they are stated</span>
+          <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="about-batch-reason" /></label>}
+        confirm={<span data-testid="confirm-text">State what {data.count} rows are about, one act each.</span>}
+        disabledReason={notSteward}
+        canSubmit={unmet.length === 0} unmet={unmet}
+        buildBody={() => ({ expected_count: data.count, reason: reason.trim(), items: data.rows.map((r) => ({ evidence_id: r.id, about: aboutOf(r) })) })}
+        submitLabel={`State the ${data.count} rows`}
+        onSuccess={() => { setReason(''); setPicked({}); setNamed({}); setReload((n) => n + 1); }}
+        renderSuccess={(d) => <>Stated {d.stated}.</>}
+      />
+    </section>
+  );
+}
