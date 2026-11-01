@@ -40,11 +40,44 @@ recorded as **3.1**.
 | 5 | **War Room `/book`**, read-only: membership as book confidence, no money summed across accounts | ~1 day | **B3** |
 | 6 | Consolidated Gate C, Brad's acts, **3.0 ratified** (`LVRF_3.0_DRAFT.md` updated to what shipped; the 3.1 list recorded) | ~2 days | — |
 
-**In parallel (Brad, content, not build):** the SOW customer's industry pack made fit for
-use — measures accepted and ratified; one lever per measure, ratified, its citation an
-opened evidence row (§17); solutions linked; attestation roles named. **Open: the SOW
-customer's industry and what must exist on day one** — these decide the content work and
-whether P4c (the Utilities pack) moves up.
+**In parallel (Brad, content, not build) — pack readiness in general** (revised 1 Nov:
+the SOW's 3–5 accounts are not known until after day 14). The two packs PROP-001
+ratified, **Utilities first and Manufacturing second**, made fit for use: measures accepted
+and ratified; one lever per measure, ratified, its citation an opened evidence row (§17);
+solutions linked; attestation roles named. Utilities is researched and accepted through
+the existing generated-prompt flow; Manufacturing mostly exists (Scotts' precedent).
+
+**The new-account checklist** (Brad, with Claude Code's help, during the 14 days): the
+repeatable path from a named account to a printed outside-in POV and value case —
+research the entity and facts; classify to a pack (research the pack first if none
+exists); the walk; the hypothesis; the summary; run and lock; the POV and the value
+case; print. Timed once on a fixture, so the time per account can be promised.
+
+---
+
+## Milestone M21 — the printed outside-in review (22 November 2026)
+
+**Ratified by Brad, 1 Nov 2026.** For the SOW (Skillsoft, "Matt", 3–5 accounts or
+opportunities for 2027): by **22 November**, each named account has a **printed
+outside-in POV and value case**, ready to review with the account executive and the
+customer or prospect.
+
+- **What it is:** built only from published material. The OUTSIDE-IN HYPOTHESIS and
+  UNVERIFIED banners print on every page. The CFO lens shows its **refusal page with the
+  asks** — what the customer would supply (a system-of-record baseline, a committed target
+  by a named person, an attested monetization rate, a verifier). That page is the
+  conversation opener, not a gap to hide.
+- **Depends on:** 3.0 through B3 (the value case and print) by 15 Nov; the accounts named
+  **by 15 Nov at the latest** (earlier is better); one to two days of research and walk per
+  account, done by Brad (rule 10). With 7 days after 15 Nov, **3 accounts are safe, 5 is
+  tight**: if all 5 are named late, the first 3 print by 22 Nov and the rest follow.
+- **Disclosure — a decision for 3.0 (D-M21):** today "Share with customer" is refused
+  until a named person verifies the outcome, and runs are disclosed `internal`. Printing an
+  outside-in POV for a prospect is a disclosure act that does not fit either state. Proposed:
+  a steward act **"Shared for review as an outside-in hypothesis"**, recorded in
+  `record_documents` (who, with whom, when, the run and its hash), allowed only while both
+  banners print, never changing the run's verification state. Added to B3's scope; Brad
+  rules before P6's build.
 
 ---
 
@@ -70,7 +103,8 @@ cut line applied first.
 
 - The full Pack Contract (design §5.2): import, deltas, validation, certification,
   activation, inheritance, the projection drift check, the pack driving every stage
-  (P4a–P4b); the Utilities pack certified (P4c) unless the SOW needs it.
+  (P4a–P4b); the Utilities pack certified (P4c). **Scheduled after 3.0 and before the
+  first 2027 engagement data** (engagements start next year).
 - P3 fetch verification; P5 beyond the attribution method (comparison populations,
   k-suppression view, cohort exports); P8 admin pages (`/people`, `/policies`).
 - The Board lens; CVAF-style standalone briefs (cost of delay, roadmap appendix) cut
