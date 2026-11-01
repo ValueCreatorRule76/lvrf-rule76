@@ -76,8 +76,8 @@ customer or prospect.
   outside-in POV for a prospect is a disclosure act that does not fit either state. Proposed:
   a steward act **"Shared for review as an outside-in hypothesis"**, recorded in
   `record_documents` (who, with whom, when, the run and its hash), allowed only while both
-  banners print, never changing the run's verification state. Added to B3's scope; Brad
-  rules before P6's build.
+  banners print, never changing the run's verification state. Added to B3's scope.
+  **Approved by Brad, 1 Nov 2026, as proposed.**
 
 ---
 
