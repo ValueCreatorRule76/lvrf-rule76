@@ -13536,3 +13536,21 @@ Each absence is asserted, so a change is seen. **On the clone only,** a fixture 
 - **Bundle unchanged:** `index-wmj6nOMC.js` / `index-DEawJdNq.css`.
 - **Rehearsal on a clone:** 183 triggers; `51|13|78|0|21|1`; 34 rows with no about, 4 verified unopened; drift none at 1123 objects; 105 CHECKs; 25 of 25 hashes. After the acts and the second hardening: 1124 objects, 106 CHECKs.
 
+### L41 + L42 + L47 Gate B and Gate C (1 Nov 2026, UTC)
+
+**Deployed at `930c8f7`;** backup `lvrf-pre-l41-20261101T134725Z` (TOC 798), then Brad's acts, then the second backup (TOC 805; `34|0|0`) and the second hardening run. Gate C ran read-only over ssh.
+
+**Gate C, clean on every check:** box HEAD `930c8f7`, tree clean, bundle `index-wmj6nOMC.js` / `index-DEawJdNq.css`; 183 triggers; drift none, 46 migrations, 1124 objects; 106 CHECKs, all plain; ownership clean; both CHECKs validated; 34 of 34 about stated, 34 `state_about` acts on 34 rows; 0 rows verified with no opening; 25 runs, hashes 25 of 25, and byte-identical to the 1 Nov snapshot (read in UTC); no refusal since the snapshot; no actor missing on any of the 76 audit rows; 0 role grants.
+
+**What each of the 4 rows recorded:**
+
+| Row | About | Verified | Opened | Form, reading | Act and reason |
+|---|---|---|---|---|---|
+| `9765335f` (Skillsoft) | Skillsoft | no | Brad Piver, 14:19:32 | legacy, no reading | `open_citation`, answered No; no reason recorded |
+| `271a449a` (Skillsoft) | Skillsoft | no | Brad Piver, 14:18:36 | legacy, no reading | `open_citation`, answered No; no reason recorded |
+| `1632a5e0` (Curia) | Curia | no | no | legacy, no reading | `withdraw`, 14:06:21: "No source on record (C3b finding); there is nothing to open." |
+| `f9775317` (Curia) | Curia | no | no | legacy, no reading | `withdraw`, 14:07:39: "Skillsoft’s own retention figure, entered to exercise the system; withdrawn from Curia’s outcome and marked. Not opened." |
+
+**Two findings (L52).** Both Skillsoft rows were opened No, so neither carries the quote the Gate B note mentions. Three of the four batch rows left open read as their account (`cee6fea9`, `f9775317` about Curia; `423be7c6` about Scotts), against the reason stated for the batch. `092c46b6` reads Curia, which fits. Neither form has a default on these choices. Each is final; a correction is the steward's supersession.
+
+**The hold on customer-side role grants:** L47 has shipped, so its condition is met. No role has been granted.
