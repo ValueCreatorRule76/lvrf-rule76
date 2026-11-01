@@ -3343,7 +3343,7 @@ Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two 
     revocation. The seed's two `person_roles` rows carry no source and do not count.
   - **The act:** `grant` joins the act enum. Revocation uses `withdraw`.
 
-## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **after C3**)
+## 13. L41 + L42: evidence the score reads is final; runs seal what a recompute needs (ruled by Brad, 26 Oct 2026; **planned 1 Nov 2026; approved with D1–D8 as recommended and four conditions; being built**)
 
 - **What becomes one-way or final:** `source_verified`, `attested_by_person_id`, `kind`,
   `simulated`, and any other column the score or the disclosure gate reads.
@@ -3367,7 +3367,218 @@ Otherwise `assumed` for an attestation, `inferred` for an artifact. Curia's two 
   - The account page's roles card gains "Record a source…"; the C3 and C3b fixtures then use it.
   - **HOLD: no customer-side role is granted on prod until L47 ships.**
 - **First, a read-only report:** the two 23 Aug updates that set `simulated`, with no actor
-  recorded. What changed, and whether any run sealed the value from before or after.
+  recorded. What changed, and whether any run sealed the value from before or after. **Done, below.**
+
+### The read-only report (1 Nov 2026, on the 31 Oct prod copy; plan only, nothing built)
+
+**The evidence table:** 34 rows, every one `legacy` form, none retired or superseded, none written
+since 27 Oct. In its whole history 4 updates: 2 `simulated` (below), 2 citations opened (12 Oct).
+
+**The two 23 Aug updates (audit 37 and 38, 24 Aug 02:53:10 UTC):**
+- **What changed:** `simulated` false to true on Skillsoft `2c10e091` and `eea43d9a`, nothing else.
+  Both provenances start `[SIM]`.
+- **Why there is no actor:** it is migration 0011's backfill (`simulated = true where provenance LIKE
+  '[SIM]%'`), which BUILD_STATUS recorded at the time as "two rows on production". A migration has no
+  person. No one decided anything about these two rows; the rule ran.
+- **What sealed them:** only Customer Zero run 1, on 3 Aug, before the backfill. Both items are sealed
+  `source_verified` false with no `simulated` key at all, and the run hash holds. No run sealed
+  either row after the update.
+
+**The 4 rows verified with no opening recorded:**
+
+| Row | Account | What it is | Current links | What can truthfully happen |
+|---|---|---|---|---|
+| `1632a5e0` | Curia | The 214-day export | none (withdrawn; under the finding) | Cannot be opened: no source on record |
+| `f9775317` | Curia | Skillsoft's Q1 release | none (both withdrawn) | Could be opened; it supports nothing |
+| `9765335f` | Skillsoft | LTM DRR 98% | baseline, Customer Zero | Can be opened: a public filing |
+| `271a449a` | Skillsoft | FY2027 guidance | impact basis, Customer Zero | Can be opened: a public filing |
+
+**What each row is about:** 32 of 34 are about the account they sit on. The two that are not:
+- **`f9775317`,** on Curia, is about Skillsoft, an institution on record. Its links are withdrawn.
+- **`423be7c6`,** on Scotts, is a Skillsoft customer story about a company that is **not an account**.
+  Its summary and provenance do not name the company. Its baseline link is withdrawn; its impact-basis
+  link stands, which is what §13 says should stay.
+
+**So a required institution id cannot be the whole field:** the company `423be7c6` is about has no row
+in `institutions`, and creating one would put a company on the Accounts home that nobody works.
+
+**What was found that the ruling did not name:**
+- **A backfill by migration would repeat 23 Aug.** Filling a new column on 34 rows is 34 `audit_log`
+  updates with no actor, and `evidence_act_present` is there to refuse an unacted write.
+- **`evidence` has no supersession route.** The column and its guard exist; nothing writes them. Once
+  the columns are final, "corrected by supersession" needs a writer, or a mistaken row has no remedy.
+- **The `legacy` form blocks recording a reading.** `evidence_form_final` refuses any change, so an
+  opening of a `legacy` row cannot record what was read.
+- **Most of L42 is already done.** New runs seal the attester since C3 and the model version and
+  fingerprint since 1.0.0. No run has been produced on prod since 19 Oct, so no prod run shows it yet.
+  What remains is below.
+- **Two recording forms ask for `source_verified`:** the add-evidence card, and the account facts
+  card. `POST /api/value-outcomes/:outcomeId/evidence` and `POST /api/institutions/:id/facts` take it
+  from the body; the other seven writers already write false.
+- **An attestation earns credit only when `source_verified`** (`evidenceCredit`), and commit and verify
+  write attestations unverified. Under this slice's rule, a customer's attestation needs an opening
+  to earn credit, so opening has to reach attestations, or §14 cannot earn credit at all.
+- **Nothing in the UI reaches an opening for these rows.** The control exists only in the walk, for
+  AI-sourced evidence on the latest outcome (L43).
+
+### What it builds (planned). Value spine: `baseline` and `attach`; `verify` through the source gate
+
+**1. Migration 0045 and hardening section 30. It writes no evidence row.**
+- `evidence.about_institution_id` (nullable FK) and `evidence.about_other_party` (nullable text).
+- CHECK `evidence_about_stated`, **NOT VALID:** exactly one is set, the text at least 3 characters.
+  Definite under NULL. New rows must state it from the first insert.
+- CHECK `evidence_verified_opened`, **NOT VALID:** `source_verified` requires `citation_resolved`.
+- Each CHECK is validated by hardening.sql once no row breaks it (D3, D4), so a re-run after Brad's
+  acts validates them and a fresh database validates them at once.
+- Enum: `governance_act` gains `state_about` (D3).
+
+**2. `lvrf_evidence_final`, one guard, as an allowlist:** on UPDATE, every column is final except
+`updated_at`, `status`, `version`, `deleted_at`, `superseded_by_id`, and the transitions below. A column added later is final by default.
+- **Kept out of the final set only as one-way moves:**
+  - `citation_resolved*`: false to true, once (already final after);
+  - `source_verified`: moves only inside an opening, or by the verification withdrawal (item 4);
+  - `about_*`: unset to set, once, inside `state_about`;
+  - `evidence_form`, `quote_text`, `locator`, `how_read`: `legacy` to `quote` or `locator`, once,
+    inside an opening. `evidence_form_final` narrows by exactly that.
+- **`simulated` is final** (D5).
+- **INSERT:** `source_verified` must be false, on every path.
+
+**3. The opening: `POST /api/evidence/:id/open-citation`, widened (same path, same act, so the lineage
+reads it unchanged).**
+- Any current evidence row, AI-sourced or not. An AI-sourced account fact stays opened in account
+  research (D1 of 11 Oct: one research path).
+- **Body:** `source_verified` (does the source support what the row states).
+- **A `legacy` row** also gives what was read: quote or locator, and how read. The row moves to that
+  form once, and the figure check runs on it.
+- **An attestation** (`statement` form): also a note of what was opened, kept as the act's reason.
+- **Refused, in words:** a `statement` observation (it cites no source to open); a row under a finding
+  ("this figure has no source on record").
+- The opener may be the person who recorded it (Q4k-D1): the separation that matters is a named
+  human against AI. The session is the only actor.
+- **`source_verified` leaves both bodies.** `refuseUnknownFields` then refuses it; the forms lose the
+  select and gain "Record that you opened the source…" after recording.
+
+**4. Withdrawing a verification: `POST /api/evidence/:id/withdraw-verification` (steward, a reason, act
+`withdraw`).** Only for a row with `source_verified` and no opening, so it can act on these 4 rows and
+no others, ever. It exists for rows nobody can open.
+
+**5. "About":**
+- Every writer states it. The seven statement writers and the fact writer pass their own institution;
+  the two forms ask, defaulting to this account, or "another company", named.
+- **Trigger `value_outcome_evidence_about_guard`, BEFORE INSERT:** baseline or actual support must be
+  evidence about the outcome's own institution. Unset, another institution and another company are
+  all refused, with `IS DISTINCT FROM` so NULL refuses. Impact basis stays open. Existing links stand.
+  `vendor_impact_only` stays: a vendor's publication about the customer is still not its baseline.
+
+**6. L47: `POST /api/institutions/:institutionId/evidence`, account evidence (signed-in staff).**
+- `kind`, `summary`, `provenance`, `source_reference`, `confidence`, the about field, and the form:
+  `quote` or `locator`, or a `statement` attestation. No `supports`, no link, no `source_verified`.
+- No `simulated`, no `ai_sourced`: AI text takes the research path (no second path).
+- **The account page gains "The account's evidence":** every row, with what it is about, its form,
+  who opened it, "verified without the source being opened" where true, its marks, and the controls
+  for items 3, 4, 7 and 8. This is the reachable home L43 otherwise leaves missing.
+- **The roles card gains "Record a source…"** opening that form inline.
+- **The grant guard and route tighten** (D6): the source must be current, not simulated, about this
+  account, and opened with `source_verified` true.
+- The C3 and C3b fixtures stop linking the org chart as outcome support.
+
+**7. Correction by supersession: `POST /api/evidence/:id/supersede` (steward, a reason, act
+`supersede`).** A new row, born unverified with its form and about; the old row points to it. The
+reason is the act's: `evidence` has no reason column, and none is added.
+- Links are not moved: a person withdraws or corrects them (C2), so no support changes silently.
+- Refused while a current role grant names the old row: revoke first.
+
+**8. The two legacy batches (rule 10: Brad's acts, dry-run count, one confirmation).**
+- **"State what the legacy rows are about":** lists the 34, 32 defaulted to their own account;
+  `f9775317` shown as Skillsoft and `423be7c6` as another company, whose name Brad types. One
+  `state_about` act per row.
+- The 4 rows are handled one at a time on the new card: opened, or withdrawn (D4).
+
+**9. L42, what remains: `payloadVersion` 3 on new runs.** Each item also seals `evidence_id`, its about
+field, and who opened it and when; each account fact the same. Sealed runs are untouched; the hash
+covers the new keys; the run page shows them only when sealed. The run page, POV and C3 and C3b match
+sealed items by the id on v3, by kind, summary and provenance on older runs. No model change:
+**scoring reads the same columns, so no 1.0.3.**
+
+**10. The 23 Aug updates: nothing is written** (D7). `lvrf_lineage_evidence` reads an update with no
+actor as "set by migration 0011's rule; no person acted", and this section is the record of why.
+
+### Gate A (planned)
+- `scripts/verify_evidence_final.sh`, on a clone, with deliberate breaks each restored byte-identical:
+  - every final column refused by UPDATE at the database, one by one, as `lvrf_app`;
+  - INSERT with `source_verified` true refused;
+  - **a NULL-input refusal per new CHECK** (both unset, both set, empty text, verified with no opening);
+  - the about guard: another institution, another company and unset as baseline and as actual
+    refused; each as impact basis accepted;
+  - the opening: `legacy` to `quote` once, a second refused; an attestation; a statement observation
+    and a row under a finding refused; no-act writes refused by `evidence_act_present`;
+  - the withdrawal refused on any row but a verified, unopened one;
+  - the grant guard: each of its four conditions refused at the database with the route's check removed;
+  - v3: the hash, recompute of a v3 run, a v2 run byte-identical; a supersede refused under a grant.
+- The walk: Record a source → open it → name the role → a run → attester credited. Screenshots
+  looked at, in `~/lvrf-backups/l41-screens/`, plus every printed POV page.
+- Fixtures move to a shared `scripts/lib` helper that records and then opens; **no test switches
+  off a guard**. Eight scripts insert evidence directly and six post `source_verified`.
+- The full regression and the equivalence on a fresh prod copy; a rehearsal of Brad's acts on a
+  throwaway clone. **Create nothing in real local `lvrf`.**
+
+### Gate B (planned)
+Backup; pull; migrate as `lvrf_migrate`; `ownership.sql`; `hardening.sql` (both CHECKs still NOT VALID,
+reported as such); checks (183 triggers; 104 CHECKs in plain sentences; drift none at 46 migrations;
+25 of 25); deploy. A STOP after each. **Then Brad's acts, in order, through the UI:**
+1. the about batch, 34 in all, one confirmation;
+2. open `9765335f` and `271a449a`, recording the reading, if the filings say so;
+3. withdraw the verification on `1632a5e0`, and on `f9775317` unless Brad opens it.
+
+Then one paste: `hardening.sql` again, validating both CHECKs.
+
+### Gate C (planned; read-only)
+34 of 34 `about` stated, each with one act; 0 rows verified with no opening; both CHECKs validated;
+all 25 runs byte-identical to the snapshot; run hashes 25 of 25; the C3b line gone from live pages
+and the 4 rows' histories intact in `audit_log`; no refusals but deliberate ones. **The hold on role grants
+stays until this slice ships,** and no role is granted by any step of it.
+
+### Decisions for Brad
+- **D1, the about field's shape.** Recommended: `about_institution_id` or `about_other_party`, exactly
+  one. Alternative: an institution row per third company, which adds accounts nobody works.
+- **D2, the supersede route in this slice.** Recommended: yes. Final columns with no writer leave a
+  mistaken row with no remedy. Alternative: defer it, and mistakes wait.
+- **D3, the about backfill.** Recommended: Brad's batch, 34 `state_about` acts, no row written by a
+  migration. Alternative: the migration fills 32 and names the 2, which is simpler and adds 34 updates
+  with no actor, the defect this slice names.
+- **D4, the 4 verified rows.** Recommended: nothing changes until a person acts; each ends **opened**
+  or **withdrawn**, and until then "verified without the source being opened" stays and a new run
+  still credits them. No run is planned in that window. Alternatives: migrate them to false (a
+  script deciding); or count them as unverified in new runs, which is a model change.
+- **D5, `simulated` final, not one-way.** Recommended: final; a row found to be simulated is
+  superseded by one that says so, under a person's act. Alternative: one-way false to true by a
+  steward act, a new route for a case with no live example.
+- **D6, a role's source must be opened.** Recommended: yes, or a role rests on a source nobody read,
+  which is 1632a5e0's defect one level up. Alternative: as C3 stands, any account evidence.
+- **D7, the 23 Aug updates.** Recommended: no row is written, the lineage says what they were. They
+  were the correct disclosure and sealed nothing. Alternative: Brad records a retrospective act over
+  them, which would state a person did what a rule did.
+- **D8, `evidence_id` in the v3 seal.** Recommended: yes, ending the match on kind, summary and
+  provenance for new runs (P2-D7 described the old seal). Alternative: keep the match; those columns
+  are now final, so it holds, at the cost of keeping both readings for good.
+
+### Brad's approval and conditions (1 Nov 2026)
+
+**D1–D8 approved as recommended, with four conditions:**
+1. **Opening an attestation requires the attester's own words:** a quote or locator from a document
+   from that person (an email, a signed statement, a letter), never the analyst's typing. A
+   `statement` attestation moves to `quote` or `locator` at its opening, and the opening names the
+   document. This replaces item 3's "a note of what was opened".
+2. **The about batch lists all 34 rows,** each with its proposed about and its own summary. The 32
+   own-account rows may be pre-filled (derived); the two exceptions are not pre-filled. One submit
+   with the count, refused if it changed.
+3. **v3 runs seal "verified without the source being opened"** beside any such item.
+4. **The second hardening paste (validating the CHECKs) starts with its own backup and STOPs like a
+   migration.**
+
+**What it could orphan:** nothing is removed. `AddEvidenceCard`'s select and the facts card's question
+go. The client's sealed-reading code keeps both payload versions. Scotts' 2 opened rows stay `legacy`:
+they were opened on 12 Oct with no reading recorded, and the record says so.
 
 
 ## 14. Commit, measure and verify in the client (ruled by Brad, 26 Oct 2026; **planned after C3; not built**)
