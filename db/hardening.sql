@@ -1709,6 +1709,13 @@ BEGIN
     RAISE EXCEPTION 'LVRF: reference_example_markers: a marker is not edited; supersede it.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
   END IF;
+  -- L50: every correction is a permanent row and an act, so one that changes nothing is refused.
+  IF OLD.superseded_by_id IS NULL AND NEW.superseded_by_id IS NOT NULL AND EXISTS
+     (SELECT 1 FROM reference_example_markers n WHERE n.id = NEW.superseded_by_id AND n.kind = OLD.kind
+         AND btrim(n.source_citation) = btrim(OLD.source_citation) AND btrim(n.note) = btrim(OLD.note)) THEN
+    RAISE EXCEPTION 'LVRF: reference_example_markers: this correction changes nothing: the kind, the citation and the note are what the marker already says.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
+  END IF;
   IF OLD.retired_by_person_id IS NULL AND NEW.retired_by_person_id IS NOT NULL
      AND (steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward) THEN
     RAISE EXCEPTION 'LVRF: reference_example_markers: only the tenant''s steward may unmark a reference example.'
@@ -2146,6 +2153,13 @@ BEGIN
       END IF;
       RETURN NEW;
     END IF;
+    -- L52 (Brad, 1 Nov 2026): a frozen outcome's link follows its evidence's supersession, and only that: the same
+    -- support, from a row this one supersedes, withdrawn in this transaction.
+    IF o.retired AND EXISTS (SELECT 1 FROM evidence p JOIN value_outcome_evidence l ON l.evidence_id = p.id
+                              WHERE p.superseded_by_id = NEW.evidence_id AND l.value_outcome_id = NEW.value_outcome_id
+                                AND l.supports = NEW.supports AND l.withdrawn_at = now()) THEN
+      RETURN NEW;
+    END IF;
     IF o.retired THEN
       RAISE EXCEPTION 'LVRF: value_outcome_evidence: this outcome belongs to a retired engagement: its outcomes are frozen. Only a correction of what a link supports is recorded on it.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_frozen';
@@ -2336,7 +2350,7 @@ BEGIN
   IF t NOT IN ('research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
                'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings') THEN
+               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings', 'industries') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2377,6 +2391,13 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = NEW.subject_id AND l.evidence_id = NEW.result_id) THEN
     RAISE EXCEPTION 'LVRF: governance_acts: an act on a link names its outcome and its evidence; there is no such link.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
+  END IF;
+  -- L52: an opening that finds the source does not support the evidence says why. A Yes records a reading; a No has only this.
+  IF NEW.act = 'open_citation' AND NEW.subject_table = 'evidence'
+     AND EXISTS (SELECT 1 FROM evidence e WHERE e.id = NEW.subject_id AND NOT e.source_verified)
+     AND length(btrim(coalesce(NEW.reason, ''))) < 12 THEN
+    RAISE EXCEPTION 'LVRF: governance_acts: an opening that does not support the evidence says why, in at least 12 characters.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_no_opening_reason';
   END IF;
   IF NEW.result_table IS NOT NULL AND NEW.subject_table <> 'value_outcome_evidence' THEN
     rt := lvrf_governed_row_tenant(NEW.result_table, NEW.result_id);
@@ -2495,6 +2516,7 @@ BEGIN
       WHEN 'customer_role_grants' THEN what := 'a role named';
       WHEN 'system_exercise_marks' THEN what := 'a mark';
       WHEN 'figure_findings' THEN what := 'a finding';
+      WHEN 'industries' THEN what := 'an industry added';
       WHEN 'value_outcome_evidence' THEN
         IF n->>'corrects_supports' IS NOT NULL THEN what := 'a correcting link'; END IF;
       ELSE NULL;
@@ -2528,7 +2550,7 @@ DECLARE
   t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
+    'industries', 'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
     'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings']
@@ -2647,6 +2669,13 @@ BEGIN
     FROM audit_log al
    WHERE al.table_name = 'evidence' AND al.record_id = e.id::text AND al.operation = 'update' AND al.actor_person_id IS NULL
      AND al.old_row->>'simulated' = 'false' AND al.new_row->>'simulated' = 'true';
+  -- L52: a supersession, in both directions: the row this one replaced, and the row that replaced this one.
+  RETURN QUERY SELECT 'supersedes'::text, 'evidence'::text, e.id, (SELECT p.full_name FROM persons p WHERE p.id = g.actor_person_id), g.at, 'act'::text,
+      jsonb_build_object('other_id', g.subject_id, 'about', (SELECT lvrf_evidence_about(o.about_institution_id, o.about_other_party) FROM evidence o WHERE o.id = g.subject_id), 'reason', g.reason)
+    FROM governance_acts g WHERE g.act = 'supersede' AND g.subject_table = 'evidence' AND g.result_table = 'evidence' AND g.result_id = e.id;
+  RETURN QUERY SELECT 'superseded_by'::text, 'evidence'::text, e.id, (SELECT p.full_name FROM persons p WHERE p.id = g.actor_person_id), g.at, 'act'::text,
+      jsonb_build_object('other_id', g.result_id, 'about', (SELECT lvrf_evidence_about(o.about_institution_id, o.about_other_party) FROM evidence o WHERE o.id = g.result_id), 'reason', g.reason)
+    FROM governance_acts g WHERE g.act = 'supersede' AND g.subject_table = 'evidence' AND g.subject_id = e.id;
   SELECT * INTO a FROM lvrf_lineage_act('evidence', e.id, ARRAY['state_about']);
   IF a.actor IS NOT NULL THEN
     RETURN QUERY SELECT 'state_about'::text, 'evidence'::text, e.id, a.actor, a.at, 'act'::text,
@@ -2663,7 +2692,7 @@ BEGIN
     RETURN QUERY SELECT 'open_citation'::text, 'evidence'::text, e.id,
       coalesce(a.actor, (SELECT full_name FROM persons WHERE id = e.citation_resolved_by_person_id)), coalesce(a.at, e.citation_resolved_at),
       CASE WHEN a.actor IS NOT NULL THEN 'act' ELSE 'record' END,
-      CASE WHEN a.actor IS NOT NULL THEN jsonb_build_object('source_verified', e.source_verified, 'act', a.act)
+      CASE WHEN a.actor IS NOT NULL THEN jsonb_build_object('source_verified', e.source_verified, 'act', a.act, 'reason', a.reason)
            ELSE jsonb_build_object('source_verified', e.source_verified, 'note', 'recorded before governance acts (25 Oct 2026)') END;
   END IF;
   IF e.attested_by_person_id IS NOT NULL THEN
@@ -3231,6 +3260,19 @@ BEGIN
     RAISE EXCEPTION 'LVRF: evidence %: a current customer-side role is named from it. Revoke the role first.', OLD.id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_source_of_role';
   END IF;
+  -- L52 (Brad, 1 Nov 2026): a mark carries to the successor, and a superseded row supports no live outcome.
+  IF OLD.superseded_by_id IS NULL AND NEW.superseded_by_id IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM system_exercise_marks m WHERE m.subject_table = 'evidence' AND m.subject_id = OLD.id)
+       AND NOT EXISTS (SELECT 1 FROM system_exercise_marks m WHERE m.subject_table = 'evidence' AND m.subject_id = NEW.superseded_by_id) THEN
+      RAISE EXCEPTION 'LVRF: evidence %: it is marked a system exercise, and the mark carries to the row that supersedes it.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_mark_carries';
+    END IF;
+    IF EXISTS (SELECT 1 FROM value_outcome_evidence l JOIN value_outcomes vo ON vo.id = l.value_outcome_id JOIN engagements g ON g.id = vo.engagement_id
+                WHERE l.evidence_id = OLD.id AND l.withdrawn_at IS NULL AND g.deleted_at IS NULL AND g.superseded_by_id IS NULL) THEN
+      RAISE EXCEPTION 'LVRF: evidence %: it supports a live outcome, so the link moves to the row that supersedes it.', OLD.id
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_link_moves';
+    END IF;
+  END IF;
   RETURN NEW;
 END $$;
 
@@ -3275,6 +3317,28 @@ BEGIN
     ALTER TABLE evidence VALIDATE CONSTRAINT evidence_about_stated;
   END IF;
 END $$;
+
+-- 31. B1 (0046, 1 Nov 2026) — a steward adds an industry (LVRF_3.0_CRITICAL_PATH item 1).
+-- ------------------------------------------------------------------
+--   industries_steward_only (I): only the tenant's steward adds one. An industry is still reference data: a name
+--     and a slug, no lifecycle (section 11). Its act is held by section 27's act-present trigger.
+CREATE OR REPLACE FUNCTION lvrf_industry_steward_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  steward uuid;
+BEGIN
+  SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
+  IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
+    RAISE EXCEPTION 'LVRF: industries: only the tenant''s steward adds an industry.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'industries_steward_only';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS industries_steward_only ON industries;
+CREATE TRIGGER industries_steward_only
+  BEFORE INSERT ON industries
+  FOR EACH ROW EXECUTE FUNCTION lvrf_industry_steward_only();
 
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
@@ -3388,7 +3452,7 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 183 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 185 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -3403,15 +3467,16 @@ COMMIT;
 --   0041 (P2) took it 141 -> 167: section 27's twenty-six.
 --   0043 (C3) took it 167 -> 176: section 28's nine.
 --   0044 (C3b) took it 176 -> 181: section 29's five.
---   0045 (L41) took it 181 -> 183: section 30's two.)
+--   0045 (L41) took it 181 -> 183: section 30's two. 0046 (B1) took it 183 -> 185: industries_steward_only and
+--   industries_act_present.)
 --
 -- 14's hardening_manifest table adds no entry to this arithmetic: it is a
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 183.
+-- TRUNCATE in section 14 fail. Total stays 185.
 --
--- Expect 284 rows here (281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
+-- Expect 287 rows here (284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
 -- information_schema.triggers emits one row per event

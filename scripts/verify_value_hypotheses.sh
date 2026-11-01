@@ -16,7 +16,8 @@
 # DELIBERATE BREAKS (Brad, 12 Oct 2026): an author verifying their own
 # actual; a verdict without a verified actual; a hypothesis setting its own
 # direction; a digit in the conditions; a falsifier edited in place; post
-# hoc read as survived. A source edit is restored byte-identical (cmp; the
+# hoc read as survived; a marker correction that changes nothing (L50). A
+# source edit is restored byte-identical (cmp; the
 # EXIT trap too); a database break runs in a rolled-back transaction or is
 # undone by re-applying hardening.sql.
 
@@ -277,7 +278,23 @@ sqlrefused "two current markers on one account (checked at commit)" "UPDATE refe
 expect POST "/api/reference-examples/$M2/retire" '{"retirement_reason":"Verification: it is an engagement after all."}' 200 "the steward unmarks it"
 expect GET "/api/institutions/$INST/pov" "" 200 "the POV"
 [ "$(rj "String(b.reference_example) + '|' + b.reference_markers.length")" = "null|2" ] && ok "  ...no current marker; both markers stay on the record" || bad "  ...$(rj "JSON.stringify(b.reference_example)")"
-expect POST "/api/institutions/$INST/reference-example" "$MB" 201 "marked again, for the page walk"
+expect POST "/api/institutions/$INST/reference-example" "$MB" 201 "marked again, for the page walk"; M3="$(rj b.reference_example_marker_id)"
+# L50: a correction that changes nothing. Every correction is a permanent row and an act.
+NOOP='{"kind":"published_case_study","source_citation":"Skillsoft case study (verification fixture)","note":"Verification: an account built from a public story.","supersession_reason":"Verification: nothing changes here."}'
+NOOPW='{"kind":"published_case_study","source_citation":"  Skillsoft case study (verification fixture) ","note":"Verification: an account built from a public story.  ","supersession_reason":"Verification: nothing changes here."}'
+MARKERS0="$(q "SELECT count(*) FROM reference_example_markers")"; ACTS0="$(q "SELECT count(*) FROM governance_acts WHERE subject_table = 'reference_example_markers'")"
+REFUSED0="$(q "SELECT count(*) FROM refusals WHERE endpoint = 'POST /api/reference-examples/:id/supersede'")"
+expect POST "/api/reference-examples/$M3/supersede" "$NOOP" 409 "L50: a correction that changes nothing" "This correction changes nothing"
+expect POST "/api/reference-examples/$M3/supersede" "$NOOPW" 409 "  ...nor does padding the citation and the note with spaces" "This correction changes nothing"
+[ "$(q "SELECT count(*) FROM reference_example_markers")|$(q "SELECT count(*) FROM governance_acts WHERE subject_table = 'reference_example_markers'")" = "$MARKERS0|$ACTS0" ] && ok "  ...no row and no act written" || bad "  ...a row or an act was written"
+[ "$(q "SELECT count(*) FROM refusals WHERE endpoint = 'POST /api/reference-examples/:id/supersede'")" = "$((REFUSED0 + 2))" ] && ok "  ...each refusal recorded" || bad "  ...refusals not recorded"
+for B in 'kind:demonstration' 'source_citation:Skillsoft case study, corrected (verification fixture)' 'note:Verification: an account built from a public story, corrected.'; do
+  F="${B%%:*}"; V="${B#*:}"
+  expect POST "/api/reference-examples/$M3/supersede" "$(node -e 'const b=JSON.parse(process.argv[1]);b[process.argv[2]]=process.argv[3];console.log(JSON.stringify(b))' "$NOOP" "$F" "$V")" 201 "  ...a change to the $F alone is a correction"
+  M3="$(rj b.reference_example_marker_id)"
+  expect POST "/api/reference-examples/$M3/supersede" "$(node -e 'const b=JSON.parse(process.argv[1]);b.supersession_reason="Verification: back to the fixture as first marked.";console.log(JSON.stringify(b))' "$NOOP")" 201 "  ...and back, for the next check"
+  M3="$(rj b.reference_example_marker_id)"
+done
 
 step "9. The pages, in a browser"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) &
@@ -348,6 +365,31 @@ fn_break b6 "         || CASE WHEN h.post_hoc THEN '_post_hoc' ELSE '' END" ""
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b6.sql" > /dev/null
 [ "$(verdict "$H4")" = "survived" ] && ok "B6: without the post hoc branch, H4 — written after its result — reads plain survived: the branch is what keeps hindsight from counting" || bad "B6: H4 $(verdict "$H4")"
 psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(verdict "$H4")" = "survived_post_hoc" ] && ok "  ...hardening.sql re-applied: survived_post_hoc again" || bad "  ...B6 restore"
+# B7 — a correction that changes nothing (L50). (a) the route's check removed: the database refuses, in the same words.
+M4="$(q "SELECT id FROM reference_example_markers WHERE institution_id = '$INST' AND deleted_at IS NULL AND superseded_by_id IS NULL")"
+[ "$(q "SELECT kind || '|' || source_citation || '|' || note FROM reference_example_markers WHERE id = '$M4'")" = "published_case_study|Skillsoft case study (verification fixture)|Verification: an account built from a public story." ] && ok "B7: the marker reads as the body restates it (the control)" || bad "B7: the control"
+python3 - "$ROUTE" <<'PY2'
+import sys; p = sys.argv[1]; s = open(p).read()
+a = "if (f.kind === m.kind && f.sourceCitation === m.source_citation.trim() && f.note === m.note.trim()) {"
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "if (false as boolean) {"))
+PY2
+stop_server; start_server
+expect POST "/api/reference-examples/$M4/supersede" "$NOOP" 422 "B7a: without the route's check, the DATABASE refuses it" "this correction changes nothing"
+[ "$(q "SELECT count(*) FROM reference_example_markers WHERE id = '$M4' AND superseded_by_id IS NULL")" = "1" ] && ok "  ...and the marker stands: the new row went back with it" || bad "  ...B7a left state"
+# (b) the guard's branch taken out as well: the no-op lands, so the two checks are what stop it.
+python3 - "$W/b7.sql" <<'PY2'
+import re, sys
+s = open('db/hardening.sql').read()
+fn = re.search(r"CREATE OR REPLACE FUNCTION lvrf_reference_marker_steward_only.*?\nEND \$\$;\n", s, re.S).group(0)
+a = "n WHERE n.id = NEW.superseded_by_id AND n.kind = OLD.kind"
+assert fn.count(a) == 1; open(sys.argv[1], 'w').write(fn.replace(a, "n WHERE false AND n.id = NEW.superseded_by_id AND n.kind = OLD.kind"))
+PY2
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b7.sql" > /dev/null
+expect POST "/api/reference-examples/$M4/supersede" "$NOOP" 201 "B7b: without either check, a correction that changes nothing lands: they are what stop it"
+M5="$(rj b.reference_example_marker_id)"
+restore "$ROUTE"; stop_server; start_server
+psql -v ON_ERROR_STOP=1 -q -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && ok "  ...hardening.sql re-applied" || bad "  ...B7 restore"
+expect POST "/api/reference-examples/$M5/supersede" "$NOOP" 409 "  ...and the same body is refused again" "This correction changes nothing"
 for f in "$ROUTE"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 

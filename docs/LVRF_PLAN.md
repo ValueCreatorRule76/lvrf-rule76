@@ -133,9 +133,9 @@ on institution routes (P3).
 | ~~L47~~ **DONE 1 Nov 2026 (`930c8f7`)** | **A customer-side role's source has to be linked to an outcome to exist** (Brad, 27 Oct 2026, from C3's fixture screens). The grant route and its guard require only evidence of the account (non-simulated, with provenance); neither needs an outcome link. But no route records account evidence without one: evidence is created only through `POST /api/value-outcomes/:outcomeId/evidence` (with a `supports`) or with a fact. So C3's and C3b's fixtures link the org chart as an outcome's impact basis, and on prod a steward naming a role would have to do the same, sealing it in the next run as outcome support | C3b Gate A, 27 Oct 2026 | **Ruled (Brad, 27 Oct 2026): built in the L41 + L42 slice (§13), as a prerequisite of §14.** Account evidence is born with the "about" field, the quote/locator form, and `source_verified` set only by an opened-the-source act. **HOLD: no customer-side role is granted on prod until L47 ships.** The fixtures then use it |
 | L48 | **Curia lot acceptance: W6 stays open, and the hypothesis waits** (Brad, 1 Nov 2026). The 95.3% is an ISPE industry median, not Curia evidence | Brad, 1 Nov 2026 | **Open; ruled in §17.** The hypothesis follows a LAR lever, which Brad authors once a citation for the deviation-to-rejection mechanism is found and opened |
 | L49 | **A lever's citation records no opening.** `value_levers.citation` is required text. Nothing records that anyone opened the source, who, or what they read, so the opening L48 asks for would not be on the record | §17, 1 Nov 2026 | **Open (Brad, 1 Nov 2026): a lever's citation becomes a reference to an evidence row, not free text.** Until then, the LAR lever's citation names an opened evidence row (§17). A schema change on `value_levers`, in a slice of its own; the 1 lever on prod needs a rule before the column changes |
-| L50 | **A marker correction that changes nothing is accepted.** The form pre-fills the current kind, and the route takes a supersession with the same kind, citation and note. Curia's three on 1 Nov 2026: 01:39 kind unchanged, 02:42 to `outside_in_test`, 12:31 unchanged. Scotts' on 19 Oct did the same. Each is a permanent row with its act | L41 growth accounting, 1 Nov 2026 | Open: the route refuses a supersession that changes nothing, and the form leaves the kind unchosen. Small; with slice 5 |
-| L52 | **Five recorded acts from L41's Gate B read differently from what was reported or reasoned** (Gate C, 1 Nov 2026). **About:** `cee6fea9`, `f9775317` (Skillsoft's earnings release) read about Curia, and `423be7c6` ("a vendor publication about another company") reads about Scotts, while the batch's reason calls them Skillsoft's filings and a story about another company. **Openings:** `9765335f`, `271a449a` were opened No: unverified, with no reading, while Brad's note read "opened with the release's quote / withdrawn", unresolved. The batch has no default on these rows and the opening has none on Yes or No, so each was a selection in the form. All are final | L41 Gate C | **Open: Brad decides.** If any is not what was meant, the only correction is the steward's supersession of the row (L41-D2). No sealed run is touched. `cee6fea9` and `f9775317` have no current link. `423be7c6` keeps its current impact-basis link on Scotts' frozen outcome, where impact basis takes evidence about anyone, so its about line is wrong but no guard is bypassed. A row about Curia could later be linked as Curia's baseline, which is why the two Curia rows matter |
-| L53 | **The next fresh prod copy breaks tests written for the pre-batch state.** `verify_evidence_final` and the fixtures around it assume 34 rows with no about and 4 verified unopened, as L39 and the C3 errata did. An opening recorded No also records no reason: the act's `reason` is empty | L41 Gate C, 1 Nov 2026 | Open: make the tests relative at the next copy; whether a No opening takes a reason is decided with it |
+| L50 | **A marker correction that changes nothing is accepted.** The form pre-fills the current kind, and the route takes a supersession with the same kind, citation and note. Curia's three on 1 Nov 2026: 01:39 kind unchanged, 02:42 to `outside_in_test`, 12:31 unchanged. Scotts' on 19 Oct did the same. Each is a permanent row with its act | L41 growth accounting, 1 Nov 2026 | **Built 1 Nov 2026, Gate A passed, not deployed; goes to Gate B with §18:** the route and the marker guard refuse it, and the form leaves the kind unchosen (BUILD_STATUS). The earlier rows stay on the record |
+| L52 | **Five recorded acts from L41's Gate B read differently from what was reported or reasoned** (Gate C, 1 Nov 2026). **About:** `cee6fea9`, `f9775317` (Skillsoft's earnings release) read about Curia, and `423be7c6` ("a vendor publication about another company") reads about Scotts, while the batch's reason calls them Skillsoft's filings and a story about another company. **Openings:** `9765335f`, `271a449a` were opened No: unverified, with no reading, while Brad's note read "opened with the release's quote / withdrawn", unresolved. The batch has no default on these rows and the opening has none on Yes or No, so each was a selection in the form. All are final | L41 Gate C | **Open, ruled in §18:** `cee6fea9` and `f9775317` to be superseded about Skillsoft, `423be7c6` about the company in the story, once Brad opens it. **HOLD: no customer-side role is granted on prod until L52 closes.** The correction is the steward's supersession of the row (L41-D2). No sealed run is touched. `cee6fea9` and `f9775317` have no current link. `423be7c6` keeps its current impact-basis link on Scotts' frozen outcome, where impact basis takes evidence about anyone, so its about line is wrong but no guard is bypassed. A row about Curia could later be linked as Curia's baseline, which is why the two Curia rows matter |
+| L53 | **The next fresh prod copy breaks tests written for the pre-batch state.** `verify_evidence_final` and the fixtures around it assume 34 rows with no about and 4 verified unopened, as L39 and the C3 errata did. An opening recorded No also records no reason: the act's `reason` is empty | L41 Gate C, 1 Nov 2026 | Open: make the tests relative at the next copy. The No reason is built in §18 |
 | L51 | **The four real rows reach neither the POV nor W6.** The POV draws an outcome's evidence only under a hypothesis (`PovPage`), and neither Skillsoft nor Curia has one. Skillsoft is the tenant's own account, so it has no walk. Curia's walk shows lot acceptance (L43). The evidence card, the lineage and each run's seal do show them. W6's withdrawn list also carries no "verified without…" line, where the POV's does | L41 Gate A, 1 Nov 2026 | Open: decide with slice 5 whether the POV lists evidence with no hypothesis. A checked gap, not a fault in L41 |
 
 ---
@@ -4040,3 +4040,82 @@ author of the hypothesis may not verify that outcome's actual (O2-D1).
 
 **W6 closes** only with evidence about Curia itself. The search that found ISPE found no rate in the Samsung Biologics,
 Catalent or Lonza filings, so that most likely means a Curia source, not more outside-in research.
+
+## 18. L52: correcting what Gate B recorded (L50, a reason on a No, the about control, a supersession batch) (ruled by Brad, 1 Nov 2026; **batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; built; Gate A, BUILD_STATUS**)
+
+**Value spine:** `verify`. A supersession keeps a record defensible when an act of record was wrong.
+
+**The ask (Brad, 1 Nov 2026):** hold L50's Gate B and add to it, as one slice:
+1. a "No" opening requires a reason, in the route and the database, with a break;
+2. the about control always offers the tenant, other accounts and a typed party, pre-filling nothing ambiguous;
+3. a supersession batch with a dry-run list showing each row's current and new statement, and what happens to its mark,
+   links and lineage. Marks must carry to the successor.
+
+**HOLD: no customer-side role is granted on prod until L52 closes** (Brad, 1 Nov 2026).
+
+**What is to be corrected (Brad's rulings, 1 Nov 2026), as it stands on prod:**
+
+| Item | Now | Ruled | Mark | Links | Sealed in |
+|---|---|---|---|---|---|
+| `cee6fea9` | about Curia | about Skillsoft | yes | none current | 16 runs |
+| `f9775317` | about Curia | about Skillsoft | yes | none current | 10 runs |
+| `423be7c6` | about Scotts; "about another company" | about Scotts, kept. New text: "Skillsoft-published case study naming Scotts Miracle-Gro: '75% reduction rate in recordable incidents' with Skillsoft EHS solutions; no period or baseline stated. A vendor claim about Scotts, not Scotts' own measurement." | no | impact basis, kept, on a frozen outcome | 2 runs; 3 errata name it |
+| `271a449a` | No opening stands | New row: the three guidance ranges only, from the Q1 FY2027 release (8-K Ex. 99.1, 9 Jun 2026); the debt-refinancing sentence dropped unless sourced from Skillsoft's own transcript | no | impact basis, live | 1 run |
+| `9765335f` | No opening stands | New row: "LTM DRR of 98%, one percentage point lower than the year ago period" | no | baseline, live | 1 run |
+| Errata on Scotts runs 1 and 2 | "a vendor claim about another company" | Superseded, keeping the correction (a vendor claim is never baseline support), the reason fixed, the supersession reason saying the earlier text misidentified the story's subject | | | |
+
+All five rows are legacy form, back no fact or entity, and name no role. `423be7c6` is AI-sourced, with no research
+result. Brad opens the Skillsoft successors Yes, with the release's quote, after checking EDGAR.
+
+**The order those rulings force:**
+1. The errata go first in the batch: an erratum needs its evidence's current link, and the batch moves that link.
+2. The quote goes in at the batch, not at the opening: a legacy row's successor must record a reading (L52-D5), and a
+   recorded reading is final. So EDGAR is checked before the batch.
+
+**What the about control offered at Gate B (read from the page on a clone of the deployed behaviour):** every row
+offered its own account, every other account, Skillsoft, and "Another company, named", with nothing pre-filled. Skillsoft
+was the last account listed, and the row's own account was the first choice.
+
+### Decisions, as built (Brad reviews them at Gate A)
+
+| # | Decision | Why |
+|---|---|---|
+| L52-D1 | **The No reason lives on the `open_citation` act**, at least 12 characters, required by the route and by `lvrf_governance_act_guard`. A Yes takes no reason | The act already holds "the route's own reason"; a column would duplicate it. The guard fires on INSERT, so earlier openings are untouched |
+| L52-D2 | **The forms pre-fill nothing.** Every about control starts at "choose", from one shared component. The tenant is named as the tenant, and a failed read of the accounts stops the form rather than dropping the tenant | L41's forms defaulted to "This account", which is the choice that went wrong. A rule for "unambiguous" would be one more thing to get wrong |
+| L52-D3 | **Unchanged: the batch's own proposals.** No rows wait, so it renders nothing on prod | |
+| L52-D4 | **A successor keeps the row's kind, summary, source, confidence, attester, `simulated` and AI origin, and takes the new about.** It is born unverified and unopened: a person opens it. A verified row's verification does not carry | L41: only an opening verifies. Q4k: AI origin is permanent |
+| L52-D5 | **A legacy row's successor needs a reading: a quote or a locator with how it was read.** `evidence_form_no_legacy` is not loosened | "Legacy" means recorded before evidence forms. So correcting `cee6fea9` and `f9775317` means Brad reads the release, and the batch records that reading. A row with a form carries its own |
+| L52-D6 | **An item must change something:** the about, the text, the source, or a reading the row lacks. The dry run refuses it otherwise | L50's rule, for evidence |
+| L52-D7 | **The mark carries:** a new mark on the successor with the same reason, its own `mark` act, and the old mark kept. `evidence_final` refuses a supersession that would drop it, on the single route as well | Brad's ruling. Marks are append-only |
+| L52-D8 | **Links carry:** a current link moves: withdrawn from the old row and linked to the successor with the same `supports`, each with an act, and its figure checked against the reading. `evidence_final` refuses a supersession that leaves a live one behind. **One narrowing of the freeze, for Brad's ruling on `423be7c6`:** a frozen outcome takes a new link only from a row that supersedes the linked row, with the same support, from a link withdrawn in the same transaction. Nothing else changes on a frozen outcome | Otherwise a superseded row goes on supporting an outcome, and the wrong text stays on Scotts' POV. If the move breaks a guard (a baseline link to a row no longer about the account), the dry run names it and the batch is refused |
+| L52-D9 | **A row backing a current fact or entity, naming a current role, or from a research result is refused in the dry run,** with what to do instead | Each has its own correction path. Found on the real rows: `423be7c6` is AI-sourced with no research result, so it can be corrected, and its successor stays AI-sourced |
+| L52-D10 | **Errata and sealed runs do not move.** The dry run counts them. An erratum named in the batch is superseded through the erratum route's own code, with the same recompute | They record what happened to the old row |
+| L52-D11 | **The dry run is a POST that writes nothing, and returns a hash of its plan.** The submit is refused if the count or the plan has changed since | Brad's batch rule, extended: it should be what was shown |
+| L52-D12 | **The lineage names both directions:** "superseded by" on the old row, "supersedes" on the new, with the reason. The evidence card says the same | |
+
+**Add an industry (Brad, 1 Nov 2026; B1):** `POST /api/industries`, a steward act on the Packs page: name, slug unique per
+tenant, a reason of at least 12 characters, its own act `add_industry`. Refused for non-stewards in the route and by
+`industries_steward_only`. No pack contract and no lifecycle. It unblocks the Utilities research for M21.
+
+**What it could orphan:** nothing. Migration 0046 adds one enum value and writes no row. `lvrf_app` gains INSERT on
+`industries`. Hardening changes five functions and adds two triggers, 183 → 185. The single supersede route now carries marks and links too, through the same code. After `423be7c6`'s link moves,
+an erratum on that row can no longer be superseded through the route, because the route needs the row's current link; none
+is planned.
+
+### Not in this slice
+Brad's acts. No row is corrected by a script (rule 10).
+
+### Gate A
+`verify_supersession.sh`, on throwaway clones of the 1 Nov copy, using the real rows:
+- the dry run's list for each row, and nothing written by it;
+- the batch through the browser, and the state after: marks, links, lineage, card;
+- refusals: count changed, plan changed, no change, a fact-backed row, a role, an AI row, a move that breaks a guard;
+- breaks: a No without a reason, route removed (database refuses) and guard removed (it lands); a mark dropped, route
+  removed; a link left on a live outcome; the plan check removed; the about control pre-filled; the frozen move loosened.
+
+Then the full regression, equivalence against `930c8f7`, screens, and stop.
+
+### Gate B and C (planned)
+Batch B1. Backup; pull; `ownership.sql`; `hardening.sql`; checks; deploy. Then Brad's acts: open the sources, the batch,
+then the Yes openings. Gate C reads each row, its successor, mark, links, lineage and both errata. L52 closes there, and
+the hold with it.

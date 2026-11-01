@@ -102,8 +102,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "183" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 183 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 185 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -123,12 +123,12 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 EV0="$(q "SELECT count(*) || '|' || md5(string_agg(md5(e::text), '' ORDER BY id)) FROM evidence e")"
 AUD0="$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
-migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0045_l41_evidence_final)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0046_add_industry)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "183" ] && ok "183 triggers (181 + evidence_final, value_outcome_evidence_about_guard)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "284" ] && ok "  ...284 information_schema rows (281 + 3)" || bad "  ...rows"
+[ "$(trig)" = "185" ] && ok "185 triggers (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "287" ] && ok "  ...287 information_schema rows (281 + 3)" || bad "  ...rows"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 46 migrations, newest 0045_l41_evidence_final" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 47 migrations, newest 0046_add_industry" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^105 CHECKs in the database: 105 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")" = "$AUD0" ] && ok "0045 and hardening write no evidence row: the audit log gains nothing (L41-D3)" || bad "audit grew"
@@ -261,17 +261,18 @@ stop_server; start_server
 expect POST "$(OC "$STOBS")" "$(node -e 'const f=JSON.parse(process.argv[1]);console.log(JSON.stringify({source_verified:true,...f}))' "$(FORMQ)")" 422 "B8: the route's refusal removed → the form guard refuses a statement observation taking a quote" "final once recorded"
 restore "$CITE"; stop_server; start_server
 SIMR="$(q "SELECT id FROM evidence WHERE id::text LIKE 'eea43d9a%'")"
-expect POST "$(OC "$SIMR")" '{"source_verified":false}' 409 "simulated evidence: there is no source to open" "no source to open"
+NO='{"source_verified":false,"reason":"Verification: the source does not say this."}'
+expect POST "$(OC "$SIMR")" "$NO" 409 "simulated evidence: there is no source to open" "no source to open"
 sqlapp "  ...at the database, unverified" "UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = '$S', citation_resolved_at = now() WHERE id = '$SIMR'" "no source to open"
 sqlapp "  ...at the database, verified" "UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = '$S', citation_resolved_at = now(), source_verified = true WHERE id = '$SIMR'" "no source to open"
 # B9 — the route's refusal removed: the trigger holds (Brad, 1 Nov 2026).
 edit "$CITE" "if (e.simulated) {" "if (false as boolean) {"
 stop_server; start_server
-expect POST "$(OC "$SIMR")" '{"source_verified":false}' 422 "B9: the route's refusal removed → evidence_final refuses a simulated opening" "no source to open"
+expect POST "$(OC "$SIMR")" "$NO" 422 "B9: the route's refusal removed → evidence_final refuses a simulated opening" "no source to open"
 [ "$(q "SELECT citation_resolved FROM evidence WHERE id = '$SIMR'")" = "f" ] && ok "  ...and nothing was written" || bad "  ...the row moved"
 restore "$CITE"; stop_server; start_server
 expect POST "$E" "$(src "$(J about account kind public_filing provenance 'Fixture filing (not a source)' summary 'L41 does not support' supports impact_basis)")" 201 "evidence that will not hold"; NOHOLD="$(rj b.evidence_id)"
-expect POST "$(OC "$NOHOLD")" '{"source_verified":false}' 200 "  ...opened: it does not support it"
+expect POST "$(OC "$NOHOLD")" "$NO" 200 "  ...opened: it does not support it"
 expect POST "$(OC "$NOHOLD")" '{"source_verified":true}' 409 "  ...and that is final" "already opened"
 expect POST "/api/evidence/$NOHOLD/withdraw-verification" "$(J reason 'Verification: not a verified row.')" 409 "  ...a withdrawal refused on any row but a verified, unopened one" "opened by a person"
 expect POST "/api/evidence/$STOBS/withdraw-verification" "$(J reason 'Verification: not a verified row.')" 409 "  ...and on an unverified one" "not verified"
@@ -332,7 +333,7 @@ expect POST "$B" "$(BODY 33 "$ITEMS" "$REASON")" 409 "a count that changed: refu
 expect POST "$B" "$(BODY 34 '[]' "$REASON")" 422 "the rows not all stated: refused" "every row"
 expect POST "$B" "$(BODY 34 "$ITEMS" "$REASON")" 403 "not the steward: refused" "" "$X"
 # B5 — the batch without its count check.
-edit "$AEV" "if (rows.length !== b.expected_count) throw" "if (false as boolean) throw"
+edit "$AEV" "if (rows.length !== b.expected_count) throw new Refusal(409, \`The count changed: \${rows.length} rows now wait" "if (false as boolean) throw new Refusal(409, \`The count changed: \${rows.length} rows now wait"
 stop_server; start_server
 expect POST "$B" "$(BODY 33 "$ITEMS" "$REASON")" 201 "B5: the count check removed → caught: a count that was off was accepted"
 restore "$AEV"; stop_server; start_server
@@ -374,7 +375,7 @@ expect POST "$(OC "$R9")" "$(node -e 'console.log(JSON.stringify({source_verifie
 [ "$(q "SELECT evidence_form || '|' || source_verified || '|' || citation_resolved FROM evidence WHERE id = '$R9'")" = "locator|true|true" ] && ok "  ...it moved from legacy, once" || bad "  ...row"
 [ -n "$(q "SELECT 1 FROM figure_checks WHERE evidence_id = '$R9'")" ] && ok "  ...and its reading is checked against the figure it supports" || bad "  ...no figure check"
 sqlapp "  ...the form back to legacy" "UPDATE evidence SET evidence_form = 'legacy', locator = NULL, how_read = NULL WHERE id = '$R9'" "final once recorded"
-expect POST "$(OC "$R2")" '{"source_verified":false}' 200 "271a449a opened: not supported, so it stops being verified"
+expect POST "$(OC "$R2")" "$NO" 200 "271a449a opened: not supported, so it stops being verified"
 [ "$(q "SELECT source_verified || '|' || citation_resolved || '|' || evidence_form FROM evidence WHERE id = '$R2'")" = "false|true|legacy" ] && ok "  ...no reading is recorded" || bad "  ...row"
 expect POST "$(OC "$R1")" '{"source_verified":true}' 409 "a row under a finding: its opening refused" "no source on record"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason short)" 422 "a withdrawal with no reason: refused" "at least 12"
@@ -393,7 +394,7 @@ reharden
 [ "$(q "SELECT convalidated FROM pg_constraint WHERE conname = 'evidence_about_stated'")" = "t" ] && ok "evidence_about_stated validated" || bad "about not validated"
 [ "$(q "SELECT convalidated FROM pg_constraint WHERE conname = 'evidence_verified_opened'")" = "t" ] && ok "evidence_verified_opened added, valid" || bad "verified CHECK"
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 46 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 47 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
 PLAIN2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN2" | grep -qE "^106 CHECKs in the database: 106 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
 reharden

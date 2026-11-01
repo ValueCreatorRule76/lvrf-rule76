@@ -70,7 +70,9 @@ function What({ s }: { s: Step }) {
       : d.attester_not_customer_side ? <span className="block text-warning">not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule</span> : null}</span>;
     // C3b: a steward's finding that this figure has no source on record.
     case 'finding': return <span className="text-warning" data-testid="lineage-finding">{str(d.finding_text)} <span className="block text-ink-45">Why: {str(d.reason)}</span></span>;
-    case 'open_citation': return <>{d.source_verified ? 'source verified' : 'opened; stays unverified'}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
+    case 'open_citation': return <>{d.source_verified ? 'source verified' : 'opened; stays unverified'}{d.reason ? <span className="block text-ink-45">{str(d.reason)}</span> : null}{note ? <span className="block text-ink-45">{note}</span> : null}</>;
+    case 'supersedes': return <span data-testid="lineage-supersedes">Supersedes the row about {str(d.about)}{d.reason ? ` — ${str(d.reason)}` : ''}</span>;
+    case 'superseded_by': return <span data-testid="lineage-superseded-by">Superseded by the row about {str(d.about)}{d.reason ? ` — ${str(d.reason)}` : ''}</span>;
     case 'figure_check': return <>{str(d.result)}: {str(d.detail)}</>;
     case 'fact': return <>{str(d.kind).replace(/_/g, ' ')}: {d.value_numeric !== null && d.value_numeric !== undefined ? formatQuantity(d.value_numeric as number | string, (d.unit as string | null) ?? null) : str(d.value_text)} (as of {day(str(d.as_of))})</>;
     case 'entity': return <>{str(d.legal_name)} · {str(d.identifier_type)} {str(d.identifier)}</>;

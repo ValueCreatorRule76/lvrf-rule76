@@ -35,6 +35,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/research-results/:id/accept': 'steward',
   'POST /api/research-results/:id/reject': 'steward',
   'POST /api/industries/:industryId/exclusions': 'steward',
+  'POST /api/industries': 'steward',
   'POST /api/industry-measures/:id/retire': 'steward',
   'POST /api/industry-measures/:id/levers': 'steward',
   'POST /api/value-levers/:id/offerings': 'steward',
@@ -56,6 +57,8 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/evidence/about-batch': 'steward',
   'POST /api/evidence/:id/withdraw-verification': 'steward',
   'POST /api/evidence/:id/supersede': 'steward',
+  'POST /api/evidence/supersession-batch': 'steward',
+  'POST /api/evidence/supersession-batch/dry-run': 'steward',
   // O2: hypotheses and executive summaries are the account team's acts.
   'POST /api/institutions/:institutionId/hypotheses': 'authorized',
   'POST /api/value-hypotheses/:id/supersede': 'authorized',
@@ -100,6 +103,7 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
 const ACT_NAME: Record<string, string> = {
   'POST /api/research-results/:id/accept': 'Accepting a pack entry',
   'POST /api/research-results/:id/reject': 'Rejecting a research result',
+  'POST /api/industries': 'Adding an industry',
   'POST /api/industries/:industryId/exclusions': 'Excluding a measure from a pack',
   'POST /api/engagements/:id/retire': 'Retiring an engagement',
   'POST /api/industry-measures/:id/retire': 'Retiring a pack entry',
@@ -118,6 +122,8 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/evidence/about-batch': 'Stating what evidence from before this field is about',
   'POST /api/evidence/:id/withdraw-verification': 'Withdrawing a verification',
   'POST /api/evidence/:id/supersede': 'Superseding evidence',
+  'POST /api/evidence/supersession-batch': 'Superseding evidence',
+  'POST /api/evidence/supersession-batch/dry-run': 'Superseding evidence',
   'POST /api/system-exercise/marks': 'Marking items as a system exercise',
   'POST /api/value-outcomes/:outcomeId/figure-findings': 'Recording that a figure has no source on record',
   'POST /api/value-runs/:runId/errata': 'Recording an erratum',

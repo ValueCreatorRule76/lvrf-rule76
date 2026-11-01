@@ -318,8 +318,11 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
   const act = mode === 'mark' ? 'Marking a reference example' : mode === 'correct' ? 'Correcting a reference-example marker' : 'Unmarking a reference example';
   const reason = stewardReason(act, actor);
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState<{ kind: ReferenceMarker['kind'] | ''; source_citation: string; note: string; why: string }>({ kind: current?.kind ?? '', source_citation: current?.source_citation ?? '', note: current?.note ?? '', why: '' });
+  const [v, setV] = useState<{ kind: ReferenceMarker['kind'] | ''; source_citation: string; note: string; why: string }>({ kind: mode === 'correct' ? '' : (current?.kind ?? ''), source_citation: current?.source_citation ?? '', note: current?.note ?? '', why: '' });
   const label = mode === 'mark' ? 'Mark as a reference example…' : mode === 'correct' ? 'Correct the marker…' : 'Unmark…';
+  // L50: a correction must change something; the kind starts unchosen, so it is chosen, not carried over.
+  const unchanged = mode === 'correct' && current !== undefined && current !== null && v.kind === current.kind
+    && v.source_citation.trim() === current.source_citation.trim() && v.note.trim() === current.note.trim();
   if (!open) return <div className="mt-1.5"><Opener label={label} reason={reason} onOpen={() => setOpen(true)} /></div>;
   const path = mode === 'mark' ? `/api/institutions/${pov.institution.id}/reference-example`
     : mode === 'correct' ? `/api/reference-examples/${current!.id}/supersede` : `/api/reference-examples/${current!.id}/retire`;
@@ -343,9 +346,10 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
               {mode === 'correct' && <label className="block sm:col-span-2"><span className={LABEL}>Why it is corrected (required)</span><textarea rows={2} className={INPUT} value={v.why} onChange={(e) => setV({ ...v, why: e.target.value })} /></label>}
             </div>}
         canSubmit={mode === 'unmark' ? v.why.trim().length >= 12
-          : v.kind !== '' && v.source_citation.trim().length >= 12 && v.note.trim().length >= 12 && (mode === 'mark' || v.why.trim().length >= 12)}
+          : v.kind !== '' && !unchanged && v.source_citation.trim().length >= 12 && v.note.trim().length >= 12 && (mode === 'mark' || v.why.trim().length >= 12)}
         unmet={mode === 'unmark' ? [`say why, in at least 12 characters (${12 - v.why.trim().length} more)`] : [
           ...(v.kind === '' ? ['choose the kind'] : []),
+          ...(unchanged ? ['change the kind, the citation or the note: this correction changes nothing'] : []),
           ...(v.source_citation.trim().length < 12 ? ['name the source citation, in at least 12 characters'] : []),
           ...(v.note.trim().length < 12 ? ['write the note, in at least 12 characters'] : []),
           ...(mode === 'correct' && v.why.trim().length < 12 ? ['say why it is corrected, in at least 12 characters'] : []),

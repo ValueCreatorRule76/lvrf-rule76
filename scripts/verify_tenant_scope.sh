@@ -76,7 +76,10 @@ INST_B="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TENANT_B', 'Ac
 CUST_B="$(q "INSERT INTO persons (institution_id, full_name, email) VALUES ('$INST_B', 'Customer B (verification)', 'customer.b.$TS@account-b.example') RETURNING id" | head -1)"
 ENG_B="$(q "INSERT INTO engagements (tenant_id, institution_id, name, owner_person_id) VALUES ('$TENANT_B', '$INST_B', 'Engagement B (verification)', '$CUST_B') RETURNING id" | head -1)"
 SLUG_B="tenant-b-only-$TS"
-IND_B="$(q "INSERT INTO industries (tenant_id, name, slug) VALUES ('$TENANT_B', 'Tenant B industry', '$SLUG_B') RETURNING id" | head -1)"
+# B1: an industry is the steward's act, with its act, as on prod.
+q "UPDATE tenants SET steward_person_id = '$STAFF_B' WHERE id = '$TENANT_B'" > /dev/null
+IND_B="$(q "SELECT gen_random_uuid()" | head -1)"
+printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nINSERT INTO industries (id, tenant_id, name, slug) VALUES ('%s', '%s', 'Tenant B industry', '%s');\nINSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, actor_person_id, route) VALUES ('%s', 'add_industry', 'industries', '%s', '%s', 'POST /api/industries');\nCOMMIT;\n" "$STAFF_B" "$IND_B" "$TENANT_B" "$SLUG_B" "$TENANT_B" "$IND_B" "$STAFF_B" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" > /dev/null
 # A live pack measure of tenant B's — a fixture, labelled as one in every
 # text column, on the throwaway clone only.
 MEASURE_OTHER="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation)

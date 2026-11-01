@@ -135,6 +135,7 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   check(psql(`SELECT count(*) FROM value_runs r JOIN engagements e ON e.id = r.engagement_id WHERE e.institution_id = '${INST}'`) === '0', '  ...and no run exists yet');
   await setField(evScope, 'Provenance', 'Walk Fictional CR disclosures FY25, page 21 (fixture, not a source)');
   await setField(evScope, 'Kind', 'public_filing');
+  await setField(evScope, 'What it is about', 'account');
   await setField(evScope, 'Summary', 'TRIR FY25 0 (fixture).');
   await setField(evScope, 'Supports', 'baseline');
   await setField(evScope, 'What it rests on', 'quote');

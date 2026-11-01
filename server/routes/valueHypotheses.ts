@@ -454,8 +454,8 @@ export function referenceExampleRouter(pool: Pool): Router {
   const router = Router();
 
   async function lockMarker(client: PoolClient, req: Request, id: string) {
-    const { rows: [m] } = await client.query<{ id: string; tenant_id: string; institution_id: string; deleted_at: string | null; superseded_by_id: string | null }>(
-      'SELECT id, tenant_id, institution_id, deleted_at, superseded_by_id FROM reference_example_markers WHERE id = $1 FOR UPDATE', [id],
+    const { rows: [m] } = await client.query<{ id: string; tenant_id: string; institution_id: string; kind: string; source_citation: string; note: string; deleted_at: string | null; superseded_by_id: string | null }>(
+      'SELECT id, tenant_id, institution_id, kind, source_citation, note, deleted_at, superseded_by_id FROM reference_example_markers WHERE id = $1 FOR UPDATE', [id],
     );
     if (!m || isOtherTenant(req, m.tenant_id, { table: 'reference_example_markers', id })) return null;
     return m;
@@ -489,6 +489,10 @@ export function referenceExampleRouter(pool: Pool): Router {
       const issues: string[] = [];
       const reason = reasonOf(req.body, 'supersession_reason', 'the marker is corrected', issues);
       if (issues.length > 0) throw new ValidationError(issues);
+      // L50: every correction is a permanent row and an act, so one that changes nothing is refused.
+      if (f.kind === m.kind && f.sourceCitation === m.source_citation.trim() && f.note === m.note.trim()) {
+        throw new ConflictRefusal('This correction changes nothing: the kind, the citation and the note are what the marker already says.');
+      }
       const { rows: [n] } = await client.query<{ id: string }>(
         `INSERT INTO reference_example_markers (tenant_id, institution_id, kind, source_citation, note, marked_by_person_id)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,

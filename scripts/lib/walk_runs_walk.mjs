@@ -120,6 +120,13 @@ if (MODE === 'pov-marker' || MODE === 'break-marker') {
     check(await ev(`(${ref}).textContent.includes('Earlier: published case study')`), '  ...and lists the earlier marker: "Earlier: published case study"');
     await click(ref, 'Correct the marker…');
     check(await waitFor(`[...(${ref}).querySelectorAll('[data-testid=marker-correct] option')].some(o=>o.value==='outside_in_test' && o.textContent==='Outside-in test')`), 'the marker form offers "Outside-in test"');
+    // L50: the kind starts unchosen; the same kind, citation and note leave nothing to submit.
+    const mf = `(${ref}).querySelector('[data-testid=marker-correct]')`;
+    check((await ev(`${mf}.querySelector('select').value`)) === '', 'L50: the correction form leaves the kind unchosen');
+    await ev(`(()=>{const el=${mf}.querySelector('select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(el,'outside_in_test');el.dispatchEvent(new Event('change',{bubbles:true}));const t=${mf}.querySelectorAll('textarea')[1];Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(t,'Verification: the reason for a correction.');t.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await sleep(400);
+    check((await ev(`${mf}.querySelector('[data-testid=form-unmet]')?.textContent ?? ''`)).includes('this correction changes nothing'), '  ...the same kind, citation and note: it says so', await ev(`${mf}.textContent.slice(-200)`));
+    check(await ev(`[...${mf}.querySelectorAll('button')].find(b=>b.textContent.includes('Correct the marker')).disabled`), '  ...and the submit stays disabled');
   } else {
     check(banner.startsWith('REFERENCE EXAMPLE, NOT AN ENGAGEMENT'), 'break-marker: with the old banner text, the kind does not reach the POV — the label map is what names it', banner);
   }

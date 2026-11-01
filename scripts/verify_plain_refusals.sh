@@ -222,7 +222,7 @@ expect POST "$OC" '{"source_verified":true}' 200 "the RECORDER opens the citatio
   && ok "  ...the row: still ai_sourced; opened by the steward, with the time; source verified; basis now published" || bad "  ...row: $(q "SELECT ai_sourced, citation_resolved, citation_resolved_by_person_id, source_verified FROM evidence WHERE id = '$EV_AI'")"
 [ "$(q "SELECT count(*) FROM audit_log WHERE id > $AUD0 AND table_name = 'evidence' AND record_id = '$EV_AI' AND actor_person_id = '$S'")" -ge 1 ] && ok "  ...audited, the steward as actor" || bad "  ...not audited"
 expect POST "$OC" '{"source_verified":true}' 409 "opening it again" "This citation was already opened by $S_NAME"
-expect POST "/api/evidence/$EV_AI2/open-citation" '{"source_verified":false}' 200 "another person (X) opens the second; the source does NOT support it" "" "$X"
+expect POST "/api/evidence/$EV_AI2/open-citation" '{"source_verified":false,"reason":"Verification: the source does not say this."}' 200 "another person (X) opens the second; the source does NOT support it" "" "$X"
 [ "$(q "SELECT ai_sourced || '|' || citation_resolved || '|' || citation_resolved_by_person_id || '|' || source_verified FROM evidence WHERE id = '$EV_AI2'")" = "true|true|$X|false" ] \
   && ok "  ...opened by X, and it stays unverified" || bad "  ...EV_AI2 row"
 sqlrefused "un-opening a citation" "UPDATE evidence SET citation_resolved = false, citation_resolved_by_person_id = NULL, citation_resolved_at = NULL, source_verified = false WHERE id = '$EV_AI'" "only a person opening the source verifies it"

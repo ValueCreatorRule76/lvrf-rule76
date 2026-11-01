@@ -28,6 +28,7 @@ import { analystOfRecordRouter, accountPersonLinkRouter } from './routes/account
 import { evidenceCitationRouter } from './routes/evidenceCitation.js';
 import { accountEvidenceRouter, evidenceActsRouter } from './routes/accountEvidence.js';
 import { industryExclusionsRouter } from './routes/industryExclusions.js';
+import { industryAddRouter } from './routes/industryAdd.js';
 import { institutionsIndexRouter } from './routes/institutionsIndex.js';
 import { offeringAttachmentRouter } from './routes/offeringAttachment.js';
 import { institutionClassifyRouter } from './routes/institutionClassify.js';
@@ -144,6 +145,7 @@ app.use('/api/value-runs', recordDocumentsWriteRouter(pool));
 app.use('/api/value-runs', compareRunsRouter(pool));
 app.use('/api/value-outcomes', recordDocumentsReadRouter(pool));
 app.use('/api/value-outcomes', gapRegisterRouter(pool));
+app.use('/api/industries', industryAddRouter(pool));
 app.use('/api/industries', industryResearchRouter(pool));
 app.use('/api/industries', industryPackRouter(pool));
 app.use('/api/industries', industryExclusionsRouter(pool));

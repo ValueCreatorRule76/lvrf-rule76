@@ -34,6 +34,7 @@ interface Row extends EvidenceFormShown {
   attester_document: string | null; opened_by: string | null; opened_on: string | null; attested_by: string | null;
   captured_by: string; captured_on: string; about: string | null; basis: string | null; basis_reason: string | null;
   under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean }[];
+  superseded_about: string | null;
 }
 function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice }: {
   institutionId: string; path: string; submitLabel: string; provenance: ReactNode; extraFields?: ReactNode;
@@ -101,6 +102,7 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [supports, setSupports] = useState<'' | 'true' | 'false'>('');
   const [document, setDocument] = useState('');
+  const [why, setWhy] = useState('');
   const attestation = row.kind === 'attestation' || row.attested_by !== null;
   const needsReading = row.evidence_form === 'legacy' || row.evidence_form === 'statement';
   const form = useEvidenceForm({ allowed: ['quote', 'locator'], kind: row.kind, sourceReference: row.source_reference ?? '' });
@@ -108,7 +110,8 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
   const yes = supports === 'true';
   const unmet = [...(supports === '' ? ['say whether the source supports it'] : []),
     ...(yes && attestation && document === '' ? ["name the document from the attester"] : []),
-    ...(yes && needsReading ? form.unmet : [])];
+    ...(yes && needsReading ? form.unmet : []),
+    ...(supports === 'false' && why.trim().length < 12 ? ['say why the source does not support it, in at least 12 characters'] : [])];
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="open-source">
       <GovernedForm<{ evidence_id: string }>
@@ -127,9 +130,11 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
               <option value="email">An email</option><option value="signed_statement">A signed statement</option><option value="letter">A letter</option>
             </select></label>}
           {yes && needsReading && form.fields}
+          {supports === 'false' && <label className="block"><span className={L}>Why it does not support this evidence</span>
+            <textarea rows={2} className={I} value={why} onChange={(ev) => setWhy(ev.target.value)} data-testid="open-source-why" /></label>}
         </div>}
         canSubmit={unmet.length === 0} unmet={unmet}
-        buildBody={() => ({ source_verified: yes, ...(yes && attestation ? { attester_document: document } : {}), ...(yes && needsReading ? form.body() : {}) })}
+        buildBody={() => ({ source_verified: yes, ...(yes && attestation ? { attester_document: document } : {}), ...(yes && needsReading ? form.body() : {}), ...(yes ? {} : { reason: why.trim() }) })}
         submitLabel="Record the opening" onSuccess={onDone} renderSuccess={() => <>Recorded.</>} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
     </div>
@@ -212,7 +217,7 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
                 )}
                 {e.source_verified && !e.citation_resolved && <VerifiedUnopenedLine className="mt-0.5" />}
                 {e.basis_reason && <span className="mt-0.5 block text-[11.5px] text-warning" data-testid="evidence-basis-reason">{e.basis}: {e.basis_reason}</span>}
-                {e.superseded_by_id && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-superseded">Superseded by a later row.</p>}
+                {e.superseded_by_id && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-superseded">Superseded by a later row{e.superseded_about ? `, about ${e.superseded_about}` : ''}.</p>}
                 {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   <LineageLink table="evidence" id={e.id} />

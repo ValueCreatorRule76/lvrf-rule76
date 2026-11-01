@@ -7,7 +7,7 @@ import { refuseUnknownFields } from '../lib/strictBody.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 import { EvidenceFormError, parseEvidenceForm, type EvidenceFormFields } from '../lib/evidenceFormBody.js';
-import { checkFigure, recordFigureCheck } from '../lib/figureCheck.js';
+import { checkFiguresOfLinks } from '../lib/figureCheck.js';
 
 /**
  * Q4k (Q4k-D1, Brad, 12 Oct 2026), widened by L41 (LVRF_PLAN §13; Brad's D1–D8 and four conditions, 1 Nov
@@ -39,10 +39,6 @@ import { checkFigure, recordFigureCheck } from '../lib/figureCheck.js';
 class ValidationError extends Error {}
 
 const ATTESTER_DOCUMENTS = ['email', 'signed_statement', 'letter'];
-const FIGURE_OF: Record<string, 'baseline_value' | 'actual_value' | 'claimed_currency_impact'> = {
-  baseline: 'baseline_value', actual: 'actual_value', impact_basis: 'claimed_currency_impact',
-};
-
 export function evidenceCitationRouter(pool: Pool): Router {
   const router = Router();
 
@@ -81,7 +77,7 @@ export function evidenceCitationRouter(pool: Pool): Router {
         return;
       }
       tenantId = e.tenant_id; institutionId = e.institution_id;
-      if (await refuseUnknownFields(pool, req, res, ['source_verified', 'evidence_form', 'quote_text', 'locator', 'how_read', 'attester_document'],
+      if (await refuseUnknownFields(pool, req, res, ['source_verified', 'evidence_form', 'quote_text', 'locator', 'how_read', 'attester_document', 'reason'],
         { endpoint, subjectTable: 'evidence', subjectId: id, tenantId, institutionId })) return;
       if (typeof body.source_verified !== 'boolean') {
         throw new ValidationError('body.source_verified must say whether the opened source supports what the evidence states (true or false)');
@@ -131,6 +127,12 @@ export function evidenceCitationRouter(pool: Pool): Router {
       } else if (['evidence_form', 'quote_text', 'locator', 'how_read', 'attester_document'].some((k) => body[k] !== undefined)) {
         throw new ValidationError('A source that does not support the evidence records no reading: leave the quote, locator and document empty.');
       }
+      // L52: a Yes records a reading; a No has only its reason (the database holds the same rule).
+      const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+      if (body.source_verified && body.reason !== undefined) throw new ValidationError('body.reason is for an opening that does not support the evidence; a Yes records its reading.');
+      if (!body.source_verified && reason.length < 12) {
+        throw new EvidenceFormError('Say why the source does not support this evidence, in at least 12 characters.');
+      }
       const { rows: [u] } = await client.query<{ source_verified: boolean; basis: string | null }>(
         `UPDATE evidence SET citation_resolved = true, citation_resolved_by_person_id = $2, citation_resolved_at = now(),
                              source_verified = $3, attester_document = $4,
@@ -142,22 +144,8 @@ export function evidenceCitationRouter(pool: Pool): Router {
           reading?.locator ? JSON.stringify(reading.locator) : null, reading?.howRead ?? null],
       );
       // P1: a reading recorded here is checked against each figure its current links support, as at recording.
-      if (reading) {
-        const { rows: links } = await client.query<{ value_outcome_id: string; supports: string; baseline_value: string | null; actual_value: string | null; claimed_currency_impact: string | null }>(
-          `SELECT l.value_outcome_id, l.supports, vo.baseline_value, vo.actual_value, vo.claimed_currency_impact
-             FROM value_outcome_evidence l JOIN value_outcomes vo ON vo.id = l.value_outcome_id
-            WHERE l.evidence_id = $1 AND l.withdrawn_at IS NULL`, [id]);
-        for (const l of links) {
-          const field = FIGURE_OF[l.supports];
-          const figure = field ? l[field] : null;
-          if (!field || figure === null) continue;
-          await recordFigureCheck(client, {
-            institutionId: e.institution_id, evidenceId: id, subjectTable: 'value_outcomes', subjectId: l.value_outcome_id,
-            subjectField: field, valueChecked: figure, actorPersonId: actor,
-          }, checkFigure({ numeric: Number(figure), text: null }, { form: reading.evidenceForm, quoteText: reading.quoteText, locator: reading.locator }));
-        }
-      }
-      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id });
+      if (reading) await checkFiguresOfLinks(client, id, e.institution_id, actor, reading);
+      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id, ...(reason ? { reason } : {}) });
       res.status(200).json({ evidence_id: id, citation_resolved: true, ai_sourced: e.ai_sourced, source_verified: u.source_verified, basis: u.basis });
     } catch (err) {
       if (err instanceof ValidationError) {

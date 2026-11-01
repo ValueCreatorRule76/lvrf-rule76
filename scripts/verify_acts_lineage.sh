@@ -128,14 +128,14 @@ PRE_ACT_IDS="$(q "SELECT coalesce(string_agg(quote_literal(id::text), ',' ORDER 
 HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0041_acts_and_lineage)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "183" ] && ok "183 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "185" ] && ok "185 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
   && ok "all $RR0 existing research results keep import_id NULL: none blank-filled, none invented" || bad "import_id after 0041"
 [ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "$ACTS_PRE" ] && ok "governance_acts and research_imports as before the migration ($ACTS_PRE, the copy's own): none backfilled (P2-D2)" || bad "acts/imports changed by the migration: $ACTS_PRE → $(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")"
-[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "21" ] \
-  && ok "21 _act_present triggers (P2's 18, C3's customer_role_grants and system_exercise_marks, C3b's figure_findings), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
+[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "22" ] \
+  && ok "22 _act_present triggers (P2's 18, C3's customer_role_grants and system_exercise_marks, C3b's figure_findings, B1's industries), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
 
 step "4. The coverage guard (Brad's condition on D3): every mutating route classed; every act route records its act"
 node scripts/list_api_routes.mjs 2>/dev/null | grep -E '^(POST|PUT|PATCH|DELETE) ' | sort -u > "$W/routes.txt"
@@ -330,8 +330,8 @@ act_is "supersede (entity)" "supersede:institution_entities:institution_entities
 SCRIPT_ROUTES="$(q "SELECT string_agg(DISTINCT route, E'\n' ORDER BY route) FROM governance_acts WHERE id::text NOT IN ($PRE_ACT_IDS)")"
 ACT_ROUTES="$(npx tsx -e "import('$(pwd)/server/lib/governanceAct.ts').then(m => console.log(Object.entries(m.ROUTE_ACTS).filter(([, a]) => a !== 'create-only').map(([r]) => r).sort().join('\n')))" 2>/dev/null)"
 NOT_HERE="$(comm -23 <(printf '%s\n' "$ACT_ROUTES") <(printf '%s\n' "$SCRIPT_ROUTES" | sort) | paste -sd'|' -)"
-[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/institutions/:institutionId/customer-roles|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings" ] \
-  && ok "29 distinct act routes exercised by this script; the other 9 act routes in ROUTE_ACTS by their own scripts (withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
+[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/evidence/supersession-batch|POST /api/industries|POST /api/institutions/:institutionId/customer-roles|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings" ] \
+  && ok "29 distinct act routes exercised by this script; the other 11 act routes in ROUTE_ACTS by their own scripts (withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
 
 step "8. Lineage — a fixture chain made after P2"
 LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvrf_lineage('$1', '$2'${3:+, '$3'})"; }
@@ -437,7 +437,7 @@ restore "$ACCT"
 # B12 (P2 review) — the open-citation route's own act removed: the opening is refused at COMMIT.
 python3 - "$CITE" <<'PY'
 import sys; p = sys.argv[1]; s = open(p).read()
-a = "      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id });\n"
+a = "      await recordAct(client, req, 'POST /api/evidence/:id/open-citation', { act: 'open_citation', tenantId: e.tenant_id, subjectTable: 'evidence', subjectId: id, ...(reason ? { reason } : {}) });\n"
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, ''))
 PY
 stop_server; start_server
@@ -458,8 +458,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b10.sql" > /dev/null
 [ "$(LN institution_facts "$F_HC")" = "prompt:record > import:act > result:record > accept:act > evidence:record > open_citation:act > figure_check:record > fact:record > seal:seal" ] \
   && ok "B10: caught — without the supersession steps the chain loses \"superseded_by\"; the script names the missing step" || bad "B10: not caught: $(LN institution_facts "$F_HC")"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "183" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
-  && ok "  ...hardening.sql re-applied: the step back, 183 triggers" || bad "  ...B10 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "185" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
+  && ok "  ...hardening.sql re-applied: the step back, 185 triggers" || bad "  ...B10 restore"
 # B13 (P2 review) — the errata note on a seal step removed (on the clone).
 python3 - "$W/b13.sql" <<'PY'
 import re, sys
@@ -472,8 +472,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b13.sql" > /dev/null
 [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "0" ] \
   && ok "B13: caught — without the errata note the seal step reads as if nothing were recorded after it" || bad "B13: not caught"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "183" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
-  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 183 triggers" || bad "  ...B13 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "185" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
+  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 185 triggers" || bad "  ...B13 restore"
 # B11 — a paste over 512 KB; and a parser refusal recorded by hash and size, never text.
 BIG="$(node -e "process.stdout.write(JSON.stringify({prompt_id:'$PF', pad:'x'.repeat(530000)}))")"
 REF0="$(q "SELECT count(*) FROM refusals")"

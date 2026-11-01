@@ -52,6 +52,7 @@ type WalkEvidence = WalkState['engagements'][number]['outcomes'][number]['eviden
 function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }) {
   const [open, setOpen] = useState(false);
   const [supports, setSupports] = useState<'' | 'true' | 'false'>('');
+  const [why, setWhy] = useState('');
   if (!e.ai_sourced) return null;
   if (e.citation_resolved) {
     return (
@@ -76,16 +77,21 @@ function OpenCitation({ e, onOpened }: { e: WalkEvidence; onOpened: () => void }
       <GovernedForm<{ evidence_id: string }>
         path={`/api/evidence/${e.id}/open-citation`} provenanceLabel="What this records"
         provenance={<p className="m-0 text-[12.5px] text-ink">That you opened the cited source of this AI-sourced evidence, with your name and the time. It is <strong>final</strong>, and the evidence stays marked AI-sourced. A run already produced keeps the state it sealed.</p>}
-        fields={<label className="block">
+        fields={<div className="flex flex-col gap-3"><label className="block">
           <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Does the source say what this evidence states?</span>
           <select className={INPUT_CLASS} value={supports} onChange={(ev) => setSupports(ev.target.value as '' | 'true' | 'false')}>
             <option value="" disabled>— choose —</option>
             <option value="true">Yes — the source is verified</option>
             <option value="false">No — opened, and it stays unverified</option>
           </select>
-        </label>}
-        canSubmit={supports !== ''}
-        buildBody={() => ({ source_verified: supports === 'true' })}
+        </label>
+        {supports === 'false' && <label className="block">
+          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Why it does not support this evidence</span>
+          <textarea rows={2} className={INPUT_CLASS} value={why} onChange={(ev) => setWhy(ev.target.value)} data-testid="open-citation-why" />
+        </label>}</div>}
+        canSubmit={supports === 'true' || (supports === 'false' && why.trim().length >= 12)}
+        unmet={supports === 'false' && why.trim().length < 12 ? ['say why the source does not support it, in at least 12 characters'] : []}
+        buildBody={() => ({ source_verified: supports === 'true', ...(supports === 'false' ? { reason: why.trim() } : {}) })}
         submitLabel="Record the opened citation" onSuccess={onOpened} renderSuccess={() => <>Recorded.</>} />
     </div>
   );

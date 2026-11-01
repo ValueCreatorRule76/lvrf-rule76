@@ -139,3 +139,28 @@ export async function recordFigureCheck(
   );
   return created.id;
 }
+
+const FIGURE_OF: Record<string, 'baseline_value' | 'actual_value' | 'claimed_currency_impact'> = {
+  baseline: 'baseline_value', actual: 'actual_value', impact_basis: 'claimed_currency_impact',
+};
+
+/** P1: a reading is checked against each figure the evidence's current links support (an opening, or a link moved to a successor). */
+export async function checkFiguresOfLinks(
+  client: PoolClient, evidenceId: string, institutionId: string, actorPersonId: string,
+  reading: { evidenceForm: string; quoteText: string | null; locator: unknown },
+): Promise<void> {
+  const { rows: links } = await client.query<{ value_outcome_id: string; supports: string; baseline_value: string | null; actual_value: string | null; claimed_currency_impact: string | null }>(
+    `SELECT l.value_outcome_id, l.supports, vo.baseline_value, vo.actual_value, vo.claimed_currency_impact
+       FROM value_outcome_evidence l JOIN value_outcomes vo ON vo.id = l.value_outcome_id
+      WHERE l.evidence_id = $1 AND l.withdrawn_at IS NULL`, [evidenceId]);
+  const ev = { form: reading.evidenceForm, quoteText: reading.quoteText, locator: reading.locator } as Evidence;
+  for (const l of links) {
+    const field = FIGURE_OF[l.supports];
+    const figure = field ? l[field] : null;
+    if (!field || figure === null) continue;
+    await recordFigureCheck(client, {
+      institutionId, evidenceId, subjectTable: 'value_outcomes', subjectId: l.value_outcome_id,
+      subjectField: field, valueChecked: figure, actorPersonId,
+    }, checkFigure({ numeric: Number(figure), text: null }, ev));
+  }
+}

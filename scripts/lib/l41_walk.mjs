@@ -44,6 +44,14 @@ const shot = async (name, width) => {
   await viewport(width);
   console.log(`  shot  ${SHOTS}/${name}.png`);
 };
+/** One element, whole, however far down the page it sits. */
+const shotOf = async (name, selector, width) => {
+  await viewport(width); await sleep(400);
+  const box = await ev(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:0,y:r.top+scrollY,width:innerWidth,height:r.height}})()`);
+  const r = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { ...box, scale: 1 } });
+  writeFileSync(`${SHOTS}/${name}.png`, Buffer.from(r.result.data, 'base64'));
+  console.log(`  shot  ${SHOTS}/${name}.png`);
+};
 const printTo = async (name) => {
   const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
   writeFileSync(`${SHOTS}/${name}`, Buffer.from(pdf.result.data, 'base64'));
@@ -71,7 +79,8 @@ if (MODE === 'source') {
   await sleep(500);
   const f = `${card}.querySelector('[data-testid=record-source]')`;
   check(!(await ev(`!!${f}.querySelector('[data-testid=source-verified]')`)), '  ...it does not ask whether the source is verified');
-  check((await ev(`${f}.querySelector('[data-testid=about-choice]').value`)) === 'account', '  ...what it is about defaults to this account, shown');
+  check((await ev(`${f}.querySelector('[data-testid=about-choice]').value`)) === '', '  ...what it is about starts unchosen (L52)');
+  await setField(f, 'What it is about', 'account');
   await setField(f, 'Kind', 'artifact');
   await setField(f, 'What it states', 'Org chart naming the walk owner as metric owner (fixture)');
   await setField(f, 'Where it came from', 'Fixture org chart, Q3 (not a source)');
@@ -119,6 +128,10 @@ if (MODE === 'aboutbatch') {
   await setField(f, 'Why they are stated', 'Verification: the walk leaves this unsent.'); await sleep(300);
   check(await ev(`[...${f}.querySelectorAll('button')].find(e=>e.textContent.includes('State the')).disabled`), '  ...the submit waits while a row is open');
   check((await ev(`${f}.textContent`)).includes(`state the ${E.ABOUT_OPEN} rows left open`), '  ...saying so in words');
+  // Brad, 1 Nov 2026: what the control offered on each row of the batch, read from the page.
+  for (const prefix of ['cee6fea9', 'f9775317', '423be7c6', '092c46b6']) {
+    ok(`OPTIONS ${prefix}: ${await ev(`[...document.querySelectorAll('[data-testid=about-batch-row]')].find(r=>r.dataset.evidence.startsWith('${prefix}')).querySelector('select').innerText.replace(/\\n/g,' | ')`)}`);
+  }
   await shot('l41_about_batch_1280', 1280);
   await shot('l41_about_batch_375', 375);
 }
@@ -168,6 +181,119 @@ if (MODE === 'fourlinked') {
   await openAll();
   check(await lineCount('[data-testid=w6-evidence]') === 2, '  ...each carries the line', String(await lineCount('[data-testid=w6-evidence]')));
   await shot('l41_real_w6_curia_linked_1280', 1280);
+}
+
+if (MODE === 'aboutcontrol' || MODE === 'aboutprefilled') {
+  // L52, 2: the same on an account's page and the tenant's own; nothing pre-filled.
+  const opts = (f) => ev(`[...${f}.querySelectorAll('[data-testid=about-choice] option')].filter(o=>o.value!=='').map(o=>o.textContent).join(' | ')`);
+  const openForm = async (inst) => {
+    await open(`/accounts/${inst}`, `!!document.querySelector('[data-testid=account-evidence],[data-testid=account-detail]')`);
+    await ev(`document.querySelector('[data-testid=account-detail]') && (document.querySelector('[data-testid=account-detail]').open = true)`); await sleep(800);
+    const card = `document.querySelector('[data-testid=account-evidence]')`;
+    await waitFor(`!!${card}`);
+    await ev(`${card}.querySelector('[data-testid=record-source-open]').click()`); await sleep(500);
+    await waitFor(`${card}.querySelectorAll('[data-testid=about-choice] option').length > 2`);
+    return `${card}.querySelector('[data-testid=record-source]')`;
+  };
+  const f = await openForm(E.CURIA);
+  const value = await ev(`${f}.querySelector('[data-testid=about-choice]').value`);
+  if (MODE === 'aboutprefilled') { check(value === 'account', 'B2: the control pre-filled → caught: it reads "this account" with nothing chosen', value); ws.close(); process.exit(0); }
+  check(value === '', "Curia's form: what it is about starts unchosen", value);
+  const curia = await opts(f);
+  check(curia === 'This account | Skillsoft (the tenant) | Scotts Miracle-Gro | Another company, named', '  ...it offers this account, the tenant, the other account and a typed company', curia);
+  check((await ev(`${f}.querySelector('[data-testid=form-unmet]')?.textContent ?? ''`)).includes('say what this evidence is about'), '  ...and says so until it is chosen');
+  await shot('l52_about_control_1280', 1280);
+  const g = await openForm(E.SELF_INST);
+  const own = await opts(g);
+  check(own === 'This account | Curia | Scotts Miracle-Gro | Another company, named', "the tenant's own form offers this account, each account and a typed company", own);
+}
+
+if (MODE === 'supersession') {
+  check(await open('/runs', `!!document.querySelector('[data-testid=supersession-open]')`), 'the Runs page offers "Correct evidence…"');
+  await ev(`document.querySelector('[data-testid=supersession-open]').click()`);
+  check(await waitFor(`document.querySelectorAll('[data-testid=supersession-row]').length > 0`), '  ...every current row is listed');
+  const rowOf = (id) => `document.querySelector('[data-testid=supersession-row][data-evidence="${id}"]')`;
+  const dry = `document.querySelector('[data-testid=supersession-dry-run]')`;
+  check(await ev(`${dry}.disabled`), '  ..."Show what this will do" waits for a row');
+  for (const [id, about, summary] of [[E.RC, 'Skillsoft (the tenant)', ''], [E.RF, 'Skillsoft (the tenant)', ''], [E.RT, 'account', E.T1], [E.R2, 'account', E.T2], [E.R9, 'account', E.T9]]) {
+    await ev(`${rowOf(id)}.querySelector('[data-testid=supersession-tick]').click()`); await sleep(300);
+    const sel = `${rowOf(id)}.querySelector('[data-testid=supersession-about]')`;
+    check((await ev(`${sel}.value`)) === '', '  ...a ticked row starts unchosen');
+    const value = about === 'account' ? about : await ev(`[...${sel}.options].find(o=>o.textContent===${JSON.stringify(about)}).value`);
+    await setField(rowOf(id), 'What it is about', value); await sleep(300);
+    if (summary) await setField(rowOf(id), 'New text', summary);
+    await setField(rowOf(id), 'What it rests on', 'quote'); await sleep(300);
+    await setField(rowOf(id), 'Quote', 'Named in the fixture document as stated here.');
+    await setField(rowOf(id), 'How it was read', 'Read from the fixture document, page one (fixture).'); await sleep(300);
+  }
+  for (const id of [E.E1, E.E2]) {
+    const r = `document.querySelector('[data-testid=supersession-erratum][data-erratum="${id}"]')`;
+    await ev(`${r}.querySelector('[data-testid=supersession-erratum-tick]').click()`); await sleep(300);
+    await setField(r, 'What is right', 'It supports the impact basis only. A vendor claim about Scotts is never support for a baseline.');
+    await setField(r, 'Reason', 'The link was corrected on 25 Oct 2026, because a vendor claim is never baseline support.');
+    await setField(r, 'Why it is superseded', 'The earlier text misidentified the subject of the story.'); await sleep(300);
+  }
+  const before = posted('/api/evidence/supersession-batch/dry-run');
+  check(await ev(`(()=>{const b=${dry};if(b.disabled)return false;b.click();return true})()`), 'the dry run runs', await text('[data-testid=supersession-waiting]'));
+  check(await waitFor(`document.querySelectorAll('[data-testid=supersession-plan-row]').length === 5 && document.querySelectorAll('[data-testid=supersession-plan-erratum]').length === 2`), '  ...and lists the 5 rows and 2 errata', await text('[data-testid=supersession-failed]'));
+  check(posted('/api/evidence/supersession-batch/dry-run') - before === 1, '  ...in one request');
+  const planOf = (id) => `document.querySelector('[data-testid=supersession-plan-row][data-evidence="${id}"]')`;
+  const c = await ev(`${planOf(E.RC)}.textContent`);
+  check(c.includes('About Curia → about Skillsoft'), '  ...cee6fea9: its current and new statement', c.slice(0, 200));
+  check(c.includes('Text new: unchanged'), '  ...and text');
+  check(c.includes('the system-exercise mark carries to the new row'), '  ...what happens to its mark');
+  check(c.includes('Links: none current; 1 withdrawn stay on the old row'), '  ...its links', c);
+  check(c.includes('16 sealed runs'), '  ...its lineage, and the sealed runs that stay', c);
+  const t = await ev(`${planOf(E.RT)}.textContent`);
+  check(t.includes('Text new: ' + E.T1), '  ...423be7c6: its current and new text');
+  check(t.includes('About Scotts Miracle-Gro → about Scotts Miracle-Gro'), '  ...its about, kept');
+  check(t.includes('Source-verified now, opened. The new row starts unverified and unopened'), '  ...that its verification does not carry', t);
+  check(t.includes('It stays AI-sourced'), '  ...that its AI origin does');
+  check(t.includes('Mark: none.'), '  ...no mark');
+  check(t.includes('moves to the new row, with its support unchanged (the outcome stays frozen)'), '  ...its link carried', t);
+  const e1 = await ev(`document.querySelector('[data-testid=supersession-plan-erratum][data-erratum="${E.E1}"]').textContent`);
+  check(e1.includes('another company') && e1.includes('A vendor claim about Scotts is never support for a baseline.') && e1.includes('misidentified'), '  ...each erratum: current and new text, and why', e1.slice(0, 240));
+  const plan = `[data-testid=supersession-plan]`;
+  await shotOf('l52_dry_run_1280', plan, 1280);
+  await shotOf('l52_dry_run_375', plan, 375);
+  await viewport(1280);
+  const sec = `document.querySelector('[data-testid=supersession-batch]')`;
+  await setField(sec, 'Why they are superseded', 'Verification: the rows and errata as ruled.'); await sleep(300);
+  const n = posted('/api/evidence/supersession-batch') - posted('/api/evidence/supersession-batch/dry-run');
+  check(await submitIn(sec, 'Supersede 7 items'), 'the steward presses "Supersede 7 items"');
+  await sleep(500);
+  check((posted('/api/evidence/supersession-batch') - posted('/api/evidence/supersession-batch/dry-run')) === n, '  ...nothing is sent before the confirmation');
+  check((await text('[data-testid=confirm-text]')).includes('Supersede 7 items, as listed above.'), '  ...the confirmation states the count');
+  await confirmIn(sec);
+  check(await waitFor(`!document.querySelector('[data-testid=supersession-plan]')`), '  ...recorded');
+}
+
+if (MODE === 'addindustry') {
+  check(await open('/packs', `!!document.querySelector('[data-testid=add-industry-open]')`), 'the Packs page offers "Add an industry…"');
+  await ev(`document.querySelector('[data-testid=add-industry-open]').click()`); await sleep(400);
+  const f = `document.querySelector('[data-testid=add-industry]')`;
+  await setField(f, 'Name', 'Utilities');
+  await setField(f, 'Slug', 'utilities');
+  await setField(f, 'Why it is added', 'Verification: a pack is to be researched for it.'); await sleep(300);
+  await shot('b1_add_industry_1280', 1280);
+  check(await submitIn(f, 'Add the industry'), 'the steward adds it');
+  await sleep(500);
+  if (await ev(`!!${f}?.querySelector('[data-testid=form-confirm-yes]')`)) await confirmIn(f);
+  check(await waitFor(`[...document.querySelectorAll('a')].some(a=>a.getAttribute('href')==='/packs/utilities')`), '  ...it is listed, linking to its pack');
+}
+
+if (MODE === 'corrected') {
+  check(await open(`/accounts/${E.CURIA}`, `!!document.querySelector('[data-testid=account-detail]')`), "Curia's account");
+  await ev(`document.querySelector('[data-testid=account-detail]').open = true`); await sleep(800);
+  await waitFor(`!!document.querySelector('[data-evidence="${E.RC}"]')`);
+  const old = await ev(`document.querySelector('[data-evidence="${E.RC}"]').textContent`);
+  check(old.includes('Superseded by a later row, about Skillsoft'), '  ...the old row names what replaced it', old.slice(0, 240));
+  const neu = await ev(`document.querySelector('[data-evidence="${E.NC}"]').textContent`);
+  check(neu.includes('about Skillsoft') && neu.includes('SYSTEM EXERCISE') && neu.includes('Not source-verified'), '  ...the new row: about Skillsoft, its mark, unverified', neu.slice(0, 240));
+  await shot('l52_card_1280', 1280);
+  check(await open(`/lineage/evidence/${E.RC}`, `!!document.querySelector('[data-testid=lineage-superseded-by]')`), "the old row's lineage reads \"superseded by\"");
+  check(await open(`/lineage/evidence/${E.NC}`, `!!document.querySelector('[data-testid=lineage-supersedes]')`), "the new row's lineage reads \"supersedes\"");
+  await shot('l52_lineage_1280', 1280);
 }
 
 if (MODE === 'seal') {

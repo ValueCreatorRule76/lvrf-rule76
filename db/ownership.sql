@@ -178,7 +178,7 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'access_grants', 'account_person_links', 'assessments', 'audit_log', 'business_metrics',
     'capabilities', 'capability_industry_measures', 'customer_role_grants', 'engagements', 'evidence',
-    'executive_summaries', 'figure_checks', 'figure_findings', 'governance_acts', 'heartbeat_events', 'industry_measure_exclusions',
+    'executive_summaries', 'figure_checks', 'figure_findings', 'governance_acts', 'heartbeat_events', 'industries', 'industry_measure_exclusions',
     'industry_measures', 'institution_entities', 'institution_facts', 'institutions',
     'lever_offerings', 'offering_capabilities', 'person_credentials', 'persons',
     'record_documents', 'reference_example_markers', 'refusals', 'research_imports', 'research_prompts',

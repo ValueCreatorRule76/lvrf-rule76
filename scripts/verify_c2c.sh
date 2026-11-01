@@ -101,8 +101,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "183" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 183 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 185 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 link_of() { q "SELECT coalesce(string_agg(supports || ':' || CASE WHEN withdrawn_at IS NULL THEN 'current' ELSE 'withdrawn' END, ',' ORDER BY withdrawn_at NULLS LAST), '') FROM value_outcome_evidence WHERE value_outcome_id = '$1' AND evidence_id = '$2'"; }
 seals() { q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -116,7 +116,7 @@ dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "183" ] && ok "183 triggers (with C3 and C3b)" || bad "triggers: $(trig)"
+[ "$(trig)" = "185" ] && ok "185 triggers (with C3 and C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -223,7 +223,7 @@ SUPB() { J evidence_id "$EV_T" what_was_wrong "The tenant's own filing was seale
 expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: a second erratum, for C2c.' "$OWN_REASON")" 422 "a supersession whose reason is the superseded erratum's own reason" "The reason for superseding repeats the erratum's own text"
 expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: the same words, twice over.' '  verification: THE SAME words,   twice over ')" 422 "  ...or this erratum's own reason, in other case and spacing" "repeats the erratum's own text"
 # B13 — the route's check removed: the database refuses.
-edit "$CORR" "        if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {" "        if (false) {"
+edit "$CORR" "    if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {" "    if (false) {"
 stop_server; start_server
 expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: a second erratum, for C2c.' "$OWN_REASON")" 422 "B13: without the route's check → the database refuses" "the reason for superseding repeats the erratum's own text"
 restore "$CORR"; stop_server; start_server

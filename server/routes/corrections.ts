@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { recordAct } from '../lib/governanceAct.js';
+import { recordAct, type ActRecord } from '../lib/governanceAct.js';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
@@ -202,6 +202,76 @@ export function correctionsOutcomeRouter(pool: Pool): Router {
 const sameText = (a: string, b: unknown) => typeof b === 'string'
   && a.toLowerCase().replace(/\s+/g, ' ').replace(/^[ .]+|[ .]+$/g, '') === b.toLowerCase().replace(/\s+/g, ' ').replace(/^[ .]+|[ .]+$/g, '');
 
+
+/**
+ * One writer of a link-correction erratum: the route, and the supersession batch (L52). `act` is the caller's own
+ * recordAct. An erratum needs the evidence's current link, so the batch runs these before it moves any link.
+ */
+export async function writeLinkErratum(client: PoolClient, act: (a: ActRecord) => Promise<void>, o: {
+  tenantId: string; actor: string; runId: string; outcomeId: string; payload: unknown; evidenceId: string;
+  texts: { wrong: string; right: string; reason: string }; supersedes: unknown; supersessionReason: string; supersessionReasonGiven: boolean;
+}) {
+  const { texts } = o;
+  const { rows: [ev] } = await client.query<{ kind: string; summary: string; provenance: string; supports_now: string | null }>(
+    `SELECT e.kind::text, e.summary, e.provenance,
+            (SELECT supports FROM value_outcome_evidence WHERE value_outcome_id = $2 AND evidence_id = e.id AND withdrawn_at IS NULL) AS supports_now
+       FROM evidence e WHERE e.id = $1`,
+    [o.evidenceId, o.outcomeId],
+  );
+  if (!ev || ev.supports_now === null) throw new Refusal(422, "That evidence has no current link to this run's outcome.");
+  // C1 review (Brad, 25 Oct 2026): one erratum per run and correction. A later one supersedes
+  // the current one, naming it, with a reason (run_errata_one_per_correction, _superseded_once).
+  const { rows: [current] } = await client.query<{ id: string; recorded_on: string; recorded_by: string }>(
+    `SELECT e.id, to_char(e.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS recorded_on, p.full_name AS recorded_by
+       FROM run_errata e JOIN persons p ON p.id = e.recorded_by_person_id
+      WHERE e.value_run_id = $1 AND e.evidence_id = $2 AND e.corrected_to_supports = $3
+        AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = e.id)`,
+    [o.runId, o.evidenceId, ev.supports_now],
+  );
+  const supersedes = o.supersedes;
+  const supersessionReason = o.supersessionReason.trim();
+  if (supersedes === undefined && o.supersessionReasonGiven) {
+    throw new Refusal(422, 'A supersession reason goes with the erratum it supersedes; name it.');
+  }
+  if (supersedes === undefined && current) {
+    throw new Refusal(409, `An erratum for this correction is already recorded on this run (${current.recorded_on}, by ${current.recorded_by}); correct it with a new erratum that supersedes it, naming it, with a reason.`);
+  }
+  if (supersedes !== undefined) {
+    if (typeof supersedes !== 'string' || !isUuid(supersedes)) throw new Refusal(422, 'Name the erratum this one supersedes.');
+    if (!current) throw new Refusal(409, 'There is no erratum for this correction on this run to supersede.');
+    if (supersedes !== current.id) {
+      throw new Refusal(409, `That is not the current erratum for this correction on this run; the current one is ${current.id} (${current.recorded_on}, by ${current.recorded_by}).`);
+    }
+    if (supersessionReason.length < MIN_REASON) throw new Refusal(422, `Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
+    // C2c (Brad, 26 Oct 2026): the reason says why the earlier erratum is superseded, not what an erratum records.
+    const { rows: [prev] } = await client.query<{ what_was_wrong: string; what_is_right: string; reason: string }>(
+      'SELECT what_was_wrong, what_is_right, reason FROM run_errata WHERE id = $1', [supersedes]);
+    if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {
+      throw new Refusal(422, "The reason for superseding repeats the erratum's own text: say why the earlier erratum is superseded.");
+    }
+  }
+  const rc = recomputeWithCorrection(o.payload as never, { id: o.evidenceId, kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
+  // C2 (Brad, 25 Oct 2026): a seal that cannot be reproduced is recorded NOT RECOMPUTED, saying why; any other refusal stands.
+  if (!rc.ok && !rc.notRecomputed) throw new Refusal(422, rc.reason);
+  const r = rc.ok ? rc : { ...rc, score: null, band: null };
+  const { rows: [row] } = await client.query<{ id: string }>(
+    `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason,
+       what_was_wrong, what_is_right, reason,
+       model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+    [o.tenantId, o.runId, o.outcomeId, o.evidenceId, ev.supports_now, supersedes ?? null, supersedes === undefined ? null : supersessionReason,
+      String(texts.wrong).trim(), String(texts.right).trim(), String(texts.reason).trim(),
+      r.modelVersion, r.modelFingerprint, r.sealedScore, r.sealedBand, r.score, r.band, r.method, o.actor],
+  );
+  await act({
+    act: 'record_erratum', tenantId: o.tenantId, subjectTable: 'run_errata', subjectId: row.id, evidenceIds: [o.evidenceId],
+    reason: String(texts.reason).trim(),
+  });
+  return { row, r, supersedes };
+}
+
+export { Refusal as ErratumRefusal, sameText };
+
 export function erratumRouter(pool: Pool): Router {
   const router = Router();
   router.post('/:runId/errata', requireSteward(pool), async (req, res) => {
@@ -244,60 +314,11 @@ export function erratumRouter(pool: Pool): Router {
         }
       }
       if (typeof b.evidence_id !== 'string' || !isUuid(b.evidence_id)) throw new Refusal(422, 'Name the evidence whose link was corrected.');
-      const { rows: [ev] } = await client.query<{ kind: string; summary: string; provenance: string; supports_now: string | null }>(
-        `SELECT e.kind::text, e.summary, e.provenance,
-                (SELECT supports FROM value_outcome_evidence WHERE value_outcome_id = $2 AND evidence_id = e.id AND withdrawn_at IS NULL) AS supports_now
-           FROM evidence e WHERE e.id = $1`,
-        [b.evidence_id, outcomeId],
-      );
-      if (!ev || ev.supports_now === null) throw new Refusal(422, "That evidence has no current link to this run's outcome.");
-      // C1 review (Brad, 25 Oct 2026): one erratum per run and correction. A later one supersedes
-      // the current one, naming it, with a reason (run_errata_one_per_correction, _superseded_once).
-      const { rows: [current] } = await client.query<{ id: string; recorded_on: string; recorded_by: string }>(
-        `SELECT e.id, to_char(e.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS recorded_on, p.full_name AS recorded_by
-           FROM run_errata e JOIN persons p ON p.id = e.recorded_by_person_id
-          WHERE e.value_run_id = $1 AND e.evidence_id = $2 AND e.corrected_to_supports = $3
-            AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = e.id)`,
-        [runId, b.evidence_id, ev.supports_now],
-      );
-      const supersedes = b.supersedes_erratum_id;
-      const supersessionReason = typeof b.supersession_reason === 'string' ? b.supersession_reason.trim() : '';
-      if (supersedes === undefined && b.supersession_reason !== undefined) {
-        throw new Refusal(422, 'A supersession reason goes with the erratum it supersedes; name it.');
-      }
-      if (supersedes === undefined && current) {
-        throw new Refusal(409, `An erratum for this correction is already recorded on this run (${current.recorded_on}, by ${current.recorded_by}); correct it with a new erratum that supersedes it, naming it, with a reason.`);
-      }
-      if (supersedes !== undefined) {
-        if (typeof supersedes !== 'string' || !isUuid(supersedes)) throw new Refusal(422, 'Name the erratum this one supersedes.');
-        if (!current) throw new Refusal(409, 'There is no erratum for this correction on this run to supersede.');
-        if (supersedes !== current.id) {
-          throw new Refusal(409, `That is not the current erratum for this correction on this run; the current one is ${current.id} (${current.recorded_on}, by ${current.recorded_by}).`);
-        }
-        if (supersessionReason.length < MIN_REASON) throw new Refusal(422, `Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
-        // C2c (Brad, 26 Oct 2026): the reason says why the earlier erratum is superseded, not what an erratum records.
-        const { rows: [prev] } = await client.query<{ what_was_wrong: string; what_is_right: string; reason: string }>(
-          'SELECT what_was_wrong, what_is_right, reason FROM run_errata WHERE id = $1', [supersedes]);
-        if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {
-          throw new Refusal(422, "The reason for superseding repeats the erratum's own text: say why the earlier erratum is superseded.");
-        }
-      }
-      const rc = recomputeWithCorrection(run.payload as never, { id: b.evidence_id, kind: ev.kind, summary: ev.summary, provenance: ev.provenance }, ev.supports_now as Supports);
-      // C2 (Brad, 25 Oct 2026): a seal that cannot be reproduced is recorded NOT RECOMPUTED, saying why; any other refusal stands.
-      if (!rc.ok && !rc.notRecomputed) throw new Refusal(422, rc.reason);
-      const r = rc.ok ? rc : { ...rc, score: null, band: null };
-      const { rows: [row] } = await client.query<{ id: string }>(
-        `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason,
-           what_was_wrong, what_is_right, reason,
-           model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
-        [tenantId, runId, outcomeId, b.evidence_id, ev.supports_now, supersedes ?? null, supersedes === undefined ? null : supersessionReason,
-          String(texts.wrong).trim(), String(texts.right).trim(), String(texts.reason).trim(),
-          r.modelVersion, r.modelFingerprint, r.sealedScore, r.sealedBand, r.score, r.band, r.method, actor],
-      );
-      await recordAct(client, req, 'POST /api/value-runs/:runId/errata', {
-        act: 'record_erratum', tenantId: tenantId!, subjectTable: 'run_errata', subjectId: row.id, evidenceIds: [b.evidence_id],
-        reason: String(texts.reason).trim(),
+      const { row, r, supersedes } = await writeLinkErratum(client, (a) => recordAct(client, req, 'POST /api/value-runs/:runId/errata', a), {
+        tenantId, actor, runId, outcomeId, payload: run.payload, evidenceId: b.evidence_id,
+        texts: { wrong: String(texts.wrong), right: String(texts.right), reason: String(texts.reason) },
+        supersedes: b.supersedes_erratum_id, supersessionReasonGiven: b.supersession_reason !== undefined,
+        supersessionReason: typeof b.supersession_reason === 'string' ? b.supersession_reason : '',
       });
       res.status(201).json({ erratum_id: row.id, supersedes_erratum_id: supersedes ?? null, sealed_score: r.sealedScore, sealed_band: r.sealedBand, recomputed_score: r.score, recomputed_band: r.band, model_version: r.modelVersion, recompute_method: r.method });
     } catch (err) {

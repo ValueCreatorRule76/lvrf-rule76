@@ -13554,3 +13554,22 @@ Each absence is asserted, so a change is seen. **On the clone only,** a fixture 
 **Two findings (L52).** Both Skillsoft rows were opened No, so neither carries the quote the Gate B note mentions. Three of the four batch rows left open read as their account (`cee6fea9`, `f9775317` about Curia; `423be7c6` about Scotts), against the reason stated for the batch. `092c46b6` reads Curia, which fits. Neither form has a default on these choices. Each is final; a correction is the steward's supersession.
 
 **The hold on customer-side role grants:** L47 has shipped, so its condition is met. No role has been granted.
+
+### B1: L50 + L52 + Add an industry (built 1 Nov 2026; Gate A passed; not deployed)
+
+Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §18.
+
+- **L50:** a marker correction that changes nothing is refused by the route (409, recorded) and by the marker guard; the form leaves the kind unchosen. Markers only.
+- **A No opening says why:** at least 12 characters, on the `open_citation` act, in the route and `lvrf_governance_act_guard`; shown in the lineage. A Yes takes no reason.
+- **The about control:** one component, `AboutSelect`; it offers this account, the tenant named as the tenant, every other account and a typed company, and starts unchosen on every form. **What it offered at Gate B, read from the page:** each row offered its own account, the other accounts, Skillsoft and "Another company, named", with nothing pre-filled.
+- **The supersession batch:** on the Runs page. Tick rows and errata, give the new about, text, source and reading, read the dry run, then one submit with the count and a hash of the plan; refused if either changed. The successor keeps the kind, attester, `simulated` and AI origin, and is born unverified and unopened. Marks carry, with a new act; the old row keeps its own. Links move. Errata are superseded first, through the erratum route's own code, because an erratum needs its link.
+- **One narrowing of the freeze (L52-D8):** a frozen outcome takes a new link only from a row superseding the linked row, with the same support, from a link withdrawn in the same transaction. It is what carries `423be7c6`'s link as ruled. After it, an erratum on the old row cannot be superseded through the route.
+- **Add an industry:** `POST /api/industries`, steward, on the Packs page, its own act `add_industry`, held in the database by `industries_steward_only` and the act-present trigger. Migration 0046.
+
+**Gate A, on the 1 Nov copy (taken before L41's Gate B, so its acts are replayed on the clone):**
+- **Full regression: all 45 scripts pass, build and lint clean** (43 in the full run; `verify_tenant_scope` and `verify_acts_lineage` after corrected tests, re-run alone). `verify_supersession` is new, 168/0, breaks B1a–B7, on the real rows. `verify_value_hypotheses` 154/0 with L50's B7; `verify_evidence_final` 247/0.
+- **Equivalence against the deployed `930c8f7`:** 72 GETs, 72 identical, nothing allowed.
+- **Rehearsal:** 185 triggers, 47 migrations, drift none, ownership clean.
+- **Bundle:** `index-yrjre6bl.js` / `index-BndT_4xn.css`. **Screens:** `~/lvrf-backups/l41-screens/` (`l52_*`, `b1_*`).
+- **An interruption:** a session restart stopped one regression and emptied the scratchpad. No break was left in the tree. The harness was restored from the transcript and the regression re-run from the top.
+

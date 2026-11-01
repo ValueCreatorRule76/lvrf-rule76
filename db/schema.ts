@@ -183,6 +183,8 @@ export const governanceAct = pgEnum('governance_act', [
   'find',
   // L41 (Brad, 1 Nov 2026; L41-D3): a steward states what a row from before the "about" field is about.
   'state_about',
+  // B1 (Brad, 1 Nov 2026): a steward adds an industry, so a pack can be researched for it.
+  'add_industry',
 ]);
 
 /* ================================================================== */

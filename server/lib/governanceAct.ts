@@ -20,7 +20,7 @@ import type { PoolClient } from 'pg';
 export type GovernanceAct =
   | 'import' | 'validate' | 'approve' | 'certify' | 'activate' | 'supersede' | 'verify' | 'attest'
   | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit'
-  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about';
+  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about' | 'add_industry';
 
 export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'create-only'>> = {
   // Research: the import, and the review of each result.
@@ -54,6 +54,7 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/industry-measures/:id/levers': ['ratify'],
   'POST /api/value-levers/:id/offerings': ['link'],
   'POST /api/industries/:industryId/exclusions': ['exclude'],
+  'POST /api/industries': ['add_industry'],
   'POST /api/institutions/:institutionId/reference-example': ['mark'],
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/correct-support': ['correct'],
   'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw': ['withdraw'],
@@ -68,9 +69,13 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   // L41 + L47 (1 Nov 2026).
   'POST /api/evidence/about-batch': ['state_about'],
   'POST /api/evidence/:id/withdraw-verification': ['withdraw'],
-  'POST /api/evidence/:id/supersede': ['supersede'],
+  // L52: a supersession carries the row's mark and moves its live links, each with its act.
+  'POST /api/evidence/:id/supersede': ['supersede', 'mark', 'withdraw', 'link'],
+  'POST /api/evidence/supersession-batch': ['supersede', 'mark', 'withdraw', 'link', 'record_erratum'],
   // Create-only: left out of P2 by name (LVRF_PLAN §10, D3).
   'POST /api/account-inputs': 'create-only',
+  // L52: the dry run writes nothing.
+  'POST /api/evidence/supersession-batch/dry-run': 'create-only',
   'POST /api/business-metrics/:metricId/pack-basis': 'create-only',
   'POST /api/capabilities/:capabilityId/industry-measures': 'create-only',
   'POST /api/engagements/:engagementId/produce-run': 'create-only',
