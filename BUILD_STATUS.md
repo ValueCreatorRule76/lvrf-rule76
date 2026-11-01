@@ -13466,8 +13466,11 @@ bytes, TOC 775. Service up 00:21:38. Bundle `index-DQN6sOQO.js` / `index-pWZMR7z
   `/api/auth/me` just before Brad signed in. The three act POSTs returned 201, 200 and 201.
 
 **Noted at Gate C:**
-- **Credit errata state no confirmer on runs 3–21.** All 19 state their points from the seal, none
-  is the 0-point row, and the sealed payloads predate 1.0.2's `definition_confirmer` field.
+- **All 19 credit errata name the confirmer exactly (Brad's condition 1):** each `recompute_method`
+  reads "20 of 20 in "Is the metric's calculation method known and documented?" rest on a
+  confirmation by Brad Piver (external analyst of record)". None needed "not recoverable from this
+  seal", and none is a 0-point row. These seals predate 1.0.2's `definition_confirmer`, so the
+  confirmer was recovered from the record at sealing.
 - **The npm audit (L27):** the root count of 6 is `drizzle-kit`'s four, `body-parser` (high) and
   `qs` (the one that took it from 5 to 6). No dependency changed; no action, by Brad's ruling.
 
