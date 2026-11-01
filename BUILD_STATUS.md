@@ -13573,3 +13573,19 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
 - **Bundle:** `index-yrjre6bl.js` / `index-BndT_4xn.css`. **Screens:** `~/lvrf-backups/l41-screens/` (`l52_*`, `b1_*`).
 - **An interruption:** a session restart stopped one regression and emptied the scratchpad. No break was left in the tree. The harness was restored from the transcript and the regression re-run from the top.
 
+### B1 Gate B and the first Gate C (1 Nov 2026, UTC): not clean
+
+**Deployed at `d26c1ef`.** Gate C read: 185 triggers, drift none at 47 migrations and 1124 objects, 106 CHECKs, ownership clean, all 25 runs byte-identical to the snapshot, hashes 25 of 25, no refusal, no audit row without an actor. Utilities added with its act. `cee6fea9` and `f9775317` read about Skillsoft with their marks carried; `423be7c6` carries Brad's text and its impact-basis link moved to `9c05af38`.
+
+**Not as ruled, so L52 stays open and the hold stays:**
+1. **`271a449a` was superseded with `9765335f`'s content (`9a36e675`), and `9765335f` was not superseded.** The batch ran 6 items, not 7. The record does not show how. `9a36e675`'s figure check flags 7,000,000, correctly.
+2. **Run 2's erratum still said "another company",** and run 1's What is right repeated its Reason and lost "supports the impact basis only". Neither could be superseded: the route and the guard needed a current link on the old row, and that link had moved.
+
+**The 7,000,000** is Customer Zero's claimed impact: the author's +2.0 points × an assumed $350M base, recorded SIMULATED AND INFERRED on 3 Aug. The guidance row is a named input to it, so the link stands and its flag stands (3.1 if the figure is to be retired). A finding is refused: the account has opened evidence and accepted facts.
+
+### B1 addendum (built 1 Nov 2026; Gate A passed; not deployed)
+
+- **An erratum follows its link down the chain** (Brad, 1 Nov 2026): `lvrf_evidence_chain()`, read by the erratum route and the guard, any number of steps. The erratum keeps naming the old row, and the recompute still reads that row's sealed item.
+- **The Supersede form** said links are not moved, which B1 made untrue; it now says they and the mark move. **The single route carries the row's confidence,** as the batch does.
+- **Gate A:** all 45 scripts pass in one run, build and lint clean; `verify_supersession` 186/0, with B8 (the route reading only the row's own link) and B9 (the chain cut to one step). Equivalence against `d26c1ef`: 72 of 72 identical, nothing allowed. Bundle `index-DKLPEoiW.js` / `index-BndT_4xn.css`.
+

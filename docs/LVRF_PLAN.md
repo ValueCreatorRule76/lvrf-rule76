@@ -4076,7 +4076,7 @@ result. Brad opens the Skillsoft successors Yes, with the release's quote, after
 offered its own account, every other account, Skillsoft, and "Another company, named", with nothing pre-filled. Skillsoft
 was the last account listed, and the row's own account was the first choice.
 
-### Decisions, as built (Brad reviews them at Gate A)
+### Decisions, as built (accepted by Brad, 1 Nov 2026, with the freeze narrowing of L52-D8, the AI origin carried, a reading at the batch, and migration 0046)
 
 | # | Decision | Why |
 |---|---|---|

@@ -228,14 +228,14 @@ async function planItem(client: PoolClient, item: Record<string, unknown>, req: 
   };
 }
 
-interface ErratumRow { id: string; tenant_id: string; value_run_id: string; value_outcome_id: string; evidence_id: string | null; kind: string; run_number: number; engagement: string; what_was_wrong: string; what_is_right: string; reason: string; payload: unknown; superseded: boolean }
+interface ErratumRow { id: string; tenant_id: string; value_run_id: string; value_outcome_id: string; evidence_id: string | null; corrected_to_supports: string | null; kind: string; run_number: number; engagement: string; what_was_wrong: string; what_is_right: string; reason: string; payload: unknown; superseded: boolean }
 
 /** One erratum of the batch: its current and new text, and what stops it. */
 async function planErratum(client: PoolClient, item: Record<string, unknown>, req: Request) {
   const id = String(item.erratum_id ?? '');
   if (!isUuid(id)) return { erratum_id: id, blockers: ['That is not an erratum.'] };
   const { rows: [x] } = await client.query<ErratumRow>(
-    `SELECT x.id, x.tenant_id, x.value_run_id, x.value_outcome_id, x.evidence_id, x.kind, r.run_number, g.name AS engagement, x.what_was_wrong, x.what_is_right, x.reason, r.payload,
+    `SELECT x.id, x.tenant_id, x.value_run_id, x.value_outcome_id, x.evidence_id, x.corrected_to_supports, x.kind, r.run_number, g.name AS engagement, x.what_was_wrong, x.what_is_right, x.reason, r.payload,
             EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id) AS superseded
        FROM run_errata x JOIN value_runs r ON r.id = x.value_run_id JOIN engagements g ON g.id = r.engagement_id WHERE x.id = $1`, [id]);
   if (!x || isOtherTenant(req, x.tenant_id, { table: 'run_errata', id })) return { erratum_id: id, blockers: ['That is not an erratum of this tenant.'] };
@@ -245,6 +245,10 @@ async function planErratum(client: PoolClient, item: Record<string, unknown>, re
   const blockers: string[] = [];
   if (x.kind !== 'link_correction' || x.evidence_id === null) blockers.push('Only an erratum on a corrected link is superseded here.');
   if (x.superseded) blockers.push('This erratum is already superseded.');
+  const { rows: [linked] } = await client.query(
+    `SELECT 1 FROM value_outcome_evidence l WHERE l.value_outcome_id = $1 AND l.evidence_id IN (SELECT lvrf_evidence_chain($2)) AND l.supports = $3 AND l.withdrawn_at IS NULL`,
+    [x.value_outcome_id, x.evidence_id, x.corrected_to_supports]);
+  if (!linked) blockers.push("This erratum's corrected link is no longer current on the outcome.");
   if (next.what_was_wrong === x.what_was_wrong && next.what_is_right === x.what_is_right && next.reason === x.reason) blockers.push('This changes nothing: give the new text.');
   if (why.length < MIN_REASON) blockers.push(`Say why the erratum is superseded, in at least ${MIN_REASON} characters.`);
   else if ([next.what_was_wrong, next.what_is_right, next.reason, x.what_was_wrong, x.what_is_right, x.reason].some((t) => sameText(why, t))) {
@@ -485,8 +489,8 @@ export function evidenceActsRouter(pool: Pool): Router {
 
   const rowOf = async (client: PoolClient, req: Request, id: string) => {
     const { rows: [e] } = await client.query<{ id: string; institution_id: string; tenant_id: string; source_verified: boolean;
-      citation_resolved: boolean; deleted_at: string | null; superseded_by_id: string | null; ai_sourced: boolean; research_query: string | null; research_tool: string | null }>(
-      `SELECT e.id, e.institution_id, i.tenant_id, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id, e.ai_sourced, e.research_query, e.research_tool
+      citation_resolved: boolean; deleted_at: string | null; superseded_by_id: string | null; ai_sourced: boolean; research_query: string | null; research_tool: string | null; confidence: string }>(
+      `SELECT e.id, e.institution_id, i.tenant_id, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id, e.ai_sourced, e.research_query, e.research_tool, e.confidence::text
          FROM evidence e JOIN institutions i ON i.id = e.institution_id WHERE e.id = $1 FOR UPDATE OF e`, [id]);
     return !e || isOtherTenant(req, e.tenant_id, { table: 'evidence', id }) ? null : e;
   };
@@ -541,7 +545,7 @@ export function evidenceActsRouter(pool: Pool): Router {
       if (grants.length > 0) throw new Refusal(409, 'A current customer-side role is named from this evidence. Revoke the role first.');
       // Q4k: AI origin is permanent, so a successor carries it.
       const origin = e.ai_sourced ? { researchQuery: e.research_query ?? '', researchTool: e.research_tool ?? '' } : null;
-      const successor = await insertRecorded(client, b, e.institution_id, e.tenant_id, actorOf(req), b.simulated === true, 'medium', origin);
+      const successor = await insertRecorded(client, b, e.institution_id, e.tenant_id, actorOf(req), b.simulated === true, e.confidence, origin);
       await carryToSuccessor(client, (a) => recordAct(client, req, 'POST /api/evidence/:id/supersede', a), e, successor, reason, actorOf(req));
       res.status(201).json({ evidence_id: successor, supersedes: id });
     } catch (err) {

@@ -1456,6 +1456,16 @@ $$;
 -- C3b (Brad, 31 Oct 2026, ruling 1): evidence under a finding — it supported the figure when the finding was
 -- recorded: a link current then, or withdrawn after it (the finding's own withdrawal keeps it covered). A link
 -- withdrawn before the finding supported nothing then. Sealed runs keep their sealed basis.
+-- L52: an evidence row and every row that supersedes it, in turn.
+CREATE OR REPLACE FUNCTION lvrf_evidence_chain(p_evidence uuid) RETURNS SETOF uuid
+LANGUAGE sql STABLE AS $$
+  WITH RECURSIVE chain(id) AS (
+    SELECT p_evidence
+    UNION
+    SELECT e.superseded_by_id FROM evidence e JOIN chain c ON e.id = c.id WHERE e.superseded_by_id IS NOT NULL
+  )
+  SELECT id FROM chain
+$$;
 CREATE OR REPLACE FUNCTION lvrf_evidence_under_finding(p_evidence uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM value_outcome_evidence l JOIN figure_findings f ON f.value_outcome_id = l.value_outcome_id
@@ -2269,9 +2279,15 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   -- An erratum is about a correction: a current, correcting link of that support (C3: a link correction's).
-  IF NEW.kind = 'link_correction' AND NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
-                  WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id = NEW.evidence_id
-                    AND l.supports = NEW.corrected_to_supports AND l.corrects_supports IS NOT NULL AND l.withdrawn_at IS NULL) THEN
+  -- L52 (Brad, 1 Nov 2026): a link that followed its evidence's supersession is still that link, however many
+  -- steps on: the correcting link on this row, and a current link of that support somewhere along its chain.
+  IF NEW.kind = 'link_correction' AND NOT (
+       EXISTS (SELECT 1 FROM value_outcome_evidence l
+                WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id = NEW.evidence_id
+                  AND l.supports = NEW.corrected_to_supports AND l.corrects_supports IS NOT NULL)
+       AND EXISTS (SELECT 1 FROM value_outcome_evidence l
+                    WHERE l.value_outcome_id = NEW.value_outcome_id AND l.evidence_id IN (SELECT lvrf_evidence_chain(NEW.evidence_id))
+                      AND l.supports = NEW.corrected_to_supports AND l.withdrawn_at IS NULL)) THEN
     RAISE EXCEPTION 'LVRF: run_errata: an erratum is about a corrected link; this outcome has no current link of that evidence corrected to %.', NEW.corrected_to_supports
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;

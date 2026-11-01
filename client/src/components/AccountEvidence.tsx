@@ -168,7 +168,7 @@ function Supersede({ row, institutionId, notSteward, onDone }: { row: Row; insti
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="supersede">
       <SourceForm institutionId={institutionId} path={`/api/evidence/${row.id}/supersede`} submitLabel="Supersede this evidence" simulatedChoice
-        provenance={<p className="m-0 text-[12.5px] text-ink">A new row that replaces this one, recorded <strong>unverified</strong>. This row stays on the record, pointing to it. <strong>Its links are not moved</strong>: withdraw or correct them on the outcome.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">A new row that replaces this one, recorded <strong>unverified</strong>. This row stays on the record, pointing to it. <strong>Its links and its mark move to the new row.</strong></p>}
         extraFields={<label className="block"><span className={L}>Why it is superseded</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="supersede-reason" /></label>}
         extraBody={() => ({ reason: reason.trim() })}
         extraUnmet={reason.trim().length < 12 ? ['say why, in at least 12 characters'] : []}

@@ -214,7 +214,10 @@ export async function writeLinkErratum(client: PoolClient, act: (a: ActRecord) =
   const { texts } = o;
   const { rows: [ev] } = await client.query<{ kind: string; summary: string; provenance: string; supports_now: string | null }>(
     `SELECT e.kind::text, e.summary, e.provenance,
-            (SELECT supports FROM value_outcome_evidence WHERE value_outcome_id = $2 AND evidence_id = e.id AND withdrawn_at IS NULL) AS supports_now
+            -- L52: a link that followed this row's supersession, however many steps on, is still its link.
+                (SELECT supports FROM value_outcome_evidence
+                  WHERE value_outcome_id = $2 AND evidence_id IN (SELECT lvrf_evidence_chain(e.id)) AND withdrawn_at IS NULL
+                  ORDER BY (evidence_id = e.id) DESC, supports LIMIT 1) AS supports_now
        FROM evidence e WHERE e.id = $1`,
     [o.evidenceId, o.outcomeId],
   );

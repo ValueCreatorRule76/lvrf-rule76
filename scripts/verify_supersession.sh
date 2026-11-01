@@ -16,6 +16,8 @@
 #   B4   a live link left behind: evidence_final refuses the supersession
 #   B5   the plan check removed: a stale plan is accepted, so that check is what refuses it
 #   B7   add an industry with the route's steward check removed: the database refuses
+#   B8   the erratum route reading only the row's own link: no erratum once its link has moved
+#   B9   the chain cut to one step: an erratum two steps on is stopped, so the walk is what carries it
 #   B6   the frozen move's guard loosened: a withdrawn link from long ago could come back, so its "now" is what stops it
 
 set -euo pipefail
@@ -36,8 +38,8 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_l52.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 CITE=server/routes/evidenceCitation.ts; AEV=server/routes/accountEvidence.ts; ABOUT=client/src/components/useAbout.tsx
-IND=server/routes/industryAdd.ts
-EDITED=("$CITE" "$AEV" "$ABOUT" "$IND")
+IND=server/routes/industryAdd.ts; CORR=server/routes/corrections.ts
+EDITED=("$CITE" "$AEV" "$ABOUT" "$IND" "$CORR")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -290,6 +292,36 @@ expect GET "/api/lineage/evidence/$NC" "" 200 "the new row's lineage"
 [ "$(rj "(Array.isArray(b)?b:b.steps).find(s=>s.kind==='supersedes').detail.about")" = "Curia" ] && ok "  ...names what it replaced" || bad "  ...new lineage"
 expect POST "$(OC "$N9")" '{"source_verified":true}' 200 "9765335f's successor opened Yes: its reading is already recorded"
 [ "$(q "SELECT source_verified FROM evidence WHERE id = '$N9'")" = "t" ] && ok "  ...verified, by a person's opening" || bad "  ...opening"
+# The addendum: an erratum follows its link down the chain, however many steps (Brad, 1 Nov 2026).
+EF1="$(q "SELECT id FROM run_errata x WHERE supersedes_id = '$E1'")"; EF2="$(q "SELECT id FROM run_errata x WHERE supersedes_id = '$E2'")"
+RECO="$(q "SELECT string_agg(coalesce(recomputed_score::text, 'none'), ',' ORDER BY id) FROM run_errata WHERE id IN ('$EF1', '$EF2')")"
+EA() { node -e 'console.log(JSON.stringify({errata:[{erratum_id:process.argv[1],what_is_right:process.argv[2],supersession_reason:process.argv[3]}]}))' "$1" "$2" "$3"; }
+ER1="$(EA "$EF1" 'It supports the impact basis only, as a vendor claim about Scotts Miracle-Gro.' 'The row text moved on, and the erratum follows one step down its chain.')"
+# B8 — the route reading only the row's own link.
+edit "$CORR" "evidence_id IN (SELECT lvrf_evidence_chain(e.id)) AND withdrawn_at IS NULL" "evidence_id = e.id AND withdrawn_at IS NULL"
+stop_server; start_server
+expect POST "/api/value-runs/$(q "SELECT value_run_id FROM run_errata WHERE id = '$EF1'")/errata" "$(J evidence_id "$RT" what_was_wrong 'Run 1 sealed the vendor publication as supporting the baseline.' what_is_right 'It supports the impact basis only, as a vendor claim.' reason 'Verification: the chain break, in the route.' supersedes_erratum_id "$EF1" supersession_reason 'Verification: the chain break, why.')" 422 "B8: the route reading only the row's own link → no erratum once the link moved" "no current link"
+restore "$CORR"; stop_server; start_server
+expect POST "$DR" "$ER1" 200 "the dry run: an erratum whose link has moved one step"
+[ "$(rj b.can_submit)" = "true" ] && ok "  ...nothing stops it" || bad "  ...$(rj "JSON.stringify(b.errata)")"
+H1="$(rj b.plan_hash)"
+expect POST "$SB" "$(node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:1,plan_hash:process.argv[2],reason:"Verification: an erratum, a step down the chain."}))' "$ER1" "$H1")" 201 "the erratum superseded, its link one step on"
+EN1="$(q "SELECT id FROM run_errata WHERE supersedes_id = '$EF1'")"
+[ "$(q "SELECT n.evidence_id = o.evidence_id AND n.corrected_to_supports = o.corrected_to_supports AND n.recomputed_score IS NOT DISTINCT FROM o.recomputed_score AND n.sealed_score = o.sealed_score FROM run_errata n JOIN run_errata o ON o.id = n.supersedes_id WHERE n.id = '$EN1'")" = "t" ] && ok "  ...it still names the old row, and the recompute from that row's sealed item is unchanged" || bad "  ...recompute"
+expect POST "/api/evidence/$NT/supersede" "$(node -e 'const f=JSON.parse(process.argv[1]);console.log(JSON.stringify({about:"account",kind:"vendor_publication",provenance:"Fixture second step of the chain (not a source)",summary:"The second step of the chain (fixture).",reason:"Verification: one step further down the chain.",...f}))' "$(FORMQ)")" 201 "a second supersession of that row: its link moves again"; NT2="$(rj b.evidence_id)"
+[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$NT2' AND withdrawn_at IS NULL AND supports = 'impact_basis'")" = "1" ] && ok "  ...the frozen outcome's link follows, a second step" || bad "  ...second move"
+[ "$(q "SELECT confidence FROM evidence WHERE id = '$NT2'")" = "$(q "SELECT confidence FROM evidence WHERE id = '$NT'")" ] && ok "  ...and the row's confidence carries on the single route" || bad "  ...confidence"
+ER2="$(EA "$EF2" 'It supports the impact basis only, as a vendor claim, two steps down.' 'The erratum follows its link two steps down the chain.')"
+expect POST "$DR" "$ER2" 200 "the dry run: an erratum whose link has moved two steps"
+H2="$(rj b.plan_hash)"; [ "$(rj b.can_submit)" = "true" ] && ok "  ...nothing stops it (the chain, not one step)" || bad "  ...$(rj "JSON.stringify(b.errata)")"
+# B9 — the guard reading only one step.
+fnbreak lvrf_evidence_chain "    SELECT e.superseded_by_id FROM evidence e JOIN chain c ON e.id = c.id WHERE e.superseded_by_id IS NOT NULL" "    SELECT e.superseded_by_id FROM evidence e JOIN chain c ON e.id = c.id WHERE e.superseded_by_id IS NOT NULL AND c.id = p_evidence"
+expect POST "$DR" "$ER2" 200 "B9: the chain cut to one step"
+printf '%s' "$(rj "b.errata[0].blockers.join()")" | grep -q "no longer current" && ok "  ...caught: two steps on, the erratum is stopped, so the walk is what carries it" || bad "  ...B9: $(rj "JSON.stringify(b.errata)")"
+reharden
+expect POST "$DR" "$ER2" 200 "  ...restored"; H2="$(rj b.plan_hash)"
+expect POST "$SB" "$(node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:1,plan_hash:process.argv[2],reason:"Verification: an erratum, two steps down the chain."}))' "$ER2" "$H2")" 201 "the erratum superseded, its link two steps on"
+sqlrefused "an erratum on an evidence row that never had a correcting link" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, '$NT2', corrected_to_supports, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, '$S' FROM run_errata WHERE id = '$EF1'" "an erratum is about a corrected link"
 # The freeze holds but for that one move.
 FO="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$RF' LIMIT 1")"
 sqlrefused "a new link on the frozen outcome, from a row with no supersession" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$R1', 'impact_basis')" "frozen"
