@@ -4239,3 +4239,22 @@ All on `/policies`, in any order. The forms are built to these labels, and their
 
 Until they are done, every case reads "no cost-of-delay months set", "no pack ratification threshold set" and "no CFO
 lens ratified", and the CFO lens refuses. Nothing falls back to a default.
+
+
+### Added to B3 (Brad, 5 Nov 2026; CVAF patterns, presentation only, no new build)
+
+1. **Every CFO refusal reason carries a converting question:** the one question the account executive asks to clear it.
+   One fixed sentence per refusal reason (for example "no committed target" → "Who at the account would commit to a
+   target for this metric, and by when?"), rendered beside the reason and its ask. Gate A: every reason the CFO page or
+   cost of delay can give has a question (break: one removed, caught). This is a question per *reason*; the design's
+   per-lever converting question belongs to the Pack Contract (P4a, 3.1).
+2. **Outcomes ordered floor-first, best-evidenced first** ("the case must not depend on its weakest evidence"). The
+   order key is each item's floor, its weakest sealed basis (design §3.1's rank), strongest floor first. **In 3.0 a run
+   seals one outcome**, so the order applies to the hypotheses and their solutioning within the case; across outcomes it
+   applies once a case carries more than one. Gate A: a fixture whose weaker-floored hypothesis was stated first renders
+   second (break: the sort removed, caught).
+
+**Estimate with both:** about ½ day, inside part 4. Part 1 (the migrations, section 33, the plain sentences) was
+largely built on 5 Nov before this came in, which offsets it, so **Gate B stays Wed 11 Nov**, buffer to Fri 13 Nov
+intact. Brad's UX message is not yet folded in: it is not in this session's record, and the estimate is re-confirmed
+once it is.

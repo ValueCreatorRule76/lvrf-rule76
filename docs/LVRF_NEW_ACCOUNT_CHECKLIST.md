@@ -156,9 +156,14 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 
 ## 10. Share and print *(B3)*
 
-- [ ] **"Shared for review as an outside-in hypothesis"** (D-M21), the steward act recording who, with whom, when, the
-      run and its hash. Allowed only while both banners print. It never changes the run's verification state.
 - [ ] **Print to PDF and look at every page:** both banners and the run's full hash on each.
+- [ ] **Before each share, an independent agent checks the printed PDF against the record** (Brad, 5 Nov 2026, a CVAF
+      pattern): every figure and its basis, every footnote, both banners on every page, and the full hash against the
+      run's `payload_hash`. The agent reads the PDF and the record read-only and reports; it records nothing (rules 9
+      and 10). Any mismatch stops the share until it is resolved.
+- [ ] **"Shared for review as an outside-in hypothesis"** (D-M21), the steward act recording who, with whom, when, the
+      run and its hash, done by Brad after a clean check. Allowed only while both banners print. It never changes the
+      run's verification state.
 
 ---
 

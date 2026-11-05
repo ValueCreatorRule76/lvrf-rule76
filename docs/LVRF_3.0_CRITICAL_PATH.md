@@ -140,4 +140,28 @@ cut line applied first.
 - **L54 and "Correct the reviewer's note"** (Brad, 5 Nov 2026; frozen out by rule 1): one migration making a reviewed
   result's note final (insert-only), and the steward act that corrects a note beside it. Until then CAIDI (`dda6e919`)
   and Net heat rate (`51c360c9`) are not used for M21.
+- **CVAF patterns, in this order (Brad, 5 Nov 2026; patterns only, no CVAF client data):**
+  1. **The drafting assistant, on CVAF's Executive Outputs Assistant pattern** (replaces the design's P10 shape; Q9's
+     ruling still applies). From a sealed run: export an evidence pack (every item with a stable evidence id, the pack
+     hashed) and a generated prompt; a person drafts outside LVRF; import with deterministic checks (same pack, every
+     sentence cites, every figure matches a cited item, no other account, attributions only to a client-stated source,
+     outside-in honesty, no placeholders); review the proposal against the current text, sentence by sentence; accept as
+     authored by the person (`executive_summaries`, `drafted_with_ai` and the tool); seal with the run. **Conflict to
+     rule, not resolve:** CVAF's Phase 2 calls a model from the server; LVRF's design says LVRF generates no prose, and
+     research's D1 that no code calls a research tool. Only the offline flow is adopted until Brad rules.
+  2. **Solutioning verdicts:** ADMIT · CONDITIONAL · DEFER · EXCLUDE, each with a qualifier; enablers; and a refusal to
+     render when the money doesn't reconcile. With the authored `solution_recommendations` and offering exclusions
+     already deferred here. **To rule first:** an LVRF lever carries no value by design (no expected-effect column), so
+     what "money reconciles" means in LVRF (per outcome: cost of delay or realized value against the recommendations
+     that claim it) is a design question, not a port.
+  3. **A read-only UI conformance audit (P13-style)**, before the steward-safety slice. *(Which slice "steward-safety"
+     names is to be confirmed with Brad: it is not yet in this plan.)*
 - Loose ends L46–L53 not closed by item 1, and any finding frozen out by rule 1.
+
+## 4.0 (recorded so nothing is lost)
+
+- **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the
+  sealed projection split into timing and adoption, base, rate, and an unexplained remainder that is shown, never
+  absorbed; negative variance reported as plainly as positive; never smoothed or netted before it is shown per item;
+  null is not zero. It needs measured actuals against committed targets, which the 2027 engagements will be the first to
+  supply.
