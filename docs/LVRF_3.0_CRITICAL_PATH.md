@@ -3,6 +3,9 @@
 **Ratified by Brad Piver, 1 November 2026.** Target: 3.0 complete by **15 November 2026**
 (14 days), for the proposed SOW.
 
+**Revised by Brad Piver, 4 November 2026:** B1 closed on 5 Nov. B2 is split, §14 becomes B4, and the cut line is
+applied. **3.0 is ratified about 17 November; M21 stays 22 November.** The table below is the revised order.
+
 This document governs the order of work until 3.0 ships. Where it and `LVRF_PLAN.md`
 disagree on order, this document wins until 3.0 is released; `CLAUDE.md` wins over both.
 Every slice still runs Gate A, B and C, and rules 1–10 of `CLAUDE.md` hold throughout
@@ -33,12 +36,20 @@ recorded as **3.1**.
 
 | # | Work | Estimate (build + Gate A) | Gate B batch |
 |---|---|---|---|
-| 1 | **Close L52 and L50** (supersession batch; "No" opening requires a reason; the about control offers tenant, accounts and a typed party; no-change marker correction refused). Lift the hold on customer-side role grants | ~1 day | **B1** |
-| 2 | **§14: commit, measure and verify in the interface**, with the **attribution method fixed at commit** (design §3.2, core only: the method enum and its rules; comparison populations are 3.1) | 2–3 days | **B2** |
-| 3 | **Pack ratify and demote** (steward act, its own governance act) and the **case snapshot** (§16, payload v4, sealing each pack entry with a hash of its fields) | ~2 days | **B2** |
-| 4 | **P6: the value case** — `lens_policies` (CFO ≥ 55, CHRO), `/runs/:id/case` with the CFO refusal page; outcomes by lever with basis and attribution; **cost of delay** under ruling (b) (committed target × client-stated, customer-side-attested monetization rate × 6/12; refuses with every reason); **roadmap milestones**; **recommended solutioning** (only offerings linked to the lever, not excluded); "what it takes to raise confidence"; the confidence curve (sealed scores, breaks, erratum marks); **print** with banners and the full hash on every page | 4–5 days | **B3** |
-| 5 | **War Room `/book`**, read-only: membership as book confidence, no money summed across accounts | ~1 day | **B3** |
-| 6 | Consolidated Gate C, Brad's acts, **3.0 ratified** (`LVRF_3.0_DRAFT.md` updated to what shipped; the 3.1 list recorded) | ~2 days | — |
+| 1 | **Close L52 and L50** (supersession batch; "No" opening requires a reason; the about control offers tenant, accounts and a typed party; no-change marker correction refused). Lift the hold on customer-side role grants | done | **B1**, closed 5 Nov (Gate C clean at `bd5cb7c`) |
+| 2 | **Short ids** in every evidence picker and list, and **"Withdraw this link…" on card 01c** (the same route as the run page's) | ½ day | **B2**, Gate B **Sun 8 Nov** |
+| 3 | **Pack ratify and demote** (steward act, its own governance act) | 1 day | **B2**, Gate B **Sun 8 Nov** |
+| 4 | **The case snapshot** (§16, payload v4, sealing each pack entry with a hash of its fields) | 2 days | **B2**, Gate B **Sun 8 Nov** |
+| 5 | **P6: the value case** — `lens_policies` (the CFO lens, ≥ 55), `/runs/:id/case` with the CFO refusal page; outcomes by lever with basis and attribution; **cost of delay** under ruling (b) (committed target × client-stated, customer-side-attested monetization rate × 6/12; refuses with every reason); **roadmap milestones**; **recommended solutioning** (only offerings linked to the lever, not excluded); "what it takes to raise confidence"; the confidence curve (sealed scores, breaks, erratum marks); **print** with banners and the full hash on every page; the steward act **"Shared for review as an outside-in hypothesis"** (D-M21) | 4–5 days | **B3**, Gate B about **13 Nov** |
+| 6 | **§14: commit, measure and verify in the interface**, with the **attribution method fixed at commit** (design §3.2, core only: the method enum and its rules; comparison populations are 3.1). M21 needs none of it: an outside-in account has no commitment, actual or verifier, and the refusal page lists them as asks | 2–3 days | **B4**, Gate B about **17 Nov** |
+| 7 | Consolidated Gate C, Brad's acts, **3.0 ratified** about **17 Nov** (`LVRF_3.0_DRAFT.md` updated to what shipped; the 3.1 list recorded) | with B4 | — |
+
+**The cut line, applied (4 Nov):** P6 cannot be through Gate A by day 9, so the **War Room** and the **CHRO lens** move
+to 3.1. The **CFO lens, its refusal page and cost of delay stay.** **Link corrections in the supersession batch** also
+move to 3.1: card 01c already corrects a link, so they would only save steward time.
+
+**Every Gate B carries a "your acts" section:** every field's exact text, and the short id of each row, so the acts are
+done in one sitting.
 
 **In parallel (Brad, content, not build) — pack readiness in general** (revised 1 Nov:
 the SOW's 3–5 accounts are not known until after day 14). The two packs PROP-001
@@ -111,4 +122,6 @@ cut line applied first.
   from the sealed case; the drafting assistant (Q9).
 - UX-1 slice 5 (copy pass, index pages, L44, L45), L40 code-splitting, L43 the walk
   showing every engagement.
+- **The War Room `/book`** and **the CHRO lens** (the cut line, 4 Nov); **link corrections in the supersession
+  batch** (card 01c already corrects a link).
 - Loose ends L46–L53 not closed by item 1, and any finding frozen out by rule 1.
