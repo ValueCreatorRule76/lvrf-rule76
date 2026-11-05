@@ -365,6 +365,31 @@ stop_server; start_server
 expect POST "$SB" "$(node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:1,plan_hash:"0000",reason:"Verification: the plan break."}))' "$PB")" 201 "B5: the plan check removed → a stale plan is accepted: that check is what refuses it"
 restore "$AEV"; stop_server; start_server
 
+step "9b. Card 01c corrects a link (B1; Brad, 4 Nov 2026)"
+# On the clone, two rows in prod's shape: each a successor that has only ever held its moved link (N9 the baseline,
+# N22 the impact basis). The card swaps them, as the two real rows are to be swapped.
+OC9="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")"
+expect GET "/api/institutions/$SELF_INST/evidence" "" 200 "the card's read"
+[ "$(rj "b.evidence.find(e=>e.id==='$N9').links.filter(l=>!l.withdrawn).map(l=>l.supports+':'+(l.value_outcome_id==='$OC9')+':'+(typeof l.metric)).join()")" = "baseline:true:string" ] && ok "  ...each link names its outcome and metric" || bad "  ...links: $(rj "JSON.stringify(b.evidence.find(e=>e.id==='$N9').links)")"
+A0="$(q "SELECT count(*) FROM governance_acts WHERE act = 'correct'")"
+TO_BASELINE="$N22" TO_IMPACT="$N9" cw cardlinks
+[ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$N22' AND withdrawn_at IS NULL")|$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")" = "baseline|impact_basis" ] && ok "swapped through card 01c" || bad "links after the card"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'correct'")" = "$((A0 + 2))" ] && ok "  ...two acts, the route's own" || bad "  ...acts"
+[ "$(q "SELECT corrects_supports FROM value_outcome_evidence WHERE evidence_id = '$N22' AND withdrawn_at IS NULL")" = "impact_basis" ] && ok "  ...the corrected link names what it replaces" || bad "  ...corrects_supports"
+expect POST "/api/value-outcomes/$OC9/evidence/$N22/correct-support" "$(J supports impact_basis reason 'Verification: back again.')" 409 "  ...a support the row once held is not recorded again (the route's own rule)" "not recorded again"
+expect POST "/api/value-outcomes/$OC9/evidence/$N9/correct-support" "$(J supports impact_basis reason 'Verification: not the steward.')" 403 "  ...X is refused, as on the run page" "steward" "$X"
+# On a copy taken after 4 Nov's acts: the two real rows themselves.
+R_DRR="$(q "SELECT id FROM evidence WHERE id::text LIKE '9a36e675%'")"; R_GUI="$(q "SELECT id FROM evidence WHERE id::text LIKE 'c1d0f877%'")"
+if [ -n "$R_DRR" ] && [ -n "$R_GUI" ]; then
+  [ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")|$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_GUI' AND withdrawn_at IS NULL")" = "impact_basis|baseline" ] && ok "the real rows, crossed as on prod: 9a36e675 on the impact basis, c1d0f877 on the baseline" || bad "real rows not as on prod"
+  TO_BASELINE="$R_DRR" TO_IMPACT="$R_GUI" cw cardlinks
+  [ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")|$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_GUI' AND withdrawn_at IS NULL")" = "baseline|impact_basis" ] && ok "  ...uncrossed on the clone: 9a36e675 the baseline, c1d0f877 the impact basis" || bad "  ...real rows after"
+  RC0="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")"
+  [ "$(q "SELECT result FROM figure_checks WHERE evidence_id = '$R_DRR' AND subject_field = 'baseline_value' ORDER BY checked_at DESC LIMIT 1")|$(q "SELECT result FROM figure_checks WHERE evidence_id = '$R_GUI' AND subject_field = 'claimed_currency_impact' ORDER BY checked_at DESC LIMIT 1")" = "pass|flag" ] && ok "  ...the baseline's check passes on 98; the impact basis flags 7,000,000, as it should" || bad "  ...checks: $(q "SELECT evidence_id, subject_field, result FROM figure_checks WHERE evidence_id IN ('$R_DRR','$R_GUI') ORDER BY checked_at")"
+else
+  ok "(the real rows 9a36e675 and c1d0f877 are not on this copy: it predates them)"
+fi
+
 step "10. Add an industry (B1; Brad, 1 Nov 2026)"
 IB() { J name "${1:-Utilities}" slug "${2:-utilities}" reason "${3:-Verification: a pack is to be researched for it.}"; }
 I0="$(q "SELECT count(*) FROM industries")"

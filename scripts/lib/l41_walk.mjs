@@ -282,6 +282,38 @@ if (MODE === 'addindustry') {
   check(await waitFor(`[...document.querySelectorAll('a')].some(a=>a.getAttribute('href')==='/packs/utilities')`), '  ...it is listed, linking to its pack');
 }
 
+if (MODE === 'cardlinks') {
+  // B1 (Brad, 4 Nov 2026): card 01c corrects what a link supports, for an outcome whose runs predate the link to it.
+  // E.TO_BASELINE now supports the impact basis; E.TO_IMPACT now supports the baseline: uncross them, one at a time.
+  const goto = async () => {
+    await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`);
+    await waitFor(`!!document.querySelector('[data-evidence="${E.TO_BASELINE}"]')`);
+  };
+  await goto();
+  for (const [id, from, to] of [[E.TO_BASELINE, 'impact basis', 'baseline'], [E.TO_IMPACT, 'baseline', 'impact_basis']]) {
+    const row = `document.querySelector('[data-evidence="${id}"]')`;
+    check((await ev(`${row}.querySelector('[data-testid=evidence-short-id]').textContent`)) === id.slice(0, 8), `${id.slice(0, 8)}: its short id is beside its text`);
+    const btn = `[...${row}.querySelectorAll('[data-testid=correct-link-open]')].find(b=>b.textContent.includes(${JSON.stringify(`(${from} of`)}))`;
+    check(await ev(`!!${btn} && !${btn}.disabled`), `  ...it offers "Correct what this link supports (${from} of …)…"`);
+    await ev(`${btn}.click()`); await sleep(400);
+    const f = `${row}.querySelector('[data-testid=correct-link]')`;
+    await setField(f, 'What it supports', to);
+    await setField(f, 'Why', 'Verification: uncrossing the two links, as on prod.'); await sleep(300);
+    if (id === E.TO_BASELINE) await shotOf('b1_card_link_1280', `[data-evidence="${id}"]`, 1280);
+    await viewport(1280);
+    check(await submitIn(f, 'Withdraw and correct'), '  ...submitted');
+    await sleep(500);
+    check((await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`)).includes(`Correct ${id.slice(0, 8)}`), '  ...the confirmation names the row by its short id');
+    await confirmIn(f); await sleep(1500);
+    check(await waitFor(`!${row}?.querySelector('[data-testid=correct-link]')`), '  ...recorded: the form closed, with no refusal', await ev(`(${row}?.querySelector('[data-testid=correct-link]')?.textContent ?? '').slice(-260)`));
+    await goto();
+  }
+  for (const [id, now] of [[E.TO_BASELINE, 'the baseline'], [E.TO_IMPACT, 'the impact basis']]) {
+    check((await ev(`document.querySelector('[data-evidence="${id}"]').textContent`)).includes(`supports ${now}`), `${id.slice(0, 8)} now supports ${now}`);
+  }
+  await shot('b1_card_links_after_1280', 1280);
+}
+
 if (MODE === 'corrected') {
   check(await open(`/accounts/${E.CURIA}`, `!!document.querySelector('[data-testid=account-detail]')`), "Curia's account");
   await ev(`document.querySelector('[data-testid=account-detail]').open = true`); await sleep(800);

@@ -3609,6 +3609,15 @@ through the API.
 
 The plan is written after C3, and nothing is built until Brad approves it.
 
+**Added to B2 (Brad, 1 Nov 2026; in scope: they cut steward time and do not cross rule 10).** Both of B1's wrong ticks came
+from the near-identical "LTM DRR" and "LTM dollar retention rate" rows:
+1. **Link corrections go into the supersession batch page,** so one dry run and one confirm cover them;
+2. **every evidence picker and list shows the row's short id beside its text.**
+
+**Before M21 prints (Brad, 1 Nov 2026):** the 7,000,000 impact-basis flag on Skillsoft needs a sourced derivation or a figure
+finding. As the guard stands a finding on that account is refused, because it has opened evidence and accepted facts
+(`lvrf_figure_finding_blockers`), so unless that rule changes, the path is a sourced derivation.
+
 ## 15. C3b: the definition factor under the C3 rule; an "unsourced figure" erratum; one errata batch (ruled by Brad, 27 Oct 2026; **approved with D1–D6 as recommended and five conditions; built; deployed at `b410b30`; Gate C clean 1 Nov 2026 (UTC), BUILD_STATUS**)
 
 **Value spine stages served:** `baseline` (a figure with no source on record says so) and `measure`/`verify`

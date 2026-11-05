@@ -298,7 +298,11 @@ export function accountEvidenceRouter(pool: Pool): Router {
                 lvrf_evidence_under_finding(e.id) AS under_finding,
                 lvrf_system_exercise_mark('evidence', e.id) AS system_exercise,
                 (SELECT lvrf_evidence_about(s.about_institution_id, s.about_other_party) FROM evidence s WHERE s.id = e.superseded_by_id) AS superseded_about,
-                coalesce((SELECT jsonb_agg(jsonb_build_object('supports', l.supports, 'withdrawn', l.withdrawn_at IS NOT NULL)) FROM value_outcome_evidence l WHERE l.evidence_id = e.id), '[]'::jsonb) AS links
+                coalesce((SELECT jsonb_agg(jsonb_build_object('supports', l.supports, 'withdrawn', l.withdrawn_at IS NOT NULL,
+                  -- B1 (Brad, 4 Nov 2026): the link's outcome and metric, so the card can correct what it supports.
+                  'value_outcome_id', l.value_outcome_id,
+                  'metric', (SELECT bm.name FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id WHERE vo.id = l.value_outcome_id)))
+                  FROM value_outcome_evidence l WHERE l.evidence_id = e.id), '[]'::jsonb) AS links
            FROM evidence e
            JOIN persons cp ON cp.id = e.captured_by_person_id
            LEFT JOIN persons rp ON rp.id = e.citation_resolved_by_person_id

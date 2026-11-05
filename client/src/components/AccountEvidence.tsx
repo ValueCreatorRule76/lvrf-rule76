@@ -9,7 +9,7 @@ import { SystemExerciseLine, type SystemExerciseMark } from './SystemExercise';
 import { LineageLink } from './LineageLink';
 import { Badge } from './workbench/Card';
 import { useAbout } from './useAbout';
-import { label, EVIDENCE_KIND, SUPPORTS } from '../lib/labels';
+import { label, supportsChoices, supportsShort, EVIDENCE_KIND, SUPPORTS } from '../lib/labels';
 import { day } from '../lib/workspaceStatus';
 
 /**
@@ -33,7 +33,7 @@ interface Row extends EvidenceFormShown {
   source_verified: boolean; citation_resolved: boolean; ai_sourced: boolean; simulated: boolean; superseded_by_id: string | null;
   attester_document: string | null; opened_by: string | null; opened_on: string | null; attested_by: string | null;
   captured_by: string; captured_on: string; about: string | null; basis: string | null; basis_reason: string | null;
-  under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean }[];
+  under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean; value_outcome_id: string; metric: string }[];
   superseded_about: string | null;
 }
 function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice }: {
@@ -141,6 +141,42 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
   );
 }
 
+/**
+ * B1 (Brad, 4 Nov 2026): the run page's "Correct what a link supports…", on the row, for an outcome whose runs predate the
+ * link to it. The same route and act: the link is withdrawn (who, when, why) and the corrected one names what it replaces.
+ */
+function CorrectLink({ row, link, notSteward, onDone }: { row: Row; link: Row['links'][number]; notSteward?: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [supports, setSupports] = useState('');
+  const [reason, setReason] = useState('');
+  if (!open) {
+    return <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} className={SMALL} data-testid="correct-link-open">
+      Correct what this link supports ({supportsShort(link.supports)} of {link.metric})…</button>;
+  }
+  const unmet = [...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])];
+  return (
+    <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="correct-link">
+      <GovernedForm<{ supports: string }>
+        path={`/api/value-outcomes/${link.value_outcome_id}/evidence/${row.id}/correct-support`} provenanceLabel="What this records" disabledReason={notSteward}
+        provenance={<p className="m-0 text-[12.5px] text-ink">This corrects the <strong>current link</strong> of this row to {link.metric}: the link is <strong>withdrawn</strong> with your reason, and the corrected one names what it replaces. <strong>No sealed run changes.</strong></p>}
+        fields={<div className="flex flex-col gap-3">
+          <label className="block"><span className={L}>What it supports</span>
+            <select className={I} value={supports} onChange={(ev) => setSupports(ev.target.value)} data-testid="correct-link-supports">
+              <option value="" disabled>— choose —</option>
+              {supportsChoices(row.kind, link.supports).map((s) => <option key={s} value={s}>{supportsShort(s)}</option>)}
+            </select></label>
+          <label className="block"><span className={L}>Why</span>
+            <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="correct-link-reason" /></label>
+        </div>}
+        confirm={<span data-testid="confirm-text">Correct {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, on {link.metric}: from {label(SUPPORTS, link.supports)} to {label(SUPPORTS, supports)}.</span>}
+        canSubmit={unmet.length === 0} unmet={unmet}
+        buildBody={() => ({ supports, reason: reason.trim() })}
+        submitLabel="Withdraw and correct" onSuccess={onDone} renderSuccess={() => <>Corrected.</>} />
+      <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
+    </div>
+  );
+}
+
 function WithdrawVerification({ row, notSteward, onDone }: { row: Row; notSteward?: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -202,6 +238,8 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
                 <div className="flex flex-wrap items-baseline gap-2">
                   <Badge tone={e.source_verified ? 'healthy' : 'warning'}>{e.source_verified ? 'Source-verified' : 'Not source-verified'}</Badge>
                   <span className="text-[13px] text-ink">{e.summary}</span>
+                  {/* B1 (Brad, 4 Nov 2026): the short id, so near-identical rows are told apart. */}
+                  <span className="font-mono text-[11px] text-ink-45" data-testid="evidence-short-id">{e.id.slice(0, 8)}</span>
                 </div>
                 <p className="m-0 mt-1 text-[11.5px] text-ink-45">
                   {label(EVIDENCE_KIND, e.kind)} · recorded by {e.captured_by}, {day(e.captured_on)}
@@ -224,6 +262,7 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
                   {openable && <OpenSource row={e} onDone={load} />}
                   {e.source_verified && !e.citation_resolved && <WithdrawVerification row={e} notSteward={steward('Withdrawing a verification')} onDone={load} />}
                   {e.superseded_by_id === null && <Supersede row={e} institutionId={institutionId} notSteward={steward('Superseding evidence')} onDone={load} />}
+                  {live.map((l) => <CorrectLink key={`${l.value_outcome_id}-${l.supports}`} row={e} link={l} notSteward={steward('Correcting a link')} onDone={load} />)}
                 </div>
               </li>
             );

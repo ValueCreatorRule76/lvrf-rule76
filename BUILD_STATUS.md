@@ -13589,3 +13589,15 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
 - **The Supersede form** said links are not moved, which B1 made untrue; it now says they and the mark move. **The single route carries the row's confidence,** as the batch does.
 - **Gate A:** all 45 scripts pass in one run, build and lint clean; `verify_supersession` 186/0, with B8 (the route reading only the row's own link) and B9 (the chain cut to one step). Equivalence against `d26c1ef`: 72 of 72 identical, nothing allowed. Bundle `index-DKLPEoiW.js` / `index-BndT_4xn.css`.
 
+### B1 addendum Gate B and the acts after it (1–5 Nov 2026, UTC)
+
+- **Deployed at `6d7bdca`** (hardening 23:03 UTC, 1 Nov). TOC 804 before B1, 807 before the addendum, 808 after it: `lvrf_evidence_chain` is the one new entry. My estimates (806, 809) were two high: a CHECK added to a table is dumped with its table, not as its own entry.
+- **Fix 1, step 1, landed on `9765335f`, not `9a36e675` (23:45:50 UTC):** its successor `c1d0f877` carries the guidance text and quote, and took `9765335f`'s baseline link. The two texts are now right on two current rows, and their links are crossed: `9a36e675` (the DRR) on the impact basis, `c1d0f877` (the guidance) on the baseline. The lineage of the two rows stays crossed; the acts record what happened.
+- **The errata batch (step 3) is done:** both Scotts errata now read the same, "It supports the impact basis only. It is a vendor claim about Scotts Miracle-Gro, not Scotts' own measurement, and is no evidence of Scotts' baseline."
+
+### Card 01c corrects a link (built 4 Nov 2026; Gate A passed; not deployed)
+
+- **Why:** no screen could correct Skillsoft's crossed links. The run page needs a run that names its outcome (run 1 predates it), and the tenant's own account has no walk.
+- **What:** each current link on a card 01c row has "Correct what this link supports (… of …)…", the run page's form, calling the same route (`correct-support`), with the same act and every guard unchanged. The card's read gains each link's `value_outcome_id` and `metric`. **The row's short id is shown beside its text** (B2's item 2, on this one card). No migration, trigger or hardening change.
+- **Gate A:** all 45 scripts pass in one run, build and lint clean; `verify_supersession` 206/0, the card swapping two rows of prod's shape, and the route refusing a support a row once held. **On a clone of the 5 Nov snapshot** (`lvrf_snapshot_20261105T023251Z`, TOC 808), the walk through card 01c uncrossed exactly `9a36e675` and `c1d0f877`: 30/0, two `correct` acts and two links only, the baseline's check "98 is in the quote (98%)", the impact basis's "7,000,000 is not in the quote", every run byte-identical. Equivalence against `6d7bdca`: 75 GETs, 72 identical, 3 differing only by the two allowed keys. Bundle `index-BhYhvguU.js` / `index-BndT_4xn.css`.
+
