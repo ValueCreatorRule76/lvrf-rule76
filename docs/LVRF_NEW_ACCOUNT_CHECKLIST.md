@@ -135,7 +135,7 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 
 ## 7. Run and lock (workspace step 5)
 
-- [ ] **W7, Produce the run.** It seals the evidence, facts and case as they stand, and the case chain once §16 ships.
+- [ ] **W7, Produce the run.** It seals the evidence, facts and case as they stand, the case chain included (§16, B2).
 - [ ] **W8, Lock the run**, with a reason. A locked run never changes. Corrections go beside it as errata.
 
 ## 8. The point of view (workspace step 6)
@@ -145,9 +145,9 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 - [ ] **Any flagged figure** on a page the prospect will see is resolved before printing: a sourced derivation, or a
       finding where the guard allows one.
 - [ ] **If no source supports a flagged figure, withdraw its link** (Brad, 4 Nov 2026), so the case prints the refusal
-      for that figure instead of a figure nothing supports. "Withdraw a link…" is on the run page. For an outcome whose
-      runs predate the link to it, there is no screen for this until B2 adds "Withdraw this link…" to card 01c. The
-      first case is Skillsoft's 7,000,000 impact basis: the guidance row is linked to it and does not state it.
+      for that figure instead of a figure nothing supports. "Withdraw a link…" is on the run page; for an outcome whose
+      runs predate the link to it, use "Withdraw this link…" on card 01c (B2). The first case was Skillsoft's 7,000,000
+      impact basis: Brad withdrew `c1d0f877`'s link on 5 Nov 2026, as the guidance row does not state the figure.
 
 ## 9. The value case *(B3: P6)*
 

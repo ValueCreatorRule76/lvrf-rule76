@@ -13676,3 +13676,27 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
   - card 01c's withdrawal before and after, at 1280 and 390;
   - the printed snapshots page, every page.
 - **Gate C cannot show a v4 run on prod** (rule 9): the first real run is read-checked when Brad produces one.
+
+### B2 closed: Gate C clean (5 Nov 2026, UTC)
+
+**Deployed at `bdf9971`** (the code of `98cde97`; every commit after it is docs only). Bundle `index-LqfuJWoB.js` /
+`index-Chp2jk1U.css`; health 200, `actor_header=off`. Backup `lvrf-pre-b2-20261105T141816Z.dump`, 600, 1.3 MB.
+
+- **The database:** 186 triggers; `lvrf_case_chain` and `value_runs_case_current` present, the trigger recorded in the
+  manifest (186 rows, applied 14:18:45 UTC). Drift none at 47 migrations and 1124 objects; 106 CHECKs, every one with a
+  plain sentence; ownership clean.
+- **The runs:** 25, hashes 25 of 25 (recompute and embedded `payloadHash`). Every run row is byte-identical to the
+  5 Nov snapshot, compared row by row in UTC. A first digest differed only because `r::text` renders timestamps in the
+  session's time zone (the Mac's copy reads America/New_York); in UTC the 25 rows match. No run seals a case yet:
+  under rule 9 none is produced to exercise the system, so the first v4 run is read-checked when Brad produces one.
+- **Brad's act, 09:27:36 ET:** `withdraw` of `c1d0f877`'s impact-basis link on outcome `f23ee6a8` (Dollar Retention
+  Rate (trailing twelve months), claiming 7,000,000), through card 01c's "Withdraw this link…", with his reason as
+  given; no replacement. The row's earlier baseline link (withdrawn 03:19 UTC, the B1 uncrossing) stays on the record.
+  Skillsoft's three other links are unchanged: `2c10e091` and `eea43d9a` the actual, `9a36e675` the baseline. Counts
+  `55|18|166|0|23|1` and `44|7|11|25|6|3`; the one new act is his.
+- **No refused request and no audit row without an actor** since 08:55 ET.
+- **L53 closes.** The four relative tests ship with B2.
+- **Also recorded on 5 Nov** (docs, between Gate A and Gate B): L54 and "Correct the reviewer's note" to 3.1; P6 rulings
+  4 (no reviewer notes on the case) and 5 (solutioning reads only links on current levers, with a Gate A break);
+  checklist stage 0 complete for M21 for Utilities (TRIR and excavation levers; CAIDI and Net heat rate not used) and
+  Manufacturing (TRIR only), with the attestation roles.
