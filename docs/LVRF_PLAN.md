@@ -4130,7 +4130,7 @@ Batch B1. Backup; pull; `ownership.sql`; `hardening.sql`; checks; deploy. Then B
 then the Yes openings. Gate C reads each row, its successor, mark, links, lineage and both errata. L52 closes there, and
 the hold with it.
 
-## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan to follow; rulings already made**)
+## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan approved by Brad, 5 Nov 2026, with the three choices as recommended; Gate B Wed 11 Nov, buffer to Fri 13 Nov**)
 
 **Value spine:** `model` and `return`: the case a CFO reads, and what it refuses.
 
@@ -4154,3 +4154,88 @@ the hold with it.
    with a withdrawn lever holding a current link beside its successor's.
 
 **Checked (4 Nov 2026):** nothing in the CFO lens, the refusal page or cost of delay requires a ratified entry.
+
+### The plan (approved by Brad, 5 Nov 2026)
+
+**Value spine:** `model` and `return`. Out of B3: the War Room and the CHRO lens (3.1, the cut line); the measure class
+and the attribution method (B4, ruling 2); authored `solution_recommendations` and `pack_offering_exclusions` (3.1).
+
+| # | Part | Estimate |
+|---|---|---|
+| 1 | Migrations 0047 (enum values only: `governance_act` + `record_rate`, `plan`, `share`; `document_disclosure` + `shared_for_review`; a new enum value cannot be used in the transaction that adds it) and 0048 (the tables below), and hardening section 33 | 1 day |
+| 2 | `lvrf_cost_of_delay(outcome)` and `lvrf_cost_of_delay_amount(baseline, target, rate, months)`; the case chain gains cost of delay (inputs and result, or every refusal reason), the roadmap and solutioning: payload v5, so B2's lock guard covers them. Runs before v5 render "not sealed in this run" | ½ day |
+| 3 | Routes and forms: `/policies` (steward: set a policy value, ratify the CFO lens); record a monetization rate on the outcome; roadmap milestones; "Shared for review as an outside-in hypothesis" (steward, D-M21); the print-request record (O4). Every new route classified in `STEWARD_ROUTES` | 1 day |
+| 4 | `/runs/:id/case` under `cfo` or `general`: header and both banners; executive summary; hypotheses; outcomes by lever, each entry "proposed, sourced at x of N institutions" with one line that no pack is certified, and no reviewer notes (ruling 4); cost of delay; roadmap; recommended solutioning from links on current levers only (ruling 5); what it takes to raise confidence; the confidence curve (B2). The CFO refusal page with every reason and ask; a reference example never under the CFO lens (O-D3). Print: both banners and the full hash on every page | 1½ days |
+| 5 | Gate A: `verify_value_case.sh` with the breaks below, a NULL-input refusal per new CHECK, the full regression, equivalence, screens at 1280 and 390, every printed page | 1 day |
+
+**Build Fri 6 – Tue 10 Nov; Gate B Wed 11 Nov, buffer to Fri 13 Nov.** If the buffer is needed, **roadmap milestones are cut
+first**: the roadmap section then shows only the dates on record (committed target dates, falsifier due dates, open asks).
+
+**0048's objects:**
+- **`policy_values`** (insert-only, versioned by `supersedes_id`): `cost_of_delay_months` (integer 1–24) and
+  `pack_ratification_institutions` (integer ≥ 1, **a value lower than the current one refused**); reason ≥ 12; steward
+  only, with a `ratify` act; one current value per key.
+- **`lens_policies`** (insert-only, versioned): `persona` (`cfo` only in 3.0), `min_confidence_score` 0–100,
+  `admitted_bases[]` (not empty, each a basis label), `suppresses[]`, `refusal_text` ≥ 24, reason; steward only, `ratify`;
+  one current per persona. **The CFO threshold lives here only** (choice 3), not also in `policy_values`.
+- **`monetization_rates`** (insert-only, superseded): account, metric, `rate` ≥ 0 (zero is data), `currency`
+  `^[A-Z]{3}$`, `per_unit` (**must equal the metric's unit**, by trigger), `rate_kind` (`performance` · `exposure`),
+  `how_read`, `evidence_id` NOT NULL about this account; a `record_rate` act. Its basis and customer-side attester are
+  read by the function, since both can change after the rate is recorded.
+- **`roadmap_milestones`** (insert-only, superseded): engagement, title, `due_on` NOT NULL, owner NOT NULL and not
+  simulated, optional outcome and stage (`commit` · `measure` · `verify`), status (`planned` · `done` · `missed`); done
+  needs evidence; a date change is a superseding row with a reason; a `plan` act.
+- **`record_documents`** gains `kind` (`rendering` · `print_request` · `share_for_review`; the five existing rows read
+  `rendering`), `lens`, `shared_with`. A share names with whom, is **allowed only while both banners print** (outside-in
+  and unverified), never changes the run, and is the steward's, with a `share` act. `record_documents` stays provisional
+  until the Repository Constitution ratifies (named, not resolved).
+- Nothing is dropped or retyped and nothing is orphaned; every new table is insert-only, so `ownership.sql`'s list is
+  unchanged.
+
+**The three choices (Brad, 5 Nov 2026, yes to all three):**
+1. **Solutioning reads the sealed current `lever_offerings` of each hypothesis's lever.** Authored recommendations and
+   offering exclusions are 3.1; with no exclusion table, "not excluded" is trivially true in 3.0, and the case says
+   nothing that claims the check.
+2. **The N in "sourced at x of N" is a policy value Brad sets** (act 2), never a number in code.
+3. **The CFO threshold lives only in the CFO lens policy** (55, O-D1).
+
+**The measure class is not the rate kind (Brad's question, 5 Nov 2026).** The class (`capability_performance` ·
+`compliance_assurance`) is what kind of value the outcome is, stated by the steward at commit in B4 (ruling 2).
+`rate_kind` (`performance` · `exposure`) is what the client's rate prices. Refusal 5 needs both; **neither is inferred
+from the other.** Until B4, `lvrf_cost_of_delay` refuses with "no measure class stated at commit" and computes on no
+outcome. B3's Gate A tests the arithmetic in `lvrf_cost_of_delay_amount` directly (the $50,000 hand calculation); B4's
+Gate A prints it end to end.
+
+**Gate A breaks, each caught:** a vendor-basis rate; a non-customer-side attester; a rate in the wrong unit; a reference
+example under the CFO lens; a roadmap date edited in place; a pre-v5 run rendering a cost of delay; a policy value or a
+lens by a non-steward; **solutioning reading a link under a withdrawn lever** (ruling 5: a copy of `27465fb3` under
+`d58a08c5` beside a link on its successor); the "sourced at x of N" label dropped; a reviewer's note shown; a share
+recorded while the run is verified or not outside-in; N lowered; D unset (the case refuses "no cost-of-delay months
+set", never computes); the class absent (refused, never inferred from the rate). Plus the hand calculation: committed
+1.0 against baseline 1.4 at an attested $250,000 per point per year prints $50,000 for 6 months (0.4 × 250,000 × 6/12),
+and a Scotts-shaped case lists every cost-of-delay refusal reason.
+
+### The B3 act session (after the B3 deploy; rule 10)
+
+All on `/policies`, in any order. The forms are built to these labels, and their confirmations to this text.
+
+1. **"Set a policy value…"**, Policy `Cost-of-delay months`, Value `6`, Reason: `Q3, ruled 24 Oct 2026, and P6 ruling 3,
+   4 Nov 2026: a delay of D months forgoes D/12 of the annual value at the committed target, undiscounted. D = 6.`
+   Confirmation: "Set Cost-of-delay months to 6. No value was set before. Every cost of delay computed after this reads
+   6/12 of the annual value at the committed target; no sealed run changes."
+2. **"Set a policy value…"**, Policy `Pack ratification threshold (institutions' systems of record)`, Value `2`, Reason:
+   `A pack entry is ratified when it is sourced from N institutions' systems of record. N = 2, as recorded (Brad, 4 Nov
+   2026), and never lowered. The value case labels each proposed entry "sourced at x of N".` Confirmation: "Set Pack
+   ratification threshold (institutions' systems of record) to 2. No value was set before. It can be raised later, never
+   lowered; no sealed run changes."
+3. **"Ratify a lens policy…"**, Persona `CFO`, Minimum computed confidence `55`, Admitted bases for an actual: only
+   `system of record` and `published`, Suppresses: only `consumption metrics`, Refusal text: `The CFO lens shows a value
+   case only when its computed confidence is at least 55 and every actual it reports rests on a system of record or a
+   published source. This case does not meet that yet. Below is each reason, and what would meet it.` Reason: `O-D1, 12
+   Oct 2026: the CFO lens threshold is 55, the medium band's floor. It admits system-of-record and published actuals
+   only, and suppresses consumption metrics (LVRF_PLAN §5).` Confirmation: "Ratify the CFO lens: at least 55, admitting
+   system of record and published actuals, suppressing consumption metrics. No CFO lens was ratified before. Every value
+   case read under the CFO lens after this applies it; no sealed run changes."
+
+Until they are done, every case reads "no cost-of-delay months set", "no pack ratification threshold set" and "no CFO
+lens ratified", and the CFO lens refuses. Nothing falls back to a default.
