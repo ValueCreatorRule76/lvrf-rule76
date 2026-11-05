@@ -13743,3 +13743,23 @@ milestone owner, the POV and the case on US Letter, footnotes in reading order).
   - **Screens and PDFs** in `~/lvrf-backups/l41-screens` (`b3_*`), every page looked at.
 - **Harness note (not B3's):** a script's cleanup stops its Vite wrapper but not Vite, so a later run on the same port
   can meet a stale server. Stray Vite processes were stopped before the final regression.
+
+### B3 closed: Gate C clean (5 Nov 2026, UTC)
+
+**Deployed at `9c93671`.** Bundle `index-C1EAYG9X.js` / `index-DedN9AjH.css`; health 200, `actor_header=off`. Backup
+`lvrf-pre-b3-20261105T204949Z.dump`, 600, 1.3 MB.
+
+- **The database:** 49 migrations; 204 triggers and 204 manifest rows (applied 20:50:25 UTC); all nine of section 33's
+  functions present; drift none at 1228 objects; 127 of 127 CHECKs with a plain sentence; ownership clean; the app role
+  holds INSERT and no UPDATE on `policy_values`, `lens_policies`, `monetization_rates` and `roadmap_milestones`.
+- **The runs:** 25, hashes 25 of 25, every row byte-identical to the 5 Nov snapshot (compared in UTC). No v5 run yet:
+  under rule 9 none is produced to exercise the system.
+- **Brad's act session, through `/policies`:** `e81fb71d` cost-of-delay months = 6 (15:58:53 ET); `24e4aa8b` pack
+  ratification threshold = 2 (15:59:23 ET); `b21fc8d3` the CFO lens, at least 55, admitting system-of-record and
+  published actuals, suppressing consumption metrics (16:00:20 ET). Three `ratify` acts, each reason equal to its row's,
+  word for word as §19's act session gave them.
+- **Counts** `55|18|169|0|23|1` and `44|7|11|25|6|3|5`; no rate or milestone yet; the five record documents read
+  `rendering`. No refused request and no audit row without an actor since 20:00 UTC.
+- **Steward safety** (B4's Gate B) waited on branch `b4-steward-safety` until this Gate C, as Brad ruled, and is merged
+  after it. Its first commit captured `Workbench.tsx` mid-break (a regression was running); a forward commit restored it,
+  and a new standing rule bars committing while a regression runs.

@@ -4130,7 +4130,7 @@ Batch B1. Backup; pull; `ownership.sql`; `hardening.sql`; checks; deploy. Then B
 then the Yes openings. Gate C reads each row, its successor, mark, links, lineage and both errata. L52 closes there, and
 the hold with it.
 
-## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan approved by Brad, 5 Nov 2026, with the three choices as recommended; built 5 Nov 2026, Gate A passed, not deployed (BUILD_STATUS); Gate B Wed 11 Nov, buffer to Fri 13 Nov**)
+## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan approved by Brad, 5 Nov 2026, with the three choices as recommended; deployed at `9c93671`; Gate C clean 5 Nov 2026 (BUILD_STATUS), six days ahead of its Gate B date**)
 
 **Value spine:** `model` and `return`: the case a CFO reads, and what it refuses.
 
