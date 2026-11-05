@@ -146,16 +146,26 @@ cut line applied first.
      hashed) and a generated prompt; a person drafts outside LVRF; import with deterministic checks (same pack, every
      sentence cites, every figure matches a cited item, no other account, attributions only to a client-stated source,
      outside-in honesty, no placeholders); review the proposal against the current text, sentence by sentence; accept as
-     authored by the person (`executive_summaries`, `drafted_with_ai` and the tool); seal with the run. **Conflict to
-     rule, not resolve:** CVAF's Phase 2 calls a model from the server; LVRF's design says LVRF generates no prose, and
-     research's D1 that no code calls a research tool. Only the offline flow is adopted until Brad rules.
+     authored by the person (`executive_summaries`, `drafted_with_ai` and the tool); seal with the run. **Ruled (Brad,
+     5 Nov 2026): the offline flow only.** LVRF generates no prose, and no code calls a research or drafting tool (D1).
+     CVAF's server-call phase is not adopted.
   2. **Solutioning verdicts:** ADMIT · CONDITIONAL · DEFER · EXCLUDE, each with a qualifier; enablers; and a refusal to
      render when the money doesn't reconcile. With the authored `solution_recommendations` and offering exclusions
-     already deferred here. **To rule first:** an LVRF lever carries no value by design (no expected-effect column), so
-     what "money reconciles" means in LVRF (per outcome: cost of delay or realized value against the recommendations
-     that claim it) is a design question, not a port.
-  3. **A read-only UI conformance audit (P13-style)**, before the steward-safety slice. *(Which slice "steward-safety"
-     names is to be confirmed with Brad: it is not yet in this plan.)*
+     already deferred here. **Ruled (Brad, 5 Nov 2026): in LVRF the verdicts reconcile to the case's levers and
+     outcomes, not to money.** Every line names a current lever on a hypothesis in the sealed case, and the output
+     refuses to render if one does not. Money reconciliation waits until monetization rates exist on real accounts.
+     **A design ruling still to write for 3.1.**
+  3. **A read-only UI conformance audit (P13-style)**, before the steward-safety slice.
+- **Steward safety** (LVRF_PLAN §19; about 1 day), **if it did not ship in B4's Gate B**: first in 3.1, after the
+  P13-style audit. Card 01c current rows first with history collapsed; simulated and system-exercise rows muted, their
+  actions behind a toggle; short labels with context above; destructive acts in a marked zone; every confirmation names
+  the item and its short id; no dead ends.
+- **From Brad's UX message (5 Nov 2026):**
+  - a source file attached to each evidence row, with the quote checked against the file's text;
+  - a planned-acts queue: reviewed act text pre-filled, and the steward reads and submits each one (rule 10 holds:
+    the steward performs every act);
+  - accessibility: the contrast of secondary text, focus, labels;
+  - code-splitting (the bundle is over 600 kB; L40).
 - Loose ends L46–L53 not closed by item 1, and any finding frozen out by rule 1.
 
 ## 4.0 (recorded so nothing is lost)

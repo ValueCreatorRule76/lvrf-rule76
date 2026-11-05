@@ -4254,7 +4254,26 @@ lens ratified", and the CFO lens refuses. Nothing falls back to a default.
    applies once a case carries more than one. Gate A: a fixture whose weaker-floored hypothesis was stated first renders
    second (break: the sort removed, caught).
 
-**Estimate with both:** about ½ day, inside part 4. Part 1 (the migrations, section 33, the plain sentences) was
-largely built on 5 Nov before this came in, which offsets it, so **Gate B stays Wed 11 Nov**, buffer to Fri 13 Nov
-intact. Brad's UX message is not yet folded in: it is not in this session's record, and the estimate is re-confirmed
-once it is.
+3. **The printed case is M21, so it is built readable** (Brad's UX message, 5 Nov 2026, item 1):
+   - **an executive page first:** the hypothesis; the money at stake, or the refusal; cost of delay; the three asks;
+   - **units and currency on every figure, one number format, and a source footnote per figure in words** (the basis
+     and the source as a sentence, never a bare code);
+   - **no short ids or lever codes in the customer print.** The hash and both banners stay. Short ids stay on screen,
+     in the app's pickers and lists (B2);
+   - **the CFO refusal page framed as "What we need from you"**, each ask with its converting question;
+   - **a short glossary:** baseline, impact basis, attested, proposed;
+   - **US Letter print typography; the banners visible on every page but not the loudest thing on it.**
+
+**Estimate with 1–3:** part 4 grows by about one day. Part 1 was largely built on 5 Nov, and part 2's function and
+payload v5 are done, so about 4½ days remain against Fri 6 – Tue 10: **Gate B stays Wed 11 Nov**, buffer to Fri 13
+intact.
+
+**Steward safety (Brad, 5 Nov 2026; about 1 day), only if B3's Gate B lands Wed 11 Nov with the buffer unused.** Built
+Thu 12 and shipped in **B4's Gate B** (no gate of its own), so B4's Gate B moves from Sat 14 to **Sun 15 Nov** and 3.0
+is ratified about 16 Nov; M21 unchanged. Otherwise it is first in 3.1, after the P13-style audit. Its scope:
+- card 01c shows current rows first, with superseded and withdrawn rows under a collapsed "History";
+- simulated and system-exercise rows muted and labelled, their act buttons behind a "Show actions" toggle;
+- short button labels, with the context on a line above;
+- destructive acts (for example "Retire this entry") in a separate, marked zone;
+- every confirmation names the item and its short id (for example "Accept CAIDI with this note: …");
+- no dead ends: where a control cannot render, it says where to go.
