@@ -503,6 +503,7 @@ function ReviewForm({
           </>
         }
         canSubmit={note.trim() !== '' && (decision === 'reject' || caveatsRead)}
+        confirm={<span data-testid="confirm-text">{decision === 'accept' ? 'Accept' : 'Reject'} {result.field_name} ({result.id.slice(0, 8)}){decision === 'accept' ? ' into the pack' : ''} with this note: &ldquo;{note.trim()}&rdquo;. A decision is final.</span>}
         buildBody={() => ({ review_note: note })}
         submitLabel={decision === 'accept' ? 'Accept' : 'Reject'}
         onSuccess={() => onDecided(`${result.field_name}: ${decision === 'accept' ? 'accepted into the pack' : 'rejected'}`)}
@@ -618,6 +619,7 @@ function ExcludeForm({
           )}
         </div>
       }
+      confirm={<span data-testid="confirm-text">Exclude &ldquo;{name.trim()}&rdquo; from this pack, with this reason: &ldquo;{reason.trim()}&rdquo;. Once excluded, the name cannot return.</span>}
       canSubmit={name.trim() !== '' && reason.trim() !== '' && !proposalHalf}
       buildBody={() => ({
         name: name.trim(),

@@ -74,7 +74,18 @@ const setField = (scopeExpr, labelText, value) => ev(`(()=>{
   Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)});
   el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return true })()`);
 const fieldValue = (scopeExpr, labelText) => ev(`(()=>{const root=${scopeExpr};const l=[...root.querySelectorAll('label')].find(x=>x.textContent.includes(${JSON.stringify(labelText)}));const el=l&&l.querySelector('input,select,textarea');return el?el.value:null})()`);
-const click = (scopeExpr, text, tag = 'button') => ev(`(()=>{const root=${scopeExpr}||document;const el=[...root.querySelectorAll(${JSON.stringify(tag)})].find(e=>e.textContent.trim()===${JSON.stringify(text)}||e.textContent.includes(${JSON.stringify(text)}));if(!el)return false;el.click();return true})()`);
+const click0 = (scopeExpr, text, tag = 'button') => ev(`(()=>{const root=${scopeExpr}||document;const el=[...root.querySelectorAll(${JSON.stringify(tag)})].find(e=>e.textContent.trim()===${JSON.stringify(text)}||e.textContent.includes(${JSON.stringify(text)}));if(!el)return false;el.click();return true})()`);
+// Steward safety (Brad, 5 Nov 2026): a steward act shows what it will record, naming the item and its short id, and is
+// sent only on "Confirm". This walk tests what each act does, so it confirms whatever confirmation follows a click;
+// verify_steward_safety.sh reads the confirmations themselves.
+const click = async (scopeExpr, text, tag = 'button') => {
+  const r = await click0(scopeExpr, text, tag);
+  if (r) {
+    await sleep(350);
+    await ev(`(()=>{const y=[...document.querySelectorAll('[data-testid=form-confirm-yes]')].find(b=>b.offsetParent!==null);if(!y)return false;y.click();return true})()`);
+  }
+  return r;
+};
 const buttonDisabled = (scopeExpr, text) => ev(`(()=>{const root=${scopeExpr};const el=[...root.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(text)});return el?el.disabled:null})()`);
 const card = (title) => `([...document.querySelectorAll('section')].find(s=>s.querySelector('h3')?.textContent.includes(${JSON.stringify(title)})))`;
 // Q4c1b: the "caveats read" tick a pending result needs before Accept.

@@ -37,7 +37,7 @@ function Revoke({ g, onDone, notSteward }: { g: Grant; onDone: () => void; notSt
         path={`/api/customer-roles/${g.id}/revoke`} provenanceLabel="What this records"
         provenance={<p className="m-0 text-[12.5px] text-ink">The role is <strong>revoked</strong> with your name, the date and your reason, and stays shown struck through. Runs already sealed keep it as it stood.</p>}
         fields={<label className="block"><span className={L}>Why</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>}
-        confirm={<span data-testid="confirm-text">Revoke {g.person}&apos;s {ROLE(g.role)} role (per {g.source}). From now on it earns no credit.</span>}
+        confirm={<span data-testid="confirm-text">Revoke {g.person}&apos;s {ROLE(g.role)} role ({g.id.slice(0, 8)}, per {g.source}). From now on it earns no credit.</span>}
         canSubmit={reason.trim().length >= 12} unmet={reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : []}
         buildBody={() => ({ reason: reason.trim() })} submitLabel="Revoke the role"
         onSuccess={() => { setOpen(false); onDone(); }} renderSuccess={() => <>Revoked.</>}

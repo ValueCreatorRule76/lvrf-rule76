@@ -37,9 +37,11 @@ interface Row extends EvidenceFormShown {
   under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean; value_outcome_id: string; metric: string }[];
   superseded_about: string | null;
 }
-function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice }: {
+function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice, confirm }: {
   institutionId: string; path: string; submitLabel: string; provenance: ReactNode; extraFields?: ReactNode;
   extraBody?: () => Record<string, unknown>; extraUnmet?: string[]; onDone: () => void; simulatedChoice?: boolean;
+  /** Steward safety (Brad, 5 Nov 2026): what will be recorded, naming the row and its short id, before it is. */
+  confirm?: (summary: string) => ReactNode;
 }) {
   const [kind, setKind] = useState('');
   const [summary, setSummary] = useState('');
@@ -74,6 +76,7 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
         {extraFields}
       </div>}
       canSubmit={unmet.length === 0} unmet={unmet}
+      confirm={confirm ? confirm(summary.trim()) : undefined}
       buildBody={() => ({ kind, summary: summary.trim(), provenance: origin.trim(), about: about.body(), ...form.body(),
         ...(reference.trim() !== '' ? { source_reference: reference.trim() } : {}),
         ...(simulatedChoice && simulated === 'true' ? { simulated: true } : {}), ...(extraBody?.() ?? {}) })}
@@ -107,7 +110,7 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
   const attestation = row.kind === 'attestation' || row.attested_by !== null;
   const needsReading = row.evidence_form === 'legacy' || row.evidence_form === 'statement';
   const form = useEvidenceForm({ allowed: ['quote', 'locator'], kind: row.kind, sourceReference: row.source_reference ?? '' });
-  if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="open-source-open">Record that you opened the source…</button>;
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="open-source-open">Open the source…</button>;
   const yes = supports === 'true';
   const unmet = [...(supports === '' ? ['say whether the source supports it'] : []),
     ...(yes && attestation && document === '' ? ["name the document from the attester"] : []),
@@ -135,6 +138,7 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
             <textarea rows={2} className={I} value={why} onChange={(ev) => setWhy(ev.target.value)} data-testid="open-source-why" /></label>}
         </div>}
         canSubmit={unmet.length === 0} unmet={unmet}
+        confirm={<span data-testid="confirm-text">Record that you opened {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;: {yes ? 'the source says what it states, so it reads source-verified' : 'the source does not support it, so it stays unverified'}. An opening is final.</span>}
         buildBody={() => ({ source_verified: yes, ...(yes && attestation ? { attester_document: document } : {}), ...(yes && needsReading ? form.body() : {}), ...(yes ? {} : { reason: why.trim() }) })}
         submitLabel="Record the opening" onSuccess={onDone} renderSuccess={() => <>Recorded.</>} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
@@ -152,7 +156,7 @@ function CorrectLink({ row, link, notSteward, onDone }: { row: Row; link: Row['l
   const [reason, setReason] = useState('');
   if (!open) {
     return <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} className={SMALL} data-testid="correct-link-open">
-      Correct what this link supports ({supportsShort(link.supports)} of {link.metric})…</button>;
+      Correct…</button>;
   }
   const unmet = [...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])];
   return (
@@ -188,7 +192,7 @@ function WithdrawLink({ row, link, notSteward, onDone }: { row: Row; link: Row['
   const [reason, setReason] = useState('');
   if (!open) {
     return <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} className={SMALL} data-testid="withdraw-link-open">
-      Withdraw this link ({supportsShort(link.supports)} of {link.metric})…</button>;
+      Withdraw this link…</button>;
   }
   const unmet = reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [];
   return (
@@ -218,7 +222,7 @@ function WithdrawVerification({ row, notSteward, onDone }: { row: Row; notStewar
         path={`/api/evidence/${row.id}/withdraw-verification`} provenanceLabel="What this records" disabledReason={notSteward}
         provenance={<p className="m-0 text-[12.5px] text-ink">That this evidence is no longer verified, by you, with your reason. <strong>No sealed run changes</strong>; the next run reads it unverified. Only an opening can verify it after this.</p>}
         fields={<label className="block"><span className={L}>Why</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="withdraw-verification-reason" /></label>}
-        confirm={<span data-testid="confirm-text">Withdraw the verification of &ldquo;{row.summary.slice(0, 90)}&rdquo;.</span>}
+        confirm={<span data-testid="confirm-text">Withdraw the verification of {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;: it reads unverified from now on, and only an opening can verify it again.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ reason: reason.trim() })}
         submitLabel="Withdraw the verification" onSuccess={onDone} renderSuccess={() => <>Withdrawn.</>} />
@@ -238,9 +242,88 @@ function Supersede({ row, institutionId, notSteward, onDone }: { row: Row; insti
         extraFields={<label className="block"><span className={L}>Why it is superseded</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="supersede-reason" /></label>}
         extraBody={() => ({ reason: reason.trim() })}
         extraUnmet={reason.trim().length < 12 ? ['say why, in at least 12 characters'] : []}
+        confirm={(next) => <span data-testid="confirm-text">Supersede {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, with a new row: &ldquo;{next.slice(0, 80)}&rdquo;, recorded unverified. Its links and its mark move to the new row.</span>}
         onDone={onDone} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
     </div>
+  );
+}
+
+/**
+ * Steward safety (Brad, 5 Nov 2026): why a row offers no opening, and where to go instead. No dead ends.
+ */
+function noOpeningReason(e: Row, live: Row['links']): string | null {
+  if (e.citation_resolved || e.superseded_by_id !== null) return null;
+  if (e.under_finding) return 'No opening: a finding records that this figure has no source on record. The run page shows the finding.';
+  if (e.simulated) return 'No opening: this row is simulated, so there is no source to open.';
+  if (e.evidence_form === 'statement' && e.kind === 'observation') return "No opening: a person's statement citing no source has nothing to open.";
+  if (e.ai_sourced && live.length === 0) return "No opening here: an AI-sourced row is opened from the research it came from, on the account's Research step.";
+  return null;
+}
+
+function EvidenceRow({ e, institutionId, steward, onDone }: { e: Row; institutionId: string; steward: (act: string) => string | undefined; onDone: () => void }) {
+  const live = e.links.filter((l) => !l.withdrawn);
+  const openable = !e.citation_resolved && e.superseded_by_id === null && !e.under_finding && !e.simulated
+    && !(e.evidence_form === 'statement' && e.kind === 'observation') && !(e.ai_sourced && live.length === 0);
+  // Simulated and system-exercise rows are muted and labelled; their acts wait behind a toggle.
+  const muted = e.simulated || Boolean(e.system_exercise);
+  const [showActions, setShowActions] = useState(!muted);
+  const why = noOpeningReason(e, live);
+  const current = e.superseded_by_id === null;
+  const withdrawals = current && (live.length > 0 || (e.source_verified && !e.citation_resolved));
+  return (
+    <li className={'border-b border-rule-soft py-2.5 last:border-b-0' + (muted ? ' opacity-70' : '')} data-testid="account-evidence-row" data-evidence={e.id} data-muted={String(muted)}>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <Badge tone={e.source_verified ? 'healthy' : 'warning'}>{e.source_verified ? 'Source-verified' : 'Not source-verified'}</Badge>
+        {e.simulated && <Badge tone="neutral">Simulated</Badge>}
+        {e.system_exercise && <Badge tone="neutral">System exercise</Badge>}
+        <span className={'text-[13px] ' + (muted ? 'text-ink-45' : 'text-ink')}>{e.summary}</span>
+        {/* B1 (Brad, 4 Nov 2026): the short id, so near-identical rows are told apart. */}
+        <ShortId id={e.id} />
+      </div>
+      <p className="m-0 mt-1 text-[11.5px] text-ink-45">
+        {label(EVIDENCE_KIND, e.kind)} · recorded by {e.captured_by}, {day(e.captured_on)}
+        {' · '}<span data-testid="evidence-about">{e.about ? <>about {e.about}</> : <span className="text-warning">what it is about is not yet stated</span>}</span>
+        {' · '}{live.length === 0 ? 'supports no outcome' : `supports ${live.map((l) => label(SUPPORTS, l.supports)).join(', ')}`}
+      </p>
+      <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]">Source: {e.provenance}</p>
+      <EvidenceRestsOn e={e} className="mt-0.5" />
+      {e.citation_resolved && (
+        <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-opened">
+          Opened by {e.opened_by ?? 'a person not on record'}{e.opened_on ? `, ${day(e.opened_on)}` : ''}{e.attester_document ? `, from a ${e.attester_document.replace('_', ' ')} from ${e.attested_by}` : ''}{e.source_verified ? '' : ': it does not support this evidence, so it stays unverified'}.
+        </p>
+      )}
+      {e.source_verified && !e.citation_resolved && <VerifiedUnopenedLine className="mt-0.5" />}
+      {e.basis_reason && <span className="mt-0.5 block text-[11.5px] text-warning" data-testid="evidence-basis-reason">{e.basis}: {e.basis_reason}</span>}
+      {e.superseded_by_id && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-superseded">Superseded by a later row{e.superseded_about ? `, about ${e.superseded_about}` : ''}.</p>}
+      {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
+      {why && <p className="m-0 mt-0.5 text-[11.5px] text-ink-70" data-testid="evidence-no-opening">{why}</p>}
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <LineageLink table="evidence" id={e.id} />
+        {muted && <button type="button" onClick={() => setShowActions(!showActions)} className={SMALL} aria-expanded={showActions} data-testid="show-actions">{showActions ? 'Hide actions' : 'Show actions'}</button>}
+      </div>
+      {showActions && current && (<>
+        {(openable || live.length > 0) && <div className="mt-1.5 flex flex-col gap-1.5" data-testid="evidence-actions">
+          {openable && <div className="flex flex-wrap items-center gap-2"><OpenSource row={e} onDone={onDone} /></div>}
+          {live.map((l) => (
+            <div key={`${l.value_outcome_id}-${l.supports}`} data-testid="evidence-link" data-supports={l.supports} data-outcome={l.value_outcome_id}>
+              <p className="m-0 text-[11px] text-ink-45" data-testid="evidence-link-context">Link: {label(SUPPORTS, l.supports)} of {l.metric}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2"><CorrectLink row={e} link={l} notSteward={steward('Correcting a link')} onDone={onDone} /></div>
+            </div>))}
+        </div>}
+        <div className="mt-1.5 flex flex-wrap items-center gap-2"><Supersede row={e} institutionId={institutionId} notSteward={steward('Superseding evidence')} onDone={onDone} /></div>
+        {withdrawals && (
+          <div className="mt-2 border-l-[3px] border-warning pl-3" data-testid="danger-zone">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-[.14em] text-warning">Withdrawals: these take something off the record going forward</p>
+            {live.map((l) => (
+              <div key={`w-${l.value_outcome_id}-${l.supports}`} className="mt-1" data-testid="evidence-link-withdraw" data-supports={l.supports} data-outcome={l.value_outcome_id}>
+                <p className="m-0 text-[11px] text-ink-45">Link: {label(SUPPORTS, l.supports)} of {l.metric}</p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-2"><WithdrawLink row={e} link={l} notSteward={steward('Withdrawing a link')} onDone={onDone} /></div>
+              </div>))}
+            {e.source_verified && !e.citation_resolved && <div className="mt-1 flex flex-wrap items-center gap-2"><WithdrawVerification row={e} notSteward={steward('Withdrawing a verification')} onDone={onDone} /></div>}
+          </div>)}
+      </>)}
+    </li>
   );
 }
 
@@ -255,50 +338,22 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
   const steward = (act: string) => (actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`);
   if (rows === null) return <p className="m-0 text-[12.5px] text-ink-45">Reading the evidence…</p>;
   if (rows === 'error') return <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the evidence.</p>;
+  // Steward safety (Brad, 5 Nov 2026): the current rows first; superseded rows under a collapsed History.
+  const current = rows.filter((e) => e.superseded_by_id === null);
+  const history = rows.filter((e) => e.superseded_by_id !== null);
   return (
     <div className="flex flex-col gap-3" data-testid="account-evidence">
-      {rows.length === 0 ? <p className="m-0 text-[12.5px] text-ink-45">No evidence recorded for this account yet.</p>
-        : <ul className="m-0 list-none p-0">
-          {rows.map((e) => {
-            const live = e.links.filter((l) => !l.withdrawn);
-            const openable = !e.citation_resolved && e.superseded_by_id === null && !e.under_finding && !e.simulated
-              && !(e.evidence_form === 'statement' && e.kind === 'observation') && !(e.ai_sourced && live.length === 0);
-            return (
-              <li key={e.id} className="border-b border-rule-soft py-2.5 last:border-b-0" data-testid="account-evidence-row" data-evidence={e.id}>
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <Badge tone={e.source_verified ? 'healthy' : 'warning'}>{e.source_verified ? 'Source-verified' : 'Not source-verified'}</Badge>
-                  <span className="text-[13px] text-ink">{e.summary}</span>
-                  {/* B1 (Brad, 4 Nov 2026): the short id, so near-identical rows are told apart. */}
-                  <ShortId id={e.id} />
-                </div>
-                <p className="m-0 mt-1 text-[11.5px] text-ink-45">
-                  {label(EVIDENCE_KIND, e.kind)} · recorded by {e.captured_by}, {day(e.captured_on)}
-                  {' · '}<span data-testid="evidence-about">{e.about ? <>about {e.about}</> : <span className="text-warning">what it is about is not yet stated</span>}</span>
-                  {' · '}{live.length === 0 ? 'supports no outcome' : `supports ${live.map((l) => label(SUPPORTS, l.supports)).join(', ')}`}
-                </p>
-                <p className="m-0 mt-0.5 text-[11.5px] text-ink-45 [overflow-wrap:anywhere]">Source: {e.provenance}</p>
-                <EvidenceRestsOn e={e} className="mt-0.5" />
-                {e.citation_resolved && (
-                  <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-opened">
-                    Opened by {e.opened_by ?? 'a person not on record'}{e.opened_on ? `, ${day(e.opened_on)}` : ''}{e.attester_document ? `, from a ${e.attester_document.replace('_', ' ')} from ${e.attested_by}` : ''}{e.source_verified ? '' : ': it does not support this evidence'}
-                  </p>
-                )}
-                {e.source_verified && !e.citation_resolved && <VerifiedUnopenedLine className="mt-0.5" />}
-                {e.basis_reason && <span className="mt-0.5 block text-[11.5px] text-warning" data-testid="evidence-basis-reason">{e.basis}: {e.basis_reason}</span>}
-                {e.superseded_by_id && <p className="m-0 mt-0.5 text-[11.5px] text-ink-45" data-testid="evidence-superseded">Superseded by a later row{e.superseded_about ? `, about ${e.superseded_about}` : ''}.</p>}
-                {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                  <LineageLink table="evidence" id={e.id} />
-                  {openable && <OpenSource row={e} onDone={load} />}
-                  {e.source_verified && !e.citation_resolved && <WithdrawVerification row={e} notSteward={steward('Withdrawing a verification')} onDone={load} />}
-                  {e.superseded_by_id === null && <Supersede row={e} institutionId={institutionId} notSteward={steward('Superseding evidence')} onDone={load} />}
-                  {live.map((l) => <CorrectLink key={`${l.value_outcome_id}-${l.supports}`} row={e} link={l} notSteward={steward('Correcting a link')} onDone={load} />)}
-                  {live.map((l) => <WithdrawLink key={`w-${l.value_outcome_id}-${l.supports}`} row={e} link={l} notSteward={steward('Withdrawing a link')} onDone={load} />)}
-                </div>
-              </li>
-            );
-          })}
+      {current.length === 0 ? <p className="m-0 text-[12.5px] text-ink-45">No current evidence recorded for this account.</p>
+        : <ul className="m-0 list-none p-0" data-testid="evidence-current">
+          {current.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} steward={steward} onDone={load} />)}
         </ul>}
+      {history.length > 0 && (
+        <details className="border-t border-rule-soft pt-2" data-testid="evidence-history">
+          <summary className={'cursor-pointer text-[11.5px] font-semibold text-ink-70 ' + FOCUS_RING}>History: {history.length} superseded {history.length === 1 ? 'row' : 'rows'}</summary>
+          <ul className="m-0 mt-1 list-none p-0">
+            {history.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} steward={steward} onDone={load} />)}
+          </ul>
+        </details>)}
       <RecordSource institutionId={institutionId} onRecorded={load} />
     </div>
   );
