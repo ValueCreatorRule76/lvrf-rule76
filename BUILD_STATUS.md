@@ -13601,3 +13601,14 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
 - **What:** each current link on a card 01c row has "Correct what this link supports (… of …)…", the run page's form, calling the same route (`correct-support`), with the same act and every guard unchanged. The card's read gains each link's `value_outcome_id` and `metric`. **The row's short id is shown beside its text** (B2's item 2, on this one card). No migration, trigger or hardening change.
 - **Gate A:** all 45 scripts pass in one run, build and lint clean; `verify_supersession` 206/0, the card swapping two rows of prod's shape, and the route refusing a support a row once held. **On a clone of the 5 Nov snapshot** (`lvrf_snapshot_20261105T023251Z`, TOC 808), the walk through card 01c uncrossed exactly `9a36e675` and `c1d0f877`: 30/0, two `correct` acts and two links only, the baseline's check "98 is in the quote (98%)", the impact basis's "7,000,000 is not in the quote", every run byte-identical. Equivalence against `6d7bdca`: 75 GETs, 72 identical, 3 differing only by the two allowed keys. Bundle `index-BhYhvguU.js` / `index-BndT_4xn.css`.
 
+### B1 closed: Gate C clean (5 Nov 2026, UTC)
+
+**Deployed at `bd5cb7c`.** 185 triggers; drift none at 47 migrations and 1124 objects; 106 CHECKs; ownership clean; health 200. All 25 runs byte-identical to the 5 Nov snapshot, hashes 25 of 25. No refusal since the addendum; no audit row without an actor.
+
+- **Brad's acts, 03:18–03:19 UTC:** `9a36e675` corrected to the baseline, `c1d0f877` to the impact basis (two `correct` acts, the route's own), then both opened Yes.
+- **Customer Zero's case:** the baseline rests on `9a36e675` (the release's LTM DRR, published), its latest check "98 is in the quote (98%)"; the impact basis on `c1d0f877` (the guidance, published), which flags 7,000,000, correctly (§14: a sourced derivation before M21).
+- **Every L52 ruling, as read:** `cee6fea9` and `f9775317` superseded about Skillsoft with marks carried; `423be7c6`'s successor carries Brad's text, stays about Scotts and AI-sourced, and holds the impact-basis link; both Scotts errata read the same, the correction kept and the recompute unchanged (10.0, 35.0); Utilities added.
+- **The two Skillsoft rows' lineage stays crossed** (the guidance row supersedes the old DRR row and the other way round); the acts record it.
+
+**L52 closes; L50 closes; the hold on customer-side role grants lifts** (Brad, 1 Nov 2026: "until L52 closes").
+
