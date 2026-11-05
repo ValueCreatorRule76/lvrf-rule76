@@ -64,6 +64,26 @@ the **Packs** page:
   | Monetization rates | Controller, or operations finance | — |
   | Training share | L&D / Learning Operations lead | LMS export |
 
+**Manufacturing (`manufacturing`): stage 0 complete for M21, TRIR only (Brad, 5 Nov 2026).**
+
+| Entry | Lever | Cites (opened Yes, on the tenant's card 01c) | Solution linked | M21 |
+|---|---|---|---|---|
+| TRIR (`82572f6f`) | `80dd10de` Safe-work behaviour through EHS procedural training | `56bfc049`, Robson et al. 2012, Scand J Work Environ Health 38(3), printed page 193, abstract (Results); and `532f51fa`, OSHA 3885, printed page 26, Action item 4 | Skillsoft Compliance Suite (link `26e9bd8c`) | **Ready** |
+| OEE (`619f5ebd`) | none | — | — | **No lever before 22 Nov** |
+| OTIF (`32675568`) | none | — | — | **No lever before 22 Nov** |
+| Capacity utilization (`6142d09e`) | none (not addressable) | — | — | Not a capability play |
+
+- **The lever claims behaviour change only.** Its mechanism leaves the injury effect to the engagement's own measurement
+  from the customer's logs, because Robson finds "insufficient evidence" for an effect on injuries.
+- **The first lever, `d58a08c5`, is withdrawn** (08:43 ET). Its citation named no row and no source on record, and it
+  claimed an injury effect its own source did not support. Its link `27465fb3` (whose basis cited Burke et al. 2006,
+  never recorded) stays under it, as a withdrawn lever's links do, and takes no new ones.
+- **Scotts' hypothesis `e627d3d0` is left naming the withdrawn lever** (Brad, 5 Nov 2026). Scotts is a retired reference
+  example, so it is not superseded onto `80dd10de`.
+- **Attestation roles:** as Utilities' TRIR. Director of Safety / EHS (OSHA 300 logs) for TRIR, Controller or
+  operations finance for monetization rates, L&D / Learning Operations lead (LMS export) for training share. Known only:
+  no role is granted until an account's own opened source names the person.
+
 ## 1. Create and classify the account
 
 - [ ] **Accounts:** "Create account" (card 01). Give the name, what the customer says it does, and "Classify as" the
