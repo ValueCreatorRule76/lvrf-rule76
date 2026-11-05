@@ -16,6 +16,7 @@ import { fetchGaps, type GapEntry } from '../api/gaps';
 import { Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { HypothesisItem, SummaryItem } from '../components/PovAuthoring';
+import { ShortId } from '../components/ShortId';
 
 /**
  * O2 — the account POV (/accounts/:id/pov): the document a value engineer
@@ -202,7 +203,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {other.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {other.map((e, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} />{e.basis_reason && <span className="text-[11px] text-warning" data-testid="basis-reason"> {e.basis_reason}</span>} {supportsShort(e.supports)}: {e.summary} <span className="text-ink-45">— {e.provenance}</span>
+              <li key={i} className="py-0.5 text-[12px] text-ink"><BasisBadge basis={e.basis} />{e.basis_reason && <span className="text-[11px] text-warning" data-testid="basis-reason"> {e.basis_reason}</span>} {supportsShort(e.supports)}: {e.summary} <ShortId id={e.evidence_id} /> <span className="text-ink-45">— {e.provenance}</span>
                 <EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} />
                 <RoleLine roles={e.attester_roles} not={e.attester_not_customer_side} who={e.stated_by} testid="pov-attester-role" />
                 {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}
@@ -215,7 +216,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {o.withdrawn_links.length > 0 && (
           <ul className="m-0 mt-2 list-none p-0">
             {o.withdrawn_links.map((l, i) => (
-              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{supportsShort(l.supports)}: {l.summary}</s> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}
+              <li key={i} className="py-0.5 text-[12px] text-ink-45" data-testid="pov-withdrawn"><s>{supportsShort(l.supports)}: {l.summary}</s> <ShortId id={l.link_evidence_id} /> — withdrawn by {l.withdrawn_by}, {day(l.withdrawn_on)}: {l.reason}
                 {l.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}</li>))}
           </ul>
         )}
@@ -224,7 +225,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
         {vendorClaims.map((e, i) => (
           <div key={i} className="border border-rule bg-white px-4 py-3" data-testid="vendor-claim">
             <span className={KICKER}>Vendor publication — a claim, not an actual</span>
-            <p className="m-0 mt-1 text-[14px] font-semibold text-ink">{e.summary}</p>
+            <p className="m-0 mt-1 text-[14px] font-semibold text-ink">{e.summary} <ShortId id={e.evidence_id} /></p>
             <p className="m-0 mt-1 text-[12px] text-ink-45">{e.provenance}. Never applied to this account's baseline, never a target.</p>
             <CorrectedNote e={e} />
             {e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-1" />}
@@ -424,6 +425,8 @@ function LockedRuns({ pov }: { pov: Pov }) {
           {r.erratum_line && <span className="block text-[11px] text-warning" data-testid="locked-run-erratum">{r.erratum_line}</span>}
           {r.system_exercise && <SystemExerciseLine mark={r.system_exercise} className="mt-0.5" />}
         </li>));
+      // §16: every run of the engagement as sealed, with its curve.
+      items.push(<li key={`${e.id}-snapshots`} className="border-b border-rule-soft px-4 py-1.5 last:border-b-0 print:hidden"><Link to={`/engagements/${e.id}/snapshots`} className={'text-[11.5px] font-semibold text-gold-ink underline hover:text-ink ' + FOCUS_RING} data-testid="pov-snapshots-link">Every run as sealed, with the confidence curve</Link></li>);
       if (e.locked_runs.length < 2) return items;
       return [...items, (
         <li key={`${e.id}-toggle`} className="border-b border-rule-soft px-4 py-1.5 last:border-b-0 print:hidden">

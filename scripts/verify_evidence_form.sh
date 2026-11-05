@@ -88,13 +88,15 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "185" ] && ok "185 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "186" ] && ok "186 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
 step "3. Every evidence row from before 0039 reads legacy; none blank"
-[ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE evidence_form = 'legacy') || '|' || count(*) FILTER (WHERE evidence_form IS NULL) FROM evidence")" = "$PRE|$PRE|0" ] \
-  && ok "all $PRE pre-0039 evidence rows read legacy; none is blank" || bad "legacy: $(q "SELECT evidence_form, count(*) FROM evidence GROUP BY 1")"
+# L53 (5 Nov 2026): relative to the copy. Every row recorded before evidence forms (24 Oct 2026) reads legacy, every
+# row recorded since carries a form, and none is blank, whatever the copy holds.
+[ "$(q "SELECT count(*) FILTER (WHERE created_at < '2026-10-25') || '|' || count(*) FILTER (WHERE evidence_form = 'legacy') || '|' || count(*) FILTER (WHERE evidence_form = 'legacy' AND created_at >= '2026-10-25') || '|' || count(*) FILTER (WHERE evidence_form IS NULL) FROM evidence")" = "$(q "SELECT count(*) FROM evidence WHERE created_at < '2026-10-25'")|$(q "SELECT count(*) FROM evidence WHERE created_at < '2026-10-25'")|0|0" ] \
+  && ok "all $(q "SELECT count(*) FROM evidence WHERE created_at < '2026-10-25'") rows recorded before 0039 read legacy; every later row carries a form; none is blank" || bad "legacy: $(q "SELECT evidence_form, count(*) FROM evidence GROUP BY 1")"
 [ "$(q "SELECT count(*) FROM evidence WHERE evidence_form = 'legacy' AND (quote_text IS NOT NULL OR locator IS NOT NULL OR how_read IS NOT NULL)")" = "0" ] \
   && ok "  ...a legacy row has no quote, locator or how-read (nothing guessed for it: P1-D6)" || bad "  ...legacy rows carry a form's fields"
 
@@ -243,7 +245,7 @@ SCOTTS_INST="$(q "SELECT id FROM institutions WHERE name ILIKE 'Scotts%' LIMIT 1
 expect POST "/api/institutions/$SCOTTS_INST/facts/$SCOTTS_FACT/supersede" "$(CF 3413100000 "$FL")" 201 "a legacy predecessor (Scotts' revenue, on this clone) corrected with a locator: an upgrade, allowed"
 
 step "9. A run sealed after 0039: payloadVersion 2; every run still hashes"
-[ "$(q "SELECT (payload->>'payloadVersion') || '|' || (payload->'institutionFacts'->0 ? 'evidenceForm') || '|' || (payload->'evidence'->0 ? 'evidence_form') || '|' || (payload->'evidence' @> '[{\"figure_check\":{\"result\":\"flag\"}}]') FROM value_runs WHERE id = '$RUN'")" = "3|true|true|true" ] \
+[ "$(q "SELECT (payload->>'payloadVersion') || '|' || (payload->'institutionFacts'->0 ? 'evidenceForm') || '|' || (payload->'evidence'->0 ? 'evidence_form') || '|' || (payload->'evidence' @> '[{\"figure_check\":{\"result\":\"flag\"}}]') FROM value_runs WHERE id = '$RUN'")" = "4|true|true|true" ] \
   && ok "the run seals payloadVersion 3: each fact's and evidence item's form, and the figure check (P1-D4)" || bad "payload: $(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RUN'")"
 HASHES="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 printf '%s' "$HASHES" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $HASHES (versions 1 and 2)" || bad "hashes: $HASHES"

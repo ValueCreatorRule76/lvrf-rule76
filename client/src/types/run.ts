@@ -151,6 +151,8 @@ export type RunDelta =
 export interface RunPayload {
   /** P1-D4: 2 for a run that seals evidence forms and figure checks; absent (version 1) before. */
   payloadVersion?: number;
+  /** §16 (payloadVersion 4): the case chain as sealed. Absent on older runs; never filled in afterwards. */
+  case?: import('../components/snapshots/CaseSealed').SealedCase;
   engagement: string;
   capability: string;
   // Bare string on runs walked before businessMetric was enriched; an

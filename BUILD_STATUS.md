@@ -13612,3 +13612,67 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
 
 **L52 closes; L50 closes; the hold on customer-side role grants lifts** (Brad, 1 Nov 2026: "until L52 closes").
 
+
+### B2: short ids, "Withdraw this link…" on card 01c, the case snapshot (§16) — Gate A, 5 Nov 2026 (UTC)
+
+**Built; Gate A passed; not deployed.** Batch B2 of `docs/LVRF_3.0_CRITICAL_PATH.md`. No migration.
+
+- **Short ids** (Brad, 4 Nov 2026): every evidence picker and list shows the row's first eight hex characters beside
+  its text: W6, W7's sealed list, the run page's link options and its corrected and withdrawn lines, the POV lists, the
+  batches, the role-source options, the evidence card and card 01c. Every confirmation of a correction or withdrawal
+  names the row by it ("Correct 9a36e675, “…”, on …").
+- **"Withdraw this link…" on card 01c:** the run page's withdrawal, on the row, for an outcome whose runs predate the
+  link to it (checklist stage 8). It uses the same route (`POST /api/value-outcomes/:o/evidence/:e/withdraw`), with the
+  same act and no replacement.
+- **§16, the case snapshot:** `hardening.sql` section 32 adds `lvrf_case_chain(outcome)` and the trigger
+  `value_runs_case_current`, which refuses a lock when the case changed after the run was produced. **186 triggers;
+  288 manifest rows.** Payload v4 seals `case`: every hypothesis version with its verdict, falsifier, author and lever
+  (ratification and offerings); the capability's offerings; the current summary per lens; the pack entry with a
+  fingerprint of its fields, or null; the marker; the findings. `GET /api/engagements/:id/snapshots` covers retired
+  engagements and is tenant-scoped. Compare gains `case`: what was sealed on both sides, one side or neither, and what
+  changed. The snapshots page shows the confidence curve (sealed scores; breaks on a model or outcome change; erratum
+  marks; hollow points for system exercises; the CFO line at 55), each run as sealed, and compare any two. The run
+  page gains "The case as sealed".
+- **Gate A:**
+  - **The full regression:** all 46 scripts pass in one run on a clone of the 5 Nov prod copy
+    (`lvrf_snapshot_20261105T023251Z`), with build and lint clean (the one lint warning is in `ActorContext.tsx`, from
+    before B2). The earlier run failed 11 scripts:
+    - nine read 185 triggers or 287 manifest rows;
+    - four expected payload 3 or the pre-short-id text;
+    - two, `verify_walk_runs` and `verify_corrections`, were caught by the new lock guard, as designed: a hypothesis
+      stated after produce now refuses the lock;
+    - one, `verify_tenant_scope`, had a new case written wrong (B's own id).
+  - **After the regression:** `verify_case_snapshot` went to 110/0 and `verify_supersession` to 214/0, with the two
+    fixes and step 9c below.
+  - **Breaks:** `verify_case_snapshot` catches B1–B8 of §16's table. Three more breaks are caught, each file restored
+    byte-identical:
+    - the sealed case printing as a closed summary;
+    - the curve keeping its screen width in print;
+    - card 01c's withdraw control removed.
+  - **Hashes:** `check_run_hashes` 35 of 35 on the clone; every locked run byte-identical.
+  - **Equivalence against `bd5cb7c`:** 77 GETs, 77 identical, no added keys.
+  - **Bundle:** `index-LqfuJWoB.js` / `index-Chp2jk1U.css`.
+- **Found while looking at the print, both fixed:**
+  - Each run's "The case as sealed" printed as a closed summary with nothing under it. The printed page now carries
+    the case itself.
+  - The curve kept its on-screen pixel width in print and ran past its card, so Chrome shrank the whole page to fit
+    (5 pages). It now scales to its card (9 pages at normal size). The banners and the latest run's full hash are on
+    every page.
+- **L53, each test relative to the copy:**
+  - `verify_evidence_final` (180/0) reads whether any row has nothing stated. On a copy taken after L41's acts, the
+    pre-act blocks read the state Gate C recorded, and the logic runs on rows chosen by what they are.
+  - `verify_supersession` (214/0) reads whether `cee6fea9` is superseded. Each chain's current end (via
+    `lvrf_evidence_chain`) stands in for its first row; `423be7c6` and `f9775317` keep their first rows (the errata and
+    the frozen links name them).
+  - `verify_evidence_form` (99/0) counts legacy rows by `created_at < 2026-10-25`, whatever the copy holds (34 on this
+    copy).
+  - `verify_acts_lineage` (190/0) expects a `state_about` step in Scotts' revenue lineage only where the copy holds
+    one.
+  - **L53 closes** at deploy (scripts only).
+- **Screens, looked at** (in `~/lvrf-backups/l41-screens`):
+  - the curve at 1280 and 390;
+  - the snapshots page;
+  - a v4 run's case;
+  - card 01c's withdrawal before and after, at 1280 and 390;
+  - the printed snapshots page, every page.
+- **Gate C cannot show a v4 run on prod** (rule 9): the first real run is read-checked when Brad produces one.

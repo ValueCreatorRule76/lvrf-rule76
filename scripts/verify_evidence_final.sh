@@ -102,8 +102,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 185 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "186" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 186 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -124,19 +124,36 @@ EV0="$(q "SELECT count(*) || '|' || md5(string_agg(md5(e::text), '' ORDER BY id)
 AUD0="$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0046_add_industry)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+# L53 (5 Nov 2026): a copy taken after L41's acts holds no row with nothing stated. On such a copy, a block that verified
+# the migration landing on the pre-act rows reads instead the state Gate C recorded, and its logic runs on rows chosen
+# by what they are, not by id. On a pre-act copy every block runs as written.
+POST="$([ "$(q "SELECT count(*) FROM evidence WHERE about_institution_id IS NULL AND about_other_party IS NULL")" = "0" ] && echo 1 || true)"
+[ -n "$POST" ] && ok "(a copy taken after L41's acts: the pre-act blocks read the state Gate C recorded)" || ok "(a copy taken before L41's acts: every block as written)"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "185" ] && ok "185 triggers (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "287" ] && ok "  ...287 information_schema rows (281 + 3)" || bad "  ...rows"
+[ "$(trig)" = "186" ] && ok "186 triggers (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "288" ] && ok "  ...288 information_schema rows (281 + 3)" || bad "  ...rows"
+if [ -z "$POST" ]; then
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 47 migrations, newest 0046_add_industry" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^105 CHECKs in the database: 105 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
+else
+DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 47 migrations, newest 0046_add_industry" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
+printf '%s' "$PLAIN" | grep -qE "^106 CHECKs in the database: 106 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
+fi
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")" = "$AUD0" ] && ok "0045 and hardening write no evidence row: the audit log gains nothing (L41-D3)" || bad "audit grew"
 [ "$(q "SELECT count(*) || '|' || md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" = "${EV0%%|*}|$(q "SELECT md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" ] && ok "  ...all ${EV0%%|*} rows kept" || bad "  ...rows"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
+if [ -z "$POST" ]; then
 [ "$(q "SELECT convalidated FROM pg_constraint WHERE conname = 'evidence_about_stated'")" = "f" ] && ok "evidence_about_stated binds new rows, not yet validated (condition 4)" || bad "about CHECK"
 [ -z "$(q "SELECT 1 FROM pg_constraint WHERE conname = 'evidence_verified_opened'")" ] && ok "evidence_verified_opened waits: 4 rows break it" || bad "verified CHECK present"
 [ "$(q "SELECT count(*) FROM evidence WHERE source_verified AND NOT citation_resolved")" = "4" ] && ok "  ...the 4 rows, as the report found" || bad "  ...not 4"
+else
+[ "$(q "SELECT string_agg(conname || '=' || convalidated, ',' ORDER BY conname) FROM pg_constraint WHERE conname IN ('evidence_about_stated', 'evidence_verified_opened')")" = "evidence_about_stated=true,evidence_verified_opened=true" ] && ok "both CHECKs validated, as Gate C read (condition 4)" || bad "CHECKs"
+[ "$(q "SELECT count(*) FROM evidence WHERE source_verified AND NOT citation_resolved")" = "0" ] && ok "  ...no row verified with no opening" || bad "  ...verified unopened"
+fi
 
 step "3. Fixtures and the server"
 TS="$(date +%s)"
@@ -223,10 +240,11 @@ LEG="$(q "SELECT id FROM evidence WHERE about_institution_id IS NULL AND about_o
 for sup in baseline actual; do
   sqlapp "another account's evidence as $sup" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$ABOUTB', '$sup')" "not about this account"
   sqlapp "another company's as $sup" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$ABOUTC', '$sup')" "not about this account"
-  sqlapp "a row with nothing stated as $sup" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$LEG', '$sup')" "nothing yet stated"
+  if [ -z "$POST" ]; then sqlapp "a row with nothing stated as $sup" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$LEG', '$sup')" "nothing yet stated"; fi
 done
 [ "$(sqlaccepted "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$ABOUTC', 'impact_basis')")" = "ACCEPTED" ] && ok "another company's evidence as the impact basis: accepted, as Scotts' vendor publication is" || bad "impact basis"
 expect POST "$E" "$(src "$(J about "$(J other_party 'Acme Fixture Co')" kind public_filing provenance 'Fixture filing (not a source)' summary 'L41 baseline about another company' supports baseline)")" 422 "the route, the same: another company's evidence as baseline refused" "not about this account"
+[ -n "$POST" ] && sqlapp "no row can return to nothing stated: a stated about set back to nothing" "UPDATE evidence SET about_institution_id = NULL, about_other_party = NULL WHERE id = '$ABOUTB'" "stated once"
 # B2 — the about guard reading nothing.
 fnbreak lvrf_outcome_evidence_about_guard "IF about IS NULL OR about IS DISTINCT FROM own THEN" "IF false THEN"
 [ "$(sqlaccepted "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$OA', '$ABOUTB', 'baseline')")" = "ACCEPTED" ] && ok "B2: the about guard reading nothing → caught: another account's evidence went in as baseline (rolled back)" || bad "B2"
@@ -312,11 +330,12 @@ TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -
 [ -n "$TOKEN" ] && ok "the steward signed in by session" || { bad "no session"; exit 1; }
 cw() {  # MODE
   local log="$W/walk.$1.log"
-  node scripts/lib/l41_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$log" 2>&1; local rc=$?
+  local rc=0; node scripts/lib/l41_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$log" 2>&1 || rc=$?
   PASS=$((PASS + $(grep -c '^  PASS' "$log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$log" || true)))
   grep -E '^  (PASS|FAIL)' "$log" || true
   [ "$rc" = "0" ] || bad "the $1 walk exited $rc (see $log)"
 }
+if [ -z "$POST" ]; then
 ABOUT_COUNT=34 ABOUT_OPEN=4 cw aboutbatch
 B=/api/evidence/about-batch
 expect GET "$B" "" 200 "the dry run"
@@ -343,9 +362,16 @@ ACTS="$(q "SELECT count(*) FROM governance_acts WHERE act = 'state_about'")"
 [ "$(q "SELECT count(*) FROM evidence WHERE about_institution_id IS NULL AND about_other_party IS NULL")" = "0" ] && ok "  ...none waits" || bad "  ...some wait"
 [ "$(q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id::text LIKE '423be7c6%'")" = "Fixture customer of the story" ] && ok "  ...423be7c6 reads as named" || bad "  ...423be7c6"
 [ "$(q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id::text LIKE 'f9775317%'")" = "Skillsoft" ] && ok "  ...f9775317 about Skillsoft, sitting on Curia" || bad "  ...f9775317"
+else
+B=/api/evidence/about-batch
+expect GET "$B" "" 200 "the about batch"
+[ "$(rj b.count)" = "0" ] && ok "  ...no row waits: the batch renders nothing" || bad "  ...count: $(rj b.count)"
+[ "$(q "SELECT count(*) || '|' || count(DISTINCT subject_id) FROM governance_acts WHERE act = 'state_about'")" = "34|34" ] && ok "  ...the 34 stated at Gate B, one act each" || bad "  ...acts: $(q "SELECT count(*) FROM governance_acts WHERE act = 'state_about'")"
+fi
 sqlapp "stated again" "UPDATE evidence SET about_other_party = 'Other Co', about_institution_id = NULL WHERE id::text LIKE '423be7c6%'" "stated once"
 
 step "10. The 4 rows, each opened or withdrawn, by a person (D4)"
+if [ -z "$POST" ]; then
 CURIA="$(q "SELECT institution_id FROM evidence WHERE id::text LIKE '1632a5e0%'")"
 expect GET "/api/institutions/$CURIA/pov" "" 200 "Curia's POV"
 [ "$(rj "b.outcomes.flatMap(o=>o.withdrawn_links).filter(e=>e.verified_unopened).length")" = "3" ] && ok "  ...the POV reads verified_unopened on Curia's 3 links withdrawn by C3b's acts" || bad "  ...POV: $(rj "b.outcomes.flatMap(o=>o.withdrawn_links).length")"
@@ -367,7 +393,7 @@ CZO="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id:
 CZE="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$CZO'")"
 expect POST "/api/engagements/$CZE/produce-run" "$(J banner_title 'L41 V3' note 'Verification: sealed with a row verified and unopened.' source_fixture l41_fixture)" 201 "a run while a row is verified and unopened"; RV="$(rj b.value_run_id)"
 [ "$(q "SELECT x->>'verified_unopened' FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RV' AND x->>'evidence_id' LIKE '9765335f%'")" = "true" ] && ok "condition 3: the v3 seal carries \"verified without the source being opened\" beside it" || bad "condition 3"
-[ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RV'")" = "3" ] && ok "  ...payloadVersion 3" || bad "  ...version"
+[ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RV'")" = "4" ] && ok "  ...payloadVersion 4 (§16: v3's keys, and the case)" || bad "  ...version"
 RUN="$RV" cw seal
 R9="$(q "SELECT id FROM evidence WHERE id::text LIKE '9765335f%'")"; R2="$(q "SELECT id FROM evidence WHERE id::text LIKE '271a449a%'")"; R1="$(q "SELECT id FROM evidence WHERE id::text LIKE '1632a5e0%'")"; RF="$(q "SELECT id FROM evidence WHERE id::text LIKE 'f9775317%'")"
 expect POST "$(OC "$R9")" '{"source_verified":true}' 422 "opening a row from before forms with no reading: refused" "Say what this evidence rests on"
@@ -387,7 +413,36 @@ expect POST "/api/evidence/$RF/withdraw-verification" "$(J reason 'Verification:
 [ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'withdraw' AND subject_table = 'evidence'")" = "2" ] && ok "  ...each withdrawal with its act" || bad "  ...acts"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence' AND record_id = '$R1' AND old_row->>'source_verified' = 'true' AND new_row->>'source_verified' = 'false'")" = "1" ] && ok "  ...and its history stands in the audit log" || bad "  ...audit"
 
+else
+CURIA="$(q "SELECT institution_id FROM evidence WHERE id::text LIKE '1632a5e0%'")"
+R9="$(q "SELECT id FROM evidence WHERE id::text LIKE '9765335f%'")"; R2="$(q "SELECT id FROM evidence WHERE id::text LIKE '271a449a%'")"; R1="$(q "SELECT id FROM evidence WHERE id::text LIKE '1632a5e0%'")"; RF="$(q "SELECT id FROM evidence WHERE id::text LIKE 'f9775317%'")"
+[ "$(q "SELECT string_agg(left(id::text, 8) || ':' || source_verified || ':' || citation_resolved || ':' || (superseded_by_id IS NOT NULL), ',' ORDER BY id) FROM evidence WHERE id IN ('$R9', '$R2', '$R1', '$RF')")" = "1632a5e0:false:false:false,271a449a:false:true:true,9765335f:false:true:true,f9775317:false:false:true" ] && ok "the 4 rows as Gate C read them: 9765335f and 271a449a opened No and superseded; 1632a5e0 and f9775317 withdrawn" || bad "the 4 rows: $(q "SELECT string_agg(left(id::text, 8) || ':' || source_verified || ':' || citation_resolved || ':' || (superseded_by_id IS NOT NULL), ',' ORDER BY id) FROM evidence WHERE id IN ('$R9', '$R2', '$R1', '$RF')")"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'withdraw' AND subject_table = 'evidence' AND subject_id IN ('$R1', '$RF')")" = "2" ] && ok "  ...each withdrawal with its act" || bad "  ...acts"
+ok "(no row is verified with no opening, so the line \"verified without the source being opened\" has nothing to show on this copy; the walk that read it ran on the pre-act copy at L41's Gate A)"
+# The opening, on a row chosen by what it is: current, legacy, not simulated, not AI, never opened, not under a finding.
+LG="$(q "SELECT e.id FROM evidence e WHERE e.evidence_form = 'legacy' AND e.superseded_by_id IS NULL AND e.deleted_at IS NULL AND NOT e.simulated AND NOT e.ai_sourced AND NOT e.citation_resolved AND NOT lvrf_evidence_under_finding(e.id) ORDER BY e.created_at, e.id LIMIT 1")"
+[ -n "$LG" ] && ok "a current legacy row, never opened: $(q "SELECT left(id::text, 8) || ' (' || kind || ')' FROM evidence WHERE id = '$LG'")" || bad "no such row on this copy"
+expect POST "$(OC "$LG")" "$NO" 200 "  ...opened No, with its reason"
+LG2="$(q "SELECT e.id FROM evidence e WHERE e.evidence_form = 'legacy' AND e.superseded_by_id IS NULL AND e.deleted_at IS NULL AND NOT e.simulated AND NOT e.ai_sourced AND NOT e.citation_resolved AND NOT lvrf_evidence_under_finding(e.id) ORDER BY e.created_at, e.id LIMIT 1")"
+if [ -n "$LG2" ]; then
+  expect POST "$(OC "$LG2")" '{"source_verified":true}' 422 "a row from before forms opened Yes with no reading: refused" "Say what this evidence rests on"
+  expect POST "$(OC "$LG2")" "$(node -e 'console.log(JSON.stringify({source_verified:true,evidence_form:"locator",how_read:"The value, read from the fixture copy of the source.",locator:{document:"Fixture copy",value:1,scale:"units"}}))')" 200 "  ...opened Yes with a locator"
+  [ "$(q "SELECT evidence_form || '|' || source_verified || '|' || citation_resolved FROM evidence WHERE id = '$LG2'")" = "locator|true|true" ] && ok "  ...it moved from legacy, once" || bad "  ...row"
+  sqlapp "  ...the form back to legacy" "UPDATE evidence SET evidence_form = 'legacy', locator = NULL, how_read = NULL WHERE id = '$LG2'" "final once recorded"
+else
+  ok "(only one current legacy row was left to open; the Yes path ran on the pre-act copy)"
+fi
+expect POST "$(OC "$R1")" '{"source_verified":true}' 409 "a row under a finding: its opening refused" "no source on record"
+expect POST "/api/evidence/$LG/withdraw-verification" "$(J reason 'Verification: an opened row is not withdrawn.')" 409 "a withdrawal on an opened row: refused" "opened by a person"
+expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: nothing to withdraw.')" 409 "  ...on a row not verified: refused" "not verified"
+expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: not the steward.')" 403 "  ...not the steward: refused" "" "$X"
+CZE="$(q "SELECT g.id FROM engagements g WHERE g.institution_id = '$SELF_INST' AND g.deleted_at IS NULL ORDER BY g.created_at LIMIT 1")"
+expect POST "/api/engagements/$CZE/produce-run" "$(J banner_title 'L41 V3' note 'Verification: sealed after the acts.' source_fixture l41_fixture)" 201 "a run on the tenant's own engagement"; RV="$(rj b.value_run_id)"
+[ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RV'")|$(q "SELECT count(*) FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RV' AND x->>'verified_unopened' = 'true'")" = "4|0" ] && ok "  ...payloadVersion 4 (§16), and no item sealed verified unopened" || bad "  ...seal"
+
+fi
 step "11. The re-run of hardening.sql completes both CHECKs (condition 4)"
+if [ -z "$POST" ]; then
 DRIFT2="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1 || true)"
 printf '%s' "$DRIFT2" | grep -q "evidence_verified_opened" && ok "before the re-run, drift names the CHECK now due: it cannot be left undone" || bad "drift before: $DRIFT2"
 reharden
@@ -397,6 +452,12 @@ DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | 
 printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 47 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
 PLAIN2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN2" | grep -qE "^106 CHECKs in the database: 106 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
+else
+reharden
+[ "$(q "SELECT string_agg(conname || '=' || convalidated, ',' ORDER BY conname) FROM pg_constraint WHERE conname IN ('evidence_about_stated', 'evidence_verified_opened')")" = "evidence_about_stated=true,evidence_verified_opened=true" ] && ok "the re-run keeps both CHECKs validated" || bad "CHECKs after the re-run"
+DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 47 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
+fi
 reharden
 sqlrefused "evidence_verified_opened: verified, no opening, past the guard (NULL-free input)" "ALTER TABLE evidence DISABLE TRIGGER evidence_final; UPDATE evidence SET source_verified = true WHERE id = '$UNOPENED'" "evidence_verified_opened"
 

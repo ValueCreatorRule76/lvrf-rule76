@@ -128,7 +128,7 @@ PRE_ACT_IDS="$(q "SELECT coalesce(string_agg(quote_literal(id::text), ',' ORDER 
 HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0041_acts_and_lineage)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "185" ] && ok "185 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "186" ] && ok "186 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
@@ -363,7 +363,9 @@ expect GET "/api/lineage/persons/$S" "" 404 "a table lineage does not trace" "no
 step "9. Lineage — the real record (P2-D1)"
 SCOTTS="$(q "SELECT id FROM institutions WHERE name ILIKE 'Scotts%' LIMIT 1")"
 F_REV="$(q "SELECT id FROM institution_facts WHERE institution_id = '$SCOTTS' AND kind = 'revenue' AND superseded_by_id IS NULL")"
-[ "$(LN institution_facts "$F_REV")" = "prompt:record > import:record > result:record > accept:record > evidence:record > open_citation:record > fact:record > seal:seal > seal:seal" ] \
+# L53 (5 Nov 2026): on a copy taken after L41's acts the fact's evidence also carries its state_about act.
+SA="$(q "SELECT CASE WHEN EXISTS (SELECT 1 FROM governance_acts a JOIN institution_facts f ON f.evidence_id = a.subject_id WHERE f.id = '$F_REV' AND a.act = 'state_about') THEN 'state_about:act > ' ELSE '' END")"
+[ "$(LN institution_facts "$F_REV")" = "prompt:record > import:record > result:record > accept:record > evidence:record > ${SA}open_citation:record > fact:record > seal:seal > seal:seal" ] \
   && ok "Scotts' revenue: prompt > import > result > accept > evidence > citation > fact > runs 1 and 2 — every pre-P2 step 'record'" || bad "Scotts revenue: $(LN institution_facts "$F_REV")"
 [ "$(q "SELECT detail->>'note' FROM lvrf_lineage('institution_facts', '$F_REV') WHERE kind = 'import'")" = "no import (before research imports, 25 Oct 2026)" ] \
   && ok "  ...the import step stated, not skipped: \"no import (before research imports, 25 Oct 2026)\"" || bad "  ...import note"
@@ -458,8 +460,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b10.sql" > /dev/null
 [ "$(LN institution_facts "$F_HC")" = "prompt:record > import:act > result:record > accept:act > evidence:record > open_citation:act > figure_check:record > fact:record > seal:seal" ] \
   && ok "B10: caught — without the supersession steps the chain loses \"superseded_by\"; the script names the missing step" || bad "B10: not caught: $(LN institution_facts "$F_HC")"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "185" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
-  && ok "  ...hardening.sql re-applied: the step back, 185 triggers" || bad "  ...B10 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "186" ] && printf '%s' "$(LN institution_facts "$F_HC")" | grep -qF "superseded_by:act" \
+  && ok "  ...hardening.sql re-applied: the step back, 186 triggers" || bad "  ...B10 restore"
 # B13 (P2 review) — the errata note on a seal step removed (on the clone).
 python3 - "$W/b13.sql" <<'PY'
 import re, sys
@@ -472,8 +474,8 @@ PY
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b13.sql" > /dev/null
 [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "0" ] \
   && ok "B13: caught — without the errata note the seal step reads as if nothing were recorded after it" || bad "B13: not caught"
-psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "185" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
-  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 185 triggers" || bad "  ...B13 restore"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > /dev/null 2>&1 && [ "$(trig)" = "186" ] && [ "$(q "SELECT jsonb_array_length(detail->'errata') FROM lvrf_lineage('value_outcomes', '$O3', 'baseline') WHERE kind = 'seal'")" = "1" ] \
+  && ok "  ...hardening.sql re-applied: the erratum back on the seal, 186 triggers" || bad "  ...B13 restore"
 # B11 — a paste over 512 KB; and a parser refusal recorded by hash and size, never text.
 BIG="$(node -e "process.stdout.write(JSON.stringify({prompt_id:'$PF', pad:'x'.repeat(530000)}))")"
 REF0="$(q "SELECT count(*) FROM refusals")"

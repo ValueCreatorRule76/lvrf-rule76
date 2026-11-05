@@ -18,6 +18,8 @@ import { HealthCard } from './HealthCard';
 import { FindingsCard } from './FindingsCard';
 import { CompareCard, type EarlierRuns } from './CompareCard';
 import { ConfidenceInstrument } from './ConfidenceInstrument';
+import { shortId } from '../../lib/shortId';
+import { CaseSealed } from '../snapshots/CaseSealed';
 
 /**
  * UX-1 slice 4: the run page (DESIGN_SPEC §9, LVRF_PLAN §7g; mock-up
@@ -307,7 +309,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
     <label className="block"><span className={L}>The link</span>
       <select className={I} value={evidenceId} onChange={(ev) => { setEvidenceId(ev.target.value); setSupports(''); }}>
         <option value="" disabled>— choose —</option>
-        {choosable.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — supports {supportsShort(e.supports)}</option>)}
+        {choosable.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{shortId(e.evidence_id)} · {e.summary.slice(0, 80)} — supports {supportsShort(e.supports)}</option>)}
       </select></label>
   );
   const whyField = (
@@ -322,12 +324,12 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
       </p>
       {done.map((e) => (
         <p key={e.evidence_id} className="m-0 max-w-[90ch] text-[11.5px] text-ink-45" data-testid="correct-on-run-done">
-          Corrected on {e.corrected_on ? day(e.corrected_on) : 'a date not recorded'} by {e.corrected_by}: “{e.summary.slice(0, 80)}” now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}. The sealed run is unchanged: an erratum records it.
+          Corrected on {e.corrected_on ? day(e.corrected_on) : 'a date not recorded'} by {e.corrected_by}: {shortId(e.evidence_id)}, “{e.summary.slice(0, 80)}”, now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}. The sealed run is unchanged: an erratum records it.
         </p>
       ))}
       {withdrawnAlone.map((l) => (
         <p key={`${l.link_evidence_id}-${l.supports}`} className="m-0 max-w-[90ch] text-[11.5px] text-ink-45" data-testid="correct-on-run-withdrawn">
-          <s>“{l.summary.slice(0, 80)}”, supporting {label(SUPPORTS, l.supports)}</s> — withdrawn on {day(l.withdrawn_on)} by {l.withdrawn_by}, with no replacement: {l.reason}
+          <s>{shortId(l.link_evidence_id)}, “{l.summary.slice(0, 80)}”, supporting {label(SUPPORTS, l.supports)}</s> — withdrawn on {day(l.withdrawn_on)} by {l.withdrawn_by}, with no replacement: {l.reason}
         </p>
       ))}
       {outcome.evidence.length > 0 && mode === 'none' && (
@@ -352,7 +354,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
                 </select></label>
               {whyField}
             </div>}
-            confirm={chosen && <span data-testid="confirm-text">Correct “{chosen.summary.slice(0, 80)}” on {outcome.metric_name}: from {label(SUPPORTS, chosen.supports)} to {label(SUPPORTS, supports)}. {runs}: record an erratum on each that sealed it.</span>}
+            confirm={chosen && <span data-testid="confirm-text">Correct {shortId(chosen.evidence_id)}, “{chosen.summary.slice(0, 80)}”, on {outcome.metric_name}: from {label(SUPPORTS, chosen.supports)} to {label(SUPPORTS, supports)}. {runs}: record an erratum on each that sealed it.</span>}
             canSubmit={Boolean(chosen) && supports !== '' && reason.trim().length >= 12}
             unmet={[...(!chosen ? ['choose the link'] : []), ...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
             buildBody={() => ({ supports, reason: reason.trim() })}
@@ -370,7 +372,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
             provenanceLabel="What this records"
             provenance={<p className="m-0 text-[12.5px] text-ink">This <strong>withdraws</strong> a current link of this run's outcome, {outcome.metric_name}, with <strong>no replacement</strong>, for every run that shares it: your name, the date and your reason are kept, and it stays shown struck through. <strong>The sealed run is not changed.</strong></p>}
             fields={<div className="flex flex-col gap-3">{linkField}{whyField}</div>}
-            confirm={chosen && <span data-testid="confirm-text">Withdraw “{chosen.summary.slice(0, 80)}” from {outcome.metric_name}: it supports {label(SUPPORTS, chosen.supports)} now, and will support nothing; no link replaces it. {runs}.</span>}
+            confirm={chosen && <span data-testid="confirm-text">Withdraw {shortId(chosen.evidence_id)}, “{chosen.summary.slice(0, 80)}”, from {outcome.metric_name}: it supports {label(SUPPORTS, chosen.supports)} now, and will support nothing; no link replaces it. {runs}.</span>}
             canSubmit={Boolean(chosen) && reason.trim().length >= 12}
             unmet={[...(!chosen ? ['choose the link'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
             buildBody={() => ({ reason: reason.trim() })}
@@ -514,7 +516,7 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
           <label className="block"><span className={L}>The corrected link</span>
             <select className={I} value={evidenceId} onChange={(e) => setEvidenceId(e.target.value)}>
               <option value="" disabled>— choose —</option>
-              {corrected.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{e.summary.slice(0, 80)} — now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}</option>)}
+              {corrected.map((e) => <option key={e.evidence_id} value={e.evidence_id}>{shortId(e.evidence_id)} · {e.summary.slice(0, 80)} — now supports {supportsShort(e.supports)}, not {supportsShort(e.corrects_supports ?? '')}</option>)}
             </select></label>
           <label className="block"><span className={L}>What was wrong</span><textarea rows={2} className={I} value={wrong} onChange={(e) => setWrong(e.target.value)} /></label>
           <label className="block"><span className={L}>What is right</span><textarea rows={2} className={I} value={right} onChange={(e) => setRight(e.target.value)} /></label>
@@ -652,6 +654,13 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
               <h2 id="sealed" className={H2}>What this run sealed</h2>
               <EvidenceCard run={run} />
               <AddEvidence run={run} />
+            </section>
+
+            {/* §16: the case this run sealed (payloadVersion 4), and every run of the engagement as sealed. */}
+            <section className="flex flex-col gap-3" aria-labelledby="case">
+              <h2 id="case" className={H2}>The case as sealed</h2>
+              <div className="border border-rule bg-white px-4 py-3"><CaseSealed c={run.payload.case} /></div>
+              <p className="m-0 text-[12px] print:hidden"><Link to={`/engagements/${run.engagement_id}/snapshots`} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="snapshots-link">Every run of this engagement, as sealed, with the confidence curve</Link></p>
             </section>
 
             <Fold title="What it takes to raise confidence" testid="fold-gaps">

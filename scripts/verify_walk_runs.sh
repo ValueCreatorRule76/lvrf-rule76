@@ -189,9 +189,10 @@ edit "$POVCARD" "    if (based.length > 0 && based.every((o) => !hasLever(o))) {
 sleep 5; INST_SAVE="$INST"; INST="$INST2"; walk break-gate; INST="$INST_SAVE"; restore "$POVCARD"
 step "6. Q4m: a retired reference engagement on the POV (Scotts' W9 is held for this)"
 LEV="$(q "SELECT id FROM value_levers WHERE name = 'Q4l lever' AND deleted_at IS NULL")"
-expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\",\"value_lever_id\":\"$LEV\",\"statement\":\"Q4m: hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"on the same denominator\"}" 201 "(an open hypothesis)"
 R3="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND locked_at IS NULL")"
 expect POST "/api/value-runs/$R3/lock" '{"lock_reason":"Verification: run three locked before the retirement."}' 200 "(run 3 locked: three locked runs)"
+# §16: the hypothesis is stated after run 3 is locked; stated before, it would change the case run 3 sealed, and refuse the lock.
+expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\",\"value_lever_id\":\"$LEV\",\"statement\":\"Q4m: hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"on the same denominator\"}" 201 "(an open hypothesis)"
 expect POST "/api/engagements/$ENG/retire" '{"retirement_reason":"Verification: a reference example, retired so the cohort does not count it."}' 200 "W9: the reference engagement retired"
 expect GET "/api/institutions/$INST/pov" "" 200 "the POV read, after the retirement"
 [ "$(rj "[b.engagements[0].retired, b.engagements[0].locked_runs.map(r=>r.run_number).join(','), b.outcomes[0].engagement_retired, b.hypotheses.filter(h=>!h.withdrawn_at&&!h.superseded_by_id).length].join('|')")" = "true|1,2,3|true|1" ] \

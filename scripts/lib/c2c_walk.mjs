@@ -111,7 +111,7 @@ if (MODE === 'withdraw' || MODE === 'confirm0') {
   const form = await startWithdraw();
   check(posted('/withdraw') - before === 0, '  ...nothing is sent yet', `${posted('/withdraw') - before} sent`);
   const conf = await ev(`${form}?.querySelector('[data-testid=form-confirm]')?.textContent ?? ''`);
-  check(conf.includes(`Withdraw “${LINK}`) && conf.includes(`from ${METRIC}: it supports the baseline now`) && conf.includes('and will support nothing; no link replaces it.') && conf.includes(`${RUNS} sealed runs share this outcome; none of them changes.`),
+  check(/^Withdraw [0-9a-f]{8}, “/.test(conf.replace(/^.*?Withdraw/, 'Withdraw')) && conf.includes(`“${LINK}`) && conf.includes(`from ${METRIC}: it supports the baseline now`) && conf.includes('and will support nothing; no link replaces it.') && conf.includes(`${RUNS} sealed runs share this outcome; none of them changes.`),
     `  ...the confirmation states the link, the change (baseline → withdrawn, no replacement), the outcome and the ${RUNS} runs that share it`, conf);
   if (MODE === 'withdraw') {
     await shot('c2c_withdraw_confirm_1280', 1280);

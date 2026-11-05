@@ -3356,6 +3356,86 @@ CREATE TRIGGER industries_steward_only
   BEFORE INSERT ON industries
   FOR EACH ROW EXECUTE FUNCTION lvrf_industry_steward_only();
 
+-- 32. §16 (B2, 5 Nov 2026) — the case snapshot: a run seals the whole case (LVRF_PLAN §16; CS-D1–D6).
+-- ------------------------------------------------------------------
+--   lvrf_case_chain(outcome): the one reader of the case chain. produce-run seals its result as payload.case
+--     (payloadVersion 4), and the lock guard compares the two, so the seal and the guard cannot disagree. Every date
+--     is UTC text and every list has an order, so the same chain reads the same bytes.
+--   value_runs_case_current (U): a v4 run is not locked once its chain has moved since it was produced (CS-D1).
+--     A run with no case (v3 and older) locks as before.
+CREATE OR REPLACE FUNCTION lvrf_case_chain(p_outcome uuid) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  WITH o AS (
+    SELECT vo.id, vo.institution_id, vo.capability_id, bm.industry_measure_id AS entry_id
+      FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id WHERE vo.id = p_outcome
+  )
+  SELECT jsonb_build_object(
+    -- CS-D2: every version of every hypothesis on the outcome, with its verdict as it reads now.
+    'hypotheses', coalesce((SELECT jsonb_agg(jsonb_build_object(
+        'id', h.id, 'statement', h.statement, 'verdict', lvrf_hypothesis_verdict(h), 'post_hoc', h.post_hoc,
+        'falsifier', jsonb_build_object('reference', h.falsifier_reference, 'value', trim_scale(h.reference_value)::text,
+          'recorded_on', to_char(h.reference_recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), 'due', to_char(h.falsifier_due, 'YYYY-MM-DD'),
+          'conditions', h.falsifier_conditions),
+        'author', (SELECT full_name FROM persons WHERE id = h.author_person_id),
+        'stated_on', to_char(h.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+        'superseded_by', h.superseded_by_id, 'supersession_reason', h.supersession_reason,
+        'withdrawn', h.deleted_at IS NOT NULL, 'withdrawal_reason', h.retirement_reason,
+        'lever', (SELECT jsonb_build_object('id', l.id, 'name', l.name, 'mechanism', l.mechanism, 'leading_indicator', l.leading_indicator,
+            'citation', l.citation, 'status', l.status,
+            -- O-D2a: the steward's proposal is the ratification; sealed beside the stored status (conflict 3).
+            'ratification', jsonb_build_object('by', (SELECT full_name FROM persons WHERE id = l.proposed_by_person_id),
+                                               'on', to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')),
+            'withdrawn', l.deleted_at IS NOT NULL,
+            'offerings', coalesce((SELECT jsonb_agg(jsonb_build_object('offering_key', f.offering_key, 'name', f.name, 'basis', lo.basis,
+                  'withdrawn', lo.retired_at IS NOT NULL) ORDER BY f.offering_key, lo.id)
+                FROM lever_offerings lo JOIN offerings f ON f.id = lo.offering_id WHERE lo.value_lever_id = l.id), '[]'::jsonb))
+          FROM value_levers l WHERE l.id = h.value_lever_id)
+      ) ORDER BY h.created_at, h.id) FROM value_hypotheses h WHERE h.value_outcome_id = o.id), '[]'::jsonb),
+    -- The offerings on the outcome's capability.
+    'offerings', coalesce((SELECT jsonb_agg(jsonb_build_object('offering_key', f.offering_key, 'name', f.name, 'primary', oc.is_primary,
+          'evidence_class', f.evidence_class, 'verification_source', f.verification_source) ORDER BY f.offering_key)
+        FROM offering_capabilities oc JOIN offerings f ON f.id = oc.offering_id WHERE oc.capability_id = o.capability_id), '[]'::jsonb),
+    -- The current executive summary per lens on the account, with its place in its version chain (conflict 4).
+    'summaries', coalesce((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'lens', s.lens, 'body', s.body,
+          'version', (WITH RECURSIVE back(id, sup) AS (SELECT s.id, s.supersedes_id UNION ALL SELECT p.id, p.supersedes_id FROM executive_summaries p JOIN back b ON p.id = b.sup)
+                      SELECT count(*) FROM back),
+          'author', (SELECT full_name FROM persons WHERE id = s.author_person_id), 'drafted_with_ai', s.drafted_with_ai, 'drafting_tool', s.drafting_tool,
+          'written_on', to_char(s.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'), 'value_run_id', s.value_run_id) ORDER BY s.lens)
+        FROM executive_summaries s WHERE s.institution_id = o.institution_id
+         AND NOT EXISTS (SELECT 1 FROM executive_summaries n WHERE n.supersedes_id = s.id)), '[]'::jsonb),
+    -- CS-D3: the pack entry itself and a SHA-256 of its fields; null where the metric rests on no entry.
+    'pack_entry', (SELECT jsonb_build_object('id', m.id, 'name', m.name, 'unit', m.unit, 'direction', m.direction, 'definition', m.definition,
+          'confounders', m.confounders, 'status', m.status, 'version', m.version,
+          'fingerprint', encode(sha256(convert_to(jsonb_build_object('name', m.name, 'unit', m.unit, 'direction', m.direction, 'definition', m.definition,
+              'why_it_pays', m.why_it_pays, 'addressable', m.addressable, 'addressable_reasoning', m.addressable_reasoning, 'confounders', m.confounders,
+              'citation', m.citation, 'status', m.status, 'version', m.version)::text, 'UTF8')), 'hex'))
+        FROM industry_measures m WHERE m.id = o.entry_id),
+    -- CS-D4: the current reference-example marker, and every figure finding on the outcome.
+    'marker', (SELECT jsonb_build_object('kind', k.kind, 'source_citation', k.source_citation, 'note', k.note,
+          'marked_by', (SELECT full_name FROM persons WHERE id = k.marked_by_person_id), 'marked_on', to_char(k.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'))
+        FROM reference_example_markers k WHERE k.institution_id = o.institution_id AND k.deleted_at IS NULL AND k.superseded_by_id IS NULL),
+    'findings', coalesce((SELECT jsonb_agg(jsonb_build_object('field', ff.field, 'value', trim_scale(ff.value)::text, 'finding_text', ff.finding_text,
+          'recorded_on', to_char(ff.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY ff.field, ff.id)
+        FROM figure_findings ff WHERE ff.value_outcome_id = o.id), '[]'::jsonb)
+  ) FROM o
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_run_case_current() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.locked_at IS NULL AND NEW.locked_at IS NOT NULL AND NEW.payload ? 'case'
+     AND (NEW.payload->'case') IS DISTINCT FROM lvrf_case_chain((NEW.payload->>'valueOutcomeId')::uuid) THEN
+    RAISE EXCEPTION 'LVRF: value_runs: the case changed after this run was produced; produce a new run and lock that.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_runs_case_current';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_runs_case_current ON value_runs;
+CREATE TRIGGER value_runs_case_current
+  BEFORE UPDATE ON value_runs
+  FOR EACH ROW EXECUTE FUNCTION lvrf_run_case_current();
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -3468,7 +3548,7 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 185 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 186 distinct triggers. (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -3490,9 +3570,9 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 185.
+-- TRUNCATE in section 14 fail. Total stays 186.
 --
--- Expect 287 rows here (284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
+-- Expect 288 rows here (287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
 -- information_schema.triggers emits one row per event

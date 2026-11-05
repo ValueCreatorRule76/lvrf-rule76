@@ -617,12 +617,14 @@ export function produceRunRouter(pool: Pool): Router {
       // from now on hashes differently than one produced before this change.
       // That is correct — a payload with more in it is a different payload —
       // not a sign that an older run's stored hash has been corrupted.
+      const { rows: [{ chain: caseChain }] } = await client.query<{ chain: unknown }>('SELECT lvrf_case_chain($1) AS chain', [vo.id]);
       const runPayloadBase = {
         // P1-D4: version 2 seals each fact's and evidence item's form and figure
         // check. A run without this key is version 1 and keeps its bytes;
         // check_run_hashes recomputes both from whatever keys a run has.
         // L42: version 3 also seals each item's row, what it is about, who opened it, and any verified unopened.
-        payloadVersion: 3,
+        // §16 (CS-D1): version 4 seals the case chain, read by lvrf_case_chain(), the function the lock guard compares.
+        payloadVersion: 4,
         // C3 (1.0.1; C3-D3): the committer and the verifier as they stood, so the run recomputes under 1.0.1.
         people: {
           committer: committerName === null ? null : { name: committerName, simulated: committerSynthetic, customer_side: committerSide.customer_side, reason: committerSide.reason, roles: committerSide.roles },
@@ -667,6 +669,8 @@ export function produceRunRouter(pool: Pool): Router {
         // 3.0 item 10 (O1): sealed with the run, under the same hash.
         entity,
         institutionFacts,
+        // §16: the hypotheses, levers, offerings, summaries, pack entry, marker and findings, as they stand.
+        case: caseChain,
       };
       const payloadHash = sha256Hex(runPayloadBase);
       const runPayload = { ...runPayloadBase, payloadHash };

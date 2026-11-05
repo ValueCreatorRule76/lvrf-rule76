@@ -6,6 +6,7 @@ import { FOCUS_RING, GovernedForm } from './GovernedForm';
 import { useEvidenceForm } from './EvidenceFormInput';
 import { AboutSelect, type AccountChoice } from './AboutSelect';
 import { aboutBody } from './useAbout';
+import { ShortId } from './ShortId';
 
 /**
  * C3 (LVRF_PLAN §12; Brad's rulings, 26 Oct 2026) — the steward's two batches, each a dry run read first,
@@ -191,7 +192,7 @@ export function AboutBatch() {
         {data.rows.map((r) => (
           <li key={r.id} className="border-b border-rule-soft px-4 py-2 text-[12px] last:border-b-0" data-testid="about-batch-row" data-evidence={r.id} data-proposed={r.proposed ?? ''}>
             <span className="font-semibold text-ink">{r.account} · {r.kind.replace(/_/g, ' ')}</span>
-            <span className="block text-ink-70 [overflow-wrap:anywhere]">{r.summary}</span>
+            <span className="block text-ink-70 [overflow-wrap:anywhere]">{r.summary} <ShortId id={r.id} /></span>
             <span className="block text-ink-45 [overflow-wrap:anywhere]">Source: {r.provenance}</span>
             <span className="mt-1 flex flex-wrap items-center gap-2">
               <AboutSelect accounts={data.accounts} ownName={r.account} value={choice(r)} disabled={Boolean(notSteward)} className={I + ' max-w-[280px]'} testId="about-batch-choice"
@@ -253,7 +254,7 @@ function CorrectRow({ row, accounts, disabled, onItem }: { row: CorrectableRow; 
         <input type="checkbox" className="mt-0.5" checked={on} disabled={disabled} onChange={(ev) => setOn(ev.target.checked)} data-testid="supersession-tick" />
         <span>
           <span className="font-semibold text-ink">{row.account} · {row.kind.replace(/_/g, ' ')} · about {row.about ?? 'nothing stated'}</span>
-          <span className="block text-ink-70 [overflow-wrap:anywhere]">{row.summary}</span>
+          <span className="block text-ink-70 [overflow-wrap:anywhere]">{row.summary} <ShortId id={row.id} /></span>
           <span className="block text-ink-45 [overflow-wrap:anywhere]">Source: {row.provenance}</span>
         </span>
       </label>
@@ -317,7 +318,7 @@ function PlanErratumLine({ r }: { r: PlanErratum }) {
 function PlanLine({ r }: { r: PlanRow }) {
   return (
     <li className="border-b border-rule-soft px-4 py-3 text-[12px] last:border-b-0" data-testid="supersession-plan-row" data-evidence={r.evidence_id}>
-      <span className="font-semibold text-ink">{r.account} · {r.kind?.replace(/_/g, ' ')}</span>
+      <span className="font-semibold text-ink">{r.account} · {r.kind?.replace(/_/g, ' ')} <ShortId id={r.evidence_id} /></span>
       {r.current && r.next && <>
         <span className="mt-1 block text-ink-70 [overflow-wrap:anywhere]" data-testid="plan-text">Text now: {r.summary}</span>
         <span className="block text-ink [overflow-wrap:anywhere]" data-testid="plan-new-text">Text new: {r.next.summary === r.summary ? 'unchanged' : r.next.summary}</span>

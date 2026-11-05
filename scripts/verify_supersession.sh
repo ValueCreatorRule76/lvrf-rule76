@@ -105,8 +105,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 185 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "186" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 186 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -126,7 +126,7 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "185" ] && ok "185 triggers: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
+[ "$(trig)" = "186" ] && ok "186 triggers: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
 
 step "3. Fixtures and the server"
 TS="$(date +%s)"
@@ -147,26 +147,44 @@ FORMQ() { J evidence_form quote quote_text 'Named in the fixture document as sta
 OC() { printf '/api/evidence/%s/open-citation' "$1"; }
 ID() { q "SELECT id FROM evidence WHERE id::text LIKE '$1%'"; }
 R9="$(ID 9765335f)"; R2="$(ID 271a449a)"; R1="$(ID 1632a5e0)"; RF="$(ID f9775317)"; RC="$(ID cee6fea9)"; RT="$(ID 423be7c6)"; RG="$(ID 092c46b6)"
+# L53 (5 Nov 2026): on a copy taken after B1's acts, the five rows B1 corrected are superseded. Each chain's current end
+# stands in for its first row, and every check reads what the copy held before the batch. The errata still name
+# 423be7c6, and the frozen links still sit on f9775317's outcome, so those two keep their first rows as RT0 and RF0.
+RT0="$RT"; RF0="$RF"
+POST="$([ -n "$(q "SELECT 1 FROM evidence WHERE id = '$RC' AND superseded_by_id IS NOT NULL")" ] && echo 1 || true)"
+HEAD() { q "SELECT id FROM evidence e WHERE e.id IN (SELECT lvrf_evidence_chain('$1')) AND e.superseded_by_id IS NULL"; }
+if [ -n "$POST" ]; then
+  R9="$(HEAD "$R9")"; R2="$(HEAD "$R2")"; RF="$(HEAD "$RF")"; RC="$(HEAD "$RC")"; RT="$(HEAD "$RT")"
+  ok "(a copy taken after B1's acts: the batch runs on each chain's current end: $(for r in "$RC" "$RF" "$RT" "$R2" "$R9"; do printf '%s ' "${r:0:8}"; done))"
+else
+  ok "(a copy taken before B1's acts: every block as written)"
+fi
 SELF_INST="$(q "SELECT id FROM institutions WHERE is_tenant_self LIMIT 1")"; CURIA="$(q "SELECT institution_id FROM evidence WHERE id = '$R1'")"; SCOTTS="$(q "SELECT institution_id FROM evidence WHERE id = '$RT'")"
 sf() { J about account kind public_filing provenance 'Fixture filing (not a source)' summary "$1" evidence_form quote quote_text 'Named in the fixture document as stated here.' how_read 'Read from the fixture document, page one (fixture).'; }
 fixture() { expect POST "/api/institutions/$SELF_INST/evidence" "$(sf "$1")" 201 "a fixture row: $1"; FX="$(rj b.evidence_id)"; }
 
 step "4. Gate B's acts, replayed on the clone: every row about its own account, as recorded"
+if [ -z "$POST" ]; then
 expect GET /api/evidence/about-batch "" 200 "the about batch"
 ITEMS="$(rj "JSON.stringify(b.rows.map(r=>({evidence_id:r.id,about:'account'})))")"
 expect POST /api/evidence/about-batch "$(J expected_count 34 items "$ITEMS" reason 'Verification: as recorded at Gate B.')" 201 "34 stated"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: as recorded at Gate B.')" 200 "1632a5e0 withdrawn"
 expect POST "/api/evidence/$RF/withdraw-verification" "$(J reason 'Verification: as recorded at Gate B.')" 200 "f9775317 withdrawn"
+else
+[ "$(q "SELECT count(*) FROM evidence WHERE about_institution_id IS NULL AND about_other_party IS NULL")|$(q "SELECT source_verified FROM evidence WHERE id = '$R1'")|$(q "SELECT source_verified FROM evidence WHERE id = '$RF0'")" = "0|f|f" ] && ok "Gate B's acts are on the copy: every row stated, 1632a5e0 and f9775317 withdrawn" || bad "Gate B's state"
+fi
 
 step "5. A No opening says why (L52, 1): route and database"
-expect POST "$(OC "$R2")" '{"source_verified":false}' 422 "a No with no reason: refused" "Say why the source does not support"
-expect POST "$(OC "$R2")" '{"source_verified":false,"reason":"short"}' 422 "  ...a reason under 12 characters: refused" "at least 12"
-expect POST "$(OC "$R2")" "$(node -e 'const f=JSON.parse(process.argv[1]);console.log(JSON.stringify({source_verified:true,reason:"Verification: a Yes takes no reason.",...f}))' "$(FORMQ)")" 422 "  ...a Yes with a reason: refused" "for an opening that does not support"
-[ "$(q "SELECT citation_resolved FROM evidence WHERE id = '$R2'")" = "f" ] && ok "  ...nothing written by any of them" || bad "  ...a refused opening wrote"
-expect POST "$(OC "$R2")" "$(J source_verified false reason 'Verification: the figures are not in the release.')" 200 "a No with its reason"
-expect POST "$(OC "$R9")" "$(J source_verified false reason 'Verification: the figures are not in the release.')" 200 "  ...9765335f too, as recorded at Gate B"
-[ "$(q "SELECT reason FROM governance_acts WHERE act = 'open_citation' AND subject_id = '$R2'")" = "Verification: the figures are not in the release." ] && ok "  ...the reason is on the act" || bad "  ...reason"
-expect GET "/api/lineage/evidence/$R2" "" 200 "its lineage"
+# On a post-act copy, the two rows this step opened are already opened, so it opens fixture rows instead.
+if [ -n "$POST" ]; then fixture "L53 row for the No"; NOA="$FX"; fixture "L53 second row for the No"; NOB="$FX"; else NOA="$R2"; NOB="$R9"; fi
+expect POST "$(OC "$NOA")" '{"source_verified":false}' 422 "a No with no reason: refused" "Say why the source does not support"
+expect POST "$(OC "$NOA")" '{"source_verified":false,"reason":"short"}' 422 "  ...a reason under 12 characters: refused" "at least 12"
+expect POST "$(OC "$NOA")" "$(node -e 'const f=JSON.parse(process.argv[1]);console.log(JSON.stringify({source_verified:true,reason:"Verification: a Yes takes no reason.",...f}))' "$([ "$(q "SELECT evidence_form FROM evidence WHERE id = '$NOA'")" = legacy ] && FORMQ || echo '{}')")" 422 "  ...a Yes with a reason: refused" "for an opening that does not support"
+[ "$(q "SELECT citation_resolved FROM evidence WHERE id = '$NOA'")" = "f" ] && ok "  ...nothing written by any of them" || bad "  ...a refused opening wrote"
+expect POST "$(OC "$NOA")" "$(J source_verified false reason 'Verification: the figures are not in the release.')" 200 "a No with its reason"
+expect POST "$(OC "$NOB")" "$(J source_verified false reason 'Verification: the figures are not in the release.')" 200 "  ...a second row too"
+[ "$(q "SELECT reason FROM governance_acts WHERE act = 'open_citation' AND subject_id = '$NOA'")" = "Verification: the figures are not in the release." ] && ok "  ...the reason is on the act" || bad "  ...reason"
+expect GET "/api/lineage/evidence/$NOA" "" 200 "its lineage"
 [ "$(rj "(Array.isArray(b)?b:b.steps).find(s=>s.kind==='open_citation').detail.reason")" = "Verification: the figures are not in the release." ] && ok "  ...and in its lineage" || bad "  ...lineage"
 fixture "L52 row for the No break"; F1="$FX"
 edit "$CITE" "if (!body.source_verified && reason.length < 12) {" "if (false as boolean) {"
@@ -187,7 +205,7 @@ TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -
 [ -n "$TOKEN" ] && ok "the steward signed in by session" || { bad "no session"; exit 1; }
 cw() {  # MODE
   local log="$W/walk.$1.log"
-  node scripts/lib/l41_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$log" 2>&1; local rc=$?
+  local rc=0; node scripts/lib/l41_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$log" 2>&1 || rc=$?
   PASS=$((PASS + $(grep -c '^  PASS' "$log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$log" || true)))
   grep -E '^  (PASS|FAIL)' "$log" || true
   [ "$rc" = "0" ] || bad "the $1 walk exited $rc (see $log)"
@@ -213,24 +231,32 @@ SK="$(J institution_id "$SELF_INST")"; PARTY="$(J other_party 'Fixture Story Com
 T1="Skillsoft-published case study naming Scotts Miracle-Gro: '75% reduction rate in recordable incidents' with Skillsoft EHS solutions; no period or baseline stated. A vendor claim about Scotts, not Scotts' own measurement."
 T2="FY2027 guidance: revenue \$388-406M, adjusted EBITDA \$108-116M, TDS free cash flow \$14-22M."
 T9="LTM DRR of 98%, one percentage point lower than the year ago period"
+# On a post-act copy each chain's end already reads its text, so the batch restates it, and RC and RF get new text too.
+TC=""; TF=""; if [ -n "$POST" ]; then T1="$T1 (restated on the clone)"; T2="$T2 (restated on the clone)"; T9="$T9 (restated on the clone)"; TC="$(q "SELECT summary FROM evidence WHERE id = '$RC'") (restated on the clone)"; TF="$(q "SELECT summary FROM evidence WHERE id = '$RF'") (restated on the clone)"; fi
+LEGR="$RC"; LEGR9="$R9"
+if [ -n "$POST" ]; then LEGR="$(q "SELECT e.id FROM evidence e WHERE e.evidence_form = 'legacy' AND e.superseded_by_id IS NULL AND e.deleted_at IS NULL AND NOT e.ai_sourced ORDER BY e.created_at, e.id LIMIT 1")"; LEGR9="$LEGR"; fi
 TX() { node -e 'const b=JSON.parse(process.argv[1]);b.summary=process.argv[2];console.log(JSON.stringify(b))' "$1" "$2"; }
-EW="$(q "SELECT id FROM run_errata x WHERE evidence_id = '$RT' AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id) ORDER BY value_run_id" | paste -sd' ' -)"
+EW="$(q "SELECT id FROM run_errata x WHERE evidence_id = '$RT0' AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id) ORDER BY value_run_id" | paste -sd' ' -)"
 E1="${EW%% *}"; E2="${EW##* }"
 EI() { node -e 'console.log(JSON.stringify({erratum_id:process.argv[1],what_is_right:"It supports the impact basis only. A vendor claim about Scotts is never support for a baseline.",reason:"The link was corrected on 25 Oct 2026, because a vendor claim is never baseline support.",supersession_reason:"The earlier text misidentified the subject of the story."}))' "$1"; }
 ERRATA="[$(EI "$E1"),$(EI "$E2")]"
-BODY="{\"items\":[$(IT "$RC" "$SK"),$(IT "$RF" "$SK"),$(TX "$(IT "$RT" '"account"')" "$T1"),$(TX "$(IT "$R2" '"account"')" "$T2"),$(TX "$(IT "$R9" '"account"')" "$T9")],\"errata\":$ERRATA}"
+TXO() { if [ -n "$2" ]; then TX "$1" "$2"; else printf '%s' "$1"; fi; }
+BODY="{\"items\":[$(TXO "$(IT "$RC" "$SK")" "$TC"),$(TXO "$(IT "$RF" "$SK")" "$TF"),$(TX "$(IT "$RT" '"account"')" "$T1"),$(TX "$(IT "$R2" '"account"')" "$T2"),$(TX "$(IT "$R9" '"account"')" "$T9")],\"errata\":$ERRATA}"
 ROW() { rj "b.rows.find(r=>r.evidence_id==='$1')$2"; }
+PRE_ABOUT_RC="$(q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id = '$RC'")"
+PRE_R2="$(q "SELECT source_verified || '|' || citation_resolved FROM evidence WHERE id = '$R2'")"
 S0="$(SNAP)"
 expect GET "$SB" "" 200 "the list of rows"
 [ "$(rj "b.rows.some(r=>r.id==='$RC')")" = "true" ] && ok "  ...offers the rows" || bad "  ...list"
 expect POST "$DR" "$BODY" 403 "X runs the dry run" "steward" "$X"
 expect POST "$DR" '{"items":[]}' 422 "no rows" "at least one row"
 expect POST "$DR" "{\"items\":[$(IT "$RC" "$SK"),$(IT "$RC" "$SK")]}" 422 "a row twice" "each row once"
-expect POST "$DR" "{\"items\":[$(IT "$RC" "$SK" noreading)]}" 200 "a legacy row with no reading"
-[ "$(rj "b.can_submit")" = "false" ] && printf '%s' "$(ROW "$RC" ".blockers[0]")" | grep -q "records no reading" && ok "  ...stopped: a new row must record its reading (L52-D5)" || bad "  ...$(ROW "$RC" ".blockers")"
+expect POST "$DR" "{\"items\":[$(IT "$LEGR" "$SK" noreading)]}" 200 "a legacy row with no reading"
+[ "$(rj "b.can_submit")" = "false" ] && printf '%s' "$(ROW "$LEGR" ".blockers[0]")" | grep -q "records no reading" && ok "  ...stopped: a new row must record its reading (L52-D5)" || bad "  ...$(ROW "$RC" ".blockers")"
 expect POST "$DR" "$BODY" 200 "the dry run"
 [ "$(rj b.can_submit)|$(rj b.count)" = "true|7" ] && ok "  ...5 rows and 2 errata, nothing stopping them" || bad "  ...$(rj "JSON.stringify(b.rows.map(r=>r.blockers))")"
 HASH="$(rj b.plan_hash)"
+if [ -z "$POST" ]; then
 [ "$(ROW "$RC" ".current.about")|$(ROW "$RC" ".next.about")|$(ROW "$RC" ".mark.carries")|$(ROW "$RC" ".links.length")|$(ROW "$RC" ".withdrawn_links")|$(ROW "$RC" ".sealed_runs")" = "Curia|Skillsoft|true|0|1|16" ] && ok "  ...cee6fea9: about Curia → Skillsoft; the mark carries; no current link; 16 sealed runs" || bad "  ...cee6fea9: $(ROW "$RC" "")"
 [ "$(ROW "$RF" ".next.about")|$(ROW "$RF" ".mark.carries")|$(ROW "$RF" ".withdrawn_links")|$(ROW "$RF" ".sealed_runs")" = "Skillsoft|true|2|10" ] && ok "  ...f9775317: about Skillsoft; the mark carries; 2 withdrawn links stay; 10 sealed runs" || bad "  ...f9775317"
 [ "$(ROW "$RT" ".current.about")|$(ROW "$RT" ".next.about")|$(ROW "$RT" ".current.verified")|$(ROW "$RT" ".mark.carries")|$(ROW "$RT" ".links[0].supports")|$(ROW "$RT" ".links[0].moves")|$(ROW "$RT" ".links[0].frozen")|$(ROW "$RT" ".errata")|$(ROW "$RT" ".sealed_runs")" = "Scotts Miracle-Gro|Scotts Miracle-Gro|true|false|impact_basis|true|true|3|2" ] && ok "  ...423be7c6: about Scotts, kept; no mark; its impact-basis link carried on the frozen outcome; 3 errata and 2 runs stay" || bad "  ...423be7c6: $(ROW "$RT" "")"
@@ -238,6 +264,21 @@ HASH="$(rj b.plan_hash)"
 [ "$(ROW "$R2" ".next.summary")|$(ROW "$R2" ".links[0].supports")|$(ROW "$R2" ".links[0].frozen")" = "$T2|impact_basis|false" ] && ok "  ...271a449a: the guidance only; its live link moves" || bad "  ...271a449a"
 [ "$(ROW "$R9" ".next.summary")|$(ROW "$R9" ".links[0].supports")" = "$T9|baseline" ] && ok "  ...9765335f: the release's words; its baseline moves" || bad "  ...9765335f"
 [ "$(rj "b.errata.length")|$(rj "b.errata.every(e=>e.current.what_is_right.includes('another company')&&!e.next.what_is_right.includes('another company'))")" = "2|true" ] && ok "  ...both errata: current and new text" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
+else
+CNT() { q "$1"; }
+for r in "$RC" "$RF" "$RT" "$R2" "$R9"; do
+  [ "$(ROW "$r" ".current.about")" = "$(q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id = '$r'")" ] \
+    && [ "$(ROW "$r" ".mark.carries")" = "$([ -n "$(q "SELECT 1 FROM system_exercise_marks WHERE subject_id = '$r'")" ] && echo true || echo false)" ] \
+    && [ "$(ROW "$r" ".links.length")" = "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$r' AND withdrawn_at IS NULL")" ] \
+    && [ "$(ROW "$r" ".withdrawn_links")" = "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$r' AND withdrawn_at IS NOT NULL")" ] \
+    && [ "$(ROW "$r" ".errata")" = "$(q "SELECT count(*) FROM run_errata WHERE evidence_id = '$r'")" ] \
+    && [ "$(ROW "$r" ".blockers.length")" = "0" ] \
+    && ok "  ...${r:0:8}: its about, mark, links, withdrawn links and errata, as the copy holds them" || bad "  ...${r:0:8}: $(ROW "$r" "")"
+done
+[ "$(ROW "$RT" ".links[0].supports")|$(ROW "$RT" ".links[0].moves")|$(ROW "$RT" ".links[0].frozen")" = "impact_basis|true|true" ] && ok "  ...${RT:0:8}: its impact-basis link carried on the frozen outcome" || bad "  ...frozen link"
+[ "$(ROW "$RT" ".next.summary")|$(ROW "$R2" ".next.summary")|$(ROW "$R9" ".next.summary")" = "$T1|$T2|$T9" ] && ok "  ...each new text" || bad "  ...texts"
+[ "$(rj "b.errata.length")|$(rj "b.errata.every(e=>e.next.what_is_right!==e.current.what_is_right)")" = "2|true" ] && ok "  ...both errata: current and new text" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
+fi
 [ "$(SNAP)" = "$S0" ] && ok "  ...the dry runs wrote nothing" || bad "  ...a dry run wrote"
 FACTED="$(q "SELECT e.id FROM evidence e JOIN institution_facts f ON f.evidence_id = e.id WHERE f.deleted_at IS NULL AND f.superseded_by_id IS NULL AND e.superseded_by_id IS NULL AND NOT e.ai_sourced LIMIT 1")"
 FI="$(q "SELECT institution_id FROM evidence WHERE id = '$FACTED'")"
@@ -253,7 +294,7 @@ expect POST "$DR" "{\"items\":[$(IT "$F3" '"account"' noreading)]}" 200 "a row w
 printf '%s' "$(rj "b.rows[0].blockers.join()")" | grep -q "This changes nothing" && ok "  ...stopped: it changes nothing (L52-D6)" || bad "  ...$(rj "JSON.stringify(b.rows[0].blockers)")"
 expect POST "$DR" "{\"errata\":[{\"erratum_id\":\"$E1\",\"supersession_reason\":\"Verification: nothing new here.\"}]}" 200 "an erratum restated as it stands"
 printf '%s' "$(rj "b.errata[0].blockers.join()")" | grep -q "This changes nothing" && ok "  ...stopped" || bad "  ...$(rj "JSON.stringify(b.errata[0].blockers)")"
-expect POST "$DR" "{\"items\":[$(IT "$R9" '"account"')]}" 200 "a legacy row, its about unchanged, with a reading"
+expect POST "$DR" "{\"items\":[$(IT "$LEGR9" '"account"')]}" 200 "a legacy row, its about unchanged, with a reading"
 [ "$(rj b.can_submit)" = "true" ] && ok "  ...allowed: the reading is the change" || bad "  ...$(rj "JSON.stringify(b.rows[0].blockers)")"
 S0="$(SNAP)"
 SUB() { node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:+process.argv[2],plan_hash:process.argv[3],reason:process.argv[4]}))' "$BODY" "$1" "$2" "$3"; }
@@ -264,17 +305,17 @@ expect POST "$SB" "$(SUB 7 "$HASH" 'Verification: not the steward.')" 403 "X sub
 [ "$(SNAP)" = "$S0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
 
 step "8. The batch, in the browser; the record after"
-ER0="$(q "SELECT count(*) FROM run_errata")"
-RC="$RC" RF="$RF" RT="$RT" R2="$R2" R9="$R9" E1="$E1" E2="$E2" T1="$T1" T2="$T2" T9="$T9" cw supersession
+ER0="$(q "SELECT count(*) FROM run_errata")"; EA0="$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum' AND route = 'POST /api/evidence/supersession-batch'")"
+RC="$RC" RF="$RF" RT="$RT" R2="$R2" R9="$R9" E1="$E1" E2="$E2" T1="$T1" T2="$T2" T9="$T9" TC="$TC" TF="$TF" POST="$POST" cw supersession
 NC="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RC'")"; NF="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RF'")"; NT="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RT'")"
 N2="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$R2'")"; N9="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$R9'")"
 [ -n "$NC" ] && [ -n "$NF" ] && [ -n "$NT" ] && [ -n "$N2" ] && [ -n "$N9" ] && ok "5 rows superseded" || bad "superseded: $NC $NF $NT $N2 $N9"
 ABT() { q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id = '$1'"; }
 [ "$(ABT "$NC")|$(ABT "$NF")|$(ABT "$NT")|$(ABT "$N2")" = "Skillsoft|Skillsoft|Scotts Miracle-Gro|Skillsoft" ] && ok "  ...each new row about what was stated" || bad "  ...about: $(ABT "$NC") $(ABT "$NF") $(ABT "$NT")"
 [ "$(q "SELECT summary FROM evidence WHERE id = '$NT'")" = "$T1" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$N2'")" = "$T2" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$N9'")" = "$T9" ] && ok "  ...with the new text" || bad "  ...text"
-[ "$(ABT "$RC")" = "Curia" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$RT'")" != "$T1" ] && ok "  ...the old rows keep what they said" || bad "  ...old"
+[ "$(ABT "$RC")" = "$PRE_ABOUT_RC" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$RT'")" != "$T1" ] && ok "  ...the old rows keep what they said" || bad "  ...old"
 [ "$(q "SELECT count(*) FROM evidence WHERE id IN ('$NC','$NF','$NT','$N2','$N9') AND NOT source_verified AND NOT citation_resolved AND evidence_form = 'quote'")" = "5" ] && ok "  ...born unverified and unopened, with the reading (L52-D4)" || bad "  ...new rows"
-[ "$(q "SELECT source_verified || '|' || citation_resolved FROM evidence WHERE id = '$R2'")" = "false|true" ] && ok "  ...the No openings stand as recorded on the old rows" || bad "  ...No"
+[ "$(q "SELECT source_verified || '|' || citation_resolved FROM evidence WHERE id = '$R2'")" = "$PRE_R2" ] && ok "  ...each old row's opening stands as recorded" || bad "  ...No"
 [ "$(q "SELECT count(*) FROM system_exercise_marks m JOIN system_exercise_marks o ON o.reason = m.reason WHERE m.subject_id IN ('$NC','$NF') AND o.subject_id IN ('$RC','$RF')")" = "2" ] && ok "  ...both marks carried, with the same reason; each old row keeps its own" || bad "  ...marks"
 [ "$(q "SELECT count(*) FROM system_exercise_marks WHERE subject_id IN ('$NT','$N2','$N9')")" = "0" ] && ok "  ...an unmarked row gains none" || bad "  ...a mark appeared"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'mark' AND subject_table = 'system_exercise_marks' AND subject_id IN (SELECT id FROM system_exercise_marks WHERE subject_id IN ('$NC','$NF'))")" = "2" ] && ok "  ...each mark with its act" || bad "  ...mark acts"
@@ -285,11 +326,11 @@ ABT() { q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) F
 [ -n "$(q "SELECT 1 FROM figure_checks WHERE evidence_id = '$N9' LIMIT 1")" ] && ok "  ...and the baseline checked against the reading" || bad "  ...no figure check"
 [ "$(q "SELECT count(*) FROM run_errata")" = "$((ER0 + 2))" ] && ok "2 errata superseded: 2 new, none removed" || bad "errata: $(q "SELECT count(*) FROM run_errata")"
 [ "$(q "SELECT count(*) FROM run_errata n JOIN run_errata o ON o.id = n.supersedes_id WHERE o.id IN ('$E1','$E2') AND n.evidence_id = o.evidence_id AND n.corrected_to_supports = o.corrected_to_supports AND n.recomputed_score = o.recomputed_score AND n.sealed_score = o.sealed_score AND n.what_is_right NOT LIKE '%another company%' AND n.supersession_reason = 'The earlier text misidentified the subject of the story.'")" = "2" ] && ok "  ...the correction kept, the reason fixed, the supersession reason recorded; the recompute unchanged" || bad "  ...errata text: $(q "SELECT what_is_right, supersession_reason, recomputed_score FROM run_errata ORDER BY recorded_at DESC LIMIT 2")"
-[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum' AND route = 'POST /api/evidence/supersession-batch'")" = "2" ] && ok "  ...each with its act" || bad "  ...erratum acts"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum' AND route = 'POST /api/evidence/supersession-batch'")" = "$((EA0 + 2))" ] && ok "  ...each with its act" || bad "  ...erratum acts"
 expect GET "/api/lineage/evidence/$RC" "" 200 "the old row's lineage"
 [ "$(rj "(Array.isArray(b)?b:b.steps).find(s=>s.kind==='superseded_by').detail.about")" = "Skillsoft" ] && ok "  ...names what superseded it" || bad "  ...old lineage"
 expect GET "/api/lineage/evidence/$NC" "" 200 "the new row's lineage"
-[ "$(rj "(Array.isArray(b)?b:b.steps).find(s=>s.kind==='supersedes').detail.about")" = "Curia" ] && ok "  ...names what it replaced" || bad "  ...new lineage"
+[ "$(rj "(Array.isArray(b)?b:b.steps).find(s=>s.kind==='supersedes').detail.about")" = "$PRE_ABOUT_RC" ] && ok "  ...names what it replaced" || bad "  ...new lineage"
 expect POST "$(OC "$N9")" '{"source_verified":true}' 200 "9765335f's successor opened Yes: its reading is already recorded"
 [ "$(q "SELECT source_verified FROM evidence WHERE id = '$N9'")" = "t" ] && ok "  ...verified, by a person's opening" || bad "  ...opening"
 # The addendum: an erratum follows its link down the chain, however many steps (Brad, 1 Nov 2026).
@@ -300,7 +341,7 @@ ER1="$(EA "$EF1" 'It supports the impact basis only, as a vendor claim about Sco
 # B8 — the route reading only the row's own link.
 edit "$CORR" "evidence_id IN (SELECT lvrf_evidence_chain(e.id)) AND withdrawn_at IS NULL" "evidence_id = e.id AND withdrawn_at IS NULL"
 stop_server; start_server
-expect POST "/api/value-runs/$(q "SELECT value_run_id FROM run_errata WHERE id = '$EF1'")/errata" "$(J evidence_id "$RT" what_was_wrong 'Run 1 sealed the vendor publication as supporting the baseline.' what_is_right 'It supports the impact basis only, as a vendor claim.' reason 'Verification: the chain break, in the route.' supersedes_erratum_id "$EF1" supersession_reason 'Verification: the chain break, why.')" 422 "B8: the route reading only the row's own link → no erratum once the link moved" "no current link"
+expect POST "/api/value-runs/$(q "SELECT value_run_id FROM run_errata WHERE id = '$EF1'")/errata" "$(J evidence_id "$RT0" what_was_wrong 'Run 1 sealed the vendor publication as supporting the baseline.' what_is_right 'It supports the impact basis only, as a vendor claim.' reason 'Verification: the chain break, in the route.' supersedes_erratum_id "$EF1" supersession_reason 'Verification: the chain break, why.')" 422 "B8: the route reading only the row's own link → no erratum once the link moved" "no current link"
 restore "$CORR"; stop_server; start_server
 expect POST "$DR" "$ER1" 200 "the dry run: an erratum whose link has moved one step"
 [ "$(rj b.can_submit)" = "true" ] && ok "  ...nothing stops it" || bad "  ...$(rj "JSON.stringify(b.errata)")"
@@ -323,11 +364,13 @@ expect POST "$DR" "$ER2" 200 "  ...restored"; H2="$(rj b.plan_hash)"
 expect POST "$SB" "$(node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:1,plan_hash:process.argv[2],reason:"Verification: an erratum, two steps down the chain."}))' "$ER2" "$H2")" 201 "the erratum superseded, its link two steps on"
 sqlrefused "an erratum on an evidence row that never had a correcting link" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, '$NT2', corrected_to_supports, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, '$S' FROM run_errata WHERE id = '$EF1'" "an erratum is about a corrected link"
 # The freeze holds but for that one move.
-FO="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$RF' LIMIT 1")"
+FO="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$RF0' LIMIT 1")"
+# The row that directly superseded f9775317 (the batch's successor on a pre-act copy; B1's on a post-act one).
+FZ="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RF0'")"
 sqlrefused "a new link on the frozen outcome, from a row with no supersession" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$R1', 'impact_basis')" "frozen"
-sqlrefused "a successor taking a link withdrawn long ago: it does not come back" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$NF', 'impact_basis')" "frozen"
+sqlrefused "a successor taking a link withdrawn long ago: it does not come back" "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$FZ', 'impact_basis')" "frozen"
 fnbreak lvrf_outcome_evidence_link_guard "AND l.supports = NEW.supports AND l.withdrawn_at = now()) THEN" "AND l.supports = NEW.supports) THEN"
-sqlaccepted "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$NF', 'impact_basis')" > "$W/b6.out" 2>&1 || true
+sqlaccepted "INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) VALUES ('$FO', '$FZ', 'impact_basis')" > "$W/b6.out" 2>&1 || true
 grep -q ACCEPTED "$W/b6.out" && ok "B6: without \"withdrawn now\", a link withdrawn long ago comes back on the frozen outcome: that test is what stops it" || bad "B6: $(cat "$W/b6.out" | tail -1)"
 reharden
 RC="$RC" NC="$NC" cw corrected
@@ -380,15 +423,32 @@ expect POST "/api/value-outcomes/$OC9/evidence/$N22/correct-support" "$(J suppor
 expect POST "/api/value-outcomes/$OC9/evidence/$N9/correct-support" "$(J supports impact_basis reason 'Verification: not the steward.')" 403 "  ...X is refused, as on the run page" "steward" "$X"
 # On a copy taken after 4 Nov's acts: the two real rows themselves.
 R_DRR="$(q "SELECT id FROM evidence WHERE id::text LIKE '9a36e675%'")"; R_GUI="$(q "SELECT id FROM evidence WHERE id::text LIKE 'c1d0f877%'")"
-if [ -n "$R_DRR" ] && [ -n "$R_GUI" ]; then
+if [ -n "$R_DRR" ] && [ -n "$R_GUI" ] && [ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")" = "impact_basis" ]; then
   [ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")|$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_GUI' AND withdrawn_at IS NULL")" = "impact_basis|baseline" ] && ok "the real rows, crossed as on prod: 9a36e675 on the impact basis, c1d0f877 on the baseline" || bad "real rows not as on prod"
   TO_BASELINE="$R_DRR" TO_IMPACT="$R_GUI" cw cardlinks
   [ "$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")|$(q "SELECT supports FROM value_outcome_evidence WHERE evidence_id = '$R_GUI' AND withdrawn_at IS NULL")" = "baseline|impact_basis" ] && ok "  ...uncrossed on the clone: 9a36e675 the baseline, c1d0f877 the impact basis" || bad "  ...real rows after"
   RC0="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$R_DRR' AND withdrawn_at IS NULL")"
   [ "$(q "SELECT result FROM figure_checks WHERE evidence_id = '$R_DRR' AND subject_field = 'baseline_value' ORDER BY checked_at DESC LIMIT 1")|$(q "SELECT result FROM figure_checks WHERE evidence_id = '$R_GUI' AND subject_field = 'claimed_currency_impact' ORDER BY checked_at DESC LIMIT 1")" = "pass|flag" ] && ok "  ...the baseline's check passes on 98; the impact basis flags 7,000,000, as it should" || bad "  ...checks: $(q "SELECT evidence_id, subject_field, result FROM figure_checks WHERE evidence_id IN ('$R_DRR','$R_GUI') ORDER BY checked_at")"
 else
-  ok "(the real rows 9a36e675 and c1d0f877 are not on this copy: it predates them)"
+  ok "(the real rows 9a36e675 and c1d0f877 are not crossed on this copy: it predates them, or they were uncrossed on 5 Nov)"
 fi
+
+step "9c. Card 01c withdraws a link (B2; Brad, 4 Nov 2026; checklist stage 8)"
+# N9 holds one current link (the impact basis, after 9b's swap). Withdrawn on the card: no replacement, one act, the
+# route's own; no run changes.
+OCW="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")"
+[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")" = "1" ] && ok "N9 holds one current link before" || bad "  ...N9's current links"
+W0="$(q "SELECT count(*) FROM governance_acts WHERE act = 'withdraw' AND subject_table = 'value_outcome_evidence'")"
+RW0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
+LW0="$(q "SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$OCW'")"
+WD_ID="$N9" WD_FROM="impact basis" cw cardwithdraw
+[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")" = "0" ] && ok "withdrawn through the card: N9 has no current link" || bad "  ...N9 still linked"
+[ "$(q "SELECT withdrawal_reason || '|' || (withdrawn_by_person_id = '$S') FROM value_outcome_evidence WHERE evidence_id = '$N9' AND value_outcome_id = '$OCW' AND supports = 'impact_basis'")" = "Verification: no source states this figure.|true" ] \
+  && ok "  ...who and why, as entered" || bad "  ...withdrawal: $(q "SELECT withdrawal_reason, withdrawn_by_person_id FROM value_outcome_evidence WHERE evidence_id = '$N9' AND supports = 'impact_basis'")"
+[ "$(q "SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$OCW'")" = "$LW0" ] && ok "  ...no replacement link: the outcome holds the same $LW0 link rows" || bad "  ...a replacement was written"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'withdraw' AND subject_table = 'value_outcome_evidence'")" = "$((W0 + 1))" ] && ok "  ...one withdraw act, the route's own" || bad "  ...acts"
+[ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RW0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
+expect POST "/api/value-outcomes/$OCW/evidence/$N9/withdraw" "$(J reason 'Verification: again, nothing current.')" 404 "  ...a second withdrawal: no current link (the route's own rule)" "no current link"
 
 step "10. Add an industry (B1; Brad, 1 Nov 2026)"
 IB() { J name "${1:-Utilities}" slug "${2:-utilities}" reason "${3:-Verification: a pack is to be researched for it.}"; }
@@ -410,11 +470,13 @@ stop_server; start_server
 expect POST /api/industries "$(IB 'Break industry' "$AUTHSLUG")" 422 "B7: the route's check removed → the database refuses a non-steward" "only the tenant's steward" "$X"
 [ "$(q "SELECT count(*) FROM industries")" = "$I0" ] && ok "  ...nothing written" || bad "  ...B7 wrote"
 restore "$IND"; stop_server; start_server
-INDWALK=1 cw addindustry
-UT="$(q "SELECT id FROM industries WHERE slug = 'utilities'")"
+IND_SLUG=utilities; IND_NAME=Utilities
+if [ -n "$(q "SELECT 1 FROM industries WHERE slug = 'utilities'")" ]; then IND_SLUG=water-utilities; IND_NAME='Water utilities'; fi
+IND_NAME="$IND_NAME" IND_SLUG="$IND_SLUG" cw addindustry
+UT="$(q "SELECT id FROM industries WHERE slug = '$IND_SLUG'")"
 [ -n "$UT" ] && ok "Utilities added through the page" || bad "no Utilities"
 [ "$(q "SELECT count(*) || '|' || min(reason) FROM governance_acts WHERE act = 'add_industry' AND subject_id = '$UT'")" = "1|Verification: a pack is to be researched for it." ] && ok "  ...with its own act and reason" || bad "  ...act"
-expect GET "/api/industries/utilities/pack" "" 200 "its pack page reads, empty"
+expect GET "/api/industries/$IND_SLUG/pack" "" 200 "its pack page reads, empty"
 expect POST "/api/industries/$UT/research-prompts" '{}' 201 "  ...and a pack research prompt can be generated: the Utilities research is unblocked"
 
 step "11. What held"

@@ -71,6 +71,8 @@ const CASES = [
   { route: 'GET /api/engagements', kind: 'list', path: '/api/engagements', aIds: [E.ENG_A], bIds: [E.ENG_B] },
   { route: 'GET /api/engagements/:id/runs', kind: 'id', path: `/api/engagements/${E.ENG_A}/runs`,
     notFound: [404, `engagement ${E.ENG_A} not found`], target: ['engagements', E.ENG_A] },
+  { route: 'GET /api/engagements/:id/snapshots', kind: 'id', path: `/api/engagements/${E.ENG_A}/snapshots`,
+    notFound: [404, `engagement ${E.ENG_A} not found`], target: ['engagements', E.ENG_A] },
   { route: 'GET /api/industries', kind: 'list', path: '/api/industries', aIds: [E.IND_A], bIds: [E.IND_B] },
   // By slug, tenant in the WHERE: no single row of another tenant, so
   // nothing to log — another tenant's slug is simply not found.

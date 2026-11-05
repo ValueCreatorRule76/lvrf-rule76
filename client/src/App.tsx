@@ -11,6 +11,7 @@ import { ActorProvider, useActor } from './actor/ActorContext';
 import { SignInOverlay, SignInPage } from './actor/SignIn';
 import { ChangePasswordPage } from './actor/ChangePassword';
 import { AppHeader } from './components/AppHeader';
+import { SnapshotsPage } from './pages/SnapshotsPage';
 
 // Sign-in P2a. Nobody signed in: the sign-in page, in place of the routes —
 // the URL is kept, so the page asked for opens once signed in. A session
@@ -28,6 +29,7 @@ function SignedInRoutes() {
         <Route path="/" element={<AccountsIndexPage />} />
         <Route path="/runs" element={<RunsIndexPage />} />
         <Route path="/runs/:id" element={<RunPage />} />
+        <Route path="/engagements/:id/snapshots" element={<SnapshotsPage />} />
         <Route path="/packs" element={<PacksIndexPage />} />
         <Route path="/packs/:slug" element={<IndustryPackPage />} />
         <Route path="/accounts/:id" element={<InstitutionPage />} />

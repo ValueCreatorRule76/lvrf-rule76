@@ -8,6 +8,7 @@ import { VerifiedUnopenedLine } from './RecordReadings';
 import { SystemExerciseLine, type SystemExerciseMark } from './SystemExercise';
 import { LineageLink } from './LineageLink';
 import { Badge } from './workbench/Card';
+import { ShortId } from './ShortId';
 import { useAbout } from './useAbout';
 import { label, supportsChoices, supportsShort, EVIDENCE_KIND, SUPPORTS } from '../lib/labels';
 import { day } from '../lib/workspaceStatus';
@@ -177,6 +178,35 @@ function CorrectLink({ row, link, notSteward, onDone }: { row: Row; link: Row['l
   );
 }
 
+/**
+ * B2 (Brad, 4 Nov 2026): the run page's "Withdraw a link…", on the row: the link is withdrawn with no replacement (who,
+ * when, why), with its own act, for an outcome whose runs predate the link to it. Checklist stage 8: a figure no source
+ * supports loses its link, so the case prints the refusal for it.
+ */
+function WithdrawLink({ row, link, notSteward, onDone }: { row: Row; link: Row['links'][number]; notSteward?: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  if (!open) {
+    return <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} className={SMALL} data-testid="withdraw-link-open">
+      Withdraw this link ({supportsShort(link.supports)} of {link.metric})…</button>;
+  }
+  const unmet = reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [];
+  return (
+    <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="withdraw-link">
+      <GovernedForm<{ withdrawn_supports: string }>
+        path={`/api/value-outcomes/${link.value_outcome_id}/evidence/${row.id}/withdraw`} provenanceLabel="What this records" disabledReason={notSteward}
+        provenance={<p className="m-0 text-[12.5px] text-ink">This <strong>withdraws</strong> the current link of this row to {link.metric}, with <strong>no replacement</strong>: who, when and why. It stays on the record, struck through. <strong>No sealed run changes.</strong></p>}
+        fields={<label className="block"><span className={L}>Why</span>
+          <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="withdraw-link-reason" /></label>}
+        confirm={<span data-testid="confirm-text">Withdraw {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, from {link.metric}: it supports {label(SUPPORTS, link.supports)} now, and will support nothing.</span>}
+        canSubmit={unmet.length === 0} unmet={unmet}
+        buildBody={() => ({ reason: reason.trim() })}
+        submitLabel="Withdraw the link" onSuccess={onDone} renderSuccess={() => <>Withdrawn.</>} />
+      <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
+    </div>
+  );
+}
+
 function WithdrawVerification({ row, notSteward, onDone }: { row: Row; notSteward?: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -239,7 +269,7 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
                   <Badge tone={e.source_verified ? 'healthy' : 'warning'}>{e.source_verified ? 'Source-verified' : 'Not source-verified'}</Badge>
                   <span className="text-[13px] text-ink">{e.summary}</span>
                   {/* B1 (Brad, 4 Nov 2026): the short id, so near-identical rows are told apart. */}
-                  <span className="font-mono text-[11px] text-ink-45" data-testid="evidence-short-id">{e.id.slice(0, 8)}</span>
+                  <ShortId id={e.id} />
                 </div>
                 <p className="m-0 mt-1 text-[11.5px] text-ink-45">
                   {label(EVIDENCE_KIND, e.kind)} · recorded by {e.captured_by}, {day(e.captured_on)}
@@ -263,6 +293,7 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
                   {e.source_verified && !e.citation_resolved && <WithdrawVerification row={e} notSteward={steward('Withdrawing a verification')} onDone={load} />}
                   {e.superseded_by_id === null && <Supersede row={e} institutionId={institutionId} notSteward={steward('Superseding evidence')} onDone={load} />}
                   {live.map((l) => <CorrectLink key={`${l.value_outcome_id}-${l.supports}`} row={e} link={l} notSteward={steward('Correcting a link')} onDone={load} />)}
+                  {live.map((l) => <WithdrawLink key={`w-${l.value_outcome_id}-${l.supports}`} row={e} link={l} notSteward={steward('Withdrawing a link')} onDone={load} />)}
                 </div>
               </li>
             );

@@ -84,6 +84,69 @@ function payloadGap(payload: Record<string, unknown>): string | null {
   return null;
 }
 
+type Json = Record<string, unknown>;
+const arr = (v: unknown): Json[] => (Array.isArray(v) ? (v as Json[]) : []);
+const keyOf = (e: Json) => (typeof e.evidence_id === 'string' ? `id:${e.evidence_id}` : `t:${e.kind}|${e.summary}|${e.provenance}`);
+
+/**
+ * §16 (CS-D6) — what changed in the case between two sealed runs, read from each seal, never from live rows. Three
+ * states: both sealed a case; one did; neither did. One-sided or empty says nothing can be said, never "no change".
+ */
+function caseDiff(from: Json, to: Json) {
+  const a = from.case as Json | undefined, b = to.case as Json | undefined;
+  const sealed = a && b ? 'both' : a || b ? 'one' : 'neither';
+  const evFrom = arr(from.evidence), evTo = arr(to.evidence);
+  const fromKeys = new Map(evFrom.map((e) => [keyOf(e), e])), toKeys = new Map(evTo.map((e) => [keyOf(e), e]));
+  const evidence = {
+    added: evTo.filter((e) => !fromKeys.has(keyOf(e))).map((e) => ({ evidence_id: e.evidence_id ?? null, summary: e.summary, supports: e.supports })),
+    removed: evFrom.filter((e) => !toKeys.has(keyOf(e))).map((e) => ({ evidence_id: e.evidence_id ?? null, summary: e.summary, supports: e.supports })),
+  };
+  if (!a || !b) {
+    return { sealed, note: sealed === 'one' ? 'Only one of these runs sealed its case, so nothing can be said about what changed in it.' : 'Neither run sealed its case, so nothing can be said about what changed in it.', evidence };
+  }
+  const hyp = (c: Json) => new Map(arr(c.hypotheses).map((h) => [String(h.id), h]));
+  const ha = hyp(a), hb = hyp(b);
+  const hypotheses = {
+    added: [...hb.values()].filter((h) => !ha.has(String(h.id))).map((h) => ({ id: h.id, statement: h.statement, verdict: h.verdict })),
+    removed: [...ha.values()].filter((h) => !hb.has(String(h.id))).map((h) => ({ id: h.id, statement: h.statement })),
+    changed: [...hb.values()].filter((h) => ha.has(String(h.id))).flatMap((h) => {
+      const p = ha.get(String(h.id))!; const pl = (p.lever ?? {}) as Json, hl = (h.lever ?? {}) as Json;
+      const what: string[] = [];
+      if (p.verdict !== h.verdict) what.push(`verdict ${p.verdict} → ${h.verdict}`);
+      if ((p.superseded_by ?? null) !== (h.superseded_by ?? null)) what.push('superseded');
+      if (p.withdrawn !== h.withdrawn) what.push('withdrawn');
+      if (pl.status !== hl.status) what.push(`lever status ${pl.status} → ${hl.status}`);
+      if (pl.withdrawn !== hl.withdrawn) what.push('lever withdrawn');
+      const off = (l: Json) => new Set(arr(l.offerings).filter((o) => !o.withdrawn).map((o) => String(o.offering_key)));
+      const oa = off(pl), ob = off(hl);
+      for (const k of ob) if (!oa.has(k)) what.push(`lever offering added: ${k}`);
+      for (const k of oa) if (!ob.has(k)) what.push(`lever offering removed: ${k}`);
+      return what.length ? [{ id: h.id, statement: h.statement, what }] : [];
+    }),
+  };
+  const offKeys = (c: Json) => new Set(arr(c.offerings).map((o) => String(o.offering_key)));
+  const oa = offKeys(a), ob = offKeys(b);
+  const sum = (c: Json) => new Map(arr(c.summaries).map((s) => [String(s.lens), s]));
+  const sa = sum(a), sb = sum(b);
+  const summaries = [...new Set([...sa.keys(), ...sb.keys()])].flatMap((lens) => {
+    const x = sa.get(lens), y = sb.get(lens);
+    if (x?.id === y?.id) return [];
+    return [{ lens, from_version: x?.version ?? null, to_version: y?.version ?? null }];
+  });
+  const pa = a.pack_entry as Json | null, pb = b.pack_entry as Json | null;
+  const ma = a.marker as Json | null, mb = b.marker as Json | null;
+  const fk = (c: Json) => new Set(arr(c.findings).map((f) => `${f.field}|${f.value}|${f.recorded_on}`));
+  const fa = fk(a), fb = fk(b);
+  return {
+    sealed, note: null, evidence, hypotheses,
+    offerings: { added: [...ob].filter((k) => !oa.has(k)), removed: [...oa].filter((k) => !ob.has(k)) },
+    summaries,
+    pack_entry: { changed: (pa?.fingerprint ?? null) !== (pb?.fingerprint ?? null), from: pa?.fingerprint ?? null, to: pb?.fingerprint ?? null },
+    marker: { changed: (ma?.kind ?? null) !== (mb?.kind ?? null), from: ma?.kind ?? null, to: mb?.kind ?? null },
+    findings: { added: [...fb].filter((k) => !fa.has(k)).length, removed: [...fa].filter((k) => !fb.has(k)).length },
+  };
+}
+
 // GET /api/value-runs/:baselineRunId/compare/:comparisonRunId — compares two
 // locked value runs factor by factor. A read; writes nothing.
 export function compareRunsRouter(pool: Pool): Router {
@@ -339,6 +402,8 @@ export function compareRunsRouter(pool: Pool): Router {
           baseline_value_from: bp.baselineValue ?? null,
           baseline_value_to: cp.baselineValue ?? null,
         },
+        // §16: what changed in the case (CS-D6), additive.
+        case: caseDiff(bp, cp),
         notes: {
           note_from: (bp.note as string | undefined) ?? null,
           note_to: (cp.note as string | undefined) ?? null,

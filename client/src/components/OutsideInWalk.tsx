@@ -11,6 +11,8 @@ import { label, supportsChoices, supportsShort, SUPPORTS } from '../lib/labels';
 import { NoSourceLine, VerifiedUnopenedLine } from './RecordReadings';
 import { SystemExerciseLine } from './SystemExercise';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
+import { ShortId } from './ShortId';
+import { shortId } from '../lib/shortId';
 
 /**
  * Q4c2 — the outside-in walk on the account page (LVRF_PLAN §4c, approved
@@ -138,7 +140,7 @@ function CorrectSupport({ e, outcomeId, metricName, sealedRuns, onDone }: { e: W
             <p className={HELP_CLASS}>At least 12 characters. Kept with the withdrawn link and the new one.</p></label>
         </div>}
         // C2c (Brad, 26 Oct 2026): the link, the change, the outcome and how many runs share it, before submitting.
-        confirm={<span data-testid="confirm-text">Correct “{e.summary.slice(0, 80)}” on {metricName}: from {label(SUPPORTS, e.supports)} to {label(SUPPORTS, supports)}. {sealedRuns} sealed run{sealedRuns === 1 ? '' : 's'} share{sealedRuns === 1 ? 's' : ''} this outcome; none of them changes: record an erratum on each that sealed it.</span>}
+        confirm={<span data-testid="confirm-text">Correct {shortId(e.id)}, “{e.summary.slice(0, 80)}”, on {metricName}: from {label(SUPPORTS, e.supports)} to {label(SUPPORTS, supports)}. {sealedRuns} sealed run{sealedRuns === 1 ? '' : 's'} share{sealedRuns === 1 ? 's' : ''} this outcome; none of them changes: record an erratum on each that sealed it.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ supports, reason: reason.trim() })}
         submitLabel="Withdraw and correct" onSuccess={() => { setOpen(false); setSupports(''); setReason(''); onDone(); }} renderSuccess={() => <>Corrected.</>} />
@@ -414,10 +416,10 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
           {outcome && outcome.evidence.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''}{e.basis_reason && <span className="text-warning" data-testid="basis-reason"> ({e.basis_reason})</span>} — <span className="text-ink-45">{e.summary}</span><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.evidence.map((e) => <li key={e.id} className="py-0.5 text-[12px] text-ink" data-testid="w6-evidence">{e.kind} · supports {supportsShort(e.supports)}{e.basis ? ` · basis ${e.basis.replace(/_/g, ' ')}` : ''}{e.basis_reason && <span className="text-warning" data-testid="basis-reason"> ({e.basis_reason})</span>} — <span className="text-ink-45">{e.summary}</span> <ShortId id={e.id} /><EvidenceRestsOn e={e} statedBy={e.stated_by} statedOn={e.stated_on} /><OpenCitation e={e} onOpened={reload} />{e.system_exercise && <SystemExerciseLine mark={e.system_exercise} className="mt-0.5" />}{e.verified_unopened && <VerifiedUnopenedLine className="mt-0.5" />}{e.corrects_supports && <span className="ml-1 text-[11px] text-ink-45" data-testid="w6-corrected"> · corrected from {e.corrects_supports.replace('_', ' ')}: {e.correction_reason}</span>}<CorrectSupport e={e} outcomeId={outcome.id} metricName={outcome.metric.name} sealedRuns={outcome.sealed_run_count} onDone={reload} /></li>)}</ul>
           )}
           {outcome && outcome.withdrawn_links.length > 0 && (
-            <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
+            <ul className="m-0 mb-2 list-none p-0">{outcome.withdrawn_links.map((l) => <li key={`${l.evidence_id}-${l.supports}`} className="py-0.5 text-[12px] text-ink-45" data-testid="w6-withdrawn"><s>supports {supportsShort(l.supports)} — {l.summary}</s> <ShortId id={l.evidence_id} /> · withdrawn by {l.withdrawn_by}, {l.withdrawn_on}: {l.reason}</li>)}</ul>
           )}
           {s6 !== 'waiting' && outcome && lockedRun && (
             <p className="m-0 text-[11.5px] text-ink-45">The run is locked: evidence added now would not be in it. A new run is a later, separate act.</p>
@@ -448,7 +450,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
                       <li key={i} data-testid="w7-sealed">
                         sealed: {supportsShort(e.supports)} · {e.kind} · basis {e.basis ?? '—'}
                         {e.ai_sourced ? ` · AI-sourced, citation ${e.citation_resolved ? 'opened' : 'not opened'}` : ''}
-                        {' · '}{e.source_verified ? 'source verified' : 'unverified'} — {e.summary}
+                        {' · '}{e.source_verified ? 'source verified' : 'unverified'} — {e.summary} <ShortId id={(e as { evidence_id?: string }).evidence_id} />
                       </li>
                     ))}
                   </ul>

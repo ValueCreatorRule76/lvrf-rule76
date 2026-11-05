@@ -101,8 +101,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 185 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "186" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 186 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 link_of() { q "SELECT coalesce(string_agg(supports || ':' || CASE WHEN withdrawn_at IS NULL THEN 'current' ELSE 'withdrawn' END, ',' ORDER BY withdrawn_at NULLS LAST), '') FROM value_outcome_evidence WHERE value_outcome_id = '$1' AND evidence_id = '$2'"; }
 seals() { q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -116,7 +116,7 @@ dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "185" ] && ok "185 triggers (with C3 and C3b)" || bad "triggers: $(trig)"
+[ "$(trig)" = "186" ] && ok "186 triggers (with C3 and C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -249,7 +249,7 @@ printf '%s' "$LIN" | grep -q "correct:act:baseline" && printf '%s' "$LIN" | grep
   && ok "  ...it reads the correction to the baseline, and its withdrawal, each from its own act (matched by evidence and moment): $LIN" || bad "  ...lineage: $LIN"
 
 step "8. B10: the run page's withdraw form without its confirmation (the last, as it writes)"
-edit "$BENCH" '            confirm={chosen && <span data-testid="confirm-text">Withdraw “' '            data-c2c-b10={chosen && <span data-testid="confirm-text">Withdraw “'
+edit "$BENCH" '            confirm={chosen && <span data-testid="confirm-text">Withdraw {shortId(chosen.evidence_id)}, “' '            data-c2c-b10={chosen && <span data-testid="confirm-text">Withdraw {shortId(chosen.evidence_id)}, “'
 sleep 3; LINK_B10="C2c mean 214 days to productivity (fixture)"
 LINK="$LINK_B10" METRIC="$METRIC" RUNS=2 WHY="Verification: B10, sent at once." node scripts/lib/c2c_walk.mjs confirm0 "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" "$R2" > "$W/walk.b10.log" 2>&1 || true
 grep -q "^  FAIL    ...nothing is sent yet — 1 sent" "$W/walk.b10.log" && ok "B10: no confirmation → caught: the request went on the first press" || bad "B10: not caught: $(grep -m3 -E 'FAIL|PASS' "$W/walk.b10.log")"

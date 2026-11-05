@@ -119,8 +119,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "185" ] \
-    && ok "  ...hardening.sql re-applied: the function as declared, 185 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "186" ] \
+    && ok "  ...hardening.sql re-applied: the function as declared, 186 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 seals() { q "SELECT string_agg(r.id || ':' || md5(r::text), ' ' ORDER BY r.run_number) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -137,7 +137,7 @@ HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | t
 printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0040_corrections and later)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "185" ] && ok "185 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "186" ] && ok "186 triggers by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 # (0040 orphaning nothing and leaving Scotts' runs byte-identical was proven at C1's Gate A, on a copy
@@ -492,7 +492,8 @@ restore "$CORR"
 # B5 — produce-run counts a withdrawn link.
 edit "$PRODUCE" "        WHERE voe.value_outcome_id = \$1 AND voe.withdrawn_at IS NULL  -- C1: a withdrawn link supports nothing" "        WHERE voe.value_outcome_id = \$1"
 stop_server; start_server
-expect POST "/api/value-runs/$RF1/lock" '{"lock_reason":"Verification: locked for B5."}' 200 "B5: (the fixture run locked)"
+# §16: the account was marked a reference example after RF1 was produced, so RF1's case has moved and its lock is refused.
+expect POST "/api/value-runs/$RF1/lock" '{"lock_reason":"Verification: locked for B5."}' 422 "§16: RF1 not locked: the account's marker changed after it was produced" "the case changed after this run was produced"
 expect POST "/api/engagements/$ENG_F/produce-run" '{"note":"Verification: B5.","source_fixture":"corrections_b5"}' 201 "B5: a run with produce-run's filter removed"
 [ "$(q "SELECT string_agg(x->>'supports', ',' ORDER BY x->>'supports') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$(rj b.value_run_id)' AND x->>'summary' = 'TRIR FY25 (fixture)'")" = "baseline,impact_basis" ] \
   && ok "B5: caught — the run seals the withdrawn baseline link beside the current one; the filter is what keeps it out" || bad "B5: not caught"

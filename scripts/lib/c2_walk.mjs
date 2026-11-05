@@ -114,7 +114,7 @@ if (MODE === 'runcorrect') {
   await ev(`document.querySelector('[data-testid=correct-on-run-form] [data-testid=form-confirm-yes]').click()`);
   check(await waitFor(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].some(p=>p.textContent.includes(${JSON.stringify(SUMMARY.slice(0, 40))}))`), 'the page reloads with "Corrected on <date> by <name>"');
   const done = await ev(`[...document.querySelectorAll('[data-testid=correct-on-run-done]')].map(p=>p.textContent).join(' | ')`);
-  check(/^Corrected on \d{1,2} [A-Z][a-z]{2} \d{4} by .+: “.+” now supports the commitment, not impact basis\. The sealed run is unchanged: an erratum records it\.$/.test(done), '  ...reading the date, who, what it supports now and what it did', done);
+  check(/^Corrected on \d{1,2} [A-Z][a-z]{2} \d{4} by .+: [0-9a-f]{8}, “.+”, now supports the commitment, not impact basis\. The sealed run is unchanged: an erratum records it\.$/.test(done), '  ...reading the date, who, what it supports now and what it did', done);
   check(!(await ev(`(()=>{const b=document.querySelector('[data-testid=record-erratum-open]');return !b||b.disabled})()`)), '  ...and "Record an erratum…" is now enabled for it');
   await shot('c2b_run2_corrected_1280', 1280);
   check(await open(`/runs/${RUN_OTHER}`, runReady), 'run 1, sharing the outcome, opens');
@@ -135,7 +135,8 @@ async function linkList(OTHER) {
   if (!(await ev(`!!document.querySelector('[data-testid=correct-on-run-open]')`))) { bad('"Correct what a link supports…" is not offered for the other links'); return; }
   await ev(`document.querySelector('[data-testid=correct-on-run-open]')?.click()`); await sleep(300);
   const opts = await ev(`(()=>{const l=[...document.querySelectorAll('[data-testid=correct-on-run-form] label')].find(l=>l.textContent.includes('The link'));return l?[...l.querySelectorAll('option')].filter(o=>o.value).map(o=>o.textContent):null})()`);
-  check(Array.isArray(opts) && JSON.stringify(opts) === JSON.stringify(OTHER.split('|')),
+  // B2: each option leads with the row's short id; the rest is the link as it reads.
+  check(Array.isArray(opts) && opts.every((o) => /^[0-9a-f]{8} · /.test(o)) && JSON.stringify(opts.map((o) => o.replace(/^[0-9a-f]{8} · /, ''))) === JSON.stringify(OTHER.split('|')),
     `"The link" lists exactly the outcome's other current links (${OTHER.split('|').length}: ${OTHER}), never the corrected attestation`, JSON.stringify(opts));
 }
 

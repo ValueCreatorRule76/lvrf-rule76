@@ -215,16 +215,18 @@ if (MODE === 'supersession') {
   const rowOf = (id) => `document.querySelector('[data-testid=supersession-row][data-evidence="${id}"]')`;
   const dry = `document.querySelector('[data-testid=supersession-dry-run]')`;
   check(await ev(`${dry}.disabled`), '  ..."Show what this will do" waits for a row');
-  for (const [id, about, summary] of [[E.RC, 'Skillsoft (the tenant)', ''], [E.RF, 'Skillsoft (the tenant)', ''], [E.RT, 'account', E.T1], [E.R2, 'account', E.T2], [E.R9, 'account', E.T9]]) {
+  for (const [id, about, summary] of [[E.RC, 'Skillsoft (the tenant)', E.TC ?? ''], [E.RF, 'Skillsoft (the tenant)', E.TF ?? ''], [E.RT, 'account', E.T1], [E.R2, 'account', E.T2], [E.R9, 'account', E.T9]]) {
     await ev(`${rowOf(id)}.querySelector('[data-testid=supersession-tick]').click()`); await sleep(300);
     const sel = `${rowOf(id)}.querySelector('[data-testid=supersession-about]')`;
     check((await ev(`${sel}.value`)) === '', '  ...a ticked row starts unchosen');
     const value = about === 'account' ? about : await ev(`[...${sel}.options].find(o=>o.textContent===${JSON.stringify(about)}).value`);
     await setField(rowOf(id), 'What it is about', value); await sleep(300);
     if (summary) await setField(rowOf(id), 'New text', summary);
-    await setField(rowOf(id), 'What it rests on', 'quote'); await sleep(300);
-    await setField(rowOf(id), 'Quote', 'Named in the fixture document as stated here.');
-    await setField(rowOf(id), 'How it was read', 'Read from the fixture document, page one (fixture).'); await sleep(300);
+    if (await ev(`!!${rowOf(id)}.querySelector('[data-testid=supersession-reading]')`)) {
+      await setField(rowOf(id), 'What it rests on', 'quote'); await sleep(300);
+      await setField(rowOf(id), 'Quote', 'Named in the fixture document as stated here.');
+      await setField(rowOf(id), 'How it was read', 'Read from the fixture document, page one (fixture).'); await sleep(300);
+    }
   }
   for (const id of [E.E1, E.E2]) {
     const r = `document.querySelector('[data-testid=supersession-erratum][data-erratum="${id}"]')`;
@@ -238,6 +240,7 @@ if (MODE === 'supersession') {
   check(await waitFor(`document.querySelectorAll('[data-testid=supersession-plan-row]').length === 5 && document.querySelectorAll('[data-testid=supersession-plan-erratum]').length === 2`), '  ...and lists the 5 rows and 2 errata', await text('[data-testid=supersession-failed]'));
   check(posted('/api/evidence/supersession-batch/dry-run') - before === 1, '  ...in one request');
   const planOf = (id) => `document.querySelector('[data-testid=supersession-plan-row][data-evidence="${id}"]')`;
+  if (!E.POST) {
   const c = await ev(`${planOf(E.RC)}.textContent`);
   check(c.includes('About Curia → about Skillsoft'), '  ...cee6fea9: its current and new statement', c.slice(0, 200));
   check(c.includes('Text new: unchanged'), '  ...and text');
@@ -253,6 +256,14 @@ if (MODE === 'supersession') {
   check(t.includes('moves to the new row, with its support unchanged (the outcome stays frozen)'), '  ...its link carried', t);
   const e1 = await ev(`document.querySelector('[data-testid=supersession-plan-erratum][data-erratum="${E.E1}"]').textContent`);
   check(e1.includes('another company') && e1.includes('A vendor claim about Scotts is never support for a baseline.') && e1.includes('misidentified'), '  ...each erratum: current and new text, and why', e1.slice(0, 240));
+  } else {
+    // A copy taken after B1's acts: every row's plan shows its current and new text, statement, mark, links and lineage.
+    for (const id of [E.RC, E.RF, E.RT, E.R2, E.R9]) {
+      const t = await ev(`${planOf(id)}.textContent`);
+      check(['Text now:', 'Text new:', 'About ', 'Mark:', 'Lineage:'].every((w) => t.includes(w)) && /Links?:/.test(t), `  ...${id.slice(0, 8)}: its text, statement, mark, links and lineage`, t.slice(0, 200));
+    }
+    check((await ev(`${planOf(E.RT)}.textContent`)).includes('moves to the new row, with its support unchanged (the outcome stays frozen)'), '  ...the frozen link carried');
+  }
   const plan = `[data-testid=supersession-plan]`;
   await shotOf('l52_dry_run_1280', plan, 1280);
   await shotOf('l52_dry_run_375', plan, 375);
@@ -269,17 +280,18 @@ if (MODE === 'supersession') {
 }
 
 if (MODE === 'addindustry') {
+  const indName = E.IND_NAME ?? 'Utilities', indSlug = E.IND_SLUG ?? 'utilities';
   check(await open('/packs', `!!document.querySelector('[data-testid=add-industry-open]')`), 'the Packs page offers "Add an industry…"');
   await ev(`document.querySelector('[data-testid=add-industry-open]').click()`); await sleep(400);
   const f = `document.querySelector('[data-testid=add-industry]')`;
-  await setField(f, 'Name', 'Utilities');
-  await setField(f, 'Slug', 'utilities');
+  await setField(f, 'Name', indName);
+  await setField(f, 'Slug', indSlug);
   await setField(f, 'Why it is added', 'Verification: a pack is to be researched for it.'); await sleep(300);
   await shot('b1_add_industry_1280', 1280);
   check(await submitIn(f, 'Add the industry'), 'the steward adds it');
   await sleep(500);
   if (await ev(`!!${f}?.querySelector('[data-testid=form-confirm-yes]')`)) await confirmIn(f);
-  check(await waitFor(`[...document.querySelectorAll('a')].some(a=>a.getAttribute('href')==='/packs/utilities')`), '  ...it is listed, linking to its pack');
+  check(await waitFor(`[...document.querySelectorAll('a')].some(a=>a.getAttribute('href')==='/packs/${indSlug}')`), '  ...it is listed, linking to its pack');
 }
 
 if (MODE === 'cardlinks') {
@@ -312,6 +324,85 @@ if (MODE === 'cardlinks') {
     check((await ev(`document.querySelector('[data-evidence="${id}"]').textContent`)).includes(`supports ${now}`), `${id.slice(0, 8)} now supports ${now}`);
   }
   await shot('b1_card_links_after_1280', 1280);
+}
+
+if (MODE === 'cardwithdraw') {
+  // B2 (Brad, 4 Nov 2026; checklist stage 8): card 01c withdraws E.WD_ID's one current link, with no replacement.
+  const row = `document.querySelector('[data-evidence="${E.WD_ID}"]')`;
+  await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`);
+  await waitFor(`!!${row}`);
+  const btn = `${row}.querySelector('[data-testid=withdraw-link-open]')`;
+  const offered = (await ev(`${btn}?.textContent ?? ''`)).startsWith(`Withdraw this link (${E.WD_FROM} of`) && (await ev(`!!${btn} && !${btn}.disabled`));
+  check(offered, `${E.WD_ID.slice(0, 8)}: it offers "Withdraw this link (${E.WD_FROM} of …)…"`, await ev(`${btn}?.textContent ?? 'none'`));
+  if (!offered) { ws.close(); process.exit(1); }
+  await ev(`${btn}.click()`); await sleep(400);
+  const f = `${row}.querySelector('[data-testid=withdraw-link]')`;
+  check(!(await ev(`[...${f}.querySelectorAll('button')].find(b=>b.textContent.trim()==='Withdraw the link')?.disabled === false`)), '  ...no reason given: it cannot be submitted');
+  await setField(f, 'Why', 'Verification: no source states this figure.'); await sleep(300);
+  await shotOf('b2_card_withdraw_1280', `[data-evidence="${E.WD_ID}"]`, 1280);
+  check(await submitIn(f, 'Withdraw the link'), '  ...submitted');
+  await sleep(500);
+  const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+  check(ct.startsWith(`Withdraw ${E.WD_ID.slice(0, 8)}, `) && ct.includes('will support nothing'), '  ...the confirmation names the row by its short id, and says it will support nothing', ct);
+  await confirmIn(f); await sleep(1500);
+  check(await waitFor(`!${row}?.querySelector('[data-testid=withdraw-link]')`), '  ...recorded: the form closed, with no refusal', await ev(`(${row}?.querySelector('[data-testid=withdraw-link]')?.textContent ?? '').slice(-260)`));
+  await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`); await waitFor(`!!${row}`);
+  check(await ev(`!${row}.querySelector('[data-testid=withdraw-link-open]')`), '  ...the row offers no withdrawal now: it has no current link');
+  await shotOf('b2_card_withdrawn_1280', `[data-evidence="${E.WD_ID}"]`, 1280);
+  await shotOf('b2_card_withdrawn_390', `[data-evidence="${E.WD_ID}"]`, 390);
+  await viewport(1280);
+}
+
+if (MODE === 'snapshots' || MODE === 'snapshotsbreak') {
+  // §16 (CS-D5): the curve against the record. E.EXPECT = points|erratum marks|hollow points|breaks, read from the DB.
+  const [points, errata, hollow, breaks] = E.EXPECT.split('|').map(Number);
+  check(await open(`/engagements/${E.ENG}/snapshots`, `!!document.querySelector('[data-testid=confidence-curve]')`), 'the snapshots page, with its curve');
+  await sleep(800);
+  const n = (sel) => ev(`document.querySelectorAll(${JSON.stringify(sel)}).length`);
+  const got = { points: await n('[data-testid=curve-point]'), errata: await n('[data-testid=curve-erratum-mark]'), hollow: await n('[data-testid=curve-point][data-hollow=true]'),
+    segments: await n('[data-testid=curve-segment]'), breaks: await n('[data-testid=curve-break]') };
+  if (MODE === 'snapshotsbreak') {
+    const caught = E.BREAK === '1' ? got.breaks === breaks && got.segments === 1 : got.errata !== errata;
+    check(caught && (E.BREAK === '1' ? true : got.errata === 0), E.BREAK === '1' ? 'B6: the curve joined across every change → caught: one line through all of them' : "B6: an erratum's mark dropped → caught: the points carrying one show none", JSON.stringify(got));
+    ws.close(); process.exit(0);
+  }
+  check(got.points === points, `one point per locked run (${points})`, JSON.stringify(got));
+  check(got.errata === errata, `  ...an erratum mark on each of the ${errata} carrying a current erratum`, JSON.stringify(got));
+  check(got.hollow === hollow, `  ...a hollow point for each of the ${hollow} system exercises`, JSON.stringify(got));
+  check(got.breaks === breaks, `  ...a break at each of the ${breaks} model or outcome changes`, JSON.stringify(got));
+  check((await n('[data-testid=snapshot-run]')) === points, '  ...and the list holds the same runs, with every number');
+  check((await ev(`document.body.textContent`)).includes('This run was sealed before the case was.'), '  ...each older run says it sealed no case');
+  check(await ev(`!!document.querySelector('[data-testid=banner-unverified]')`), '  ...the disclosure banner (rule 6)');
+  check(await ev(`!!document.querySelector('[data-testid=banner-reference]')`), '  ...and the reference-example banner (O-D3)');
+  await ev(`(()=>{const p=document.querySelector('[data-testid=curve-point] rect[tabindex]');p.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));p.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true}))})()`); await sleep(300);
+  check(await waitFor(`!!document.querySelector('[data-testid=curve-tooltip]')`, 3000), '  ...hovering a point names its run, score, band and model');
+  await shot('cs_snapshots_1280', 1280);
+  await shotOf('cs_curve_1280', '[data-testid=confidence-curve]', 1280);
+  await shotOf('cs_curve_390', '[data-testid=confidence-curve]', 390);
+  await viewport(390); await sleep(500);
+  check((await ev('document.documentElement.scrollWidth')) <= 390, 'at 390, no horizontal scroll', String(await ev('document.documentElement.scrollWidth')));
+  await viewport(1280);
+  await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(200);
+  // A closed <details> prints as its summary alone: the printed page carries each run's sealed case itself.
+  check((await ev(`[...document.querySelectorAll('[data-testid=case-sealed-print]')].filter((e)=>getComputedStyle(e).display!=='none').length`)) === points
+    && (await ev(`[...document.querySelectorAll('[data-testid=snapshot-run] details')].every((e)=>getComputedStyle(e).display==='none')`)),
+    `  ...printed, each of the ${points} runs carries its sealed case, not a closed summary`);
+  // The curve's pixel width is measured on screen; the printed page is narrower, so the SVG scales to its card.
+  check((await ev(`getComputedStyle(document.querySelector('[data-testid=confidence-curve] svg')).maxWidth`)) === '100%',
+    '  ...printed, the curve scales to its card (max-width 100%), not its screen width');
+  const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+  writeFileSync(`${SHOTS}/cs_snapshots.pdf`, Buffer.from(pdf.result.data, 'base64'));
+  await send('Emulation.setEmulatedMedia', { media: '' });
+  console.log(`  shot  ${SHOTS}/cs_snapshots.pdf`);
+}
+
+if (MODE === 'runcase') {
+  check(await open(`/runs/${E.RUN}`, runReady), 'a v4 run page');
+  await sleep(600);
+  const t = await ev(`document.querySelector('[data-testid=case-sealed]')?.textContent ?? ''`);
+  check(t.includes('As sealed with the run, never read live.') && t.includes('Verdict as sealed: open') && t.includes('ratified by'), '  ...the case as sealed: its hypothesis, verdict and lever', t.slice(0, 200));
+  check(await ev(`!!document.querySelector('[data-testid=snapshots-link]')`), '  ...and a link to every run of the engagement');
+  await shotOf('cs_run_case_1280', '[aria-labelledby=case]', 1280);
 }
 
 if (MODE === 'corrected') {

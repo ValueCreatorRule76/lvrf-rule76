@@ -5,6 +5,7 @@ import { LineageLink } from '../LineageLink';
 import { Badge } from './Card';
 import { label, EVIDENCE_KIND, SUPPORTS } from '../../lib/labels';
 import { EvidenceRestsOn, FigureCheckLine } from '../EvidenceRestsOn';
+import { ShortId } from '../ShortId';
 
 // payload.evidence is a snapshot taken at walk time, not a live join —
 // walkSpine.ts's comment explains why: evidence mutates after a walk
@@ -46,6 +47,7 @@ export function EvidenceCard({ run }: { run: Run }) {
             <div className="flex flex-wrap items-baseline gap-2">
               <Badge tone={e.source_verified ? 'healthy' : 'warning'}>{e.source_verified ? 'Source-verified' : 'Not source-verified'}</Badge>
               <span className="text-[13px] text-ink" data-record>{e.summary}</span>
+              <ShortId id={e.evidence_id} />
             </div>
             <p className="m-0 mt-1 text-[11.5px] text-ink-45">
               {label(EVIDENCE_KIND, e.kind)} · supports {label(SUPPORTS, e.supports)}
