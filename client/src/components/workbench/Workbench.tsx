@@ -609,9 +609,9 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
     // <thead> and the record line its <tfoot>, which Chrome repeats on every
     // printed page. On screen they are plain blocks.
     <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="run-page">
-      <div><RunBanners run={run} account={account} /></div>
+      <div className="print:hidden"><RunBanners run={run} account={account} /></div>
       <table className="block w-full border-collapse print:table print:table-fixed">
-        <thead className="hidden" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} compact /></td></tr></thead>
+        <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><RunBanners run={run} account={account} compact /></td></tr></thead>
         <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter run={run} /></td></tr></tfoot>
         <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
           <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 pb-16 pt-6 sm:px-[30px] print:gap-5 print:px-0 print:pb-4 print:pt-4">
