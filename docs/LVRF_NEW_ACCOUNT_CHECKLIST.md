@@ -27,6 +27,10 @@ the **Packs** page:
 - [ ] **Solutions are linked to the lever** (offerings), each with the steward's basis.
 - [ ] **The attestation roles that will be needed are known.** No role is granted from an unopened source.
 
+**Utilities (Brad, 5 Nov 2026):** two entries carry another entry's reviewer note on the pack page: **CAIDI (`dda6e919`)**
+has SAIDI's, and **Net heat rate (`51c360c9`)** has the non-capacity SSO note. **Neither is used for M21.** The note
+correction is a 3.1 steward act (L54); until it ships, read those two notes as wrong.
+
 ## 1. Create and classify the account
 
 - [ ] **Accounts:** "Create account" (card 01). Give the name, what the customer says it does, and "Classify as" the

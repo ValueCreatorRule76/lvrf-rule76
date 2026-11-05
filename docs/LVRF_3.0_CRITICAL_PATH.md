@@ -132,4 +132,7 @@ cut line applied first.
   batch** (card 01c already corrects a link).
 - **Pack ratify and demote** (4 Nov): ratification at N = 2 institutions' systems of record, the threshold a
   recorded value, never lowered; demotion with a reason.
+- **L54 and "Correct the reviewer's note"** (Brad, 5 Nov 2026; frozen out by rule 1): one migration making a reviewed
+  result's note final (insert-only), and the steward act that corrects a note beside it. Until then CAIDI (`dda6e919`)
+  and Net heat rate (`51c360c9`) are not used for M21.
 - Loose ends L46–L53 not closed by item 1, and any finding frozen out by rule 1.
