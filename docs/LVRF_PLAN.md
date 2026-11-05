@@ -4128,3 +4128,19 @@ Then the full regression, equivalence against `930c8f7`, screens, and stop.
 Batch B1. Backup; pull; `ownership.sql`; `hardening.sql`; checks; deploy. Then Brad's acts: open the sources, the batch,
 then the Yes openings. Gate C reads each row, its successor, mark, links, lineage and both errata. L52 closes there, and
 the hold with it.
+
+## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan to follow; rulings already made**)
+
+**Value spine:** `model` and `return`: the case a CFO reads, and what it refuses.
+
+**Rulings before the plan (Brad, 4 Nov 2026):**
+1. **The case reads pack entries as they stand.** Each shows as "proposed, sourced at 0 of 2 institutions" (a count
+   derived at render, never stored), with one plain line that no pack is certified, because certification is 3.1. The
+   design's "the account's industry resolves one active certified pack" does not apply in 3.0.
+2. **The `compliance_assurance` refusal is kept, and moves to B4.** At commit, the steward states the measure class
+   beside the attribution method, and cost of delay refuses a `compliance_assurance` class with a performance rate.
+   It is moot until a commitment exists.
+3. **`monetization_rates` and `policy_values` are B3's migration.** Setting D = 6 months is a steward act in B3's act
+   session, with its exact text in the Gate B pastes.
+
+**Checked (4 Nov 2026):** nothing in the CFO lens, the refusal page or cost of delay requires a ratified entry.
