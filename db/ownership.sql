@@ -163,12 +163,13 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO lvrf_app;
 -- check_schema_drift.mjs, and Gate C read it as lvrf_app.)
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO lvrf_app;
 
--- INSERT on the 38 tables the code inserts into; UPDATE on the 22 it updates
+-- INSERT on the 42 tables the code inserts into; UPDATE on the 22 it updates
 -- (C1: value_outcome_evidence for the withdrawal only; its guard refuses any other UPDATE;
 -- C3: customer_role_grants for the revocation only, likewise).
 -- audit_log is written by lvrf_audit() (SECURITY DEFINER, so as its owner);
 -- its INSERT grant is a backstop. Never UPDATE on audit_log, heartbeat_events
--- refusals, figure_checks, run_errata, governance_acts, research_imports (P2), system_exercise_marks (C3) or figure_findings (C3b): section 24 of
+-- refusals, figure_checks, run_errata, governance_acts, research_imports (P2), system_exercise_marks (C3), figure_findings (C3b),
+-- or B3's insert-only policy_values, lens_policies, monetization_rates and roadmap_milestones: section 24 of
 -- hardening.sql refuses the run if any is granted.
 -- A table not created yet (a clone behind the newest migration) is skipped;
 -- this file is re-run after migrating, so it is granted then.
@@ -183,7 +184,9 @@ BEGIN
     'lever_offerings', 'offering_capabilities', 'person_credentials', 'persons',
     'record_documents', 'reference_example_markers', 'refusals', 'research_imports', 'research_prompts',
     'research_results', 'run_errata', 'sessions', 'system_exercise_marks', 'value_hypotheses', 'value_levers',
-    'value_outcome_evidence', 'value_outcomes', 'value_runs']
+    'value_outcome_evidence', 'value_outcomes', 'value_runs',
+    -- B3 (§19, 0048): insert-only, so INSERT and never UPDATE.
+    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT INSERT ON public.%I TO lvrf_app', t);

@@ -26,6 +26,7 @@ const LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Accounts', end: true },
   { to: '/packs', label: 'Packs' },
   { to: '/runs', label: 'Runs' },
+  { to: '/policies', label: 'Policies' },
 ];
 
 export function NavBar() {

@@ -100,6 +100,9 @@ export const returnKind = pgEnum('return_kind', [
 /** Who may see a rendered record. Drives the visible disclosure banner. */
 export const documentDisclosure = pgEnum('document_disclosure', [
   'draft', 'internal', 'customer_shared',
+  // B3 (D-M21, Brad 1 Nov 2026): shown to a prospect for review as an outside-in hypothesis, with both banners on
+  // every page. Never `customer_shared`, and it never changes the run's verification state.
+  'shared_for_review',
 ]);
 
 export const personRole = pgEnum('person_role', [
@@ -185,6 +188,9 @@ export const governanceAct = pgEnum('governance_act', [
   'state_about',
   // B1 (Brad, 1 Nov 2026): a steward adds an industry, so a pack can be researched for it.
   'add_industry',
+  // B3 (P6; LVRF_PLAN §19, approved 5 Nov 2026): a client's monetization rate recorded; a roadmap milestone planned
+  // (or its date, status or owner superseded); a run shared for review as an outside-in hypothesis (D-M21).
+  'record_rate', 'plan', 'share',
 ]);
 
 /* ================================================================== */
@@ -1192,9 +1198,31 @@ export const recordDocuments = pgTable('record_documents', {
 
   renderedByPersonId: uuid('rendered_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   renderedAt: timestamp('rendered_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * B3 (0048; LVRF_PLAN §19). What this row records:
+   *   - 'rendering': a rendered Realization Record (every row before 0048);
+   *   - 'print_request': a value case's Print control was pressed (O4). It claims the request only: the browser may
+   *     cancel the dialog. The printed payload_hash is the trace;
+   *   - 'share_for_review': D-M21, the steward act "Shared for review as an outside-in hypothesis" (who, with whom,
+   *     when, the run and its hash). Allowed only while both banners print; never changes the run (hardening §33).
+   * Text with a CHECK, not an enum: 0048 runs in the transaction that 0047 adds enum values in.
+   */
+  kind: text('kind').notNull().default('rendering'),
+  /** B3: the lens a value case was read under ('cfo' or 'general'); null on a rendering. */
+  lens: text('lens'),
+  /** B3: with whom a run was shared for review, as the steward states it (a person and their organisation). */
+  sharedWith: text('shared_with'),
 }, (t) => [
   unique('record_documents_outcome_version_key').on(t.valueOutcomeId, t.documentVersion),
   index('record_documents_engagement_idx').on(t.engagementId),
+  check('record_documents_kind_known', sql`${t.kind} IN ('rendering', 'print_request', 'share_for_review')`),
+  check('record_documents_lens_known', sql`${t.lens} IS NULL OR ${t.lens} IN ('cfo', 'general')`),
+  /** A case's print request and its share name the lens; a share names with whom. Every term definite under NULL. */
+  check('record_documents_kind_complete',
+    sql`(${t.kind} = 'rendering' AND ${t.lens} IS NULL AND ${t.sharedWith} IS NULL)
+        OR (${t.kind} = 'print_request' AND ${t.lens} IS NOT NULL AND ${t.sharedWith} IS NULL AND ${t.valueRunId} IS NOT NULL)
+        OR (${t.kind} = 'share_for_review' AND ${t.lens} IS NOT NULL AND ${t.valueRunId} IS NOT NULL
+            AND ${t.sharedWith} IS NOT NULL AND char_length(btrim(${t.sharedWith})) >= 3)`),
 ]);
 
 /* ================================================================== */
@@ -2416,6 +2444,151 @@ export const executiveSummaries = pgTable('executive_summaries', {
   check('executive_summaries_ai_disclosed',
     sql`(${t.draftedWithAi} AND ${t.draftingTool} IS NOT NULL AND length(btrim(${t.draftingTool})) >= 2)
         OR (NOT ${t.draftedWithAi} AND ${t.draftingTool} IS NULL)`),
+]);
+
+/* ================================================================== */
+/* B3 (P6): policy values, lens policies, monetization rates, roadmap   */
+/* ================================================================== */
+
+/**
+ * B3 (0048; LVRF_PLAN §19). A governed value the steward sets: insert-only, versioned by `supersedes_id`, one current
+ * row per key (the row nothing supersedes). Each set is a `ratify` act (hardening §33).
+ *   - `cost_of_delay_months` (D; Q3, P6 ruling 3): an integer from 1 to 24.
+ *   - `pack_ratification_institutions` (N; Brad, 4 Nov 2026): an integer of at least 1, never lowered.
+ * Nothing reads a default: with no row, cost of delay refuses and the label says the threshold is not set.
+ */
+export const policyValues = pgTable('policy_values', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  key: text('key').notNull(),
+  value: numeric('value').notNull(),
+  reason: text('reason').notNull(),
+  setByPersonId: uuid('set_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  setAt: timestamp('set_at', { withTimezone: true }).notNull().defaultNow(),
+  supersedesId: uuid('supersedes_id'),
+}, (t) => [
+  foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: 'policy_values_supersedes_fk' }).onDelete('restrict'),
+  unique('policy_values_supersedes_key').on(t.supersedesId),
+  index('policy_values_tenant_key_idx').on(t.tenantId, t.key),
+  /** One root per key; with the unique supersedes_id, each key's versions are one line, and the head is current. */
+  uniqueIndex('policy_values_one_root').on(t.tenantId, t.key).where(sql`${t.supersedesId} IS NULL`),
+  check('policy_values_key_known', sql`${t.key} IN ('cost_of_delay_months', 'pack_ratification_institutions')`),
+  check('policy_values_value_in_range',
+    sql`${t.value} = trunc(${t.value})
+        AND ((${t.key} = 'cost_of_delay_months' AND ${t.value} >= 1 AND ${t.value} <= 24)
+          OR (${t.key} = 'pack_ratification_institutions' AND ${t.value} >= 1))`),
+  check('policy_values_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
+]);
+
+/**
+ * B3 (0048; O3, O-D1). A lens is a governed policy the steward ratifies: insert-only, versioned, one current per
+ * persona. Only `cfo` in 3.0 (the CHRO lens is 3.1). The CFO threshold lives here only (choice 3, 5 Nov 2026).
+ * `admitted_bases` are the D2 bases an actual may rest on to show under this lens; `suppresses` what it never shows.
+ */
+export const lensPolicies = pgTable('lens_policies', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  persona: text('persona').notNull(),
+  minConfidenceScore: numeric('min_confidence_score', { precision: 5, scale: 1 }).notNull(),
+  admittedBases: text('admitted_bases').array().notNull(),
+  suppresses: text('suppresses').array().notNull(),
+  refusalText: text('refusal_text').notNull(),
+  reason: text('reason').notNull(),
+  ratifiedByPersonId: uuid('ratified_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  ratifiedAt: timestamp('ratified_at', { withTimezone: true }).notNull().defaultNow(),
+  supersedesId: uuid('supersedes_id'),
+}, (t) => [
+  foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: 'lens_policies_supersedes_fk' }).onDelete('restrict'),
+  unique('lens_policies_supersedes_key').on(t.supersedesId),
+  index('lens_policies_tenant_persona_idx').on(t.tenantId, t.persona),
+  uniqueIndex('lens_policies_one_root').on(t.tenantId, t.persona).where(sql`${t.supersedesId} IS NULL`),
+  check('lens_policies_persona_known', sql`${t.persona} IN ('cfo')`),
+  check('lens_policies_threshold_range', sql`${t.minConfidenceScore} >= 0 AND ${t.minConfidenceScore} <= 100`),
+  check('lens_policies_bases_known',
+    sql`cardinality(${t.admittedBases}) >= 1 AND array_position(${t.admittedBases}, NULL) IS NULL
+        AND ${t.admittedBases} <@ ARRAY['system_of_record', 'published', 'client_stated', 'inferred', 'assumed']::text[]`),
+  check('lens_policies_suppresses_known',
+    sql`array_position(${t.suppresses}, NULL) IS NULL AND ${t.suppresses} <@ ARRAY['consumption']::text[]`),
+  check('lens_policies_refusal_stated', sql`char_length(btrim(${t.refusalText})) >= 24`),
+  check('lens_policies_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
+]);
+
+/** B3: what a client's monetization rate prices. Not the measure class (B4, ruling 2): neither is read from the other. */
+export const rateKind = pgEnum('rate_kind', ['performance', 'exposure']);
+
+/**
+ * B3 (0048; design §5.4, ruling b). A client's rate for one of the account's metrics: currency per one unit of the
+ * metric per year. Insert-only; corrected by a superseding row with a reason. Its evidence is about this account;
+ * whether it is client-stated or system-of-record, and attested by a customer-side person, is read by
+ * lvrf_cost_of_delay at the time, because both can change after the rate is recorded. `per_unit` must equal the
+ * metric's unit (trigger). A rate of zero is data.
+ */
+export const monetizationRates = pgTable('monetization_rates', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  businessMetricId: uuid('business_metric_id').notNull().references(() => businessMetrics.id, { onDelete: 'restrict' }),
+  rate: numeric('rate').notNull(),
+  currency: text('currency').notNull(),
+  perUnit: text('per_unit').notNull(),
+  rateKind: rateKind('rate_kind').notNull(),
+  howRead: text('how_read').notNull(),
+  evidenceId: uuid('evidence_id').notNull().references(() => evidence.id, { onDelete: 'restrict' }),
+  reason: text('reason'),
+  recordedByPersonId: uuid('recorded_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  supersedesId: uuid('supersedes_id'),
+}, (t) => [
+  foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: 'monetization_rates_supersedes_fk' }).onDelete('restrict'),
+  unique('monetization_rates_supersedes_key').on(t.supersedesId),
+  index('monetization_rates_metric_idx').on(t.businessMetricId),
+  /** One rate per account metric: a correction supersedes it. */
+  uniqueIndex('monetization_rates_one_root').on(t.institutionId, t.businessMetricId).where(sql`${t.supersedesId} IS NULL`),
+  check('monetization_rates_rate_nonnegative', sql`${t.rate} >= 0`),
+  check('monetization_rates_currency_code', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+  check('monetization_rates_how_read_stated', sql`char_length(btrim(${t.howRead})) >= 12`),
+  /** A correction says why; a first rate need not. Definite under NULL. */
+  check('monetization_rates_correction_says_why',
+    sql`${t.supersedesId} IS NULL OR (${t.reason} IS NOT NULL AND char_length(btrim(${t.reason})) >= 12)`),
+]);
+
+export const milestoneStatus = pgEnum('milestone_status', ['planned', 'done', 'missed']);
+
+/**
+ * B3 (0048; design §5.5). The plan to measure, authored, per engagement: insert-only. A change of date, status or owner
+ * is a superseding row with a reason, so a slip stays visible. Done needs the evidence that shows it. Nothing is
+ * generated.
+ */
+export const roadmapMilestones = pgTable('roadmap_milestones', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  engagementId: uuid('engagement_id').notNull().references(() => engagements.id, { onDelete: 'restrict' }),
+  title: text('title').notNull(),
+  dueOn: date('due_on').notNull(),
+  /**
+   * Who owns it, in the recorder's words: a name and a role (Brad, 5 Nov 2026). Often a person at the customer who has
+   * no row in LVRF, so it is stated text, shown as stated by the recorder, never resolved to a person.
+   */
+  ownerStated: text('owner_stated').notNull(),
+  valueOutcomeId: uuid('value_outcome_id').references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  stage: text('stage'),
+  status: milestoneStatus('status').notNull().default('planned'),
+  doneEvidenceId: uuid('done_evidence_id').references(() => evidence.id, { onDelete: 'restrict' }),
+  reason: text('reason'),
+  plannedByPersonId: uuid('planned_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  plannedAt: timestamp('planned_at', { withTimezone: true }).notNull().defaultNow(),
+  supersedesId: uuid('supersedes_id'),
+}, (t) => [
+  foreignKey({ columns: [t.supersedesId], foreignColumns: [t.id], name: 'roadmap_milestones_supersedes_fk' }).onDelete('restrict'),
+  unique('roadmap_milestones_supersedes_key').on(t.supersedesId),
+  index('roadmap_milestones_engagement_idx').on(t.engagementId),
+  check('roadmap_milestones_title_stated', sql`char_length(btrim(${t.title})) >= 6`),
+  check('roadmap_milestones_owner_stated', sql`char_length(btrim(${t.ownerStated})) >= 3`),
+  check('roadmap_milestones_stage_known', sql`${t.stage} IS NULL OR ${t.stage} IN ('commit', 'measure', 'verify')`),
+  check('roadmap_milestones_done_has_evidence',
+    sql`(${t.status} = 'done' AND ${t.doneEvidenceId} IS NOT NULL) OR (${t.status} <> 'done' AND ${t.doneEvidenceId} IS NULL)`),
+  check('roadmap_milestones_change_says_why',
+    sql`${t.supersedesId} IS NULL OR (${t.reason} IS NOT NULL AND char_length(btrim(${t.reason})) >= 12)`),
 ]);
 
 /* ================================================================== */

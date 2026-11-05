@@ -53,6 +53,15 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/system-exercise/marks': 'steward',
   'POST /api/value-outcomes/:outcomeId/figure-findings': 'steward',
   'POST /api/value-runs/:runId/errata': 'steward',
+  // B3 (§19): policy values, the CFO lens and D-M21's share are the steward's; a rate, a milestone and a print
+  // request are the account team's.
+  'POST /api/policies/values': 'steward',
+  'POST /api/policies/lenses': 'steward',
+  'POST /api/value-runs/:runId/share-for-review': 'steward',
+  'POST /api/value-outcomes/:outcomeId/monetization-rates': 'authorized',
+  'POST /api/engagements/:engagementId/milestones': 'authorized',
+  'POST /api/roadmap-milestones/:id/supersede': 'authorized',
+  'POST /api/value-runs/:runId/print-request': 'authorized',
   // L41 + L47 (1 Nov 2026): stating a legacy row's about, withdrawing a verification, superseding evidence.
   'POST /api/evidence/about-batch': 'steward',
   'POST /api/evidence/:id/withdraw-verification': 'steward',
@@ -127,6 +136,9 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/system-exercise/marks': 'Marking items as a system exercise',
   'POST /api/value-outcomes/:outcomeId/figure-findings': 'Recording that a figure has no source on record',
   'POST /api/value-runs/:runId/errata': 'Recording an erratum',
+  'POST /api/policies/values': 'Setting a policy value',
+  'POST /api/policies/lenses': 'Ratifying a lens policy',
+  'POST /api/value-runs/:runId/share-for-review': 'Sharing a run for review as an outside-in hypothesis',
 };
 
 /** The actor's tenant's steward: { id, full_name }, or null if none is named. */

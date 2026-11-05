@@ -4130,7 +4130,7 @@ Batch B1. Backup; pull; `ownership.sql`; `hardening.sql`; checks; deploy. Then B
 then the Yes openings. Gate C reads each row, its successor, mark, links, lineage and both errata. L52 closes there, and
 the hold with it.
 
-## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan approved by Brad, 5 Nov 2026, with the three choices as recommended; Gate B Wed 11 Nov, buffer to Fri 13 Nov**)
+## 19. P6: the value case (B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`; **plan approved by Brad, 5 Nov 2026, with the three choices as recommended; built 5 Nov 2026, Gate A passed, not deployed (BUILD_STATUS); Gate B Wed 11 Nov, buffer to Fri 13 Nov**)
 
 **Value spine:** `model` and `return`: the case a CFO reads, and what it refuses.
 
@@ -4217,7 +4217,9 @@ and a Scotts-shaped case lists every cost-of-delay refusal reason.
 
 ### The B3 act session (after the B3 deploy; rule 10)
 
-All on `/policies`, in any order. The forms are built to these labels, and their confirmations to this text.
+All on `/policies` (Policies in the nav), in any order. The forms are built to these labels, and their confirmations
+to this text (verify_value_case.sh performs all three on a clone and compares each confirmation word for word). Each
+form submits with its button ("Set the value", "Ratify the lens"), shows the confirmation, and records on "Confirm".
 
 1. **"Set a policy value…"**, Policy `Cost-of-delay months`, Value `6`, Reason: `Q3, ruled 24 Oct 2026, and P6 ruling 3,
    4 Nov 2026: a delay of D months forgoes D/12 of the annual value at the committed target, undiscounted. D = 6.`
@@ -4257,7 +4259,9 @@ lens ratified", and the CFO lens refuses. Nothing falls back to a default.
    an earlier line here said hypotheses within a case would be reordered by floor; they cannot be, as they share it.)*
 
 3. **The printed case is M21, so it is built readable** (Brad's UX message, 5 Nov 2026, item 1):
-   - **an executive page first:** the hypothesis; the money at stake, or the refusal; cost of delay; the three asks;
+   - **an executive page first:** the hypothesis; the money at stake, or the refusal; cost of delay; **every ask the
+     record derives, each with its converting question** (Brad, 5 Nov 2026: "three" was wording, not a rule; an
+     outside-in account has four);
    - **units and currency on every figure, one number format, and a source footnote per figure in words** (the basis
      and the source as a sentence, never a bare code);
    - **no short ids or lever codes in the customer print.** The hash and both banners stay. Short ids stay on screen,
@@ -4270,7 +4274,7 @@ lens ratified", and the CFO lens refuses. Nothing falls back to a default.
 payload v5 are done, so about 4½ days remain against Fri 6 – Tue 10: **Gate B stays Wed 11 Nov**, buffer to Fri 13
 intact.
 
-**Steward safety (Brad, 5 Nov 2026; about 1 day), only if B3's Gate B lands Wed 11 Nov with the buffer unused.** Built
+**Steward safety (Brad, 5 Nov 2026; about 1 day; B4 Gate B Sun 15 Nov with it accepted by Brad, 5 Nov), only if B3's Gate B lands Wed 11 Nov with the buffer unused.** Built
 Thu 12 and shipped in **B4's Gate B** (no gate of its own), so B4's Gate B moves from Sat 14 to **Sun 15 Nov** and 3.0
 is ratified about 16 Nov; M21 unchanged. Otherwise it is first in 3.1, after the P13-style audit. Its scope:
 - card 01c shows current rows first, with superseded and withdrawn rows under a collapsed "History";

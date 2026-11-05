@@ -13700,3 +13700,46 @@ Batch B1 of `docs/LVRF_3.0_CRITICAL_PATH.md`; plan and decisions in LVRF_PLAN §
   4 (no reviewer notes on the case) and 5 (solutioning reads only links on current levers, with a Gate A break);
   checklist stage 0 complete for M21 for Utilities (TRIR and excavation levers; CAIDI and Net heat rate not used) and
   Manufacturing (TRIR only), with the attestation roles.
+
+### B3: P6, the value case — Gate A, 5 Nov 2026 (UTC)
+
+**Built; Gate A passed; not deployed.** Batch B3 of `docs/LVRF_3.0_CRITICAL_PATH.md`, the plan in LVRF_PLAN §19 (approved by
+Brad, 5 Nov 2026, with its additions: converting questions, floor-first, the printed case built readable, the stated
+milestone owner, the POV and the case on US Letter, footnotes in reading order).
+
+- **Migrations 0047** (enum values only: `governance_act` + `record_rate`, `plan`, `share`; `document_disclosure` +
+  `shared_for_review`) **and 0048** (`policy_values`, `lens_policies`, `monetization_rates`, `roadmap_milestones`;
+  `record_documents` gains `kind`, `lens`, `shared_with`, its five rows reading `rendering`). **Hardening section 33:**
+  204 triggers (+18), 320 manifest rows (+32); each new table insert-only by its guard and at the role (section 24
+  refuses UPDATE on it; `ownership.sql` grants INSERT only); policy values and the CFO lens the steward's; N never
+  lowered; a rate in the metric's unit, on evidence recorded on and about the account; a share the steward's, of a
+  locked run, only while both banners print (`lvrf_run_banners`, from the seal). 49 migrations, 1228 objects, 127 CHECKs.
+- **`lvrf_cost_of_delay`** returns the figure or every reason, each with a code; **on a 3.0 case it refuses "no measure
+  class stated at commit"** until B4, the rate kind never read as the class. The arithmetic is
+  `lvrf_cost_of_delay_amount` alone.
+- **Payload v5** seals cost of delay, the roadmap (milestone heads, owner as stated, slips), solutioning (only links on
+  current levers, ruling 5) and the outcome's currency; the lock guard compares only the keys a run sealed, so v4 runs
+  lock as before.
+- **The case** (`GET /api/value-runs/:runId/case`, `/runs/:id/case`): the executive page (hypothesis, the money or the
+  refusal, cost of delay, every ask the record derives with its converting question); the CFO refusal page "What we
+  need from you"; outcomes by lever with "proposed, sourced at x of N institutions" and no reviewer note (ruling 4);
+  footnotes in words, numbered in reading order; glossary; US Letter; no short ids in the print. `/policies` for the
+  steward's three acts. The POV prints on US Letter too, without short ids.
+- **Gate A:**
+  - `verify_value_case.sh` **194/0**: breaks C1–C11 each caught; the act session performed on a clone through the page,
+    each confirmation equal to §19's text; the $50,000 by hand through `lvrf_cost_of_delay_amount` only; a NULL-input
+    refusal per new CHECK (and the share CHECK read false, not NULL, on a NULL run).
+  - **The full regression: 47 scripts pass in one run** on a clone of the 5 Nov copy; build and lint clean (the one
+    warning is `ActorContext.tsx`'s, from before). Fixed on the way: counts and payload version in ten scripts; the
+    B2 break that edits the lock guard; act routes named literally in `recordAct`; eight tenant cases;
+    `verify_accounts_home`'s B5 now walks on its own session (B4's break, with the nav's fourth link, could end on
+    "Sign out").
+  - **Found and fixed by building the script:** the app role had no INSERT on the new tables; `SELECT … FOR UPDATE`
+    needs UPDATE, so the routes take no row lock (the unique chain indexes refuse a racing second write).
+  - **Found and fixed by looking at the printed pages:** a lowercased name in the refusal line; the asks printed twice;
+    "the asks below"; a withdrawn lever not said; a repeated test date; a short id on the printed POV.
+  - **Equivalence against `bd5cb7c`:** 77 GETs, 77 identical, no added keys.
+  - **Bundle:** `index-C1EAYG9X.js` / `index-DedN9AjH.css`.
+  - **Screens and PDFs** in `~/lvrf-backups/l41-screens` (`b3_*`), every page looked at.
+- **Harness note (not B3's):** a script's cleanup stops its Vite wrapper but not Vite, so a later run on the same port
+  can meet a stale server. Stray Vite processes were stopped before the final regression.

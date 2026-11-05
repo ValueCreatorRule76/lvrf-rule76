@@ -115,8 +115,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "186" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 186 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -129,11 +129,11 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "186" ] && ok "186 triggers: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "288" ] && ok "  ...288 information_schema rows (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "204" ] && ok "204 triggers (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "320" ] && ok "  ...320 information_schema rows (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: section 32 writes nothing" || bad "  ...a run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 47 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 49 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"
@@ -206,9 +206,9 @@ expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O2" "$L" baseline "$TOD
 produce() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture case_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
 lock() { req POST "/api/value-runs/$1/lock" "$(J lock_reason "${2:-Verification: sealed.}")"; }
 
-step "4. The seal (payloadVersion 4)"
+step "4. The seal (payloadVersion 5 since B3: v4's case and B3's keys)"
 produce "$ENG1" "Verification: the first v4 run."; R1="$RUN"
-[ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$R1'")" = "4" ] && ok "payloadVersion 4" || bad "version"
+[ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$R1'")" = "5" ] && ok "payloadVersion 5 (B3; the case chain of §16 within it)" || bad "version"
 [ "$(q "SELECT (payload->'case') = lvrf_case_chain('$O1') FROM value_runs WHERE id = '$R1'")" = "t" ] && ok "  ...payload.case is lvrf_case_chain(), the function the guard reads" || bad "  ...case differs"
 C() { q "SELECT $1 FROM value_runs r WHERE r.id = '$R1'"; }
 [ "$(C "jsonb_array_length(payload->'case'->'hypotheses') || '|' || (payload->'case'->'hypotheses'->0->>'verdict') || '|' || (payload->'case'->'hypotheses'->0->'lever'->'ratification'->>'by') || '|' || (payload->'case'->'hypotheses'->0->'falsifier'->>'value')")" = "1|open|$S_NAME|1.4" ] && ok "  ...the hypothesis, its verdict as it read, its lever's ratification and its falsifier" || bad "  ...hypothesis: $(C "payload->'case'->'hypotheses'")"
@@ -242,7 +242,7 @@ produce "$ENG1" "Verification: then the lever is withdrawn."; R5="$RUN"
 expect POST "/api/value-levers/$L/retire" '{"retirement_reason":"Verification: the lever withdrawn for the case seal."}' 200 "  ...the lever withdrawn"
 lock "$R5"; [ "$CODE" = "422" ] && ok "  ...a withdrawn lever refuses the lock" || bad "  ...R5: $CODE $(said)"
 # B2 — the guard removed.
-fnbreak lvrf_run_case_current "     AND (NEW.payload->'case') IS DISTINCT FROM lvrf_case_chain((NEW.payload->>'valueOutcomeId')::uuid) THEN" "     AND false THEN"
+fnbreak lvrf_run_case_current "     AND (NEW.payload->'case') IS DISTINCT FROM (" "     AND false AND (NEW.payload->'case') IS DISTINCT FROM ("
 lock "$R5"; [ "$CODE" = "200" ] && ok "B2: the guard removed → a run whose lever was withdrawn after it locks: the guard is what stops it" || bad "B2: $CODE $(said)"
 reharden
 # B3 — the verdict moves after produce.
@@ -252,7 +252,7 @@ measure "$O2" 1.1; verify "$O2"
 [ "$(verdict "$H2")" = "survived" ] && ok "  ...H2 now survived, by a verified actual" || bad "  ...H2: $(verdict "$H2")"
 lock "$R7"; [ "$CODE" = "422" ] && ok "B3: the verdict moved after produce → the lock is refused" || bad "B3: $CODE $(said)"
 # B4 — a v3 run still locks, its bytes unchanged.
-edit "$PRODUCE" "        payloadVersion: 4," "        payloadVersion: 3,"
+edit "$PRODUCE" "        payloadVersion: 5," "        payloadVersion: 3,"
 edit "$PRODUCE" "        case: caseChain,
 " ""
 stop_server; start_server

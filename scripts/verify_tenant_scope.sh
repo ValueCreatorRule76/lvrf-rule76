@@ -215,12 +215,17 @@ GRANT_A="$(pj .customer_role_grant_id)"
 curl -s -b "$JAR_A" -o /dev/null -X POST -H 'content-type: application/json' -d '{}' "http://127.0.0.1:$PORT/api/auth/logout"; rm -f "$JAR_A"
 [ "$(q "SELECT reference_value::text || '|' || (SELECT direction FROM industry_measures WHERE id = '$MEASURE_A') || '|' || author_person_id || '|' || lvrf_hypothesis_verdict(h) FROM value_hypotheses h WHERE id = '$HYP_A'")" = "0.0000|increase|$STAFF_A|open" ] \
   && ok "HYP_A $HYP_A stated by A through the route: reference 0 (recorded baseline), the entry's direction increase, verdict open" || { bad "HYP_A row"; exit 1; }
+# B3 (§19): one of A's roadmap milestones, for the change route's case. Planned by A's staff, as themself (the guard).
+MS_A="$(newid)"
+q "SELECT set_config('lvrf.actor_person_id', '$STAFF_A', true); INSERT INTO roadmap_milestones (id, tenant_id, engagement_id, title, due_on, owner_stated, planned_by_person_id)
+  VALUES ('$MS_A', '$TENANT_A', '$ENG_A', 'Tenant A milestone (verification $TS)', '2030-01-01', 'A owner (verification)', '$STAFF_A'); $(act_sql plan roadmap_milestones "$MS_A" "$STAFF_A" 'POST /api/engagements/:engagementId/milestones')" > /dev/null
+[ "$(q "SELECT count(*) FROM roadmap_milestones WHERE id = '$MS_A'")" = "1" ] && ok "MS_A: a milestone of A, with its act" || { bad "MS_A"; exit 1; }
 [ "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled <> 'O'")" = "0" ] && ok "no trigger is disabled on the clone" || bad "a disabled trigger"
 
 step "5. The cases"
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
-export ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A GRANT_A
+export MS_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A GRANT_A
 export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.

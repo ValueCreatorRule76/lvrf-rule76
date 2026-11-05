@@ -1939,7 +1939,9 @@ LANGUAGE sql STABLE AS $$
      AND has_table_privilege('lvrf_app', c.oid, priv)
   UNION ALL
   SELECT format('lvrf_app holds UPDATE on %s', t)
-    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks', 'figure_findings']) t
+    FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks', 'figure_findings',
+                      -- B3 (section 33): insert-only at the role, not only by their guards.
+                      'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2366,7 +2368,9 @@ BEGIN
   IF t NOT IN ('research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
                'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings', 'industries') THEN
+               'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings', 'industries',
+               -- B3 (§19, section 33)
+               'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2533,6 +2537,13 @@ BEGIN
       WHEN 'system_exercise_marks' THEN what := 'a mark';
       WHEN 'figure_findings' THEN what := 'a finding';
       WHEN 'industries' THEN what := 'an industry added';
+      -- B3 (§19): the value case's governed inputs; a record document only when it is a share for review (D-M21).
+      WHEN 'policy_values' THEN what := 'a policy value set';
+      WHEN 'lens_policies' THEN what := 'a lens policy ratified';
+      WHEN 'monetization_rates' THEN what := 'a monetization rate recorded';
+      WHEN 'roadmap_milestones' THEN what := 'a milestone planned';
+      WHEN 'record_documents' THEN
+        IF n->>'kind' = 'share_for_review' THEN what := 'a share for review'; END IF;
       WHEN 'value_outcome_evidence' THEN
         IF n->>'corrects_supports' IS NOT NULL THEN what := 'a correcting link'; END IF;
       ELSE NULL;
@@ -2569,7 +2580,8 @@ BEGIN
     'industries', 'research_imports', 'research_results', 'evidence', 'value_outcomes', 'value_runs', 'engagements',
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
-    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings']
+    'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings',
+    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -3356,6 +3368,382 @@ CREATE TRIGGER industries_steward_only
   BEFORE INSERT ON industries
   FOR EACH ROW EXECUTE FUNCTION lvrf_industry_steward_only();
 
+-- 33. B3 (P6; LVRF_PLAN §19, approved by Brad 5 Nov 2026) — the value case's governed inputs.
+-- ------------------------------------------------------------------
+--   policy_values, lens_policies: the steward's, insert-only, one line of versions per key or persona (0048's
+--     one_root index and unique supersedes_id); N (pack_ratification_institutions) never lowered.
+--   monetization_rates: insert-only; the account's metric, in the metric's unit; evidence recorded on and about
+--     this account; recorded by current staff. Its basis and attester are read by lvrf_cost_of_delay, not here.
+--   roadmap_milestones: insert-only; a successor is the same engagement's milestone and says why.
+--   record_documents: a print request and a share are never edited; a print request is internal and names its run's
+--     hash; a share is the steward's, of a locked run, and only while both banners print (lvrf_run_banners).
+--   lvrf_cost_of_delay_amount(), lvrf_cost_of_delay(): the figure, or every reason it is refused (design §5.4).
+--   lvrf_case_chain() gains cost_of_delay, roadmap and solutioning (payloadVersion 5); the lock guard compares only
+--     the keys a run sealed, so a v4 run locks exactly as before.
+-- Each table: _audit, _no_delete, _guard; _act_present comes from P2's loop (lvrf_require_act), where these tables are added.
+--
+-- CONSEQUENCE: 186 -> 204 (four tables × 4, and record_documents _guard and _act_present).
+
+CREATE OR REPLACE FUNCTION lvrf_is_steward(p_tenant uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT coalesce((SELECT steward_person_id FROM tenants WHERE id = p_tenant) = lvrf_current_actor(), false)
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_is_current_staff(p_person uuid, p_tenant uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT coalesce((SELECT p.tenant_id = p_tenant AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL
+                     FROM persons p WHERE p.id = p_person), false)
+$$;
+
+-- The D2 bases, strongest first, for "the weaker of its inputs" (design §3.1, §5.4).
+CREATE OR REPLACE FUNCTION lvrf_basis_rank(p_basis text) RETURNS integer
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE p_basis WHEN 'system_of_record' THEN 5 WHEN 'published' THEN 4 WHEN 'client_stated' THEN 3
+                      WHEN 'inferred' THEN 2 WHEN 'assumed' THEN 1 ELSE 0 END
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_policy_value_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  prev record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: policy_values: a policy value is a version on the record and is never edited; set a new one that supersedes it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_guard';
+  END IF;
+  IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.set_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: policy_values: only the tenant''s steward sets a policy value, as themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_steward_only';
+  END IF;
+  IF NEW.supersedes_id IS NOT NULL THEN
+    SELECT tenant_id, key, value INTO prev FROM policy_values WHERE id = NEW.supersedes_id;
+    IF prev.tenant_id IS DISTINCT FROM NEW.tenant_id OR prev.key IS DISTINCT FROM NEW.key THEN
+      RAISE EXCEPTION 'LVRF: policy_values: a new value supersedes a value of the same tenant and key.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_guard';
+    END IF;
+    IF NEW.key = 'pack_ratification_institutions' AND NEW.value < prev.value THEN
+      RAISE EXCEPTION 'LVRF: policy_values: the pack ratification threshold is never lowered (% to %; Brad, 4 Nov 2026).', trim_scale(prev.value), trim_scale(NEW.value)
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_never_lowered';
+    END IF;
+  END IF;
+  NEW.set_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_lens_policy_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  prev record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: lens_policies: a lens policy is a version on the record and is never edited; ratify a new one that supersedes it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_guard';
+  END IF;
+  IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.ratified_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: lens_policies: only the tenant''s steward ratifies a lens policy, as themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_steward_only';
+  END IF;
+  IF NEW.supersedes_id IS NOT NULL THEN
+    SELECT tenant_id, persona INTO prev FROM lens_policies WHERE id = NEW.supersedes_id;
+    IF prev.tenant_id IS DISTINCT FROM NEW.tenant_id OR prev.persona IS DISTINCT FROM NEW.persona THEN
+      RAISE EXCEPTION 'LVRF: lens_policies: a new version supersedes a policy of the same tenant and persona.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_guard';
+    END IF;
+  END IF;
+  NEW.ratified_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_monetization_rate_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  inst_tenant uuid;
+  m record;
+  e record;
+  prev record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: a rate is on the record and is never edited; record a correction that supersedes it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
+  END IF;
+  SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
+  IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
+  END IF;
+  SELECT institution_id, unit, deleted_at, superseded_by_id INTO m FROM business_metrics WHERE id = NEW.business_metric_id;
+  IF m.institution_id IS DISTINCT FROM NEW.institution_id OR m.deleted_at IS NOT NULL OR m.superseded_by_id IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: the metric % is not a current metric of this account.', NEW.business_metric_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
+  END IF;
+  IF NEW.per_unit IS DISTINCT FROM m.unit THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: the rate is per "%", the metric is measured in "%"; a rate is stated in the metric''s own unit.', NEW.per_unit, m.unit
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_unit_matches';
+  END IF;
+  SELECT institution_id, about_institution_id, deleted_at, superseded_by_id INTO e FROM evidence WHERE id = NEW.evidence_id;
+  IF e.institution_id IS DISTINCT FROM NEW.institution_id OR e.about_institution_id IS DISTINCT FROM NEW.institution_id
+     OR e.deleted_at IS NOT NULL OR e.superseded_by_id IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: a rate rests on current evidence recorded on and about this account.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_evidence_about_account';
+  END IF;
+  IF NOT lvrf_is_current_staff(NEW.recorded_by_person_id, NEW.tenant_id) OR NEW.recorded_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: monetization_rates: a rate is recorded by current, non-simulated staff of the tenant, as themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
+  END IF;
+  IF NEW.supersedes_id IS NOT NULL THEN
+    SELECT institution_id, business_metric_id INTO prev FROM monetization_rates WHERE id = NEW.supersedes_id;
+    IF prev.institution_id IS DISTINCT FROM NEW.institution_id OR prev.business_metric_id IS DISTINCT FROM NEW.business_metric_id THEN
+      RAISE EXCEPTION 'LVRF: monetization_rates: a correction supersedes a rate of the same account and metric.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
+    END IF;
+  END IF;
+  NEW.recorded_at := now();
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION lvrf_roadmap_milestone_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  eng record;
+  prev record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: a milestone is on the record and is never edited; a new date, status or owner supersedes it, with a reason.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+  END IF;
+  SELECT tenant_id, institution_id INTO eng FROM engagements WHERE id = NEW.engagement_id;
+  IF eng.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: the engagement % is not of tenant %.', NEW.engagement_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+  END IF;
+  IF NEW.value_outcome_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM value_outcomes WHERE id = NEW.value_outcome_id AND engagement_id = NEW.engagement_id) THEN
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: outcome % is not of this engagement.', NEW.value_outcome_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+  END IF;
+  IF NEW.done_evidence_id IS NOT NULL AND NOT EXISTS (
+       SELECT 1 FROM evidence WHERE id = NEW.done_evidence_id AND institution_id = eng.institution_id AND deleted_at IS NULL AND superseded_by_id IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: a milestone is shown done by current evidence on this account.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+  END IF;
+  IF NOT lvrf_is_current_staff(NEW.planned_by_person_id, NEW.tenant_id) OR NEW.planned_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: a milestone is planned by current, non-simulated staff of the tenant, as themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+  END IF;
+  IF NEW.supersedes_id IS NOT NULL THEN
+    SELECT engagement_id INTO prev FROM roadmap_milestones WHERE id = NEW.supersedes_id;
+    IF prev.engagement_id IS DISTINCT FROM NEW.engagement_id THEN
+      RAISE EXCEPTION 'LVRF: roadmap_milestones: a change supersedes a milestone of the same engagement.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
+    END IF;
+  END IF;
+  NEW.planned_at := now();
+  RETURN NEW;
+END $$;
+
+-- The two banners of a run, from its sealed payload only (rule 6; §5 "Outside-in says so"): OUTSIDE-IN when no sealed
+-- figure has a system-of-record or client-stated basis; UNVERIFIED unless the sealed realization is verified.
+CREATE OR REPLACE FUNCTION lvrf_run_banners(p_run uuid) RETURNS jsonb
+LANGUAGE sql STABLE AS $$
+  SELECT jsonb_build_object(
+    'outside_in', NOT EXISTS (
+      SELECT 1 FROM (
+        SELECT x->>'basis' AS b FROM jsonb_array_elements(coalesce(r.payload->'evidence', '[]'::jsonb)) x
+        UNION ALL SELECT x->>'basis' FROM jsonb_array_elements(coalesce(r.payload->'institutionFacts', '[]'::jsonb)) x
+        UNION ALL SELECT r.payload->'entity'->>'basis'
+      ) s WHERE s.b IN ('system_of_record', 'client_stated')),
+    'unverified', coalesce(r.payload->>'realization', '') <> 'verified')
+  FROM value_runs r WHERE r.id = p_run
+$$;
+
+CREATE OR REPLACE FUNCTION lvrf_record_document_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  run record;
+  b jsonb;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.kind <> 'rendering' THEN
+      RAISE EXCEPTION 'LVRF: record_documents: a % is on the record and is never edited.', replace(OLD.kind, '_', ' ')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+    END IF;
+    IF NEW.kind IS DISTINCT FROM OLD.kind THEN
+      RAISE EXCEPTION 'LVRF: record_documents: what a document records is fixed when it is written.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+    END IF;
+  END IF;
+  IF NEW.disclosure::text = 'shared_for_review' AND NEW.kind <> 'share_for_review' THEN
+    RAISE EXCEPTION 'LVRF: record_documents: "shared for review" is the disclosure of a share for review only.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+  END IF;
+  IF TG_OP = 'UPDATE' OR NEW.kind = 'rendering' THEN RETURN NEW; END IF;
+
+  SELECT r.engagement_id, r.payload_hash, r.locked_at, r.payload->>'valueOutcomeId' AS outcome INTO run FROM value_runs r WHERE r.id = NEW.value_run_id;
+  IF run.engagement_id IS DISTINCT FROM NEW.engagement_id OR run.outcome IS DISTINCT FROM NEW.value_outcome_id::text THEN
+    RAISE EXCEPTION 'LVRF: record_documents: run % is not of this engagement and outcome.', NEW.value_run_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+  END IF;
+  IF NEW.content_hash IS DISTINCT FROM run.payload_hash THEN
+    RAISE EXCEPTION 'LVRF: record_documents: a % names its run''s payload hash, which is the trace.', replace(NEW.kind, '_', ' ')
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+  END IF;
+  IF NOT lvrf_is_current_staff(NEW.rendered_by_person_id, NEW.tenant_id) OR NEW.rendered_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: record_documents: a % is recorded by current staff of the tenant, as themself.', replace(NEW.kind, '_', ' ')
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+  END IF;
+  IF NEW.kind = 'print_request' THEN
+    IF NEW.disclosure::text <> 'internal' THEN
+      RAISE EXCEPTION 'LVRF: record_documents: a print request is internal; sharing is its own act.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+    END IF;
+  ELSE
+    IF NOT lvrf_is_steward(NEW.tenant_id) THEN
+      RAISE EXCEPTION 'LVRF: record_documents: only the tenant''s steward shares a run for review (D-M21).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_share_steward_only';
+    END IF;
+    IF NEW.disclosure::text <> 'shared_for_review' THEN
+      RAISE EXCEPTION 'LVRF: record_documents: a share for review is disclosed "shared for review", never customer-shared.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+    END IF;
+    IF run.locked_at IS NULL THEN
+      RAISE EXCEPTION 'LVRF: record_documents: only a locked run is shared for review; lock it first.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_share_gate';
+    END IF;
+    b := lvrf_run_banners(NEW.value_run_id);
+    IF NOT coalesce((b->>'outside_in')::boolean, false) OR NOT coalesce((b->>'unverified')::boolean, false) THEN
+      RAISE EXCEPTION 'LVRF: record_documents: a run is shared for review as an outside-in hypothesis only while both banners print (outside-in %, unverified %).',
+        coalesce(b->>'outside_in', 'unknown'), coalesce(b->>'unverified', 'unknown')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_share_gate';
+    END IF;
+  END IF;
+  NEW.rendered_at := now();
+  RETURN NEW;
+END $$;
+
+DO $$
+DECLARE
+  t text;
+  remedy text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones'] LOOP
+    remedy := CASE t
+      WHEN 'policy_values' THEN 'A policy value is a version on the record and is never deleted; set a new one that supersedes it.'
+      WHEN 'lens_policies' THEN 'A lens policy is a version on the record and is never deleted; ratify a new one that supersedes it.'
+      WHEN 'monetization_rates' THEN 'A rate is on the record and is never deleted; record a correction that supersedes it.'
+      ELSE 'A milestone is on the record and is never deleted; a change supersedes it, with a reason.' END;
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_audit', t);
+    EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION lvrf_audit()', t || '_audit', t);
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_no_delete', t);
+    EXECUTE format('CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(%L)', t || '_no_delete', t, remedy);
+  END LOOP;
+END $$;
+
+DROP TRIGGER IF EXISTS policy_values_guard ON policy_values;
+CREATE TRIGGER policy_values_guard BEFORE INSERT OR UPDATE ON policy_values FOR EACH ROW EXECUTE FUNCTION lvrf_policy_value_guard();
+DROP TRIGGER IF EXISTS lens_policies_guard ON lens_policies;
+CREATE TRIGGER lens_policies_guard BEFORE INSERT OR UPDATE ON lens_policies FOR EACH ROW EXECUTE FUNCTION lvrf_lens_policy_guard();
+DROP TRIGGER IF EXISTS monetization_rates_guard ON monetization_rates;
+CREATE TRIGGER monetization_rates_guard BEFORE INSERT OR UPDATE ON monetization_rates FOR EACH ROW EXECUTE FUNCTION lvrf_monetization_rate_guard();
+DROP TRIGGER IF EXISTS roadmap_milestones_guard ON roadmap_milestones;
+CREATE TRIGGER roadmap_milestones_guard BEFORE INSERT OR UPDATE ON roadmap_milestones FOR EACH ROW EXECUTE FUNCTION lvrf_roadmap_milestone_guard();
+DROP TRIGGER IF EXISTS record_documents_guard ON record_documents;
+CREATE TRIGGER record_documents_guard BEFORE INSERT OR UPDATE ON record_documents FOR EACH ROW EXECUTE FUNCTION lvrf_record_document_guard();
+
+-- The current head of a chain of versions: the row nothing supersedes.
+CREATE OR REPLACE FUNCTION lvrf_policy_value(p_tenant uuid, p_key text) RETURNS numeric
+LANGUAGE sql STABLE AS $$
+  SELECT v.value FROM policy_values v
+   WHERE v.tenant_id = p_tenant AND v.key = p_key AND NOT EXISTS (SELECT 1 FROM policy_values s WHERE s.supersedes_id = v.id)
+$$;
+
+-- Design §5.4: |committed target − baseline| × rate × D / 12, undiscounted. Null when any input is null; never a default.
+CREATE OR REPLACE FUNCTION lvrf_cost_of_delay_amount(p_baseline numeric, p_target numeric, p_rate numeric, p_months numeric) RETURNS numeric
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT abs(p_target - p_baseline) * p_rate * p_months / 12
+$$;
+
+-- The figure, or every reason it is refused (design §5.4, ruling b). Never a vendor claim, a pack value, an effect size
+-- or a default. B3: the measure class is stated at commit in B4 (ruling 2); until then every outcome is refused with
+-- "no measure class stated at commit", and the rate kind is never read as the class.
+CREATE OR REPLACE FUNCTION lvrf_cost_of_delay(p_outcome uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  o record;
+  bm record;
+  rt record;
+  rate_ev evidence;
+  rate_basis text;
+  base_basis text;
+  months numeric;
+  reasons jsonb := '[]'::jsonb;
+  amount numeric;
+  improving boolean;
+BEGIN
+  SELECT vo.*, i.tenant_id AS inst_tenant INTO o FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id WHERE vo.id = p_outcome;
+  IF o.id IS NULL THEN RETURN NULL; END IF;
+  SELECT id, name, unit, direction INTO bm FROM business_metrics WHERE id = o.business_metric_id;
+  months := lvrf_policy_value(o.inst_tenant, 'cost_of_delay_months');
+
+  IF o.actual_value IS NOT NULL THEN
+    RETURN jsonb_build_object('status', 'measured', 'amount', NULL, 'months', trim_scale(months)::text,
+      'note', 'The outcome is measured: the case shows the realized value instead, and no cost of delay.', 'reasons', '[]'::jsonb);
+  END IF;
+
+  IF months IS NULL THEN reasons := reasons || jsonb_build_object('code', 'no_months', 'text', 'no cost-of-delay months set'); END IF;
+  IF o.target_value IS NULL OR o.committed_at IS NULL OR o.committed_by_person_id IS NULL THEN
+    reasons := reasons || jsonb_build_object('code', 'no_commitment', 'text', 'no committed target');
+  ELSE
+    improving := CASE bm.direction WHEN 'decrease' THEN o.target_value < o.baseline_value ELSE o.target_value > o.baseline_value END;
+    IF NOT coalesce(improving, false) THEN reasons := reasons || jsonb_build_object('code', 'target_not_improvement', 'text', 'the committed target is not an improvement in the metric''s direction'); END IF;
+  END IF;
+
+  SELECT * INTO rt FROM monetization_rates r
+   WHERE r.institution_id = o.institution_id AND r.business_metric_id = o.business_metric_id
+     AND NOT EXISTS (SELECT 1 FROM monetization_rates s WHERE s.supersedes_id = r.id);
+  IF rt.id IS NULL THEN
+    reasons := reasons || jsonb_build_object('code', 'no_rate', 'text', 'no monetization rate stated by the client');
+  ELSE
+    SELECT * INTO rate_ev FROM evidence WHERE id = rt.evidence_id;
+    rate_basis := lvrf_evidence_basis(rate_ev);
+    IF rate_basis IS NULL OR rate_basis NOT IN ('system_of_record', 'client_stated') THEN
+      reasons := reasons || jsonb_build_object('code', 'rate_basis', 'text', format('the rate''s evidence is %s, not client-stated or system of record', coalesce(replace(rate_basis, '_', ' '), 'without a basis')));
+    END IF;
+    IF rate_ev.attested_by_person_id IS NULL OR rate_ev.attested_at IS NULL OR NOT lvrf_customer_side(rate_ev.attested_by_person_id, o.institution_id) THEN
+      reasons := reasons || jsonb_build_object('code', 'rate_not_attested', 'text', 'the rate is not attested by a customer-side person');
+    END IF;
+    IF rt.per_unit IS DISTINCT FROM bm.unit THEN
+      reasons := reasons || jsonb_build_object('code', 'rate_unit', 'text', format('the rate is per %s; the metric is measured in %s', rt.per_unit, bm.unit));
+    END IF;
+  END IF;
+  reasons := reasons || jsonb_build_object('code', 'no_measure_class', 'text', 'no measure class stated at commit');
+
+  SELECT e_basis INTO base_basis FROM (
+    SELECT lvrf_evidence_basis(e) AS e_basis FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id
+     WHERE voe.value_outcome_id = o.id AND voe.supports = 'baseline' AND voe.withdrawn_at IS NULL
+  ) s ORDER BY lvrf_basis_rank(e_basis) DESC LIMIT 1;
+
+  IF jsonb_array_length(reasons) = 0 THEN
+    amount := lvrf_cost_of_delay_amount(o.baseline_value, o.target_value, rt.rate, months);
+  END IF;
+  RETURN jsonb_build_object(
+    'status', CASE WHEN jsonb_array_length(reasons) = 0 THEN 'computed' ELSE 'refused' END,
+    'amount', trim_scale(round(amount, 2))::text,
+    'months', trim_scale(months)::text,
+    'currency', rt.currency,
+    'basis', CASE WHEN jsonb_array_length(reasons) = 0 THEN
+               (CASE WHEN lvrf_basis_rank(coalesce(base_basis, 'assumed')) <= lvrf_basis_rank(rate_basis) THEN coalesce(base_basis, 'assumed') ELSE rate_basis END) END,
+    'inputs', jsonb_build_object(
+      'baseline', trim_scale(o.baseline_value)::text, 'baseline_basis', base_basis,
+      'target', trim_scale(o.target_value)::text,
+      'committed_by', (SELECT full_name FROM persons WHERE id = o.committed_by_person_id),
+      'committed_on', to_char(o.committed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+      'rate', CASE WHEN rt.id IS NULL THEN NULL ELSE jsonb_build_object(
+        'id', rt.id, 'rate', trim_scale(rt.rate)::text, 'currency', rt.currency, 'per_unit', rt.per_unit, 'kind', rt.rate_kind,
+        'evidence_id', rt.evidence_id, 'basis', rate_basis,
+        'attested_by', (SELECT full_name FROM persons WHERE id = rate_ev.attested_by_person_id),
+        'attested_on', to_char(rate_ev.attested_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) END),
+    'reasons', reasons);
+END $$;
+
 -- 32. §16 (B2, 5 Nov 2026) — the case snapshot: a run seals the whole case (LVRF_PLAN §16; CS-D1–D6).
 -- ------------------------------------------------------------------
 --   lvrf_case_chain(outcome): the one reader of the case chain. produce-run seals its result as payload.case
@@ -3416,15 +3804,44 @@ LANGUAGE sql STABLE AS $$
         FROM reference_example_markers k WHERE k.institution_id = o.institution_id AND k.deleted_at IS NULL AND k.superseded_by_id IS NULL),
     'findings', coalesce((SELECT jsonb_agg(jsonb_build_object('field', ff.field, 'value', trim_scale(ff.value)::text, 'finding_text', ff.finding_text,
           'recorded_on', to_char(ff.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY ff.field, ff.id)
-        FROM figure_findings ff WHERE ff.value_outcome_id = o.id), '[]'::jsonb)
+        FROM figure_findings ff WHERE ff.value_outcome_id = o.id), '[]'::jsonb),
+    -- B3 (payloadVersion 5; §19): cost of delay as it reads now (the figure, or every reason it is refused).
+    'cost_of_delay', lvrf_cost_of_delay(o.id),
+    -- B3: the plan to measure. The current head of each milestone of the engagement, on this outcome or on none, and the
+    -- outcome's own committed measurement date. Nothing generated.
+    'roadmap', jsonb_build_object(
+      'promised_measured_on', (SELECT to_char(vo.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM value_outcomes vo WHERE vo.id = o.id),
+      'milestones', coalesce((SELECT jsonb_agg(jsonb_build_object('id', m.id, 'title', m.title, 'due_on', to_char(m.due_on, 'YYYY-MM-DD'),
+            'owner', m.owner_stated, 'planned_by', (SELECT full_name FROM persons WHERE id = m.planned_by_person_id), 'stage', m.stage, 'status', m.status,
+            'slipped', EXISTS (SELECT 1 FROM roadmap_milestones a WHERE a.id = m.supersedes_id AND a.due_on <> m.due_on))
+            ORDER BY m.due_on, m.id)
+          FROM roadmap_milestones m JOIN value_outcomes vo ON vo.engagement_id = m.engagement_id AND vo.id = o.id
+         WHERE (m.value_outcome_id IS NULL OR m.value_outcome_id = o.id)
+           AND NOT EXISTS (SELECT 1 FROM roadmap_milestones s WHERE s.supersedes_id = m.id)), '[]'::jsonb)),
+    -- B3 (§19 choice 1, ruling 5): per current hypothesis, the offerings linked to its lever, read only while the lever
+    -- is current. A link under a withdrawn lever never appears on a case.
+    'solutioning', coalesce((SELECT jsonb_agg(jsonb_build_object('hypothesis_id', h.id, 'lever_id', l.id, 'lever', l.name,
+          'lever_current', (l.deleted_at IS NULL AND l.superseded_by_id IS NULL),
+          'offerings', CASE WHEN l.deleted_at IS NULL AND l.superseded_by_id IS NULL THEN coalesce((
+            SELECT jsonb_agg(jsonb_build_object('link_id', lo.id, 'offering', f.name, 'offering_key', f.offering_key, 'basis', lo.basis,
+                     'evidence_class', f.evidence_class, 'verification_source', f.verification_source, 'evidence_access', f.evidence_access,
+                     'linked_by', (SELECT full_name FROM persons WHERE id = lo.linked_by_person_id),
+                     'linked_on', to_char(lo.linked_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY f.name, lo.id)
+              FROM lever_offerings lo JOIN offerings f ON f.id = lo.offering_id
+             WHERE lo.value_lever_id = l.id AND lo.retired_at IS NULL), '[]'::jsonb) ELSE '[]'::jsonb END) ORDER BY h.created_at, h.id)
+        FROM value_hypotheses h JOIN value_levers l ON l.id = h.value_lever_id
+       WHERE h.value_outcome_id = o.id AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL), '[]'::jsonb)
   ) FROM o
 $$;
 
 CREATE OR REPLACE FUNCTION lvrf_run_case_current() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+  -- B3: only the keys the run sealed are compared, so a v4 run (no cost of delay, roadmap or solutioning) locks as before.
   IF OLD.locked_at IS NULL AND NEW.locked_at IS NOT NULL AND NEW.payload ? 'case'
-     AND (NEW.payload->'case') IS DISTINCT FROM lvrf_case_chain((NEW.payload->>'valueOutcomeId')::uuid) THEN
+     AND (NEW.payload->'case') IS DISTINCT FROM (
+       SELECT coalesce(jsonb_object_agg(k, c.chain->k), '{}'::jsonb)
+         FROM (SELECT lvrf_case_chain((NEW.payload->>'valueOutcomeId')::uuid) AS chain) c, jsonb_object_keys(NEW.payload->'case') k) THEN
     RAISE EXCEPTION 'LVRF: value_runs: the case changed after this run was produced; produce a new run and lock that.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_runs_case_current';
   END IF;
@@ -3548,7 +3965,8 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 186 distinct triggers. (0024 took it 78 -> 82: institution_facts
+--   Total: 204 distinct triggers (186 before section 33: four tables × audit, no_delete, guard, act_present, and
+--   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
 --   Section 18, Q4b (0031), took it 95 -> 98. 0034 (Q4h) took it 98 -> 102:
@@ -3570,9 +3988,10 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 186.
+-- TRUNCATE in section 14 fail. Total stays 204.
 --
--- Expect 288 rows here (287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
+-- Expect 320 rows here (288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
+-- (7 each), and record_documents guard I+U and act_present I+U. 287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):
 -- information_schema.triggers emits one row per event

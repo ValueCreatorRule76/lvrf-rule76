@@ -19,7 +19,22 @@ body {
     color: theme('colors.ink-45');
   }
 }
+/* B3 (§19, UX item 1; Brad, 5 Nov 2026): the value case and the POV, M21's two printed documents, print on US Letter;
+   every other page keeps A4. */
+@page letter {
+  size: letter;
+  margin: 0.55in 0.6in 0.75in;
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 8pt;
+    color: theme('colors.ink-45');
+  }
+}
 @media print {
+  [data-testid='value-case'], [data-testid='pov'] { page: letter; }
+  /* UX item 1 (Brad, 5 Nov 2026): no short ids in a customer print; they stay on screen, where B2 put them. */
+  [data-testid='pov'] [data-testid='evidence-short-id'] { display: none; }
   body { background: theme('colors.white'); }
   [data-testid^='banner-'] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* Keep small units whole; let long sections break, so no page is left half empty. */

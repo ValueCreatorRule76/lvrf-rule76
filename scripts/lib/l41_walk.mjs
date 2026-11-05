@@ -353,6 +353,104 @@ if (MODE === 'cardwithdraw') {
   await viewport(1280);
 }
 
+if (MODE === 'policies') {
+  // B3 (§19): the act session, on the clone, through the page. Every confirmation must read exactly as the act session
+  // quotes it (LVRF_PLAN §19, "The B3 act session"), so the pastes Brad reads are the page's own words.
+  const ready = `!!document.querySelector('[data-testid=policies]')`;
+  check(await open('/policies', ready), 'the policies page');
+  check((await ev(`document.querySelector('[data-testid=lens-none]')?.textContent ?? ''`)).includes('No CFO lens is ratified'), '  ...with no CFO lens, it says so');
+  const acts = [
+    { key: 'cost_of_delay_months', value: '6', reason: 'Q3, ruled 24 Oct 2026, and P6 ruling 3, 4 Nov 2026: a delay of D months forgoes D/12 of the annual value at the committed target, undiscounted. D = 6.',
+      confirm: 'Set Cost-of-delay months to 6. No value was set before. Every cost of delay computed after this reads 6/12 of the annual value at the committed target; no sealed run changes.' },
+    { key: 'pack_ratification_institutions', value: '2', reason: 'A pack entry is ratified when it is sourced from N institutions’ systems of record. N = 2, as recorded (Brad, 4 Nov 2026), and never lowered. The value case labels each proposed entry "sourced at x of N".',
+      confirm: "Set Pack ratification threshold (institutions' systems of record) to 2. No value was set before. It can be raised later, never lowered; no sealed run changes." },
+  ];
+  for (const a of acts) {
+    await ev(`document.querySelector('[data-testid=set-policy-open]').click()`); await sleep(400);
+    const f = `document.querySelector('[data-testid=set-policy]')`;
+    await setField(f, 'Policy', a.key); await setField(f, 'Value', a.value); await setField(f, 'Reason', a.reason); await sleep(300);
+    check(await submitIn(f, 'Set the value'), `  ...${a.key}: submitted`); await sleep(400);
+    const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+    check(ct === a.confirm, `  ...the confirmation reads exactly as the act session quotes it (${a.key})`, ct);
+    if (a.key === 'cost_of_delay_months') await shotOf('b3_policy_confirm_1280', '[data-testid=set-policy]', 1280);
+    await confirmIn(f); await sleep(1200);
+    check(await waitFor(`(document.querySelector('[data-testid=set-policy]')?.textContent ?? '').includes('Set.')`), `  ...recorded (${a.key})`, await ev(`(document.querySelector('[data-testid=set-policy]')?.textContent ?? '').slice(-300)`));
+    await open('/policies', ready);
+  }
+  await ev(`document.querySelector('[data-testid=ratify-lens-open]').click()`); await sleep(400);
+  const f = `document.querySelector('[data-testid=ratify-lens]')`;
+  await setField(f, 'Persona', 'cfo'); await setField(f, 'Minimum computed confidence', '55');
+  await ev(`${f}.querySelector('[data-testid=lens-basis-system_of_record]').click()`); await ev(`${f}.querySelector('[data-testid=lens-basis-published]').click()`);
+  await ev(`${f}.querySelector('[data-testid=lens-suppress-consumption]').click()`);
+  await setField(f, 'Refusal text', 'The CFO lens shows a value case only when its computed confidence is at least 55 and every actual it reports rests on a system of record or a published source. This case does not meet that yet. Below is each reason, and what would meet it.');
+  await setField(f, 'Reason', 'O-D1, 12 Oct 2026: the CFO lens threshold is 55, the medium band’s floor. It admits system-of-record and published actuals only, and suppresses consumption metrics (LVRF_PLAN §5).');
+  await sleep(300);
+  check(await submitIn(f, 'Ratify the lens'), '  ...the CFO lens: submitted'); await sleep(400);
+  const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+  check(ct === 'Ratify the CFO lens: at least 55, admitting system of record and published actuals, suppressing consumption metrics. No CFO lens was ratified before. Every value case read under the CFO lens after this applies it; no sealed run changes.',
+    '  ...the confirmation reads exactly as the act session quotes it (CFO lens)', ct);
+  await confirmIn(f); await sleep(1200);
+  check(await waitFor(`(${f}?.textContent ?? '').includes('Ratified.')`), '  ...recorded (CFO lens)', await ev(`(${f}?.textContent ?? '').slice(-300)`));
+  await open('/policies', ready);
+  check(await ev(`!!document.querySelector('[data-testid=lens-current]')`), '  ...the CFO lens now reads ratified');
+  await shot('b3_policies_1280', 1280); await shot('b3_policies_390', 390); await viewport(1280);
+}
+
+if (MODE === 'valuecase') {
+  // B3 (§19): the value case of E.RUN under E.LENS, on screen and printed. E.EXPECT_* are read from the record.
+  const lens = E.LENS === 'cfo' ? '?lens=cfo' : '';
+  const ready = `!!document.querySelector('[data-testid=executive-page]')`;
+  check(await open(`/runs/${E.RUN}/case${lens}`, ready), `the value case (${E.LENS})`);
+  const has = (t) => ev(`!!document.querySelector('[data-testid=${t}]')`);
+  check(await has('banner-unverified'), '  ...the disclosure banner (rule 6)');
+  if (E.EXPECT_OUTSIDE_IN === '1') check(await has('banner-outside-in'), '  ...the outside-in banner');
+  const asks = await ev(`[...document.querySelectorAll('[data-testid=exec-asks] [data-testid=ask]')].map(a=>a.dataset.code+(a.querySelector('[data-testid=converting-question]')?'+q':'')).join(',')`);
+  check(asks === E.EXPECT_ASKS, '  ...the executive page lists every ask the record derives, each with its converting question', asks);
+  if (E.EXPECT_COD) check(await has(E.EXPECT_COD), `  ...cost of delay reads ${E.EXPECT_COD}`, await ev(`document.querySelector('[data-testid=exec-page]')?.textContent?.slice(0,300) ?? ''`));
+  if (E.EXPECT_COD_QUESTION) check((await ev(`[...document.querySelectorAll('[data-testid=cod-reasons] li')].map(l=>l.dataset.code+(l.querySelector('[data-testid=cod-question]')?'+q':'')).join(',')`)) === E.EXPECT_COD_QUESTION,
+    '  ...each cost-of-delay reason with its converting question', await ev(`[...document.querySelectorAll('[data-testid=cod-reasons] li')].map(l=>l.dataset.code).join(',')`));
+  if (E.LENS === 'cfo') {
+    check(await has('cfo-refusal') === (E.EXPECT_CFO_REFUSED === '1'), `  ...the CFO lens ${E.EXPECT_CFO_REFUSED === '1' ? 'refuses' : 'admits'}`);
+    if (E.EXPECT_CFO_REASONS) check((await ev(`[...document.querySelectorAll('[data-testid=cfo-reasons] [data-testid=ask]')].map(a=>a.dataset.code).join(',')`)) === E.EXPECT_CFO_REASONS,
+      '  ...its reasons, each with a converting question', await ev(`[...document.querySelectorAll('[data-testid=cfo-reasons] [data-testid=ask]')].map(a=>a.dataset.code).join(',')`));
+  }
+  if (E.EXPECT_PACK_LABEL) check((await ev(`document.querySelector('[data-testid=pack-entry-label]')?.textContent ?? ''`)).includes(E.EXPECT_PACK_LABEL), `  ...the pack entry reads "${E.EXPECT_PACK_LABEL}" and no pack is certified`,
+    await ev(`document.querySelector('[data-testid=pack-entry-label]')?.textContent ?? 'none'`));
+  if (E.EXPECT_SOLUTIONING) check((await ev(`[...document.querySelectorAll('[data-testid=solutioning-lever]')].map(x=>x.dataset.current+':'+x.querySelectorAll('[data-testid=solutioning-offering]').length).join(',')`)) === E.EXPECT_SOLUTIONING,
+    '  ...solutioning reads only links on current levers (ruling 5)', await ev(`[...document.querySelectorAll('[data-testid=solutioning-lever]')].map(x=>x.dataset.current+':'+x.querySelectorAll('[data-testid=solutioning-offering]').length).join(',')`));
+  if (E.FORBID) check(!(await ev(`document.body.textContent.includes(${JSON.stringify(E.FORBID)})`)), `  ...the reviewer's note is not on the case (ruling 4)`);
+  // Footnotes numbered in reading order: the first reference to each number appears in ascending order.
+  const refs = await ev(`[...document.querySelectorAll('[data-testid=footnote-ref]')].map(x=>Number(x.textContent))`);
+  const firsts = refs.filter((n, i) => refs.indexOf(n) === i);
+  check(firsts.every((n, i) => n === i + 1), `  ...footnotes numbered in reading order (${firsts.join(',') || 'none'})`, JSON.stringify(refs));
+  check((await ev(`document.querySelectorAll('[data-testid=footnote]').length`)) === firsts.length, '  ...one source note per number, in words');
+  check(await has('case-glossary'), '  ...the glossary');
+  await shot(`b3_case_${E.LENS}_${E.TAG}_1280`, 1280);
+  await viewport(390); await sleep(500);
+  check((await ev('document.documentElement.scrollWidth')) <= 390, '  ...at 390, no horizontal scroll', String(await ev('document.documentElement.scrollWidth')));
+  await shot(`b3_case_${E.LENS}_${E.TAG}_390`, 390);
+  await viewport(1280);
+  await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(300);
+  const shortIds = await ev(`(()=>{const t=[...document.querySelectorAll('[data-testid=value-case] *')].filter(e=>getComputedStyle(e).display!=='none'&&e.offsetParent!==null||e.tagName==='TD').map(e=>e.childNodes).flatMap(n=>[...n]).filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ');return (t.match(/\\b[0-9a-f]{8}\\b(?![0-9a-f-])/g)||[]).filter(x=>!${JSON.stringify(E.HASH ?? '')}.includes(x))})()`);
+  check(shortIds.length === 0, '  ...printed, no short id or row code (the hash excepted)', JSON.stringify(shortIds.slice(0, 5)));
+  check(await ev(`getComputedStyle(document.querySelector('[data-testid=case-inputs]')?.parentElement ?? document.body).display === 'none' || !document.querySelector('[data-testid=case-inputs]')`), '  ...printed, the "For the next run" panel is not');
+  const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+  writeFileSync(`${SHOTS}/b3_case_${E.LENS}_${E.TAG}.pdf`, Buffer.from(pdf.result.data, 'base64'));
+  await send('Emulation.setEmulatedMedia', { media: '' });
+  console.log(`  shot  ${SHOTS}/b3_case_${E.LENS}_${E.TAG}.pdf`);
+}
+
+if (MODE === 'povletter') {
+  // Brad, 5 Nov 2026: M21 prints the POV and the value case, both on US Letter.
+  check(await open(`/accounts/${E.INST}/pov`, `!!document.querySelector('[data-testid=pov]')`), 'the POV');
+  await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(300);
+  check(await ev(`[...document.querySelectorAll('[data-testid=pov] [data-testid=evidence-short-id]')].every(e=>getComputedStyle(e).display==='none')`), '  ...printed, the POV shows no short id (UX item 1)');
+  const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+  await send('Emulation.setEmulatedMedia', { media: '' });
+  writeFileSync(`${SHOTS}/b3_pov_letter.pdf`, Buffer.from(pdf.result.data, 'base64'));
+  console.log(`  shot  ${SHOTS}/b3_pov_letter.pdf`);
+}
+
 if (MODE === 'snapshots' || MODE === 'snapshotsbreak') {
   // §16 (CS-D5): the curve against the record. E.EXPECT = points|erratum marks|hollow points|breaks, read from the DB.
   const [points, errata, hollow, breaks] = E.EXPECT.split('|').map(Number);

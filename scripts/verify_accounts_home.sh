@@ -255,6 +255,9 @@ restore "$HEADER"
 LIB=client/src/lib/workspaceStatus.ts; cp "$LIB" "$W/workspaceStatus.ts.orig"
 edit "$LIB" "  if (!w.ok || !p.ok || !r.ok) return { error: ROW_UNAVAILABLE };" "  if (!p.ok || !r.ok) return { error: ROW_UNAVAILABLE };"
 edit "$LIB" "  const walk = w.v; const pov = p.v; const research = r.v;" "  const walk = w.ok ? w.v : null; const pov = p.v; const research = r.v;"
+# B3 (5 Nov 2026): B4's break puts the desktop row on the phone, and its keyboard walk can end on "Sign out" now the
+# row has a fourth link (Policies), so B5 walks on a session of its own.
+TOKEN="$(curl -s -c - -o /dev/null -X POST -H 'content-type: application/json' -H "Origin: http://localhost:$VITE_PORT" -d "{\"email\":\"$EMAIL\",\"password\":\"$PW\"}" "$BASE/api/auth/login" | awk '$6 == "lvrf_session" {print $7}')"
 sleep 5; node "$W/home.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$W" b5 "$N_ACC" "$NEW" > "$W/b5.log" 2>&1 || true
 grep -q 'FAIL  failed /walk: the row says' "$W/b5.log" && ok "B5: a failed /walk read as empty → caught: the row would show a status from partial data" || bad "B5: not caught: $(grep -m3 'failed /walk' "$W/b5.log" | tr '\n' ' ')"
 cp "$W/workspaceStatus.ts.orig" "$LIB"; cmp -s "$W/workspaceStatus.ts.orig" "$LIB" && ok "  ...$LIB restored byte-identical" || bad "  ...$LIB restore differs"

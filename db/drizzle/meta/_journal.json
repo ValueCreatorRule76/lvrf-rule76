@@ -330,6 +330,20 @@
       "when": 1793554456303,
       "tag": "0046_add_industry",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1793893054060,
+      "tag": "0047_b3_enums",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793897121266,
+      "tag": "0048_b3_value_case",
+      "breakpoints": true
     }
   ]
 }

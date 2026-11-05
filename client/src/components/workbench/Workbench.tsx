@@ -660,7 +660,9 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
             <section className="flex flex-col gap-3" aria-labelledby="case">
               <h2 id="case" className={H2}>The case as sealed</h2>
               <div className="border border-rule bg-white px-4 py-3"><CaseSealed c={run.payload.case} /></div>
-              <p className="m-0 text-[12px] print:hidden"><Link to={`/engagements/${run.engagement_id}/snapshots`} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="snapshots-link">Every run of this engagement, as sealed, with the confidence curve</Link></p>
+              <p className="m-0 text-[12px] print:hidden"><Link to={`/engagements/${run.engagement_id}/snapshots`} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="snapshots-link">Every run of this engagement, as sealed, with the confidence curve</Link>
+                {' · '}<Link to={`/runs/${run.id}/case`} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="case-link">The value case</Link>
+                {' · '}<Link to={`/runs/${run.id}/case?lens=cfo`} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="case-link-cfo">under the CFO lens</Link></p>
             </section>
 
             <Fold title="What it takes to raise confidence" testid="fold-gaps">

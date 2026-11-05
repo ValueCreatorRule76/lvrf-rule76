@@ -117,6 +117,28 @@ export const PLAIN_CHECK: Record<string, string> = {
   value_outcomes_verified_requires_human: 'A verified outcome names its verifier, when, and its verified source.',
   value_runs_confidence_range: "A run's confidence runs from 0 to 100.",
   value_runs_lock_is_complete: 'Locking a run records who locked it and why, together.',
+  // B3 (§19, 0048).
+  lens_policies_bases_known: 'A lens admits at least one basis, each one of system of record, published, client-stated, inferred or assumed.',
+  lens_policies_persona_known: 'In 3.0 the only lens policy is the CFO lens.',
+  lens_policies_reason_stated: 'Ratifying a lens says why, in at least 12 characters.',
+  lens_policies_refusal_stated: "A lens's refusal text needs at least 24 characters.",
+  lens_policies_suppresses_known: 'A lens may suppress consumption metrics, and nothing else yet.',
+  lens_policies_threshold_range: "A lens's minimum computed confidence runs from 0 to 100.",
+  monetization_rates_correction_says_why: 'Correcting a rate says why, in at least 12 characters.',
+  monetization_rates_currency_code: 'A currency is a three-letter code, such as USD.',
+  monetization_rates_how_read_stated: 'A rate says how it was read from its source, in at least 12 characters.',
+  monetization_rates_rate_nonnegative: 'A rate is zero or more.',
+  policy_values_key_known: 'A policy value is the cost-of-delay months or the pack ratification threshold.',
+  policy_values_reason_stated: 'Setting a policy value says why, in at least 12 characters.',
+  policy_values_value_in_range: 'Cost-of-delay months is a whole number from 1 to 24; the pack ratification threshold a whole number of at least 1.',
+  record_documents_kind_complete: 'A print request names its run and lens; a share for review names its run, lens and with whom (at least 3 characters).',
+  record_documents_kind_known: 'A record document is a rendering, a print request or a share for review.',
+  record_documents_lens_known: 'A lens is the CFO lens or general.',
+  roadmap_milestones_change_says_why: 'Changing a milestone says why, in at least 12 characters.',
+  roadmap_milestones_done_has_evidence: 'A milestone is done only with the evidence that shows it, and only a done milestone names such evidence.',
+  roadmap_milestones_stage_known: "A milestone's stage is commit, measure or verify.",
+  roadmap_milestones_owner_stated: "State the milestone's owner, a name and role, in at least 3 characters.",
+  roadmap_milestones_title_stated: 'A milestone needs a title of at least 6 characters.',
 };
 
 export const NEUTRAL_CHECK = "That can't be recorded as entered; nothing was written.";

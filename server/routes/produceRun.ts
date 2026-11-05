@@ -163,8 +163,9 @@ export function produceRunRouter(pool: Pool): Router {
         committed_by_person_id: string | null;
         verified_by_person_id: string | null;
         institution_id: string;
+        currency_code: string | null;
       }>(
-        `SELECT id, institution_id, capability_id, business_metric_id, value_stage,
+        `SELECT id, institution_id, capability_id, business_metric_id, value_stage, currency_code,
                 baseline_value, target_value, actual_value,
                 claimed_currency_impact, realized_currency_impact, impact_basis,
                 promised_measured_at, actual_measured_at,
@@ -624,7 +625,9 @@ export function produceRunRouter(pool: Pool): Router {
         // check_run_hashes recomputes both from whatever keys a run has.
         // L42: version 3 also seals each item's row, what it is about, who opened it, and any verified unopened.
         // §16 (CS-D1): version 4 seals the case chain, read by lvrf_case_chain(), the function the lock guard compares.
-        payloadVersion: 4,
+        // B3 (§19): version 5's chain also carries cost of delay (the figure or every refusal), the roadmap and the
+        // solutioning; the lock guard compares only the keys a run sealed, so a v4 run locks as before.
+        payloadVersion: 5,
         // C3 (1.0.1; C3-D3): the committer and the verifier as they stood, so the run recomputes under 1.0.1.
         people: {
           committer: committerName === null ? null : { name: committerName, simulated: committerSynthetic, customer_side: committerSide.customer_side, reason: committerSide.reason, roles: committerSide.roles },
@@ -656,6 +659,8 @@ export function produceRunRouter(pool: Pool): Router {
         actualValue: toNumber(vo.actual_value),
         claimedCurrencyImpact,
         realizedCurrencyImpact,
+        // B3 (payloadVersion 5): the currency of the outcome's currency figures, so the case names it from the seal.
+        currencyCode: vo.currency_code ?? null,
         realization,
         disclosure,
         note,
@@ -669,7 +674,8 @@ export function produceRunRouter(pool: Pool): Router {
         // 3.0 item 10 (O1): sealed with the run, under the same hash.
         entity,
         institutionFacts,
-        // §16: the hypotheses, levers, offerings, summaries, pack entry, marker and findings, as they stand.
+        // §16: the hypotheses, levers, offerings, summaries, pack entry, marker and findings, as they stand;
+        // B3: cost of delay, the roadmap and the solutioning too.
         case: caseChain,
       };
       const payloadHash = sha256Hex(runPayloadBase);

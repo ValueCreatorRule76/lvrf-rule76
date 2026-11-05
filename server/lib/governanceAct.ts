@@ -20,7 +20,8 @@ import type { PoolClient } from 'pg';
 export type GovernanceAct =
   | 'import' | 'validate' | 'approve' | 'certify' | 'activate' | 'supersede' | 'verify' | 'attest'
   | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit'
-  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about' | 'add_industry';
+  | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about' | 'add_industry'
+  | 'record_rate' | 'plan' | 'share';
 
 export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'create-only'>> = {
   // Research: the import, and the review of each result.
@@ -72,6 +73,15 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   // L52: a supersession carries the row's mark and moves its live links, each with its act.
   'POST /api/evidence/:id/supersede': ['supersede', 'mark', 'withdraw', 'link'],
   'POST /api/evidence/supersession-batch': ['supersede', 'mark', 'withdraw', 'link', 'record_erratum'],
+  // B3 (§19): the value case's governed inputs.
+  'POST /api/policies/values': ['ratify'],
+  'POST /api/policies/lenses': ['ratify'],
+  'POST /api/value-outcomes/:outcomeId/monetization-rates': ['record_rate'],
+  'POST /api/engagements/:engagementId/milestones': ['plan'],
+  'POST /api/roadmap-milestones/:id/supersede': ['plan'],
+  'POST /api/value-runs/:runId/share-for-review': ['share'],
+  // B3 (O4): a print request claims the request only, with its own who and when; no governed transition.
+  'POST /api/value-runs/:runId/print-request': 'create-only',
   // Create-only: left out of P2 by name (LVRF_PLAN §10, D3).
   'POST /api/account-inputs': 'create-only',
   // L52: the dry run writes nothing.
