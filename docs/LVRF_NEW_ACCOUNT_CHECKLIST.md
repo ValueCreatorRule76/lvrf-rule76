@@ -18,9 +18,12 @@ the **Packs** page:
 - [ ] **The industry exists.** If not, use "Add an industry…" (steward): name, slug, reason. Utilities was added on 1 Nov.
 - [ ] **The pack has measures.** If not, on the industry's pack page: "Generate a research prompt" (R1), run it, then
       "Parse a research response" (R3), then accept or exclude each measure under "Pending review" (R4/R5).
-- [ ] **Measures are ratified** *(B2: pack ratify and demote)*. Until B2 ships, every entry reads `proposed`.
-- [ ] **Each measure the account will use has one lever, ratified.** Its citation names an **opened evidence row**
-      (§17), not free text: record the source as evidence first, open it, then name that row in the lever's citation.
+- [ ] **Measures accepted; entries proposed until N = 2 institutions' systems of record** (Brad, 4 Nov 2026).
+      Ratification is 3.1 and is never lowered to make it reachable. The value case shows each entry as proposed.
+- [ ] **Each measure the account will use has one lever.** A lever is ratified by the steward's proposal (O-D2a), and
+      it can be written while its entry is proposed. Its citation names an **opened evidence row** (§17), not free
+      text: record the source on card 01c of the tenant's own account, about its publisher, open it, then name that
+      row in the lever's citation.
 - [ ] **Solutions are linked to the lever** (offerings), each with the steward's basis.
 - [ ] **The attestation roles that will be needed are known.** No role is granted from an unopened source.
 
