@@ -118,6 +118,7 @@ function AddIndustry({ stewardName, isSteward, onAdded }: { stewardName: string 
           <label className="block"><span className={LABEL}>Why it is added</span><textarea rows={2} className={INPUT} value={v.reason} onChange={(e) => setV({ ...v, reason: e.target.value })} /></label>
         </div>}
         canSubmit={unmet.length === 0} unmet={unmet}
+        confirm={<span data-testid="confirm-text">Add the industry {v.name.trim()} ({v.slug.trim()}), because: &ldquo;{v.reason.trim()}&rdquo;. It cannot be deleted.</span>}
         buildBody={() => ({ name: v.name.trim(), slug: v.slug.trim(), reason: v.reason.trim() })}
         submitLabel="Add the industry"
         onSuccess={() => { setV({ name: '', slug: '', reason: '' }); setOpen(false); onAdded(); }}

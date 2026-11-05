@@ -44,7 +44,9 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
     : `This is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
   if (!open) {
     return (
-      <div className="mt-3">
+      <div className="mt-3 border-l-[3px] border-warning pl-3" data-testid="danger-zone">
+        <p className="m-0 mb-1 text-[10px] font-semibold uppercase tracking-[.14em] text-warning">Retirement: takes this entry out of the pack</p>
+        <div className="mt-3">
         <button
           type="button"
           disabled={Boolean(stewardReason)}
@@ -59,6 +61,7 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
           Retire this entry…
         </button>
         {stewardReason && <span className="ml-2 text-[11px] text-ink-45">{stewardReason}</span>}
+      </div>
       </div>
     );
   }
@@ -89,6 +92,7 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
           </label>
         }
         canSubmit={reason.trim().length >= 12}
+        confirm={<span data-testid="confirm-text">Retire {measure.name} ({measure.id.slice(0, 8)}) from this pack, with this reason: &ldquo;{reason.trim()}&rdquo;. Final: it returns only by a new accepted research result.</span>}
         buildBody={() => ({ retirement_reason: reason })}
         submitLabel="Retire"
         onSuccess={onRetired}

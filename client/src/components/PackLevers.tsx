@@ -47,11 +47,12 @@ function withdrawnLine(w: Withdrawal): string {
 }
 
 /** "Withdraw…" for a lever or a link: a reason (≥ 12), the steward's act. */
-function Withdraw({ path, what, act, label, onChanged }: { path: string; what: string; act: string; label: string; onChanged: () => void }) {
+function Withdraw({ path, what, id, act, label, onChanged }: { path: string; what: string; id: string; act: string; label: string; onChanged: () => void }) {
   const reason = useStewardReason(act);
   const [open, setOpen] = useState(false);
   const [why, setWhy] = useState('');
-  if (!open) return <div className="mt-1.5"><Opener label={label} reason={reason} onOpen={() => setOpen(true)} /></div>;
+  // Steward safety (Brad, 5 Nov 2026): a withdrawal sits in its own marked zone.
+  if (!open) return <div className="mt-1.5 border-l-[3px] border-warning pl-2" data-testid="danger-zone"><Opener label={label} reason={reason} onOpen={() => setOpen(true)} /></div>;
   return (
     <div className="mt-2 border-t border-rule-soft pt-2" data-testid="withdraw">
       <GovernedForm<Record<string, unknown>>
@@ -61,6 +62,7 @@ function Withdraw({ path, what, act, label, onChanged }: { path: string; what: s
         fields={<label className="block"><span className={LABEL_CLASS}>Why it is withdrawn (required)</span>
           <textarea rows={2} className={INPUT_CLASS} value={why} onChange={(e) => setWhy(e.target.value)} /></label>}
         canSubmit={why.trim().length >= 12}
+        confirm={<span data-testid="confirm-text">Withdraw {what} ({id.slice(0, 8)}), with this reason: &ldquo;{why.trim()}&rdquo;. It stays on the record, marked.</span>}
         buildBody={() => ({ retirement_reason: why })}
         submitLabel="Withdraw" onSuccess={() => { setOpen(false); setWhy(''); onChanged(); }} renderSuccess={() => <>Withdrawn.</>} />
     </div>
@@ -93,6 +95,7 @@ function LinkSolution({ lever, offerings, onChanged }: { lever: ValueLever; offe
             <textarea rows={2} className={INPUT_CLASS} value={basis} onChange={(e) => setBasis(e.target.value)} /></label>
         </div>}
         canSubmit={!!key && basis.trim().length >= 12}
+        confirm={<span data-testid="confirm-text">Link {chosen?.name ?? key} to the lever &ldquo;{lever.name}&rdquo; ({lever.id.slice(0, 8)}), because: &ldquo;{basis.trim()}&rdquo;.</span>}
         buildBody={() => ({ offering_key: key, basis })}
         submitLabel="Link the solution" onSuccess={() => { setOpen(false); setKey(''); setBasis(''); onChanged(); }} renderSuccess={() => <>Linked.</>} />
     </div>
@@ -117,6 +120,7 @@ function AddLever({ measure, onChanged }: { measure: IndustryMeasure; onChanged:
           <label className="block"><span className={LABEL_CLASS}>Citation (required)</span><input className={INPUT_CLASS} value={v.citation} onChange={(e) => setV({ ...v, citation: e.target.value })} /></label>
         </div>}
         canSubmit={v.name.trim() !== '' && v.mechanism.trim().length >= 12 && v.leading_indicator.trim() !== '' && v.citation.trim().length >= 12}
+        confirm={<span data-testid="confirm-text">Propose the lever &ldquo;{v.name.trim()}&rdquo; on {measure.name} ({measure.id.slice(0, 8)}), citing: &ldquo;{v.citation.trim()}&rdquo;. A steward&apos;s proposal reads ratified.</span>}
         buildBody={() => v}
         submitLabel="Propose the lever" onSuccess={() => { setOpen(false); setV({ name: '', mechanism: '', leading_indicator: '', citation: '' }); onChanged(); }} renderSuccess={() => <>Proposed.</>} />
     </div>
@@ -132,7 +136,7 @@ function Solution({ s, leverWithdrawn, onChanged }: { s: LeverSolution; leverWit
       {s.basis}
       {s.withdrawn_at && <p className="m-0 text-[11px] text-ink-45">{withdrawnLine(s)}</p>}
       {!s.withdrawn_at && !leverWithdrawn && (
-        <Withdraw path={`/api/lever-offerings/${s.id}/retire`} what={`the link of "${s.name}" to this lever`}
+        <Withdraw path={`/api/lever-offerings/${s.id}/retire`} id={s.id} what={`the link of "${s.name}" to this lever`}
           act="Withdrawing a solution from a lever" label="Withdraw this solution…" onChanged={onChanged} />
       )}
     </li>
@@ -166,7 +170,7 @@ export function PackLevers({ measure, offerings, onChanged }: { measure: Industr
           {!l.withdrawn_at && (
             <>
               <LinkSolution lever={l} offerings={offerings} onChanged={onChanged} />
-              <Withdraw path={`/api/value-levers/${l.id}/retire`} what={`the lever "${l.name}"`}
+              <Withdraw path={`/api/value-levers/${l.id}/retire`} id={l.id} what={`the lever "${l.name}"`}
                 act="Withdrawing a value lever" label="Withdraw this lever…" onChanged={onChanged} />
             </>
           )}

@@ -103,6 +103,9 @@ if (MODE === 'source') {
   await setField(o, 'Does the source say what this evidence states?', 'true'); await sleep(300);
   await shot('l41_open_source_1280', 1280);
   check(await submitIn(o, 'Record the opening'), 'the opening is submitted');
+  await sleep(400);
+  check(/^Record that you opened [0-9a-f]{8}, /.test(await ev(`${o}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`)), '  ...its confirmation names the row by its short id', await ev(`${o}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`));
+  await confirmIn(o);
   await sleep(500);
   if (await ev(`!!${o}?.querySelector('[data-testid=form-confirm-yes]')`)) await confirmIn(o);
   check(await waitFor(`!!document.querySelector('[data-testid=evidence-opened]')`), '  ...the row shows who opened it');
@@ -289,6 +292,9 @@ if (MODE === 'addindustry') {
   await setField(f, 'Why it is added', 'Verification: a pack is to be researched for it.'); await sleep(300);
   await shot('b1_add_industry_1280', 1280);
   check(await submitIn(f, 'Add the industry'), 'the steward adds it');
+  await sleep(400);
+  check((await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`)).startsWith('Add the industry '), '  ...its confirmation names the industry and its slug');
+  await confirmIn(f);
   await sleep(500);
   if (await ev(`!!${f}?.querySelector('[data-testid=form-confirm-yes]')`)) await confirmIn(f);
   check(await waitFor(`[...document.querySelectorAll('a')].some(a=>a.getAttribute('href')==='/packs/${indSlug}')`), '  ...it is listed, linking to its pack');
@@ -305,8 +311,9 @@ if (MODE === 'cardlinks') {
   for (const [id, from, to] of [[E.TO_BASELINE, 'impact basis', 'baseline'], [E.TO_IMPACT, 'baseline', 'impact_basis']]) {
     const row = `document.querySelector('[data-evidence="${id}"]')`;
     check((await ev(`${row}.querySelector('[data-testid=evidence-short-id]').textContent`)) === id.slice(0, 8), `${id.slice(0, 8)}: its short id is beside its text`);
-    const btn = `[...${row}.querySelectorAll('[data-testid=correct-link-open]')].find(b=>b.textContent.includes(${JSON.stringify(`(${from} of`)}))`;
-    check(await ev(`!!${btn} && !${btn}.disabled`), `  ...it offers "Correct what this link supports (${from} of …)…"`);
+    // Steward safety: the button reads "Correct…", its link named on the line above it.
+    const btn = `${row}.querySelector('[data-testid=evidence-link][data-supports=${JSON.stringify(from.replace(' ', '_'))}] [data-testid=correct-link-open]')`;
+    check(await ev(`!!${btn} && !${btn}.disabled && (${row}.querySelector('[data-testid=evidence-link][data-supports=${JSON.stringify(from.replace(' ', '_'))}] [data-testid=evidence-link-context]')?.textContent ?? '').includes(${JSON.stringify(from)})`), `  ...it offers "Correct…" under "Link: ${from} of …"`);
     await ev(`${btn}.click()`); await sleep(400);
     const f = `${row}.querySelector('[data-testid=correct-link]')`;
     await setField(f, 'What it supports', to);
@@ -332,8 +339,9 @@ if (MODE === 'cardwithdraw') {
   await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`);
   await waitFor(`!!${row}`);
   const btn = `${row}.querySelector('[data-testid=withdraw-link-open]')`;
-  const offered = (await ev(`${btn}?.textContent ?? ''`)).startsWith(`Withdraw this link (${E.WD_FROM} of`) && (await ev(`!!${btn} && !${btn}.disabled`));
-  check(offered, `${E.WD_ID.slice(0, 8)}: it offers "Withdraw this link (${E.WD_FROM} of …)…"`, await ev(`${btn}?.textContent ?? 'none'`));
+  // Steward safety: in the row's marked withdrawals zone, under "Link: … of …".
+  const offered = (await ev(`${row}.querySelector('[data-testid=danger-zone] [data-testid=evidence-link-withdraw]')?.textContent ?? ''`)).includes(`${E.WD_FROM} of`) && (await ev(`!!${btn} && !${btn}.disabled`));
+  check(offered, `${E.WD_ID.slice(0, 8)}: it offers "Withdraw this link…" in the withdrawals zone, under its link`, await ev(`${row}.querySelector('[data-testid=danger-zone]')?.textContent ?? 'none'`));
   if (!offered) { ws.close(); process.exit(1); }
   await ev(`${btn}.click()`); await sleep(400);
   const f = `${row}.querySelector('[data-testid=withdraw-link]')`;
@@ -351,6 +359,56 @@ if (MODE === 'cardwithdraw') {
   await shotOf('b2_card_withdrawn_1280', `[data-evidence="${E.WD_ID}"]`, 1280);
   await shotOf('b2_card_withdrawn_390', `[data-evidence="${E.WD_ID}"]`, 390);
   await viewport(1280);
+}
+
+if (MODE === 'stewardsafety') {
+  // Steward safety (Brad, 5 Nov 2026): card 01c and the pack page. E.EXPECT = current|history|muted (current rows),
+  // read from the record. BREAK names the break this walk runs under, so its FAIL lines are the catch.
+  check(await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`), "the tenant's own card 01c");
+  const [cur, hist, muted] = E.EXPECT.split('|').map(Number);
+  const got = await ev(`(()=>{const c=document.querySelector('[data-testid=evidence-current]');const h=document.querySelector('[data-testid=evidence-history]');
+    return {cur:c?c.querySelectorAll(':scope > [data-testid=account-evidence-row]').length:0, hist:h?h.querySelectorAll('[data-testid=account-evidence-row]').length:0, open:h?h.open:null,
+      label:h?.querySelector('summary')?.textContent??'', supInCur:c?c.querySelectorAll('[data-testid=evidence-superseded]').length:0,
+      muted:c?c.querySelectorAll(':scope > [data-testid=account-evidence-row][data-muted=true]').length:0}})()`);
+  check(got.cur === cur && got.supInCur === 0, `current rows first: the ${cur} current rows, none of them superseded`, JSON.stringify(got));
+  check(got.hist === hist && got.open === false && got.label === `History: ${hist} superseded ${hist === 1 ? 'row' : 'rows'}`, `  ...the ${hist} superseded rows under a collapsed "History"`, JSON.stringify(got));
+  check(got.muted === muted, `  ...${muted} simulated or system-exercise rows muted and labelled`, JSON.stringify(got));
+  const mutedRow = `document.querySelector('[data-testid=evidence-current] > [data-muted=true]')`;
+  if (muted > 0) {
+    check(await ev(`!!${mutedRow}.querySelector('[data-testid=show-actions]') && !${mutedRow}.querySelector('[data-testid=evidence-actions], [data-testid=danger-zone], [data-testid=supersede-open]')`), '  ...a muted row\'s acts wait behind "Show actions"');
+    check(await ev(`/Simulated|System exercise/.test(${mutedRow}.textContent)`), '  ...and it says why it is muted');
+    await ev(`${mutedRow}.querySelector('[data-testid=show-actions]').click()`); await sleep(300);
+    check(await ev(`!!${mutedRow}.querySelector('[data-testid=supersede-open]') && ${mutedRow}.querySelector('[data-testid=show-actions]').textContent === 'Hide actions'`), '  ..."Show actions" shows them');
+  }
+  // A row with a live link: its withdrawal in the marked zone, its correction outside it, each under "Link: … of …".
+  const linked = `[...document.querySelectorAll('[data-testid=evidence-current] > [data-muted=false]')].find(r=>r.querySelector('[data-testid=evidence-link]'))`;
+  check(await ev(`(()=>{const r=${linked};if(!r)return false;const z=r.querySelector('[data-testid=danger-zone]');return !!z && !!z.querySelector('[data-testid=withdraw-link-open]') && !z.querySelector('[data-testid=correct-link-open]') && /Link: .+ of /.test(r.querySelector('[data-testid=evidence-link-context]')?.textContent??'') && r.querySelector('[data-testid=correct-link-open]').textContent.trim()==='Correct…'})()`),
+    'a withdrawal sits in the marked zone, the correction outside it; short labels, the link named on the line above');
+  // Its withdrawal's confirmation names the row and its short id; Back sends nothing.
+  await ev(`${linked}.querySelector('[data-testid=withdraw-link-open]').click()`); await sleep(300);
+  const wf = `${linked}.querySelector('[data-testid=withdraw-link]')`;
+  await setField(wf, 'Why', 'Verification: reading the confirmation only.'); await sleep(200);
+  await submitIn(wf, 'Withdraw the link'); await sleep(300);
+  const ct = await ev(`${wf}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+  check(/^Withdraw [0-9a-f]{8}, “/.test(ct), '  ...its confirmation names the row and its short id', ct);
+  await ev(`${wf}.querySelector('[data-testid=form-confirm-back]').click()`); await sleep(300);
+  check(!(await ev(`(${wf}?.textContent ?? '').includes('Withdrawn.')`)), '  ..."Back" records nothing');
+  // No dead ends: a current row that cannot be opened says why and where to go.
+  check(await ev(`[...document.querySelectorAll('[data-testid=evidence-current] > [data-testid=account-evidence-row]')].filter(r=>(r.dataset.muted==='false' || r.querySelector('[data-testid=show-actions]')?.textContent==='Hide actions') && !r.querySelector('[data-testid=open-source-open]') && !r.querySelector('[data-testid=evidence-opened]')).every(r=>!!r.querySelector('[data-testid=evidence-no-opening]'))`),
+    'no dead ends: every current row that offers no opening says why, and where to go');
+  await shotOf('ss_card01c_1280', '[data-testid=account-evidence]', 1280); await shotOf('ss_card01c_390', '[data-testid=account-evidence]', 390); await viewport(1280);
+  // The pack page: retirement and withdrawals in the marked zone; a proposal's confirmation names the entry's short id.
+  check(await open(`/packs/${E.SLUG}`, `!!document.querySelector('[data-testid=levers]')`), 'the pack page');
+  check(await ev(`(()=>{const z=[...document.querySelectorAll('[data-testid=danger-zone]')];return z.some(x=>/Retire this entry/.test(x.textContent)) && z.some(x=>/Withdraw this lever/.test(x.textContent))})()`), '  ..."Retire this entry…" and "Withdraw this lever…" each in a marked zone');
+  const lv = `document.querySelector('[data-testid=levers]')`;
+  await ev(`[...${lv}.querySelectorAll('button')].find(b=>b.textContent.includes('Add a lever'))?.click()`); await sleep(300);
+  const af = `${lv}.querySelector('[data-testid=add-lever]')`;
+  for (const [l, v] of [['Lever name', 'Verification lever (not recorded)'], ['Mechanism', 'Verification: a mechanism sentence, long enough.'], ['Leading indicator', 'Verification indicator'], ['Citation', 'Verification citation, not a source.']]) await setField(af, l, v);
+  await sleep(200); await submitIn(af, 'Propose the lever'); await sleep(300);
+  const lt = await ev(`${af}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+  check(/^Propose the lever “Verification lever \(not recorded\)” on .+ \([0-9a-f]{8}\), citing: /.test(lt), '  ...a proposal\'s confirmation names the entry and its short id', lt);
+  await ev(`${af}.querySelector('[data-testid=form-confirm-back]').click()`); await sleep(200);
+  await shot('ss_pack_1280', 1280);
 }
 
 if (MODE === 'policies') {
