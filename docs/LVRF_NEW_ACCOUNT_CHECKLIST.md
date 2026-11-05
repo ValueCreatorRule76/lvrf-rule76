@@ -47,6 +47,15 @@ the **Packs** page:
   SAIDI's; Net heat rate has the non-capacity SSO note). The correction is a 3.1 steward act (L54); until it ships, read
   those two notes as wrong. Net heat rate also has no lever until a primary source for the operator-controllable share
   is opened.
+- **Attestation roles, known (Brad, 5 Nov 2026).** Known only: **no role is granted until an account's own opened
+  source names the person** who holds it.
+
+  | What is attested | Role | Their system of record |
+  |---|---|---|
+  | TRIR | Director of Safety / EHS | OSHA 300 logs |
+  | Excavation damages | Damage Prevention Manager | damage records, 811 ticket counts |
+  | Monetization rates | Controller, or operations finance | — |
+  | Training share | L&D / Learning Operations lead | LMS export |
 
 ## 1. Create and classify the account
 
