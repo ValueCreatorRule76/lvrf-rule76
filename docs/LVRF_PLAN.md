@@ -3588,7 +3588,7 @@ go. The client's sealed-reading code keeps both payload versions. Scotts' 2 open
 they were opened on 12 Oct with no reading recorded, and the record says so.
 
 
-## 14. Commit, measure and verify in the client (ruled by Brad, 26 Oct 2026; **planned after C3; not built**)
+## 14. Commit, measure and verify in the client (ruled by Brad, 26 Oct 2026; **B4 of `docs/LVRF_3.0_CRITICAL_PATH.md`, plan approved by Brad 5 Nov 2026 with D1–D4 as recommended; Gate B Thu 12 Nov, buffer Wed 11**)
 
 **Prerequisite (Brad, 27 Oct 2026): L47, in the L41 + L42 slice (§13).** A verifier or committer earns credit only
 when customer-side, and a role needs a source. **HOLD: no customer-side role is granted on prod until L47 ships.**
@@ -3618,6 +3618,77 @@ from the near-identical "LTM DRR" and "LTM dollar retention rate" rows:
 **Before M21 prints (Brad, 1 Nov 2026):** the 7,000,000 impact-basis flag on Skillsoft needs a sourced derivation or a figure
 finding. As the guard stands a finding on that account is refused, because it has opened evidence and accepted facts
 (`lvrf_figure_finding_blockers`), so unless that rule changes, the path is a sourced derivation.
+
+### B4: the plan (approved by Brad, 5 Nov 2026)
+
+**Value spine:** `commit`, `measure`, `verify`, and the value case's `model` and `return`. With steward safety (§19),
+built and verified on 5 Nov and merged after B3's Gate C.
+
+| # | Part | Estimate |
+|---|---|---|
+| 1 | Migration 0049 and hardening section 34: `value_outcomes.attribution_method` (`control_group` · `comparison_group` · `trend_adjusted` · `estimate_adjusted` · `contribution_only`; design §3.2) and `value_outcomes.measure_class` (`capability_performance` · `compliance_assurance`; ruling 2), both stated at commit and fixed after it; measuring requires the method and a current actual-evidence link of an admitted basis (D2); an insert-only `outcome_withdrawals` (D3) | ¾ day |
+| 2 | Cost of delay: the class rule replaces B3's placeholder (a `compliance_assurance` class with a `performance` rate refused, its own code and converting question); the case's attribution sentence chosen by the method (only `control_group` may say "attributable to"); the CFO lens shows realized currency only for `control_group` and `comparison_group`, with a source; the $50,000 printed end to end on the fixture | ½ day |
+| 3 | Commit, measure and verify forms on the account's outcome, each confirmation naming the outcome's short id; a committer and a verifier customer-side | 1 day |
+| 4 | "Withdraw this measurement…" and "Withdraw this commitment…", the steward's, in the marked zone (D3) | ¼ day |
+| 5 | A claimed impact with no impact-basis source prints its refusal, never the figure (D4; Brad's stage-8 ruling) | ¼ day |
+| 6 | Gate A: `verify_commit_measure_verify.sh` with its breaks, a NULL-input refusal per new CHECK, the full regression (49 scripts, steward safety's included), equivalence, screens, every printed page; **and the branch-against-main diff of every file any verify script breaks, each byte-identical to its intended version** (Brad's standing guard, 5 Nov 2026) | 1 day |
+
+**Build Fri 6 – Tue 10 Nov; Gate A Tue 10; Gate B Thu 12 Nov, buffer Wed 11; 3.0 ratified about 15 Nov.**
+
+**Decisions (Brad, 5 Nov 2026, yes to all four):**
+- **D1.** Commitments made before B4 (Skillsoft's, Curia's) keep no method or class: the case says "not stated: committed
+  before B4", and cost of delay refuses for them.
+- **D2.** Measuring requires a current actual-evidence link whose basis is system of record, client-stated or published,
+  and not simulated.
+- **D3.** Withdrawing a measurement or a commitment is the steward's act, with a reason; the withdrawn values stay in
+  `outcome_withdrawals`, and the outcome steps back.
+- **D4.** A claimed impact with no impact-basis source prints "A claimed impact is recorded with no source behind it, so
+  it is not shown", never the figure.
+
+**The realized 8,400,000 on f23ee6a8 (Brad's question, 5 Nov 2026).** It belongs to the measurement Act 1 withdraws:
+`value_outcomes_realized_requires_measurement` lets a realized impact stand only while the outcome is past `claimed`, so
+withdrawing the measurement clears it, and `outcome_withdrawals` keeps it with the actual. No value case prints it
+(B3's case renders no realized impact; nor does the POV). Run 1's internal run page shows it, sealed in run 1 (payload v1,
+the Customer Zero demonstration, 29 Aug), and stays as it is. B4 prints a realized currency only under `control_group`
+or `comparison_group`, with a source.
+
+**Gate A breaks, each caught (with the plan's own):** a commit without the method or the class; the method or class
+changed after commit; a measurement on simulated or inferred evidence only; a compliance class priced at a performance
+rate computed; causal language under any method but `control_group`; realized currency shown under trend, estimate or
+contribution; a withdrawal that loses the withdrawn values; **an unsourced claimed impact printed as a figure** (B3 printed
+"a vendor claim of $7,000,000 is on record"; Brad, 5 Nov 2026); run 1's case printing 8,400,000.
+
+### B4: the act session (after B4's deploy; rule 10)
+
+On Skillsoft's account, outcome **f23ee6a8**, Dollar Retention Rate (trailing twelve months). The forms are built to these
+confirmations; Gate A compares them word for word.
+
+1. **"Withdraw this measurement…"** (the marked zone). Why: `The actual of 100.4% rests only on simulated rows 2c10e091
+   and eea43d9a; Skillsoft has not reported Q2 FY2027, so the figure does not exist. Withdrawn so no case prints it.`
+   Confirmation: "Withdraw the measurement of f23ee6a8, Dollar Retention Rate (trailing twelve months): actual 100.4 %,
+   measured 2026-07-31, realized 8,400,000 USD. The outcome reads committed again; the withdrawn values stay on the
+   record."
+2. **"Withdraw this commitment…"**. Why: `The target of 100% was committed by [SIM] Customer Sponsor, a simulated person; no
+   named person at Skillsoft has committed to a target.` Confirmation: "Withdraw the commitment of f23ee6a8, Dollar
+   Retention Rate (trailing twelve months): target 100 %, committed by [SIM] Customer Sponsor. The outcome reads claimed;
+   the withdrawn values stay on the record."
+3. **Card 01c, `2c10e091`** ("Show actions", then "Withdraw this link…" under "Link: the actual of Dollar Retention Rate
+   (trailing twelve months)"). Why: `A simulated assessment, not Skillsoft's dollar retention; the measurement it supported
+   is withdrawn.`
+4. **Card 01c, `eea43d9a`**, the same way. Why: `A simulated export of a figure Skillsoft has not reported; the measurement it
+   supported is withdrawn.`
+5. **W7, "Produce".** Banner `OUTSIDE-IN HYPOTHESIS`; Note `Skillsoft's own case as it stands: the published DRR baseline of
+   98%, no committed target, no measured actual.`; Run source label `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun
+   2026)`.
+6. **W8, lock.** Lock reason `Skillsoft's own case as it stands, locked as the record its value case and its print are
+   read from.`
+7. **The case under the CFO lens; Print** (the print request is recorded); save the PDF to
+   `~/lvrf-backups/l41-screens/skillsoft_case_cfo.pdf`, chmod 600. Expected: both banners and the full hash on every page;
+   baseline 98 % (published); no target; no actual; cost of delay refused (no committed target, no rate, no class); the
+   CFO lens refusing (below 55, no actual); six asks with converting questions; the claimed impact refused, not printed.
+8. **The stage-10 independent check** before any share: a subagent reads the PDF and prod read-only, records nothing, and
+   reports pass or fail for every figure and footnote against the sealed payload, both banners on every page, the hash
+   against `payload_hash`, and no short id.
 
 ## 15. C3b: the definition factor under the C3 rule; an "unsourced figure" erratum; one errata batch (ruled by Brad, 27 Oct 2026; **approved with D1–D6 as recommended and five conditions; built; deployed at `b410b30`; Gate C clean 1 Nov 2026 (UTC), BUILD_STATUS**)
 
