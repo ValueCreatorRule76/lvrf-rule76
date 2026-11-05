@@ -4146,5 +4146,11 @@ the hold with it.
 
 4. **The value case shows pack entries as they stand, without reviewer notes** (Brad, 5 Nov 2026). A reviewer's note is
    an internal review caveat; it stays on the pack page.
+5. **Recommended solutioning reads only links on current levers** (Brad, 5 Nov 2026). A link under a withdrawn lever
+   never appears on a case, even though the link itself still reads current (a withdrawn lever keeps its links and
+   takes no new ones). The first case is `27465fb3` (Compliance Suite, its basis citing Burke et al. 2006, never
+   recorded) under `d58a08c5`, withdrawn 5 Nov; only `26e9bd8c` under its successor `80dd10de` may show. **B3's Gate A
+   carries a break for it:** the current-lever condition removed from the solutioning read must be caught, on a fixture
+   with a withdrawn lever holding a current link beside its successor's.
 
 **Checked (4 Nov 2026):** nothing in the CFO lens, the refusal page or cost of delay requires a ratified entry.
