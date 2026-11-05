@@ -4249,10 +4249,12 @@ lens ratified", and the CFO lens refuses. Nothing falls back to a default.
    cost of delay can give has a question (break: one removed, caught). This is a question per *reason*; the design's
    per-lever converting question belongs to the Pack Contract (P4a, 3.1).
 2. **Outcomes ordered floor-first, best-evidenced first** ("the case must not depend on its weakest evidence"). The
-   order key is each item's floor, its weakest sealed basis (design §3.1's rank), strongest floor first. **In 3.0 a run
-   seals one outcome**, so the order applies to the hypotheses and their solutioning within the case; across outcomes it
-   applies once a case carries more than one. Gate A: a fixture whose weaker-floored hypothesis was stated first renders
-   second (break: the sort removed, caught).
+   order key is each outcome's floor, the weakest sealed basis among its figures (design §3.1's rank), strongest floor
+   first. **In 3.0 a run seals one outcome, and its hypotheses share that outcome's figures, so they share one floor:**
+   the order has nothing to reorder within a 3.0 case and starts to matter once a case carries more than one outcome.
+   It is built now as the one ordering function the outcomes table uses (`floorFirst`, `server/routes/valueCase.ts`).
+   Gate A tests it on two outcome rows given weakest first (break: the sort removed, caught). *(Corrected 5 Nov 2026:
+   an earlier line here said hypotheses within a case would be reordered by floor; they cannot be, as they share it.)*
 
 3. **The printed case is M21, so it is built readable** (Brad's UX message, 5 Nov 2026, item 1):
    - **an executive page first:** the hypothesis; the money at stake, or the refusal; cost of delay; the three asks;
