@@ -84,6 +84,10 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
       banners, the marker, every figure and its basis.
 - [ ] **Any flagged figure** on a page the prospect will see is resolved before printing: a sourced derivation, or a
       finding where the guard allows one.
+- [ ] **If no source supports a flagged figure, withdraw its link** (Brad, 4 Nov 2026), so the case prints the refusal
+      for that figure instead of a figure nothing supports. "Withdraw a link…" is on the run page. For an outcome whose
+      runs predate the link to it, there is no screen for this until B2 adds "Withdraw this link…" to card 01c. The
+      first case is Skillsoft's 7,000,000 impact basis: the guidance row is linked to it and does not state it.
 
 ## 9. The value case *(B3: P6)*
 
