@@ -27,14 +27,21 @@ the **Packs** page:
 - [ ] **Solutions are linked to the lever** (offerings), each with the steward's basis.
 - [ ] **The attestation roles that will be needed are known.** No role is granted from an unopened source.
 
-**Utilities, stage 0 as it stands (Brad, 5 Nov 2026):**
+**Utilities: stage 0 complete for M21 (Brad, 5 Nov 2026).**
 
-| Entry | Lever | Cites (opened Yes, on the tenant's card 01c) | M21 |
-|---|---|---|---|
-| TRIR (`792c9a8d`) | `1b41c5cf` Hazard recognition and control training for field crews | `532f51fa`, OSHA 3885 (Oct 2016), printed page 26 (PDF page 30), Action item 4 | **Ready** |
-| Excavation damages per 1,000 locate requests (`ba412de0`) | `9b3673be` Locator accuracy and qualification | `ce9b1a09`, CGA 2025 DIRT Data Summary & Trends, page 13, ranks 3 and 4 | **Ready** |
-| CAIDI (`dda6e919`) | none | — | **Not used** |
-| Net heat rate (`51c360c9`) | none | — | **Not used** |
+| Entry | Lever | Cites (opened Yes, on the tenant's card 01c) | Solution linked | M21 |
+|---|---|---|---|---|
+| TRIR (`792c9a8d`) | `1b41c5cf` Hazard recognition and control training for field crews | `532f51fa`, OSHA 3885 (Oct 2016), printed page 26 (PDF page 30), Action item 4 | Skillsoft Compliance Suite (link `6d4e9da0`) | **Ready** |
+| Excavation damages per 1,000 locate requests (`ba412de0`) | `9b3673be` Locator accuracy and qualification | `ce9b1a09`, CGA 2025 DIRT Data Summary & Trends, page 13, ranks 3 and 4 | **none** (no catalog offering) | **Ready** |
+| CAIDI (`dda6e919`) | none | — | — | **Not used** |
+| Net heat rate (`51c360c9`) | none | — | — | **Not used** |
+
+- **The Compliance Suite link** (Brad, 08:23 ET, one `link` act). Its basis: "Its EHS and workplace safety training is the
+  delivery for this lever's hazard-recognition training; the catalog lists EHS and workplace safety in its scope. Which
+  courses cover hazard recognition and control is to be confirmed for each account."
+- **The excavation lever has no catalog offering.** Nothing in the catalog covers utility locating, 811 practice or
+  locator qualification, and LX Design Studio is not linked as custom authoring. The value case's recommended solutioning
+  shows none for it. **To raise with Skillsoft:** locator and 811 content, possibly through the Content Marketplace.
 
 - **Both quotes were checked by Brad against the downloaded documents:** OSHA 3885 through the PDF's text layer, and the
   CGA table on page 13, confirmed by eye as well. The OSHA URL opens in a browser; an automated fetch gets a bot check
