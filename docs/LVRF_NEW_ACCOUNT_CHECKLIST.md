@@ -27,9 +27,26 @@ the **Packs** page:
 - [ ] **Solutions are linked to the lever** (offerings), each with the steward's basis.
 - [ ] **The attestation roles that will be needed are known.** No role is granted from an unopened source.
 
-**Utilities (Brad, 5 Nov 2026):** two entries carry another entry's reviewer note on the pack page: **CAIDI (`dda6e919`)**
-has SAIDI's, and **Net heat rate (`51c360c9`)** has the non-capacity SSO note. **Neither is used for M21.** The note
-correction is a 3.1 steward act (L54); until it ships, read those two notes as wrong.
+**Utilities, stage 0 as it stands (Brad, 5 Nov 2026):**
+
+| Entry | Lever | Cites (opened Yes, on the tenant's card 01c) | M21 |
+|---|---|---|---|
+| TRIR (`792c9a8d`) | `1b41c5cf` Hazard recognition and control training for field crews | `532f51fa`, OSHA 3885 (Oct 2016), printed page 26 (PDF page 30), Action item 4 | **Ready** |
+| Excavation damages per 1,000 locate requests (`ba412de0`) | `9b3673be` Locator accuracy and qualification | `ce9b1a09`, CGA 2025 DIRT Data Summary & Trends, page 13, ranks 3 and 4 | **Ready** |
+| CAIDI (`dda6e919`) | none | — | **Not used** |
+| Net heat rate (`51c360c9`) | none | — | **Not used** |
+
+- **Both quotes were checked by Brad against the downloaded documents:** OSHA 3885 through the PDF's text layer, and the
+  CGA table on page 13, confirmed by eye as well. The OSHA URL opens in a browser; an automated fetch gets a bot check
+  (403). `ce9b1a09` carries no URL, by Brad's choice; its citation names the document and page.
+- **The first two levers, `4a864995` and `f3726d60`, are retired.** Both were ratified before their sources were
+  recorded and opened, and their citations named no row. The rows they rested on, `36854f20` (instructions in its quote
+  field) and `d07d8a84` (an instruction for its citation, figures from a trade-press summary), are superseded by
+  `532f51fa` and `ce9b1a09`.
+- **Why CAIDI and Net heat rate are not used:** each carries another entry's reviewer note on the pack page (CAIDI has
+  SAIDI's; Net heat rate has the non-capacity SSO note). The correction is a 3.1 steward act (L54); until it ships, read
+  those two notes as wrong. Net heat rate also has no lever until a primary source for the operator-controllable share
+  is opened.
 
 ## 1. Create and classify the account
 
