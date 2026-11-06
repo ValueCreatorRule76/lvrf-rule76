@@ -58,6 +58,9 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/policies/values': 'steward',
   'POST /api/policies/lenses': 'steward',
   'POST /api/value-runs/:runId/share-for-review': 'steward',
+  // B4 (§14, D3)
+  'POST /api/value-outcomes/:outcomeId/measurement/withdraw': 'steward',
+  'POST /api/value-outcomes/:outcomeId/commitment/withdraw': 'steward',
   'POST /api/value-outcomes/:outcomeId/monetization-rates': 'authorized',
   'POST /api/engagements/:engagementId/milestones': 'authorized',
   'POST /api/roadmap-milestones/:id/supersede': 'authorized',
@@ -139,6 +142,8 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/policies/values': 'Setting a policy value',
   'POST /api/policies/lenses': 'Ratifying a lens policy',
   'POST /api/value-runs/:runId/share-for-review': 'Sharing a run for review as an outside-in hypothesis',
+  'POST /api/value-outcomes/:outcomeId/measurement/withdraw': 'Withdrawing a measurement',
+  'POST /api/value-outcomes/:outcomeId/commitment/withdraw': 'Withdrawing a commitment',
 };
 
 /** The actor's tenant's steward: { id, full_name }, or null if none is named. */

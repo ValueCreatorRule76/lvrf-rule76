@@ -32,6 +32,7 @@ import { industryExclusionsRouter } from './routes/industryExclusions.js';
 import { industryAddRouter } from './routes/industryAdd.js';
 import { policiesRouter, monetizationRatesRouter, milestonesRouter, milestoneChangeRouter, caseRecordsRouter } from './routes/valueCaseInputs.js';
 import { valueCaseRouter } from './routes/valueCase.js';
+import { outcomeWithdrawalsRouter, outcomeSpineRouter } from './routes/outcomeWithdrawals.js';
 import { institutionsIndexRouter } from './routes/institutionsIndex.js';
 import { offeringAttachmentRouter } from './routes/offeringAttachment.js';
 import { institutionClassifyRouter } from './routes/institutionClassify.js';
@@ -157,6 +158,9 @@ app.use('/api/engagements', milestonesRouter(pool));
 app.use('/api/roadmap-milestones', milestoneChangeRouter(pool));
 app.use('/api/value-runs', caseRecordsRouter(pool));
 app.use('/api/value-runs', valueCaseRouter(pool));
+// B4 (§14, D3): withdrawing a measurement or a commitment.
+app.use('/api/value-outcomes', outcomeWithdrawalsRouter(pool));
+app.use('/api/institutions', outcomeSpineRouter(pool));
 app.use('/api/industries', industryResearchRouter(pool));
 app.use('/api/industries', industryPackRouter(pool));
 app.use('/api/industries', industryExclusionsRouter(pool));

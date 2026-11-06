@@ -209,7 +209,10 @@ sqlrefused "un-withdraw H3" "UPDATE value_hypotheses SET deleted_at = NULL, stat
 step "6. The verdict: computed, never decided (O2-D1)"
 expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O2" "$L")" 201 "X states H2 on outcome two, due today" "" "$X"; H2="$(rj b.value_hypothesis_id)"
 expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O5" "$L")" 201 "X states H5 on outcome five, due today" "" "$X"; H5="$(rj b.value_hypothesis_id)"
-measure() {  # OUTCOME ACTUAL
+measure() {  # OUTCOME ACTUAL — B4 (§14): committed first, with its method, unless it already is
+  if [ "$(q "SELECT committed_at IS NULL FROM value_outcomes WHERE id = '$1'")" = "t" ]; then
+    req POST "/api/value-outcomes/$1/commit" "{\"target_value\":1.0,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"${TODAY}T11:00:00Z\",\"commitment_note\":\"Verification: committed before measuring.\",\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\"}"; [ "$CODE" = "201" ] || bad "commit $1: $CODE $(said)"
+  fi
   req POST "/api/value-outcomes/$1/evidence" "$(EVB system_export "TRIR extract (fixture)" actual)"; [ "$CODE" = "201" ] || bad "actual evidence $1: $CODE $(said)"
   req POST "/api/value-outcomes/$1/measure" "{\"actual_value\":$2,\"actual_measured_at\":\"${TODAY}T12:00:00Z\"}"; [ "$CODE" = "200" ] || bad "measure $1: $CODE $(said)"
 }

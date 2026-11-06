@@ -117,6 +117,10 @@ export const PLAIN_CHECK: Record<string, string> = {
   value_outcomes_verified_requires_human: 'A verified outcome names its verifier, when, and its verified source.',
   value_runs_confidence_range: "A run's confidence runs from 0 to 100.",
   value_runs_lock_is_complete: 'Locking a run records who locked it and why, together.',
+  // B4 (§14, 0049).
+  outcome_withdrawals_kind_known: 'A withdrawal is of a measurement or a commitment.',
+  outcome_withdrawals_reason_stated: 'Withdrawing says why, in at least 12 characters.',
+  outcome_withdrawals_values_kept: 'A withdrawal keeps the values it withdraws.',
   // B3 (§19, 0048).
   lens_policies_bases_known: 'A lens admits at least one basis, each one of system of record, published, client-stated, inferred or assumed.',
   lens_policies_persona_known: 'In 3.0 the only lens policy is the CFO lens.',

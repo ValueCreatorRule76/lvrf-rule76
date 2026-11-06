@@ -955,6 +955,11 @@ export const reflectionEvidence = pgTable('reflection_evidence', {
  * the cross-Chapel contract, and Compass should be derived from these two tables
  * rather than declared ahead of them.
  */
+/** B4 (design §3.2): the attribution methods; only control_group may use causal language. */
+export const attributionMethod = pgEnum('attribution_method', ['control_group', 'comparison_group', 'trend_adjusted', 'estimate_adjusted', 'contribution_only']);
+/** B4 (design §3.4, ruling 2): performance value, or avoided risk and licence to operate. Never summed together. */
+export const measureClass = pgEnum('measure_class', ['capability_performance', 'compliance_assurance']);
+
 export const valueOutcomes = pgTable('value_outcomes', {
   id: id(),
   engagementId: uuid('engagement_id').notNull().references(() => engagements.id, { onDelete: 'restrict' }),
@@ -974,6 +979,13 @@ export const valueOutcomes = pgTable('value_outcomes', {
   /** The commit stage: the customer agreed this target is the right one. */
   committedByPersonId: uuid('committed_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
   committedAt: timestamp('committed_at', { withTimezone: true }),
+  /**
+   * B4 (0049; LVRF_PLAN §14, design §3.2): how much of a movement the learning may claim, stated at commit and fixed after
+   * it (hardening §34). Null on a commitment made before B4 (D1): the case says "not stated: committed before B4".
+   */
+  attributionMethod: attributionMethod('attribution_method'),
+  /** B4 (ruling 2): what kind of value the outcome is, stated at commit beside the method. Never read from a rate. */
+  measureClass: measureClass('measure_class'),
 
   actualValue: numeric('actual_value', { precision: 18, scale: 4 }),
   actualMeasuredAt: timestamp('actual_measured_at', { withTimezone: true }),
@@ -2511,6 +2523,26 @@ export const lensPolicies = pgTable('lens_policies', {
     sql`array_position(${t.suppresses}, NULL) IS NULL AND ${t.suppresses} <@ ARRAY['consumption']::text[]`),
   check('lens_policies_refusal_stated', sql`char_length(btrim(${t.refusalText})) >= 24`),
   check('lens_policies_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
+]);
+
+/**
+ * B4 (0049; D3, Brad 5 Nov 2026). A measurement or a commitment withdrawn by the steward, with a reason: insert-only. The
+ * values withdrawn are kept here, exactly as they stood, so stepping the outcome back loses nothing from the record.
+ */
+export const outcomeWithdrawals = pgTable('outcome_withdrawals', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  valueOutcomeId: uuid('value_outcome_id').notNull().references(() => valueOutcomes.id, { onDelete: 'restrict' }),
+  kind: text('kind').notNull(),
+  withdrawnValues: jsonb('withdrawn_values').notNull(),
+  reason: text('reason').notNull(),
+  withdrawnByPersonId: uuid('withdrawn_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('outcome_withdrawals_outcome_idx').on(t.valueOutcomeId),
+  check('outcome_withdrawals_kind_known', sql`${t.kind} IN ('measurement', 'commitment')`),
+  check('outcome_withdrawals_values_kept', sql`jsonb_typeof(${t.withdrawnValues}) = 'object' AND ${t.withdrawnValues} <> '{}'::jsonb`),
+  check('outcome_withdrawals_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
 ]);
 
 /** B3: what a client's monetization rate prices. Not the measure class (B4, ruling 2): neither is read from the other. */

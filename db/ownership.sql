@@ -163,7 +163,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO lvrf_app;
 -- check_schema_drift.mjs, and Gate C read it as lvrf_app.)
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO lvrf_app;
 
--- INSERT on the 42 tables the code inserts into; UPDATE on the 22 it updates
+-- INSERT on the 43 tables the code inserts into; UPDATE on the 22 it updates
 -- (C1: value_outcome_evidence for the withdrawal only; its guard refuses any other UPDATE;
 -- C3: customer_role_grants for the revocation only, likewise).
 -- audit_log is written by lvrf_audit() (SECURITY DEFINER, so as its owner);
@@ -186,7 +186,9 @@ BEGIN
     'research_results', 'run_errata', 'sessions', 'system_exercise_marks', 'value_hypotheses', 'value_levers',
     'value_outcome_evidence', 'value_outcomes', 'value_runs',
     -- B3 (§19, 0048): insert-only, so INSERT and never UPDATE.
-    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones']
+    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones',
+    -- B4 (§14, 0049): insert-only.
+    'outcome_withdrawals']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT INSERT ON public.%I TO lvrf_app', t);

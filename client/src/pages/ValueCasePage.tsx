@@ -21,11 +21,13 @@ import { num, money } from '../lib/caseFormat';
  * reference example says so, and never reads through the CFO lens (O-D3). Nothing on the page is computed here: the
  * figures are the seal's, and cost of delay is the database's (lvrf_cost_of_delay), sealed at produce.
  */
-interface Source { kind: string; summary: string; provenance: string | null; source_reference: string | null; supports: string; basis: string | null }
+interface Source { kind: string; summary: string; provenance: string | null; source_reference: string | null; supports: string; basis: string | null;
+  figure_check?: { result: string; detail: string } | null }
 interface Ask { code: string; need: string; question: string }
 interface Hypothesis {
   id: string; statement: string; verdict: string; author: string | null; stated_on: string; superseded_by: string | null; withdrawn: boolean;
   falsifier: { reference: string; value: string | null; recorded_on: string | null; due: string | null; conditions: string | null };
+  falsifier_text: string | null;
   lever: { name: string; mechanism: string; leading_indicator: string; withdrawn: boolean } | null;
 }
 interface CostOfDelay {
@@ -39,14 +41,16 @@ interface Milestone { id: string; title: string; due_on: string; owner: string |
 interface Outcome {
   value_outcome_id: string | null; metric: string; unit: string | null; direction: string | null; baseline: number | null; target: number | null; actual: number | null;
   realization: string | null; claimed_currency_impact: number | null; currency: string | null; committer: string | null; verifier: string | null;
-  sources: { baseline: Source | null; actual: Source | null; impact_basis: Source | null }; floor: string | null;
+  committer_customer_side: boolean | null; committer_side_reason: string | null;
+  sources: { baseline: Source | null; actual: Source | null; impact_basis: Source | null; target_commitment: Source | null }; floor: string | null;
+  attribution: { method: string | null; class: string | null } | null; realized_currency_impact?: number | null;
 }
 interface Summary { lens: string; body: string; author: string; version: number; drafted_with_ai: boolean; drafting_tool: string | null; written_on: string }
 interface ValueCase {
   run: { id: string; run_number: number; locked_at: string | null; locked_by: string | null; payload_hash: string; payload_version: number; score: number; band: string; system_exercise: unknown };
   engagement: { id: string; name: string; retired: boolean };
   account: { id: string; name: string; is_tenant_self: boolean };
-  lens: 'cfo' | 'general'; banners: { outside_in: boolean; unverified: boolean } | null; marker: { kind: MarkerKind } | null;
+  lens: 'cfo' | 'general'; banners: { outside_in: boolean; unverified: boolean; not_shown?: { summary: string; why: string }[] } | null; marker: { kind: MarkerKind } | null;
   case_sealed: boolean; v5: boolean; hypotheses: Hypothesis[]; summaries: Summary[];
   pack_entry: { name: string; status: string; version: number; sourced_at: number; threshold: number | null } | null;
   outcomes: Outcome[]; cost_of_delay: CostOfDelay | null; roadmap: { promised_measured_on: string | null; milestones: Milestone[] } | null;
@@ -90,8 +94,25 @@ function makeFootnotes() {
   return { notes, cite };
 }
 
+// B4 (stage-10 rehearsal, item 1): a figure check that flags the figure is said in the footnote, never hidden.
 const sourceNote = (label: string, s: Source | null) =>
-  s ? `${label}: ${basisWords(s.basis)}. ${s.summary}${s.provenance ? ` (${s.provenance})` : ''}.` : `${label}: no source is sealed with this run.`;
+  s ? `${label}: ${basisWords(s.basis)}. ${s.summary}${s.provenance ? ` (${s.provenance})` : ''}.${s.figure_check?.result === 'flag' ? ` The quoted source does not state this figure (figure check: ${s.figure_check.detail}).` : ''}`
+    : `${label}: no source is sealed with this run.`;
+// B4 (item 2): the target's footnote, with its basis and whether the committer is customer-side as the record reads it.
+const targetNote = (o: Outcome) => `Target: committed by ${o.committer ?? 'no one on record'}${o.committer_customer_side === true ? ', customer-side'
+  : o.committer_customer_side === false ? `, whom the record does not find customer-side (${o.committer_side_reason ?? 'no reason recorded'})` : ''}.${o.sources.target_commitment
+  ? ` Its record: ${basisWords(o.sources.target_commitment.basis)}. ${o.sources.target_commitment.summary}.` : ' No evidence of the commitment is sealed with this run.'}`;
+/** B4 (design §3.2): what the case may say of a movement, by the method fixed at commit. Only control_group is causal. */
+const ATTRIBUTION: Record<string, string> = {
+  control_group: 'Attribution: a control group. A measured change may be called attributable to the learning, with the difference-in-differences shown.',
+  comparison_group: 'Attribution: a comparison group, not randomised. A measured change is associated with the learning, never said to be caused by it.',
+  trend_adjusted: 'Attribution: trend-adjusted. A measured change is reported only beyond the prior trend.',
+  estimate_adjusted: 'Attribution: participant or manager estimates, adjusted. A measured change is an estimated contribution.',
+  contribution_only: 'Attribution: none claimed. The outcome may move; no share of it is claimed for the learning.',
+};
+const attributionLine = (o: Outcome) => !o.attribution ? null
+  : o.attribution.method ? ATTRIBUTION[o.attribution.method] ?? o.attribution.method
+  : o.target !== null ? 'Attribution: not stated (committed before B4).' : null;
 
 function Section({ title, children, testid }: { title: string; children: ReactNode; testid?: string }) {
   return (
@@ -211,6 +232,10 @@ export function ValueCasePage() {
             <section className="mb-8 break-after-page" data-testid="executive-page">
               <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Value case · {d.lens === 'cfo' ? 'CFO lens' : 'general'}</span>
               <h1 className="m-0 my-1.5 font-display text-[32px] leading-[1.02] tracking-[.012em]">{d.account.name}</h1>
+              {(d.banners?.not_shown?.length ?? 0) > 0 && (
+                <p className="m-0 mb-1 text-[12px] text-ink-70" data-testid="not-shown">{d.banners!.not_shown!.length === 1
+                  ? `One customer-side item is on record but not shown: ${d.banners!.not_shown![0].summary}, ${d.banners!.not_shown![0].why}.`
+                  : `${d.banners!.not_shown!.length} customer-side items are on record but not shown: ${d.banners!.not_shown!.map((x) => `${x.summary}, ${x.why}`).join('; ')}.`}</p>)}
               <p className="m-0 text-[12px] text-ink-45">{metric} · run {d.run.run_number}{d.run.locked_at ? `, locked ${d.run.locked_at.slice(0, 10)}${d.run.locked_by ? ` by ${d.run.locked_by}` : ''}` : ', not locked'} · computed confidence {d.run.score} / 100 ({d.run.band})</p>
 
               <h2 className="m-0 mb-1 mt-5 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">The hypothesis</h2>
@@ -222,7 +247,7 @@ export function ValueCasePage() {
               {cfoRefused
                 ? <p className="m-0 text-[13px]" data-testid="exec-refused">This case is refused under the CFO lens, for {d.cfo!.reasons.length === 1 ? 'one reason' : `${d.cfo!.reasons.length} reasons`} set out under “What we need from you”, each with the question that clears it. What would meet it is below.</p>
                 : <p className="m-0 text-[13px]" data-testid="exec-money">{codLine()}</p>}
-              {o && <p className="m-0 mt-1 text-[12.5px] text-ink-70" data-testid="exec-baseline">Baseline {baselineText ?? 'not recorded'}{baselineText && cite(sourceNote('Baseline', o.sources.baseline))}; target {o.target !== null ? withUnit(o.target, o.unit) : 'not committed: a hypothesis'}{o.target !== null && o.committer && cite(`Target: committed by ${o.committer}.`)}; actual {o.actual !== null ? withUnit(o.actual, o.unit) : 'not measured'}{o.actual !== null && cite(sourceNote('Actual', o.sources.actual))}.</p>}
+              {o && <p className="m-0 mt-1 text-[12.5px] text-ink-70" data-testid="exec-baseline">Baseline {baselineText ?? 'not recorded'}{baselineText && cite(sourceNote('Baseline', o.sources.baseline))}; target {o.target !== null ? withUnit(o.target, o.unit) : 'not committed: a hypothesis'}{o.target !== null && cite(targetNote(o))}; actual {o.actual !== null ? withUnit(o.actual, o.unit) : 'not measured'}{o.actual !== null && cite(sourceNote('Actual', o.sources.actual))}.</p>}
               {cfoRefused && <p className="m-0 mt-1 text-[12.5px] text-ink-70">{codLine()}</p>}
 
               <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">What we need from you</h2>
@@ -252,7 +277,7 @@ export function ValueCasePage() {
                   <div key={h.id} className="mb-3" data-testid="case-hypothesis">
                     <p className="m-0 text-[13px] font-semibold">{h.statement}</p>
                     {h.lever && <p className="m-0 mt-0.5 text-[12px] text-ink-70">Through: {h.lever.name}{h.lever.withdrawn ? ' (this lever has since been withdrawn)' : ''}. {h.lever.mechanism} Watch first: {h.lever.leading_indicator}.</p>}
-                    <p className="m-0 mt-0.5 text-[12px] text-ink-70">Shown wrong if: {h.falsifier.reference === 'baseline' ? 'against the baseline' : 'against the committed target'}{h.falsifier.value ? ` of ${withUnit(h.falsifier.value, o?.unit ?? null)}` : ''}{h.falsifier.due ? `, by ${h.falsifier.due}` : ''}{h.falsifier.conditions ? `, provided that ${h.falsifier.conditions}` : ''}. Verdict as sealed: {VERDICT[h.verdict] ?? h.verdict}.</p>
+                    <p className="m-0 mt-0.5 text-[12px] text-ink-70" data-testid="falsifier">Shown wrong if: {h.falsifier_text ?? 'no falsifier was sealed'} Verdict as sealed: {VERDICT[h.verdict] ?? h.verdict}.</p>
                     <p className="m-0 mt-0.5 text-[11px] text-ink-45">Stated by {h.author ?? 'no one recorded'} on {h.stated_on}.</p>
                   </div>))}
               </Section>
@@ -266,13 +291,21 @@ export function ValueCasePage() {
                     <tr key={x.value_outcome_id ?? i} className="border-b border-rule-soft align-top" data-testid="outcome-row" data-floor={x.floor ?? ''}>
                       <td className="py-1.5 pr-2">{x.metric}</td>
                       <td className="py-1.5 pr-2">{withUnit(x.baseline, x.unit) ?? 'not recorded'}{x.baseline !== null && cite(sourceNote('Baseline', x.sources.baseline))}</td>
-                      <td className="py-1.5 pr-2">{x.target !== null ? withUnit(x.target, x.unit) : 'no target: a hypothesis'}</td>
+                      <td className="py-1.5 pr-2">{x.target !== null ? <>{withUnit(x.target, x.unit)}{cite(targetNote(x))}</> : 'no target: a hypothesis'}</td>
                       <td className="py-1.5 pr-2">{x.actual !== null ? <>{withUnit(x.actual, x.unit)}{cite(sourceNote('Actual', x.sources.actual))}</> : 'not measured'}</td>
                       <td className="py-1.5">{x.realization ?? 'not sealed'}</td>
                     </tr>))}</tbody>
                 </table>
-                {o?.claimed_currency_impact !== null && o?.claimed_currency_impact !== undefined && (
-                  <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="vendor-claim">A vendor claim of {money(o.claimed_currency_impact, o.currency)} is on record{cite(sourceNote('Vendor claim', o.sources.impact_basis))}. It is shown as a claim and is never applied to the baseline.</p>)}
+                {/* D4 (Brad, 5 Nov 2026): a claimed impact prints only with an impact-basis source sealed; otherwise its refusal. */}
+                {o?.claimed_currency_impact !== null && o?.claimed_currency_impact !== undefined && (o.sources.impact_basis
+                  ? <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="vendor-claim">A vendor claim of {money(o.claimed_currency_impact, o.currency)} is on record{cite(sourceNote('Vendor claim', o.sources.impact_basis))}. It is shown as a claim and is never applied to the baseline.</p>
+                  : <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="claim-refused">A claimed impact is recorded with no source behind it, so it is not shown.</p>)}
+                {o && attributionLine(o) && <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="attribution">{attributionLine(o)}</p>}
+                {/* B4 (design §3.2): a realized impact prints only under a control or comparison group, with an impact-basis source. */}
+                {o?.realized_currency_impact !== null && o?.realized_currency_impact !== undefined && (
+                  (o.attribution?.method === 'control_group' || o.attribution?.method === 'comparison_group') && o.sources.impact_basis
+                    ? <p className="m-0 mt-2 text-[12px] text-ink" data-testid="realized">Realized: {money(o.realized_currency_impact, o.currency)}, {o.attribution.method === 'control_group' ? 'attributable to the learning' : 'associated with the learning'}{cite(sourceNote('Realized impact', o.sources.impact_basis))}.</p>
+                    : <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="realized-withheld">A realized impact is recorded but not shown: {o.attribution?.method ? 'its attribution method claims no causal or comparative share' : 'no attribution method was stated at commit'}{o.sources.impact_basis ? '' : ', and no source supports it'}.</p>)}
                 {d.pack_entry && (
                   <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="pack-entry-label">Pack entry: {d.pack_entry.name}, {d.pack_entry.status}, sourced at {d.pack_entry.sourced_at} of {d.pack_entry.threshold ?? 'an unset number of'} institutions{d.pack_entry.threshold === null ? ' (the pack ratification threshold is not set)' : ''}. No pack is certified yet.</p>)}
               </Section>

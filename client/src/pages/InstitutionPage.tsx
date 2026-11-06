@@ -13,6 +13,7 @@ import { FOCUS_RING } from '../components/GovernedForm';
 import { AccountFactsCard } from '../components/AccountFactsCard';
 import { CustomerRoles } from '../components/CustomerRoles';
 import { AccountEvidence } from '../components/AccountEvidence';
+import { OutcomeSpine } from '../components/OutcomeSpine';
 import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
 import { STEP_TITLES, day, deriveSteps } from '../lib/workspaceStatus';
 import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
@@ -446,6 +447,10 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
               <Card n="01c" title="The account's evidence">
                 <AccountEvidence institutionId={id} />
               </Card>
+              {/* B4 (§14): commit, measure and verify each outcome; the steward's withdrawals. */}
+              <Card n="01d" title="Commit, measure and verify">
+                <OutcomeSpine institutionId={id} />
+              </Card>
               <PackSection pack={view.pack} measuredIds={measuredIds} isTenantSelf={false} />
               <MetricsSection metrics={view.metrics} isTenantSelf={false} />
               <GapSection gap={view.gap} pack={view.pack} />
@@ -572,6 +577,10 @@ export function InstitutionPage() {
       {/* L41: the tenant's own evidence is reachable as an account's is. */}
       <Card n="01c" title="The account's evidence">
         <AccountEvidence institutionId={view.institution.id} />
+      </Card>
+      {/* B4 (§14): the tenant's own outcomes are committed, measured and verified, and withdrawn, as an account's are. */}
+      <Card n="01d" title="Commit, measure and verify">
+        <OutcomeSpine institutionId={view.institution.id} />
       </Card>
       {/* Q4c2: the outside-in walk, below the facts (LVRF_PLAN §4c). */}
       {!view.institution.is_tenant_self && (

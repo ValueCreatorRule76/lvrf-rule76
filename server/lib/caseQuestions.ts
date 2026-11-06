@@ -35,6 +35,14 @@ export const CASE_ASKS: Record<string, CaseAsk> = {
     need: 'A baseline for {metric} from {account}’s system of record.',
     question: 'What did {metric} read over the last full period, from the system that records it?',
   },
+  committer_not_customer_side: {
+    need: 'A target committed by a person at {account} whose role there is named from a source.',
+    question: 'Who at {account} owns {metric}, and would they commit to the target themselves?',
+  },
+  class_rate_mismatch: {
+    need: 'For a compliance measure, the cost of the exposure to {account} (for example its own penalty cost per finding), not a performance rate.',
+    question: 'What has a finding or a breach on {metric} cost {account} before, and who in finance would stand behind that figure?',
+  },
   no_verifier: {
     need: 'A named person at {account} to verify the measured result.',
     question: 'Who at {account} would confirm the result against their own records?',

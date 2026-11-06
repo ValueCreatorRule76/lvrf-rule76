@@ -80,6 +80,9 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/engagements/:engagementId/milestones': ['plan'],
   'POST /api/roadmap-milestones/:id/supersede': ['plan'],
   'POST /api/value-runs/:runId/share-for-review': ['share'],
+  // B4 (§14, D3): the steward withdraws a measurement or a commitment.
+  'POST /api/value-outcomes/:outcomeId/measurement/withdraw': ['withdraw'],
+  'POST /api/value-outcomes/:outcomeId/commitment/withdraw': ['withdraw'],
   // B3 (O4): a print request claims the request only, with its own who and when; no governed transition.
   'POST /api/value-runs/:runId/print-request': 'create-only',
   // Create-only: left out of P2 by name (LVRF_PLAN §10, D3).

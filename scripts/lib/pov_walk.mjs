@@ -156,9 +156,10 @@ if (MODE === 'author') {
   const stageOrders = await ev(`[...document.querySelectorAll('[data-testid=stages] nav')].map(n=>[...n.querySelectorAll('li')].map(l=>l.dataset.stage).join(','))`);
   check(stageOrders.length > 0 && stageOrders.every((o) => o === spine.join(',')), `each engagement's bar shows the seven spine stages, in the enum's order (${spine.join(' → ')})`, JSON.stringify(stageOrders));
   check(await ev(`[...document.querySelectorAll('[data-testid=stages] li[data-state=current]')].some(l=>l.dataset.stage==='verify')`)
-    && await ev(`[...document.querySelectorAll('[data-testid=stages] li[data-stage=commit]')].some(l=>l.dataset.state==='gap')`)
+    && await ev(`[...document.querySelectorAll('[data-testid=stages] li[data-state=current]')].filter(l=>l.dataset.stage==='verify').every(l=>l.parentElement.querySelector('li[data-stage=commit]').dataset.state==='passed')`)
     && await ev(`document.querySelectorAll('[data-testid=stages] li[data-state=done]').length === 0`),
-    'a verified outcome\'s engagement reaches verify; its commit, never recorded, shows as a gap; no stage is ticked done on inference');
+    // B4 (§14): a measurement now needs a commitment stating its method, so the verified outcome's commit is recorded.
+    'a verified outcome\'s engagement reaches verify; its commit, recorded before the measurement (B4), reads passed; no stage is ticked done on inference');
   check(await ev(`document.querySelector('[data-testid=confidence]').textContent.includes('No computed confidence: no locked run.')`), 'confidence: none shown without a locked run (no number from nowhere)');
   const chains = await ev(`[...document.querySelectorAll('[data-testid=chain]')].map(c=>c.querySelectorAll('li').length)`);
   const current = Number(psql(`SELECT count(*) FROM value_hypotheses WHERE institution_id = '${INST}' AND deleted_at IS NULL AND superseded_by_id IS NULL`));

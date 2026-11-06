@@ -101,7 +101,7 @@ frozen() {  # LABEL CODE
 }
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-COMMIT_BODY="{\"target_value\":1,\"committed_by_person_id\":\"$ACTOR\",\"committed_at\":\"$NOW\",\"commitment_note\":\"Verification: frozen-outcome check.\"}"
+COMMIT_BODY="{\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\",\"target_value\":1,\"committed_by_person_id\":\"$ACTOR\",\"committed_at\":\"$NOW\",\"commitment_note\":\"Verification: frozen-outcome check.\"}"
 MEASURE_BODY="{\"actual_value\":1,\"actual_measured_at\":\"$NOW\",\"note\":\"Verification: frozen-outcome check.\"}"
 VERIFY_BODY="{\"verified_by_person_id\":\"$ACTOR\",\"verified_at\":\"$NOW\",\"attestation_note\":\"Verification: frozen-outcome check.\"}"
 EVIDENCE_BODY='{"kind":"observation","summary":"Verification","provenance":"Verification run, not a real source","supports":"baseline","confidence":"low","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}'

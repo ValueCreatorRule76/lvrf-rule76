@@ -115,6 +115,18 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const committedByPersonId = requireUuidString(body, 'committed_by_person_id', 'body');
       const committedAt = requireTimestamp(body, 'committed_at', 'body');
       const commitmentNote = requireString(body, 'commitment_note', 'body');
+      // B4 (LVRF_PLAN §14; design §3.2, ruling 2): the attribution method and the measure class, stated at commit and fixed
+      // after it (hardening §34 holds both). Neither has a default.
+      const attributionMethodIn = requireString(body, 'attribution_method', 'body');
+      const measureClassIn = requireString(body, 'measure_class', 'body');
+      if (!['control_group', 'comparison_group', 'trend_adjusted', 'estimate_adjusted', 'contribution_only'].includes(attributionMethodIn)) {
+        res.status(422).json({ message: 'Choose the attribution method: control group, comparison group, trend-adjusted, estimate-adjusted, or contribution only.' });
+        return;
+      }
+      if (!['capability_performance', 'compliance_assurance'].includes(measureClassIn)) {
+        res.status(422).json({ message: 'Choose the measure class: capability and performance, or compliance and risk.' });
+        return;
+      }
 
       const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
@@ -237,10 +249,10 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const { rows: [updated] } = await client.query<{ committed_at: Date; value_stage: string }>(
         `UPDATE value_outcomes
             SET target_value = $1, committed_by_person_id = $2,
-                committed_at = $3, value_stage = 'commit'
+                committed_at = $3, value_stage = 'commit', attribution_method = $5, measure_class = $6
           WHERE id = $4 AND committed_at IS NULL
           RETURNING committed_at, value_stage`,
-        [targetValue, committedByPersonId, committedAt, outcomeId],
+        [targetValue, committedByPersonId, committedAt, outcomeId, attributionMethodIn, measureClassIn],
       );
       if (!updated) {
         res.status(409).json({

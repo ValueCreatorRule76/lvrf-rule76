@@ -108,8 +108,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 code_at() {  # REF — that commit's produce-run and model, for sealing under its model
   git show "$1:$PRODUCE" > "$PRODUCE"; git show "$1:$MODELF" > "$MODELF"; stop_server; start_server
@@ -173,10 +173,10 @@ CRED0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "204" ] && ok "204 triggers (B3 section 33: +18) (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "320" ] && ok "  ...320 information_schema rows (B3: +32) (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 49 migrations, newest 0048_b3_value_case" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^[0-9]+ CHECKs in the database: [0-9]+ with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 [ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5(e::text), '' ORDER BY id), '') FROM run_errata e")" = "$ERR0" ] && ok "0044 orphans nothing: all ${ERR0%%|*} errata kept, each unchanged" || bad "errata after 0044"
@@ -233,7 +233,7 @@ validate "$MET" "$ANALYST" 214; OV="$O"; METV="$MET"
 # L41: a row verified with no opening cannot be made any more, so V's row is unverified; an opening would block the
 # finding. "verified without the source being opened" is read below from a row of the copy that holds it.
 EVID_VERIFIED=false evid "$OV" system_export 'C3b export attested by the analyst (fixture)' baseline "$ANALYST"; EVV="$EV"
-expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed by the analyst.')" 201 "  ...committed by the analyst"
+expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed by the analyst.' attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by the analyst"
 # The POV shows an outcome's figures and evidence under its hypothesis (C2's fixture shape): a pack entry, its lever, the claim, the basis.
 IND="$(q "SELECT id FROM industries WHERE tenant_id = '$TEN' AND slug = 'manufacturing'")"
 ENTRY="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation) VALUES ('$TEN', '$IND', 'C3b days to productivity entry (fixture) $TS', 'days', 'decrease', 'Fixture definition.', 'w', true, 'r', 'Fixture confounders: cohort mix.', 'Verification fixture, not a source.') RETURNING id" | head -1)"

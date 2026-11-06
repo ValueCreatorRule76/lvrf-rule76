@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 import { askFor } from '../lib/caseQuestions.js';
+import { falsifierSentence } from './valueHypotheses.js';
 
 /**
  * B3 (P6; LVRF_PLAN §19) — GET /api/value-runs/:runId/case?lens=cfo|general: the value case of one run, read from its
@@ -19,7 +20,8 @@ import { askFor } from '../lib/caseQuestions.js';
 const BASIS_RANK: Record<string, number> = { system_of_record: 5, published: 4, client_stated: 3, inferred: 2, assumed: 1 };
 const rank = (b: string | null | undefined) => (b ? BASIS_RANK[b] ?? 0 : 0);
 
-interface SealedEvidence { kind: string; summary: string; provenance: string | null; source_reference: string | null; supports: string; basis: string | null }
+interface SealedEvidence { kind: string; summary: string; provenance: string | null; source_reference: string | null; supports: string; basis: string | null;
+  figure_check?: { result: string; detail: string } | null; simulated?: boolean }
 
 /** The strongest sealed basis behind one support (baseline, actual, impact basis), or null when none is sealed. */
 function bestOf(evidence: SealedEvidence[], supports: string): SealedEvidence | null {
@@ -80,6 +82,7 @@ export function valueCaseRouter(pool: Pool): Router {
       const baseline = bestOf(evidence, 'baseline');
       const actual = bestOf(evidence, 'actual');
       const impact = bestOf(evidence, 'impact_basis');
+      const target = bestOf(evidence, 'target_commitment');
       const cod = version >= 5 ? sealedCase?.cost_of_delay ?? null : null;
 
       // What we need from you: from the sealed record, in spine order. The vendor's own gaps are kept apart.
@@ -88,6 +91,8 @@ export function valueCaseRouter(pool: Pool): Router {
       for (const reason of (cod?.reasons ?? []) as { code: string }[]) codes.push(reason.code);
       if (p.targetValue === null || p.targetValue === undefined) codes.push('no_commitment');
       if (p.actualValue === null || p.actualValue === undefined) codes.push('no_actual');
+      // B4 (stage-10 rehearsal, item 4): a committer the record does not find customer-side is an ask of its own.
+      if (p.targetValue !== null && p.targetValue !== undefined && p.people?.committer && p.people.committer.customer_side === false) codes.push('committer_not_customer_side');
       if (!p.people?.verifier) codes.push('no_verifier');
       const ours = new Set(['no_months', 'no_lens']);
       const unique = [...new Set(codes)];
@@ -121,9 +126,12 @@ export function valueCaseRouter(pool: Pool): Router {
       const outcomes = floorFirst([{
         value_outcome_id: p.valueOutcomeId ?? null, metric, unit, direction: p.businessMetric?.direction ?? null,
         baseline: p.baselineValue ?? null, target: p.targetValue ?? null, actual: p.actualValue ?? null, realization: p.realization ?? null,
-        claimed_currency_impact: p.claimedCurrencyImpact ?? null, currency: p.currencyCode ?? null,
-        committer: p.people?.committer?.name ?? null, verifier: p.people?.verifier?.name ?? null,
-        sources: { baseline, actual, impact_basis: impact }, floor: outcomeFloor,
+        claimed_currency_impact: p.claimedCurrencyImpact ?? null, realized_currency_impact: p.realizedCurrencyImpact ?? null, currency: p.currencyCode ?? null,
+        committer: p.people?.committer?.name ?? null, committer_customer_side: p.people?.committer?.customer_side ?? null,
+        committer_side_reason: p.people?.committer?.reason ?? null, verifier: p.people?.verifier?.name ?? null,
+        sources: { baseline, actual, impact_basis: impact, target_commitment: target }, floor: outcomeFloor,
+        // B4 (§14): the method and class as sealed (v5 runs produced after B4); null before.
+        attribution: sealedCase?.attribution ?? null,
       }]);
 
       res.json({
@@ -133,7 +141,11 @@ export function valueCaseRouter(pool: Pool): Router {
         account: { id: r.institution_id, name: r.account, is_tenant_self: r.is_tenant_self },
         lens, banners: r.banners, marker,
         case_sealed: Boolean(sealedCase), v5: version >= 5,
-        hypotheses: sealedCase?.hypotheses ?? [],
+        // B4 (stage-10 rehearsal, item 3): the falsifier in the POV's sentence, so it says which way.
+        hypotheses: ((sealedCase?.hypotheses ?? []) as Record<string, any>[]).map((h) => ({ ...h,
+          falsifier_text: h.falsifier?.value ? falsifierSentence({ metric_name: metric, unit, direction: (p.businessMetric?.direction ?? 'decrease') as 'increase' | 'decrease',
+            falsifier_reference: h.falsifier.reference, reference_value: String(h.falsifier.value), reference_recorded_on: h.falsifier.recorded_on ?? '',
+            falsifier_due: h.falsifier.due ?? '', falsifier_conditions: h.falsifier.conditions ?? '' }) : null })),
         summaries: sealedCase?.summaries ?? [],
         pack_entry: packEntry,
         outcomes,

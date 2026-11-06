@@ -3658,6 +3658,13 @@ rate computed; causal language under any method but `control_group`; realized cu
 contribution; a withdrawal that loses the withdrawn values; **an unsourced claimed impact printed as a figure** (B3 printed
 "a vendor claim of $7,000,000 is on record"; Brad, 5 Nov 2026); run 1's case printing 8,400,000.
 
+**A guard change, AMENDMENT-005 (`lvrf_block_ai_actual`; Brad's three conditions, 6 Nov 2026).** Before B4 the guard
+refused every write of an inadmissible actual link, its withdrawal included, so acts 3–4 could not be performed. Its one
+exemption is exactly a withdrawal: an UPDATE of a current link that sets the withdrawal and changes no other column. A new
+link, a re-link, a change of support or of evidence is refused as before; the steward, the reason and the act are held by
+`lvrf_outcome_evidence_link_guard`, CHECK `value_outcome_evidence_withdrawal_complete` and `act_present`. Gate A break M8
+widens the exemption to any write and is caught. B4's Gate B report names it, with its before and after.
+
 ### B4: added after the stage-10 rehearsal (Brad, 5 Nov 2026)
 
 The rehearsal (an independent subagent, read-only, on Gate A's PDFs and their clone) found both PDFs failing. Approved

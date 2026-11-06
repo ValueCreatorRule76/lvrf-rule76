@@ -361,6 +361,46 @@ if (MODE === 'cardwithdraw') {
   await viewport(1280);
 }
 
+if (MODE === 'spineacts') {
+  // B4 (§14): the act session's acts 1-4 on the copy, through card 01d and card 01c, each confirmation compared word for
+  // word with LVRF_PLAN §14. E.OUT is Skillsoft's outcome; E.C1 / E.C2 the two confirmations; E.R1..E.R4 the reasons.
+  const page = async () => {
+    await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=account-evidence]')`);
+    await ev(`(()=>{const d=document.querySelector('[data-testid=account-detail]');if(d)d.open=true;return true})()`); await sleep(600);
+    await waitFor(`!!document.querySelector('[data-testid=outcome-spine]')`);
+  };
+  await page();
+  const row = `document.querySelector('[data-testid=spine-outcome][data-outcome="${E.OUT}"]')`;
+  check(await ev(`!!${row}?.querySelector('[data-testid=danger-zone] [data-testid=withdraw-measurement-open]')`), "card 01d: Skillsoft's outcome offers \"Withdraw this measurement…\" in the marked zone");
+  for (const [kind, reason, expected] of [['measurement', E.R1, E.C1], ['commitment', E.R2, E.C2]]) {
+    await ev(`${row}.querySelector('[data-testid=withdraw-${kind}-open]').click()`); await sleep(300);
+    const f = `${row}.querySelector('[data-testid=withdraw-${kind}]')`;
+    await setField(f, 'Why', reason); await sleep(200);
+    check(await submitIn(f, `Withdraw the ${kind}`), `  ...${kind}: submitted`); await sleep(300);
+    const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+    check(ct === expected, `  ...the ${kind}'s confirmation reads exactly as §14's act session quotes it`, ct);
+    if (kind === 'measurement') await shotOf('b4_withdraw_measurement_1280', `[data-testid=spine-outcome][data-outcome="${E.OUT}"]`, 1280);
+    await confirmIn(f); await sleep(1200);
+    await page();
+    check(await waitFor(`(${row}?.textContent ?? '').includes(${JSON.stringify(kind === 'measurement' ? 'not measured' : 'no commitment')})`), `  ...recorded: the outcome reads ${kind === 'measurement' ? 'not measured' : 'with no commitment'}`, await ev(`(${row}?.textContent ?? '').slice(0, 300)`));
+  }
+  // Acts 3 and 4: the two simulated actual links, on card 01c (muted rows: "Show actions" first).
+  for (const [id, reason] of [[E.SIM1, E.R3], [E.SIM2, E.R4]]) {
+    const r = `document.querySelector('[data-evidence="${id}"]')`;
+    if (await ev(`!!${r}?.querySelector('[data-testid=show-actions]') && !${r}.querySelector('[data-testid=withdraw-link-open]')`)) { await ev(`${r}.querySelector('[data-testid=show-actions]').click()`); await sleep(300); }
+    check(await ev(`(${r}.querySelector('[data-testid=danger-zone] [data-testid=evidence-link-withdraw]')?.textContent ?? '').includes('Link: the actual of')`), `${id.slice(0, 8)}: "Withdraw this link…" under "Link: the actual of …"`);
+    await ev(`${r}.querySelector('[data-testid=withdraw-link-open]').click()`); await sleep(300);
+    const f = `${r}.querySelector('[data-testid=withdraw-link]')`;
+    await setField(f, 'Why', reason); await sleep(200);
+    await submitIn(f, 'Withdraw the link'); await sleep(300);
+    const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+    check(ct.startsWith(`Withdraw ${id.slice(0, 8)}, “`) && ct.endsWith('it supports the actual now, and will support nothing.'), `  ...its confirmation names ${id.slice(0, 8)}`, ct);
+    await confirmIn(f); await sleep(1200);
+    await page();
+  }
+  await shot('b4_card01d_after_1280', 1280);
+}
+
 if (MODE === 'stewardsafety') {
   // Steward safety (Brad, 5 Nov 2026): card 01c and the pack page. E.EXPECT = current|history|muted (current rows),
   // read from the record. BREAK names the break this walk runs under, so its FAIL lines are the catch.
@@ -463,7 +503,7 @@ if (MODE === 'valuecase') {
   check(await has('banner-unverified'), '  ...the disclosure banner (rule 6)');
   if (E.EXPECT_OUTSIDE_IN === '1') check(await has('banner-outside-in'), '  ...the outside-in banner');
   const asks = await ev(`[...document.querySelectorAll('[data-testid=exec-asks] [data-testid=ask]')].map(a=>a.dataset.code+(a.querySelector('[data-testid=converting-question]')?'+q':'')).join(',')`);
-  check(asks === E.EXPECT_ASKS, '  ...the executive page lists every ask the record derives, each with its converting question', asks);
+  if (E.EXPECT_ASKS !== 'skip') check(asks === E.EXPECT_ASKS, '  ...the executive page lists every ask the record derives, each with its converting question', asks);
   if (E.EXPECT_COD) check(await has(E.EXPECT_COD), `  ...cost of delay reads ${E.EXPECT_COD}`, await ev(`document.querySelector('[data-testid=exec-page]')?.textContent?.slice(0,300) ?? ''`));
   if (E.EXPECT_COD_QUESTION) check((await ev(`[...document.querySelectorAll('[data-testid=cod-reasons] li')].map(l=>l.dataset.code+(l.querySelector('[data-testid=cod-question]')?'+q':'')).join(',')`)) === E.EXPECT_COD_QUESTION,
     '  ...each cost-of-delay reason with its converting question', await ev(`[...document.querySelectorAll('[data-testid=cod-reasons] li')].map(l=>l.dataset.code).join(',')`));
@@ -477,6 +517,14 @@ if (MODE === 'valuecase') {
   if (E.EXPECT_SOLUTIONING) check((await ev(`[...document.querySelectorAll('[data-testid=solutioning-lever]')].map(x=>x.dataset.current+':'+x.querySelectorAll('[data-testid=solutioning-offering]').length).join(',')`)) === E.EXPECT_SOLUTIONING,
     '  ...solutioning reads only links on current levers (ruling 5)', await ev(`[...document.querySelectorAll('[data-testid=solutioning-lever]')].map(x=>x.dataset.current+':'+x.querySelectorAll('[data-testid=solutioning-offering]').length).join(',')`));
   if (E.FORBID) check(!(await ev(`document.body.textContent.includes(${JSON.stringify(E.FORBID)})`)), `  ...the reviewer's note is not on the case (ruling 4)`);
+  // B4 (§14; the stage-10 rehearsal's items, D4, the banner ruling).
+  if (E.FORBID2) check(!(await ev(`document.body.textContent.includes(${JSON.stringify(E.FORBID2)})`)), `  ...the case never prints "${E.FORBID2}"`);
+  if (E.EXPECT_CLAIM_REFUSED === '1') check(await has('claim-refused') && !(await has('vendor-claim')), '  ...a claimed impact with no source prints its refusal, not the figure (D4)');
+  if (E.EXPECT_NOT_SHOWN) check((await ev(`document.querySelector('[data-testid=not-shown]')?.textContent ?? ''`)).includes(E.EXPECT_NOT_SHOWN), '  ...the customer-side item on record but not shown is named', await ev(`document.querySelector('[data-testid=not-shown]')?.textContent ?? 'none'`));
+  if (E.EXPECT_FOOTNOTE) check((await ev(`[...document.querySelectorAll('[data-testid=footnote]')].map(x=>x.textContent).join(' | ')`)).includes(E.EXPECT_FOOTNOTE), `  ...a footnote says: "${E.EXPECT_FOOTNOTE}"`, await ev(`[...document.querySelectorAll('[data-testid=footnote]')].map(x=>x.textContent).join(' | ')`));
+  if (E.EXPECT_FALSIFIER) check((await ev(`document.querySelector('[data-testid=falsifier]')?.textContent ?? ''`)).includes(E.EXPECT_FALSIFIER), '  ...the falsifier says which way', await ev(`document.querySelector('[data-testid=falsifier]')?.textContent ?? 'none'`));
+  if (E.EXPECT_ATTRIBUTION) check((await ev(`document.querySelector('[data-testid=attribution]')?.textContent ?? ''`)).startsWith(E.EXPECT_ATTRIBUTION), '  ...the attribution sentence the method allows', await ev(`document.querySelector('[data-testid=attribution]')?.textContent ?? 'none'`));
+  if (E.EXPECT_COD_AMOUNT) check((await ev(`document.querySelector('[data-testid=cod-computed]')?.textContent ?? ''`)).includes(E.EXPECT_COD_AMOUNT), `  ...the printed cost of delay reads ${E.EXPECT_COD_AMOUNT}`, await ev(`document.querySelector('[data-testid=cod-computed]')?.textContent ?? 'none'`));
   // Footnotes numbered in reading order: the first reference to each number appears in ascending order.
   const refs = await ev(`[...document.querySelectorAll('[data-testid=footnote-ref]')].map(x=>Number(x.textContent))`);
   const firsts = refs.filter((n, i) => refs.indexOf(n) === i);

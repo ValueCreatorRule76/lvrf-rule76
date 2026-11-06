@@ -114,7 +114,7 @@ ERR0="$(q "SELECT count(*) || '|' || coalesce(string_agg(md5((to_jsonb(e) - 'kin
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0042_c2_supports)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "204" ] && ok "204 triggers (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 0042 adds none)" || bad "triggers: $(trig)"
+[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 0042 adds none)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0042 ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
@@ -151,7 +151,7 @@ EVB() {  # KIND SUMMARY SUPPORTS VERIFIED [ATTESTED_BY]
   if [ -n "${5:-}" ]; then J kind "$1" provenance 'Fixture extract (not a source)' summary "$2" supports "$3" source_verified "$4" ai_sourced false simulated false evidence_form quote quote_text 'TRIR 1.4 for FY25, from the fixture extract.' how_read 'The FY25 TRIR, read as exported.' attested_by_person_id "$5" attested_at 2025-10-01T00:00:00Z
   else J kind "$1" provenance 'Fixture filing (not a source)' summary "$2" supports "$3" source_verified "$4" ai_sourced false simulated false evidence_form quote quote_text 'Our total recordable incident rate was 1.4 in FY25.' how_read 'The FY25 TRIR, from the fixture report, read as published.'; fi
 }
-COMMIT() { J target_value 1.2 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: the owner commits to 1.2 ($1)."; }
+COMMIT() { J target_value 1.2 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: the owner commits to 1.2 ($1)." attribution_method contribution_only measure_class capability_performance; }
 outcome() {  # NAME -> O, ENG
   expect POST "/api/institutions/$INST/value-outcomes" "$(OUTC "$1")" 201 "outcome $1"
   O="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"

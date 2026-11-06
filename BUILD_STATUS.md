@@ -13763,3 +13763,65 @@ milestone owner, the POV and the case on US Letter, footnotes in reading order).
 - **Steward safety** (B4's Gate B) waited on branch `b4-steward-safety` until this Gate C, as Brad ruled, and is merged
   after it. Its first commit captured `Workbench.tsx` mid-break (a regression was running); a forward commit restored it,
   and a new standing rule bars committing while a regression runs.
+
+### B4: commit, measure and verify; the steward's withdrawals; the class rule; attribution — Gate A, 6 Nov 2026 (UTC)
+
+**Built; Gate A passed; not deployed.** Batch B4 of `docs/LVRF_3.0_CRITICAL_PATH.md`, the plan in LVRF_PLAN §14 (approved by
+Brad, 5 Nov 2026, with D1–D4, the unsourced-impact break, the stage-10 rehearsal's four fixes and the OUTSIDE-IN banner
+ruling). Ships with steward safety (§19, merged at `7e4d791`), which is on main and undeployed.
+
+- **Migration 0049** (`0049_b4_attribution`): `value_outcomes.attribution_method` (`control_group` · `comparison_group` ·
+  `trend_adjusted` · `estimate_adjusted` · `contribution_only`) and `value_outcomes.measure_class`
+  (`capability_performance` · `compliance_assurance`), both nullable (D1: commitments before B4 keep neither);
+  `outcome_withdrawals` (kind, the withdrawn values as the outcome held them, reason, by, at), with CHECKs
+  `kind_known`, `values_kept`, `reason_stated`. **Hardening section 34:** `lvrf_outcome_spine_guard` (a commit states
+  both; both fixed after it; a measurement needs the method and a current actual link of an admitted basis, not
+  simulated (D2); the outcome steps back only with its withdrawal row); `lvrf_outcome_withdrawal_guard` (the steward's;
+  the values recorded are the outcome's; a verified measurement never withdrawn; a commitment only once nothing is
+  measured); audit, no-delete; insert-only at the role (`ownership.sql`, section 24). **209 triggers (+5), 328 manifest
+  rows (+8), 50 migrations, 1246 objects, 130 CHECKs.**
+- **Cost of delay:** the class rule replaces B3's placeholder: no class stated refuses (`no_measure_class`); a
+  compliance class priced at anything but an exposure rate refuses (`class_rate_mismatch`, its own ask).
+- **The case:** the attribution sentence chosen by the method (only a control group says "attributable to"); a
+  realized currency printed only under a control or comparison group with a source, otherwise withheld in words; a
+  claimed impact with no impact-basis source prints its refusal, never the figure (D4); each figure's footnote carries
+  its figure check; the target footnoted (basis, committer customer-side or not); the falsifier in the POV's sentence;
+  the `committer_not_customer_side` ask; **OUTSIDE-IN prints unless a printed figure rests on customer-side evidence,
+  and one line names each sealed customer-side item that is not shown** (`lvrf_run_banners` gains `not_shown`; D-M21's
+  share gate follows the printed banners). The case chain seals `attribution` (method, class).
+- **The client:** card 01d, "Commit, measure, verify", on the account page and the tenant-self page: commit, measure and
+  verify forms, and the steward's "Withdraw this measurement…" and "Withdraw this commitment…" in the marked zone, each
+  confirmation naming the outcome's short id. Routes `POST /api/value-outcomes/:outcomeId/measurement/withdraw`,
+  `…/commitment/withdraw` (steward; act `withdraw`), `GET /api/institutions/:institutionId/outcome-spine`; the commit
+  route requires the method and the class.
+- **A guard change, AMENDMENT-005 (`lvrf_block_ai_actual`, hardening section 5a):**
+  - **Before:** every INSERT or UPDATE of an actual link whose evidence is AI-sourced, AI-assisted, simulated or
+    vendor-published was refused, **including its withdrawal**, so an inadmissible actual link (Skillsoft's simulated
+    `2c10e091`, `eea43d9a`) could never be taken off the record.
+  - **After:** one exemption, exactly a withdrawal: an UPDATE of a current link (`withdrawn_at` NULL before, set after)
+    that changes **no other column** (the row compared with the three withdrawal columns removed). A new link, a
+    re-link, a change of support or of evidence meets every refusal as before. That it is the steward's, with a reason
+    and an act, is held by `lvrf_outcome_evidence_link_guard` (steward only; a withdrawal is final; no edit of outcome,
+    evidence, supports or correction columns), CHECK `value_outcome_evidence_withdrawal_complete` (by, at, and a reason
+    of at least 12 characters, together) and `act_present`.
+  - **Gate A:** break M8 widens the exemption to any write; a never-linked simulated row linked as an actual then
+    lands, and is caught; with hardening re-applied it is refused again by this guard's own message.
+- **Gate A:**
+  - `verify_commit_measure_verify.sh` **147/0** on a clone of the 5 Nov copy: breaks M1–M8 each caught (a commit
+    without the method; the method changed after commit; a measurement on inferred evidence only; the class rule
+    removed; a withdrawal's kept values unchecked; the not-shown line removed; an unsourced claimed impact printed as a
+    figure; the AMENDMENT-005 exemption widened); acts 1–4 performed on the clone through the page, each confirmation
+    equal to §14's text word for word; acts 5–7 produce, lock and read Skillsoft's first v5 run under the CFO lens;
+    run 1's case never prints 8,400,000; a NULL-input refusal per new CHECK, each CHECK read false (never NULL) on its
+    input.
+  - **The full regression: 52 scripts pass in one run (`verify_accounts_home` 62/1 there, on its "failed /walk" timing check: the row still read "loading…" 2 s after the intercepted 500; 63/0 twice run alone right after; B4 touches neither the home page nor /walk)** on a clone of the 5 Nov copy; build and lint clean (the one warning is
+    `ActorContext.tsx`'s, from before). Fixed on the way: counts in the scripts; eight commit bodies gain the method and
+    class; three fixtures commit before they measure (B4 requires it), and the POV walk's commit stage reads "passed",
+    not "gap"; the withdrawal routes written out literally for `list_api_routes`; the tenant case for commit given the
+    two new fields; the steward-safety read recognises `short(o.id)`; `verify_value_case`'s cost-of-delay basis is the
+    weaker input (client-stated), and its banners carry `not_shown`.
+  - **Break targets (Brad's standing guard):** 41 files any verify script breaks, each diffed against HEAD after the regression: 38 byte-identical; the 3 that differ (`ValueCasePage.tsx`, `valueCase.ts`, `outcomeWalk.ts`) differ only by B4's own changes, read line by line, no break residue
+  - **Equivalence against `9c93671`:** 77 GETs, 77 identical, no added keys
+  - **Bundle:** `index-PDTgA8rp.js` / `index-CJhpJCOf.css`
+  - **Backup TOC for Gate B:** measured on clones of the 5 Nov copy: `bd5cb7c` 806, `9c93671` 886 (+80, B3), B4 903 (+17). Prod read 811 at `bd5cb7c`, so B4's pre-migration backup expects **891**.
+  - **Screens and PDFs** in `~/lvrf-backups/l41-screens` (`b4reg/`), every page looked at.

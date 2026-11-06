@@ -198,6 +198,17 @@ DECLARE
   vendor boolean;
 BEGIN
   IF NEW.supports <> 'actual' THEN RETURN NEW; END IF;
+  -- B4 (5 Nov 2026; Brad, 6 Nov): withdrawing such a link takes it off the record, which is this guard's own aim; the
+  -- guard must not keep an inadmissible actual link in place (Skillsoft's simulated rows, D3 acts 3-4). The exemption is
+  -- exactly that and nothing wider: an UPDATE of a current link that sets the withdrawal and changes no other column. A
+  -- new link, a re-link, a change of support or of evidence still meets every refusal below. That the withdrawer is the
+  -- steward, with a reason and an act, is held elsewhere: lvrf_outcome_evidence_link_guard (steward only; a withdrawal is
+  -- final), CHECK value_outcome_evidence_withdrawal_complete (by, at and reason together), and act_present.
+  IF TG_OP = 'UPDATE' AND OLD.withdrawn_at IS NULL AND NEW.withdrawn_at IS NOT NULL
+     AND (to_jsonb(NEW) - ARRAY['withdrawn_by_person_id', 'withdrawn_at', 'withdrawal_reason'])
+       = (to_jsonb(OLD) - ARRAY['withdrawn_by_person_id', 'withdrawn_at', 'withdrawal_reason']) THEN
+    RETURN NEW;
+  END IF;
   SELECT e.ai_sourced, a.ai_assisted, e.simulated, e.kind = 'vendor_publication'
     INTO ai, assisted, sim, vendor
     FROM evidence e
@@ -1941,7 +1952,7 @@ LANGUAGE sql STABLE AS $$
   SELECT format('lvrf_app holds UPDATE on %s', t)
     FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks', 'figure_findings',
                       -- B3 (section 33): insert-only at the role, not only by their guards.
-                      'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones']) t
+                      'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'outcome_withdrawals']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2370,7 +2381,7 @@ BEGIN
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
                'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings', 'industries',
                -- B3 (§19, section 33)
-               'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents') THEN
+               'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2542,6 +2553,7 @@ BEGIN
       WHEN 'lens_policies' THEN what := 'a lens policy ratified';
       WHEN 'monetization_rates' THEN what := 'a monetization rate recorded';
       WHEN 'roadmap_milestones' THEN what := 'a milestone planned';
+      WHEN 'outcome_withdrawals' THEN what := 'a ' || (n->>'kind') || ' withdrawn';
       WHEN 'record_documents' THEN
         IF n->>'kind' = 'share_for_review' THEN what := 'a share for review'; END IF;
       WHEN 'value_outcome_evidence' THEN
@@ -2581,7 +2593,7 @@ BEGIN
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
     'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings',
-    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents']
+    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -3368,6 +3380,121 @@ CREATE TRIGGER industries_steward_only
   BEFORE INSERT ON industries
   FOR EACH ROW EXECUTE FUNCTION lvrf_industry_steward_only();
 
+-- 34. B4 (LVRF_PLAN §14, approved by Brad 5 Nov 2026; design §3.2, ruling 2, D1-D4) — commit, measure, withdraw.
+-- ------------------------------------------------------------------
+--   value_outcomes_spine_guard (U):
+--     a commit states the attribution method and the measure class; both are fixed while the commitment stands (D1:
+--     a commitment made before B4 keeps none, and is refused a measurement until it is withdrawn and made again);
+--     a measurement needs the method, and a current actual-evidence link whose basis is system of record, client-stated
+--     or published, and not simulated (D2);
+--     a measurement or a commitment is taken back only with its outcome_withdrawals row, written in the same transaction
+--     (D3); a verified measurement is never withdrawn; a commitment is withdrawn only once nothing is measured.
+--   outcome_withdrawals: the steward's, insert-only; _audit, _no_delete, _guard, _act_present.
+--
+-- CONSEQUENCE: 204 -> 209 (value_outcomes_spine_guard; outcome_withdrawals audit, no_delete, guard, act_present).
+
+CREATE OR REPLACE FUNCTION lvrf_outcome_spine_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  admitted boolean;
+BEGIN
+  -- A new commit states both.
+  IF OLD.committed_at IS NULL AND NEW.committed_at IS NOT NULL
+     AND (NEW.attribution_method IS NULL OR NEW.measure_class IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states its attribution method and its measure class (B4, design §3.2).'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_commit_states_method';
+  END IF;
+  -- Fixed while the commitment stands.
+  IF OLD.committed_at IS NOT NULL AND NEW.committed_at IS NOT NULL
+     AND (NEW.attribution_method IS DISTINCT FROM OLD.attribution_method OR NEW.measure_class IS DISTINCT FROM OLD.measure_class) THEN
+    RAISE EXCEPTION 'LVRF: value_outcomes: the attribution method and the measure class are fixed at commit; withdraw the commitment to change them.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_method_fixed';
+  END IF;
+  -- A measurement needs the method and admitted evidence.
+  IF OLD.actual_value IS NULL AND NEW.actual_value IS NOT NULL THEN
+    IF NEW.attribution_method IS NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: no attribution method was stated at commit, so nothing can be measured; withdraw the commitment and commit again, stating the method.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_measure_needs_method';
+    END IF;
+    SELECT EXISTS (SELECT 1 FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id
+                    WHERE voe.value_outcome_id = NEW.id AND voe.supports = 'actual' AND voe.withdrawn_at IS NULL
+                      AND e.superseded_by_id IS NULL AND e.deleted_at IS NULL AND NOT e.simulated
+                      AND lvrf_evidence_basis(e) IN ('system_of_record', 'client_stated', 'published'))
+      INTO admitted;
+    IF NOT admitted THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: a measured actual rests on current evidence from a system of record, stated by the client, or published, and not simulated (D2).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_measure_admitted_evidence';
+    END IF;
+  END IF;
+  -- Taking a measurement back.
+  IF OLD.actual_value IS NOT NULL AND NEW.actual_value IS NULL THEN
+    IF OLD.verified_at IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: a verified measurement is never withdrawn.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_withdrawal_recorded';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM outcome_withdrawals w WHERE w.value_outcome_id = NEW.id AND w.kind = 'measurement' AND w.withdrawn_at = now()) THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: a measurement is withdrawn only with its record of what is withdrawn (outcome_withdrawals).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_withdrawal_recorded';
+    END IF;
+  END IF;
+  -- Taking a commitment back.
+  IF OLD.committed_at IS NOT NULL AND NEW.committed_at IS NULL THEN
+    IF NEW.actual_value IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: withdraw the measurement first; a commitment is withdrawn only once nothing is measured.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_withdrawal_recorded';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM outcome_withdrawals w WHERE w.value_outcome_id = NEW.id AND w.kind = 'commitment' AND w.withdrawn_at = now()) THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: a commitment is withdrawn only with its record of what is withdrawn (outcome_withdrawals).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_withdrawal_recorded';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_outcomes_spine_guard ON value_outcomes;
+CREATE TRIGGER value_outcomes_spine_guard BEFORE UPDATE ON value_outcomes FOR EACH ROW EXECUTE FUNCTION lvrf_outcome_spine_guard();
+
+CREATE OR REPLACE FUNCTION lvrf_outcome_withdrawal_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  o record;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: a withdrawal is on the record and is never edited.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_guard';
+  END IF;
+  SELECT vo.*, i.tenant_id AS inst_tenant INTO o FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id WHERE vo.id = NEW.value_outcome_id;
+  IF o.inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: outcome % is not of tenant %.', NEW.value_outcome_id, NEW.tenant_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_guard';
+  END IF;
+  IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.withdrawn_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: only the tenant''s steward withdraws a measurement or a commitment, as themself.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_steward_only';
+  END IF;
+  -- What is withdrawn is what the outcome holds now, kept exactly.
+  IF NEW.kind = 'measurement' AND (o.actual_value IS NULL
+     OR (NEW.withdrawn_values->>'actual_value')::numeric IS DISTINCT FROM o.actual_value) THEN
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: there is no measurement to withdraw, or the values recorded are not the outcome''s.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_values_kept';
+  END IF;
+  IF NEW.kind = 'commitment' AND (o.committed_at IS NULL
+     OR (NEW.withdrawn_values->>'target_value')::numeric IS DISTINCT FROM o.target_value) THEN
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: there is no commitment to withdraw, or the values recorded are not the outcome''s.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_values_kept';
+  END IF;
+  NEW.withdrawn_at := now();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS outcome_withdrawals_audit ON outcome_withdrawals;
+CREATE TRIGGER outcome_withdrawals_audit AFTER INSERT OR UPDATE ON outcome_withdrawals FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS outcome_withdrawals_no_delete ON outcome_withdrawals;
+CREATE TRIGGER outcome_withdrawals_no_delete BEFORE DELETE ON outcome_withdrawals FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete(
+  'A withdrawal is on the record and is never deleted.');
+DROP TRIGGER IF EXISTS outcome_withdrawals_guard ON outcome_withdrawals;
+CREATE TRIGGER outcome_withdrawals_guard BEFORE INSERT OR UPDATE ON outcome_withdrawals FOR EACH ROW EXECUTE FUNCTION lvrf_outcome_withdrawal_guard();
+
 -- 33. B3 (P6; LVRF_PLAN §19, approved by Brad 5 Nov 2026) — the value case's governed inputs.
 -- ------------------------------------------------------------------
 --   policy_values, lens_policies: the steward's, insert-only, one line of versions per key or persona (0048's
@@ -3382,7 +3509,7 @@ CREATE TRIGGER industries_steward_only
 --     the keys a run sealed, so a v4 run locks exactly as before.
 -- Each table: _audit, _no_delete, _guard; _act_present comes from P2's loop (lvrf_require_act), where these tables are added.
 --
--- CONSEQUENCE: 186 -> 204 (four tables × 4, and record_documents _guard and _act_present).
+-- CONSEQUENCE: 186 -> 204 (four tables × 4, and record_documents _guard and _act_present); section 34 takes it to 209.
 
 CREATE OR REPLACE FUNCTION lvrf_is_steward(p_tenant uuid) RETURNS boolean
 LANGUAGE sql STABLE AS $$
@@ -3540,19 +3667,37 @@ BEGIN
   RETURN NEW;
 END $$;
 
--- The two banners of a run, from its sealed payload only (rule 6; §5 "Outside-in says so"): OUTSIDE-IN when no sealed
--- figure has a system-of-record or client-stated basis; UNVERIFIED unless the sealed realization is verified.
+-- The two banners of a run, from its sealed payload only (rule 6; §5 "Outside-in says so"; B4 ruling, Brad 5 Nov 2026):
+-- OUTSIDE-IN unless a figure the case prints rests on customer-side evidence (system of record or client-stated): the
+-- baseline, the target, the actual, or a computed cost of delay's rate. A sealed customer-side item the case does not
+-- print is named in not_shown, with why. UNVERIFIED unless the sealed realization is verified. D-M21's share gate reads
+-- these, so it follows the printed banners.
 CREATE OR REPLACE FUNCTION lvrf_run_banners(p_run uuid) RETURNS jsonb
 LANGUAGE sql STABLE AS $$
+  WITH r AS (SELECT payload FROM value_runs WHERE id = p_run),
+  cod AS (SELECT r.payload->'case'->'cost_of_delay' AS c FROM r),
+  ev AS (
+    SELECT x->>'summary' AS summary, x->>'supports' AS supports, x->>'basis' AS basis, x->>'evidence_id' AS evidence_id
+      FROM r, jsonb_array_elements(coalesce(r.payload->'evidence', '[]'::jsonb)) x),
+  printed AS (
+    SELECT 1 FROM ev WHERE ev.basis IN ('system_of_record', 'client_stated') AND ev.supports IN ('baseline', 'actual', 'target_commitment')
+    UNION ALL
+    SELECT 1 FROM cod WHERE cod.c->>'status' = 'computed' AND cod.c->'inputs'->'rate'->>'basis' IN ('system_of_record', 'client_stated')),
+  not_shown AS (
+    SELECT ev.summary, CASE
+             WHEN ev.evidence_id IS NOT NULL AND ev.evidence_id = (SELECT cod.c->'inputs'->'rate'->>'evidence_id' FROM cod) AND (SELECT cod.c->>'status' FROM cod) IS DISTINCT FROM 'computed'
+               THEN 'because cost of delay is refused'
+             ELSE 'because the case prints no figure it supports' END AS why
+      FROM ev WHERE ev.basis IN ('system_of_record', 'client_stated') AND ev.supports NOT IN ('baseline', 'actual', 'target_commitment')
+       AND NOT EXISTS (SELECT 1 FROM cod WHERE cod.c->>'status' = 'computed' AND cod.c->'inputs'->'rate'->>'evidence_id' = ev.evidence_id)
+    UNION ALL
+    SELECT 'an account fact (' || (x->>'kind') || ')', 'because the case prints no account facts'
+      FROM r, jsonb_array_elements(coalesce(r.payload->'institutionFacts', '[]'::jsonb)) x WHERE x->>'basis' IN ('system_of_record', 'client_stated'))
   SELECT jsonb_build_object(
-    'outside_in', NOT EXISTS (
-      SELECT 1 FROM (
-        SELECT x->>'basis' AS b FROM jsonb_array_elements(coalesce(r.payload->'evidence', '[]'::jsonb)) x
-        UNION ALL SELECT x->>'basis' FROM jsonb_array_elements(coalesce(r.payload->'institutionFacts', '[]'::jsonb)) x
-        UNION ALL SELECT r.payload->'entity'->>'basis'
-      ) s WHERE s.b IN ('system_of_record', 'client_stated')),
-    'unverified', coalesce(r.payload->>'realization', '') <> 'verified')
-  FROM value_runs r WHERE r.id = p_run
+    'outside_in', NOT EXISTS (SELECT 1 FROM printed),
+    'unverified', coalesce((SELECT payload->>'realization' FROM r), '') <> 'verified',
+    'not_shown', coalesce((SELECT jsonb_agg(jsonb_build_object('summary', summary, 'why', why) ORDER BY summary) FROM not_shown), '[]'::jsonb))
+  FROM r
 $$;
 
 CREATE OR REPLACE FUNCTION lvrf_record_document_guard() RETURNS trigger
@@ -3714,7 +3859,13 @@ BEGIN
       reasons := reasons || jsonb_build_object('code', 'rate_unit', 'text', format('the rate is per %s; the metric is measured in %s', rt.per_unit, bm.unit));
     END IF;
   END IF;
-  reasons := reasons || jsonb_build_object('code', 'no_measure_class', 'text', 'no measure class stated at commit');
+  -- B4 (ruling 2): the class stated at commit; a compliance class is priced only at an exposure rate. Neither is read
+  -- from the other.
+  IF o.measure_class IS NULL THEN
+    reasons := reasons || jsonb_build_object('code', 'no_measure_class', 'text', 'no measure class stated at commit');
+  ELSIF o.measure_class = 'compliance_assurance' AND rt.id IS NOT NULL AND rt.rate_kind <> 'exposure' THEN
+    reasons := reasons || jsonb_build_object('code', 'class_rate_mismatch', 'text', 'a compliance measure is priced only at the client''s exposure rate, not a performance rate');
+  END IF;
 
   SELECT e_basis INTO base_basis FROM (
     SELECT lvrf_evidence_basis(e) AS e_basis FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id
@@ -3807,6 +3958,8 @@ LANGUAGE sql STABLE AS $$
         FROM figure_findings ff WHERE ff.value_outcome_id = o.id), '[]'::jsonb),
     -- B3 (payloadVersion 5; §19): cost of delay as it reads now (the figure, or every reason it is refused).
     'cost_of_delay', lvrf_cost_of_delay(o.id),
+    -- B4 (§14): the attribution method and the measure class, as stated at commit (null before B4, D1).
+    'attribution', (SELECT jsonb_build_object('method', vo.attribution_method, 'class', vo.measure_class) FROM value_outcomes vo WHERE vo.id = o.id),
     -- B3: the plan to measure. The current head of each milestone of the engagement, on this outcome or on none, and the
     -- outcome's own committed measurement date. Nothing generated.
     'roadmap', jsonb_build_object(
@@ -3965,7 +4118,8 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 204 distinct triggers (186 before section 33: four tables × audit, no_delete, guard, act_present, and
+--   Total: 209 distinct triggers (204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
+--   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
 --   0029 took it 84 -> 87. Section 17, L16, took it 87 -> 95.
@@ -3988,9 +4142,10 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 204.
+-- TRUNCATE in section 14 fail. Total stays 209.
 --
--- Expect 320 rows here (288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
+-- Expect 328 rows here (320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
+-- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
 -- (7 each), and record_documents guard I+U and act_present I+U. 287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,
 -- act_present I+U, and system_exercise_marks guard I, immutable U, audit I+U, no_delete D, act_present I+U: +14):

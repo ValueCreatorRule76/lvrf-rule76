@@ -115,8 +115,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 pre_c3() {  # the pre-C3 code itself, for sealing runs under model 1.0.0
   git show "$PRE_C3:$PRODUCE" > "$PRODUCE"; git show "$PRE_C3:$MODELF" > "$MODELF"; stop_server; start_server
@@ -163,7 +163,7 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 ERR0="$(q "SELECT count(*) FROM run_errata")"; LC0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'link_correction'")"; CRED0="$(q "SELECT count(*) FROM run_errata WHERE kind = 'non_customer_credit'")"; RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "204" ] && ok "204 triggers (B3 section 33: +18) (167 + section 28's nine + section 29's five, C3b)" || bad "triggers: $(trig)"
+[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) (167 + section 28's nine + section 29's five, C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
@@ -197,7 +197,7 @@ evid() {  # OUTCOME KIND SUMMARY SUPPORTS [ATTESTER] -> EV
   else expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified true ai_sourced false simulated false evidence_form quote quote_text 'TRIR 1.4 for FY25.' how_read 'The FY25 TRIR, read as published.')" 201 "  ...evidence: $3"; fi
   EV="$(rj b.evidence_id)"
 }
-commit() { expect POST "/api/value-outcomes/$1/commit" "$(J target_value 1.2 committed_by_person_id "$2" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: committed to 1.2 ($3).")" 201 "  ...committed by $3"; }
+commit() { expect POST "/api/value-outcomes/$1/commit" "$(J target_value 1.2 committed_by_person_id "$2" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: committed to 1.2 ($3)." attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by $3"; }
 seal() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture c3)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; expect POST "/api/value-runs/$RUN/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"; }
 # Account 1: the analyst of record's case (Curia's shape), sealed under the pre-C3 code.
 acct "C3 account one (invented)" "[$(J full_name "$OWNER_NAME 1" email "owner1.$TS@c3.example" title Owner),$(J full_name "$ANALYST_NAME" email "analyst.$TS@c3.example" title 'External analyst of record — not an employee')]"

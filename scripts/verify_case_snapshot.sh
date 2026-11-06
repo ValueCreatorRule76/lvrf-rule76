@@ -115,8 +115,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -129,11 +129,11 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "204" ] && ok "204 triggers (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "320" ] && ok "  ...320 information_schema rows (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: section 32 writes nothing" || bad "  ...a run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 49 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"
@@ -188,7 +188,10 @@ COND="on the same denominator, among the covered population"
 HB() {  # OUTCOME LEVER [REFERENCE] [DUE] [CONDITIONS] [EXTRA]
   printf '{"value_outcome_id":"%s","value_lever_id":"%s","statement":"Frontline hazard recognition reduces recordable injuries at this account.","falsifier_reference":"%s","falsifier_due":"%s","falsifier_conditions":"%s"%s}' "$1" "$2" "${3:-baseline}" "${4:-$TODAY}" "${5:-$COND}" "${6:-}"
 }
-measure() {  # OUTCOME ACTUAL
+measure() {  # OUTCOME ACTUAL — B4 (§14): committed first, with its method, unless it already is
+  if [ "$(q "SELECT committed_at IS NULL FROM value_outcomes WHERE id = '$1'")" = "t" ]; then
+    req POST "/api/value-outcomes/$1/commit" "{\"target_value\":1.0,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"${TODAY}T11:00:00Z\",\"commitment_note\":\"Verification: committed before measuring.\",\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\"}"; [ "$CODE" = "201" ] || bad "commit $1: $CODE $(said)"
+  fi
   req POST "/api/value-outcomes/$1/evidence" "$(EVB system_export "TRIR extract (fixture)" actual)"; [ "$CODE" = "201" ] || bad "actual evidence $1: $CODE $(said)"
   req POST "/api/value-outcomes/$1/measure" "{\"actual_value\":$2,\"actual_measured_at\":\"${TODAY}T12:00:00Z\"}"; [ "$CODE" = "200" ] || bad "measure $1: $CODE $(said)"
 }

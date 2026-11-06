@@ -88,7 +88,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "204" ] && ok "204 triggers (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -143,7 +143,7 @@ EV_L="$(rj b.evidence_id)"
 expect POST "/api/industry-measures/$E/levers" '{"name":"Form hazard recognition (fixture)","mechanism":"Crews trained to recognise hazards stop unsafe tasks earlier.","leading_indicator":"Near-miss reports","citation":"Verification citation, not a source."}' 201 "a lever on the entry (steward)"
 LEV="$(rj b.value_lever_id)"
 expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$O1\",\"value_lever_id\":\"$LEV\",\"statement\":\"Frontline hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"Same definition and denominator as the published baseline.\"}" 201 "a hypothesis on the outcome"
-expect POST "/api/value-outcomes/$O1/commit" "{\"target_value\":1.2,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"commitment_note\":\"Verification: the owner commits to 1.2.\"}" 201 "the target committed"
+expect POST "/api/value-outcomes/$O1/commit" "{\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\",\"target_value\":1.2,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"commitment_note\":\"Verification: the owner commits to 1.2.\"}" 201 "the target committed"
 expect POST "/api/value-outcomes/$O1/measure" '{"actual_value":1.1,"actual_measured_at":"2026-10-12T12:00:00Z"}' 200 "the actual measured"
 expect POST "/api/value-outcomes/$O1/verify" "{\"verified_by_person_id\":\"$VERIFIER\",\"verified_at\":\"2026-10-12T13:00:00Z\",\"attestation_note\":\"Verification: the customer confirmed the extract.\"}" 200 "the actual verified"
 FQ() { printf '"evidence_kind":"public_filing","provenance":"Fixture 10-K FY2025 (not a source)","confidence":"medium","source_verified":false,"ai_sourced":false,"evidence_form":"quote","quote_text":"%s","how_read":"%s"' "$1" "$2"; }

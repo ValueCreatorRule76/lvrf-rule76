@@ -110,8 +110,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -147,7 +147,7 @@ for f in sorted(glob.glob('client/src/**/*.tsx', recursive=True)):
             d += {'{': 1, '}': -1}.get(s[j], 0); j += 1
         blk = ' '.join(s[i:j - 1].split())
         if blk.startswith('confirm ?'): continue  # the form that passes its caller's confirmation through
-        has = 'slice(0, 8)' in blk or '<ShortId' in blk or 'shortId(' in blk or 'payload_hash' in blk
+        has = 'slice(0, 8)' in blk or 'short(o.id)' in blk or '<ShortId' in blk or 'shortId(' in blk or 'payload_hash' in blk
         t = re.search(r'data-testid="confirm-text">(.{0,40})', blk)
         print(('ID' if has else 'WORDS') + '\t' + f.split('/')[-1] + ':' + (t.group(1) if t else blk[:40]))
 PY2

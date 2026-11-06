@@ -9,7 +9,7 @@
 # Fixtures go through the routes; the B3 act session is performed through the page, on the clone, and its confirmations
 # compared word for word with LVRF_PLAN §19. DELIBERATE BREAKS (every file restored byte-identical, every function
 # restored by re-applying hardening.sql), each must be caught:
-#   C1  the measure-class refusal removed from lvrf_cost_of_delay: the fixture then computes, so the class is what holds it
+#   C1  the arithmetic changed (B4: the class is stated at commit, so the fixture computes; its figure must equal the hand sum)
 #   C2  a rate on vendor evidence; a rate attested by no customer-side person (both refused by the function)
 #   C3  the unit check removed from the rate guard: a rate in the wrong unit lands
 #   C4  the reference-example test removed from the CFO lens: Curia reads through the CFO lens
@@ -54,7 +54,8 @@ cleanup() {
   for f in "${EDITED[@]}"; do
     cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }
   done
-  sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
+  # KEEP_DB=1 keeps the clone (a throwaway copy, never prod) for a read-only check after the run; drop it yourself.
+  sleep 1; [ -n "${KEEP_DB:-}" ] || dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
   rm -rf "$W/chrome"
 }
 . scripts/lib/finish.sh
@@ -121,8 +122,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "204" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 204 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -136,14 +137,14 @@ RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > "$W/own.log" 2>&1 && ok "ownership.sql" || bad "ownership: $(grep -m2 ERROR "$W/own.log")"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "204" ] && ok "204 triggers: section 33 adds 18" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "320" ] && ok "  ...320 information_schema rows (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5): section 33 adds 18" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: the migrations and section 33 write nothing to a run" || bad "  ...a run changed"
 [ "$(q "SELECT string_agg(DISTINCT kind, ',') || '|' || count(*) FROM record_documents")" = "rendering|$(q "SELECT count(*) FROM record_documents")" ] && ok "  ...every existing record document reads 'rendering'" || bad "  ...kinds: $(q "SELECT string_agg(DISTINCT kind, ',') FROM record_documents")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 49 migrations, newest 0048_b3_value_case" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^127 CHECKs in the database: 127 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 
@@ -269,15 +270,16 @@ V="$(in_txn "$(CORR "$RN")" "SELECT jsonb_path_query_array(lvrf_cost_of_delay('$
 printf '%s' "$V" | grep -q '"rate_not_attested"' && ok "C2: a rate attested by a person with no customer-side role → refused" || bad "C2 attester: $V"
 
 step "7. Commit, the seal, and the \$50,000 (C1)"
-expect POST "/api/value-outcomes/$OA/commit" "$(J target_value 1.0 committed_by_person_id "$OWNA" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed to 1.0.')" 201 "a committed target of 1.0 against 1.4"
-[ "$(CODC)" = '["no_measure_class"]' ] && ok "every input but the class in place: refused with exactly \"no measure class stated at commit\" (until B4)" || bad "reasons: $(CODC)"
-[ "$(q "SELECT (lvrf_cost_of_delay('$OA')->>'amount') IS NULL AND lvrf_cost_of_delay('$OA')->>'status' = 'refused'")" = "t" ] && ok "  ...and no amount: the function computes nothing for a 3.0 case" || bad "  ...amount: $(q "SELECT lvrf_cost_of_delay('$OA')")"
+expect POST "/api/value-outcomes/$OA/commit" "$(J target_value 1.0 committed_by_person_id "$OWNA" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed to 1.0.' attribution_method contribution_only measure_class capability_performance)" 201 "a committed target of 1.0 against 1.4"
+# B4 (§14): the class is stated at commit, so with every input in place the figure computes.
+[ "$(CODC)" = '[]' ] && [ "$(q "SELECT lvrf_cost_of_delay('$OA')->>'status' || '|' || (lvrf_cost_of_delay('$OA')->>'amount') || '|' || (lvrf_cost_of_delay('$OA')->>'basis')")" = "computed|50000|client_stated" ] \
+  && ok "every input in place, the class stated at commit: computed 50000, its basis the weaker of its inputs (the client-stated rate, below the published baseline)" || bad "cod: $(q "SELECT lvrf_cost_of_delay('$OA')")"
 # In tenths, so the hand sum is exact: |10 − 14| / 10 × 250,000 × 6 / 12.
 BYHAND="$(node -e 'console.log(Math.abs(10 - 14) * 250000 * 6 / (12 * 10))')"
 [ "$(q "SELECT trim_scale(round(lvrf_cost_of_delay_amount(1.4, 1.0, 250000, 6), 2))")" = "$BYHAND" ] && [ "$BYHAND" = "50000" ] && ok "the \$50,000, by hand: |1.0 − 1.4| × 250,000 × 6 / 12 = $BYHAND, through lvrf_cost_of_delay_amount only" || bad "amount: $(q "SELECT lvrf_cost_of_delay_amount(1.4, 1.0, 250000, 6)") by hand $BYHAND"
 [ "$(q "SELECT lvrf_cost_of_delay_amount(NULL, 1.0, 250000, 6) IS NULL AND lvrf_cost_of_delay_amount(1.4, 1.0, 0, 6) = 0")" = "t" ] && ok "  ...a NULL input gives no figure; a zero rate gives zero (zero is data)" || bad "  ...null/zero"
-fnbreak lvrf_cost_of_delay "  reasons := reasons || jsonb_build_object('code', 'no_measure_class', 'text', 'no measure class stated at commit');" "  NULL;"
-[ "$(q "SELECT lvrf_cost_of_delay('$OA')->>'status' || '|' || (lvrf_cost_of_delay('$OA')->>'amount')")" = "computed|50000" ] && ok "C1: the class refusal removed → caught: the fixture computes 50000, so the class is what holds a 3.0 case" || bad "C1: $(q "SELECT lvrf_cost_of_delay('$OA')")"
+fnbreak lvrf_cost_of_delay_amount "  SELECT abs(p_target - p_baseline) * p_rate * p_months / 12" "  SELECT abs(p_target - p_baseline) * p_rate * p_months / 6"
+[ "$(q "SELECT lvrf_cost_of_delay('$OA')->>'amount'")" != "$BYHAND" ] && ok "C1: the arithmetic changed → caught: the case's figure no longer equals the hand sum" || bad "C1"
 reharden
 expect POST "/api/engagements/$ENGA/milestones" "$(J title 'Baseline extract from the EHS system' due_on "$LATER" owner 'Jane Doe, Director of Safety (fixture)' stage measure)" 201 "a milestone, its owner as stated"; MS="$(rj b.roadmap_milestone_id)"
 expect POST "/api/engagements/$ENGA/milestones" "$(J title 'Baseline extract' due_on "$LATER")" 422 "  ...a milestone with no owner stated" "State its owner"
@@ -287,7 +289,7 @@ expect POST "/api/roadmap-milestones/$MS2/supersede" "$(J status done reason 'Ve
 sqlrefused "a milestone edited in place" "UPDATE roadmap_milestones SET due_on = '$TODAY' WHERE id = '$MS2'" "never edited"
 produce "$ENGA" "Verification: the client-stated case."; RA="$RUN"; HASHA="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RA'")"
 C() { q "SELECT $1 FROM value_runs WHERE id = '$RA'"; }
-[ "$(C "jsonb_path_query_array(payload->'case'->'cost_of_delay'->'reasons', '\$[*].code')::text")" = '["no_measure_class"]' ] && ok "the run seals cost of delay refused for the class alone" || bad "sealed reasons: $(C "payload->'case'->'cost_of_delay'")"
+[ "$(C "(payload->'case'->'cost_of_delay'->>'status') || '|' || (payload->'case'->'cost_of_delay'->>'amount') || '|' || (payload->'case'->'attribution'->>'class')")" = "computed|50000|capability_performance" ] && ok "the run seals the computed cost of delay, 50000, and the class stated at commit" || bad "sealed: $(C "payload->'case'->'cost_of_delay'")"
 [ "$(C "jsonb_array_length(payload->'case'->'roadmap'->'milestones') || '|' || (payload->'case'->'roadmap'->'milestones'->0->>'owner') || '|' || (payload->'case'->'roadmap'->'milestones'->0->>'slipped')")" = "1|Jane Doe, Director of Safety (fixture)|true" ] && ok "  ...the roadmap: the milestone's current version, its owner as stated, and that it slipped" || bad "  ...roadmap: $(C "payload->'case'->'roadmap'")"
 [ "$(C "(SELECT string_agg((x->>'lever_current') || ':' || jsonb_array_length(x->'offerings'), ',' ORDER BY x->>'lever') FROM jsonb_array_elements(payload->'case'->'solutioning') x)")" = "true:1,false:0" ] && ok "  ...solutioning: one offering on the current lever, none through the withdrawn one (ruling 5)" || bad "  ...solutioning: $(C "payload->'case'->'solutioning'")"
 [ "$(C "payload->>'currencyCode'")" = "" ] && ok "  ...the outcome's currency sealed as recorded (none here, so the case says so)" || ok "  ...currency sealed: $(C "payload->>'currencyCode'")"
@@ -328,7 +330,7 @@ expect POST "/api/institutions/$INSTB/hypotheses" "$(HB "$OB" "$L" 'Safe-work tr
 produce "$ENGB" "Verification: the outside-in case."; RB="$RUN"; HASHB="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RB'")"
 expect POST "/api/value-runs/$RB/share-for-review" "$(J shared_with 'Pat Example, VP Operations, Prospect Co (fixture)' lens cfo)" 409 "a share of an unlocked run" "lock it first"
 lock "$RB"
-[ "$(q "SELECT lvrf_run_banners('$RB')::text || '|' || lvrf_run_banners('$RA')::text")" = '{"outside_in": true, "unverified": true}|{"outside_in": false, "unverified": true}' ] && ok "banners from the seal: the outside-in run carries both; the client-stated run is not outside-in" || bad "banners: $(q "SELECT lvrf_run_banners('$RB'), lvrf_run_banners('$RA')")"
+[ "$(q "SELECT lvrf_run_banners('$RB')::text || '|' || lvrf_run_banners('$RA')::text")" = '{"not_shown": [], "outside_in": true, "unverified": true}|{"not_shown": [], "outside_in": false, "unverified": true}' ] && ok "banners from the seal: the outside-in run carries both; the client-stated run, whose printed rate is client-stated, is not outside-in; neither seals an unprinted customer-side item" || bad "banners: $(q "SELECT lvrf_run_banners('$RB'), lvrf_run_banners('$RA')")"
 expect POST "/api/value-runs/$RB/share-for-review" "$(J shared_with 'Pat Example, VP Operations, Prospect Co (fixture)' lens cfo)" 403 "a share by X" "steward" "$X"
 expect POST "/api/value-runs/$RB/share-for-review" "$(J shared_with 'Pat Example, VP Operations, Prospect Co (fixture)' lens cfo)" 201 "the steward's share of the outside-in run"; DOC="$(rj b.record_document_id)"
 [ "$(q "SELECT kind || '|' || disclosure || '|' || lens || '|' || shared_with || '|' || (content_hash = '$HASHB') FROM record_documents WHERE id = '$DOC'")" = "share_for_review|shared_for_review|cfo|Pat Example, VP Operations, Prospect Co (fixture)|true" ] && ok "  ...who, with whom, the run's hash; disclosed 'shared for review', never customer-shared" || bad "  ...doc: $(q "SELECT * FROM record_documents WHERE id = '$DOC'")"
@@ -376,7 +378,7 @@ restore "$CASE"
 
 step "12. The page, the screens, the print (C11)"
 stop_server; start_server
-RUN="$RA" LENS=general TAG=client EXPECT_ASKS="baseline_not_system_of_record+q,no_measure_class+q,no_actual+q,no_verifier+q" EXPECT_COD=cod-refused EXPECT_COD_QUESTION="no_measure_class+q" \
+RUN="$RA" LENS=general TAG=client EXPECT_ASKS="baseline_not_system_of_record+q,no_actual+q,committer_not_customer_side+q,no_verifier+q" EXPECT_COD=cod-computed \
   EXPECT_PACK_LABEL="proposed, sourced at 0 of 2 institutions" EXPECT_SOLUTIONING="true:1,false:0" FORBID="$NOTE_PART" HASH="$HASHA" EXPECT_OUTSIDE_IN=0 cw valuecase
 CFOR="$(q "SELECT CASE WHEN confidence_score < 55 THEN 'below_threshold,' ELSE '' END FROM value_runs WHERE id = '$RB'")no_actual"
 RUN="$RB" LENS=cfo TAG=outside_in EXPECT_ASKS="baseline_not_system_of_record+q,no_commitment+q,no_rate+q,no_measure_class+q,no_actual+q,no_verifier+q" \
@@ -386,7 +388,7 @@ RUN="$RB" LENS=general TAG=outside_in EXPECT_ASKS="baseline_not_system_of_record
 INST="$INSTB" cw povletter
 edit "$PAGE" 'data-testid="pack-entry-label"' 'data-testid="pack-entry-label-dropped"'
 sleep 5
-RUN="$RA" LENS=general TAG=break EXPECT_ASKS="baseline_not_system_of_record+q,no_measure_class+q,no_actual+q,no_verifier+q" EXPECT_PACK_LABEL="proposed, sourced at 0 of 2 institutions" HASH="$HASHA" cw valuecase > "$W/c11.out" 2>&1 || true
+RUN="$RA" LENS=general TAG=break EXPECT_ASKS="baseline_not_system_of_record+q,no_actual+q,committer_not_customer_side+q,no_verifier+q" EXPECT_PACK_LABEL="proposed, sourced at 0 of 2 institutions" HASH="$HASHA" cw valuecase > "$W/c11.out" 2>&1 || true
 grep -q 'FAIL    ...the pack entry reads' "$W/c11.out" && ok "C11: the \"sourced at x of N\" label dropped → caught" || bad "C11: $(grep -c FAIL "$W/c11.out")"
 FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/c11.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/c11.out" || true)))
 restore "$PAGE"; sleep 3
@@ -396,7 +398,7 @@ HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 |
 printf '%s' "$(HASHES)" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $(HASHES)" || bad "hashes: $(HASHES)"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.source_fixture IS DISTINCT FROM 'value_case_fixture'")" = "$RUNS0" ] && ok "every run on the copy byte-identical after all of this" || bad "an older run changed"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^127 CHECKs in the database: 127 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 
