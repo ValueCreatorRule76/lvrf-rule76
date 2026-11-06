@@ -13823,5 +13823,5 @@ ruling). Ships with steward safety (§19, merged at `7e4d791`), which is on main
   - **Break targets (Brad's standing guard):** 41 files any verify script breaks, each diffed against HEAD after the regression: 38 byte-identical; the 3 that differ (`ValueCasePage.tsx`, `valueCase.ts`, `outcomeWalk.ts`) differ only by B4's own changes, read line by line, no break residue
   - **Equivalence against `9c93671`:** 77 GETs, 77 identical, no added keys
   - **Bundle:** `index-PDTgA8rp.js` / `index-CJhpJCOf.css`
-  - **Backup TOC for Gate B:** measured on clones of the 5 Nov copy: `bd5cb7c` 806, `9c93671` 886 (+80, B3), B4 903 (+17). Prod read 811 at `bd5cb7c`, so B4's pre-migration backup expects **891**.
+  - **Backup TOC for Gate B:** measured on clones of the 5 Nov copy (the box's snapshot reads 808; the copy reads 2 lower): `bd5cb7c` (B1, before B2) 806, `9c93671` 886 (+80: B2's three objects and B3's), B4 903 (+17). B4's pre-migration backup expects **808 + 80 = 888**. (Corrected by Brad, 6 Nov 2026: I first gave 891, adding the +80 to B2's 811 as if `bd5cb7c` were B2's commit.)
   - **Screens and PDFs** in `~/lvrf-backups/l41-screens` (`b4reg/`), every page looked at.
