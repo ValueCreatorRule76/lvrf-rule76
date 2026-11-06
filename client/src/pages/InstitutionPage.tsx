@@ -14,6 +14,7 @@ import { AccountFactsCard } from '../components/AccountFactsCard';
 import { CustomerRoles } from '../components/CustomerRoles';
 import { AccountEvidence } from '../components/AccountEvidence';
 import { OutcomeSpine } from '../components/OutcomeSpine';
+import { EngagementRuns } from '../components/RunControls';
 import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
 import { STEP_TITLES, day, deriveSteps } from '../lib/workspaceStatus';
 import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
@@ -602,6 +603,8 @@ export function InstitutionPage() {
             {view.engagements.map((e) => (
               <li key={e.id} className="border-b border-rule-soft py-1.5 last:border-b-0">
                 <span className="text-[13px] text-ink">{e.name}</span>
+                {/* Brad, 6 Nov 2026: the tenant's own account has no walk, so its runs are produced and locked here, by W7's and W8's routes. */}
+                {view.institution.is_tenant_self && <EngagementRuns engagementId={e.id} onChanged={refresh} />}
               </li>
             ))}
           </ul>

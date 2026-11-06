@@ -13,6 +13,7 @@ import { SystemExerciseLine } from './SystemExercise';
 import { deriveWalk, walkStatus, type StepState, type WalkState, type WalkStatus } from '../lib/workspaceStatus';
 import { ShortId } from './ShortId';
 import { shortId } from '../lib/shortId';
+import { NewRun, LockRun } from './RunControls';
 
 /**
  * Q4c2 — the outside-in walk on the account page (LVRF_PLAN §4c, approved
@@ -148,47 +149,6 @@ function CorrectSupport({ e, outcomeId, metricName, sealedRuns, onDone }: { e: W
   );
 }
 
-/**
- * Q4l: a second (or later) run, once the latest is locked — e.g. after an
- * AI-sourced citation is opened, so the new run seals the opened state.
- * The same route as W7's first run; nothing earlier changes.
- */
-function NewRun({ engId, next, banner, onDone }: { engId: string; next: number; banner: string; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [v, setV] = useState({ banner_title: banner, note: '', source_fixture: '' });
-  if (!open) {
-    return (
-      <div className="mt-1">
-        <button type="button" onClick={() => setOpen(true)}
-          className={'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ' + FOCUS_RING}>
-          Produce a new run…
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-2 border-t border-rule-soft pt-2" data-testid="new-run">
-      <GovernedForm<{ value_run_id: string }>
-        path={`/api/engagements/${engId}/produce-run`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">Run {next}: the outcome, its evidence and its confidence as they stand now, snapshotted. Earlier runs keep what they sealed. Not locked until you lock it.</p>}
-        fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Banner</span>
-            <input className={INPUT_CLASS} value={v.banner_title} onChange={(e) => setV({ ...v, banner_title: e.target.value })} /></label>
-          <label className="block"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Note (required)</span>
-            <input className={INPUT_CLASS} value={v.note} placeholder="What changed since the last run, e.g. the citation was opened" onChange={(e) => setV({ ...v, note: e.target.value })} /></label>
-          <label className="block sm:col-span-2"><span className="mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Run source label (required)</span>
-            <input className={INPUT_CLASS} value={v.source_fixture} onChange={(e) => setV({ ...v, source_fixture: e.target.value })} /></label>
-        </div>}
-        canSubmit={v.banner_title.trim() !== '' && v.note.trim() !== '' && v.source_fixture.trim() !== ''}
-        unmet={[...(v.banner_title.trim() === '' ? ['a banner'] : []), ...(v.note.trim() === '' ? ['a note'] : []), ...(v.source_fixture.trim() === '' ? ['a run source label'] : [])]}
-        buildBody={() => v}
-        submitLabel={`Produce run ${next}`}
-        onSuccess={() => { setOpen(false); setV({ ...v, note: '' }); onDone(); }}
-        renderSuccess={() => <>Produced.</>} />
-    </div>
-  );
-}
-
 function Step({ id, title, state, waitsFor, children, testId }: {
   id: string; title: string; state: StepState; waitsFor?: string; children: ReactNode; testId: string;
 }) {
@@ -245,7 +205,6 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
   const [p4, setP4] = useState({ engagement_name: '', owner: '', metric_name: '', unit: '', direction: '', source_system: '', capability_name: '', baseline_value: '', baseline_measured_at: '' });
   const [p5, setP5] = useState({ industry_measure_id: '', basis_note: '' });
   const [p7, setP7] = useState({ banner_title: 'OUTSIDE-IN HYPOTHESIS', note: '', source_fixture: '' });
-  const [p8, setP8] = useState({ lock_reason: '' });
   const [p9, setP9] = useState({ retirement_reason: '' });
   useEffect(() => { if (w && !('error' in w)) onStatus?.(walkStatus(w)); }, [w]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -485,14 +444,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
         <Step id="W8" title="Lock the run" state={s8} waitsFor="W7, a run" testId="w8">
           {lockedRun && <p className="m-0 mb-2 text-[12.5px] text-ink">Run {lockedRun.run_number} locked {lockedRun.locked_at!.slice(0, 10)}. A locked run cannot change.</p>}
           {openRun && (s8 === 'next' || (lockedRun && !eng?.retired)) && (
-            <GovernedForm<{ run_id: string }>
-              path={`/api/value-runs/${openRun.id}/lock`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">Locking run {openRun.run_number} is final: the run cannot change. Earlier locked runs stay as they were.</p>}
-              fields={field('Lock reason', <textarea rows={2} className={INPUT_CLASS} value={p8.lock_reason} onChange={(e) => setP8({ lock_reason: e.target.value })} />)}
-              canSubmit={p8.lock_reason.trim() !== ''}
-              unmet={['say why the run is locked']}
-              buildBody={() => ({ lock_reason: p8.lock_reason })}
-              primary={Boolean(primaryFor?.includes('w8'))} submitLabel={`Lock run ${openRun.run_number}`} onSuccess={() => { setP8({ lock_reason: '' }); reload(); }} renderSuccess={() => <>Locked.</>} />
+            <LockRun run={openRun} primary={Boolean(primaryFor?.includes('w8'))} onDone={reload} />
           )}
         </Step>
 

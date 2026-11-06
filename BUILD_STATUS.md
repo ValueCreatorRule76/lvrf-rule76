@@ -13811,7 +13811,9 @@ ruling). Ships with steward safety (§19, merged at `7e4d791`), which is on main
     without the method; the method changed after commit; a measurement on inferred evidence only; the class rule
     removed; a withdrawal's kept values unchecked; the not-shown line removed; an unsourced claimed impact printed as a
     figure; the AMENDMENT-005 exemption widened); acts 1–4 performed on the clone through the page, each confirmation
-    equal to §14's text word for word; acts 5–7 produce, lock and read Skillsoft's first v5 run under the CFO lens;
+    equal to §14's text word for word; acts 5–6 produced and locked Skillsoft's first v5 run **by route, not through the
+    page: not proven through the page** (corrected 6 Nov 2026; the tenant's own account had no Produce control, which
+    blocked Act 5 at Gate B; see "B4 addendum" below); act 7 read its case under the CFO lens through the page;
     run 1's case never prints 8,400,000; a NULL-input refusal per new CHECK, each CHECK read false (never NULL) on its
     input.
   - **The full regression: 52 scripts pass in one run (`verify_accounts_home` 62/1 there, on its "failed /walk" timing check: the row still read "loading…" 2 s after the intercepted 500; 63/0 twice run alone right after; B4 touches neither the home page nor /walk)** on a clone of the 5 Nov copy; build and lint clean (the one warning is
@@ -13825,3 +13827,22 @@ ruling). Ships with steward safety (§19, merged at `7e4d791`), which is on main
   - **Bundle:** `index-PDTgA8rp.js` / `index-CJhpJCOf.css`
   - **Backup TOC for Gate B:** measured on clones of the 5 Nov copy (the box's snapshot reads 808; the copy reads 2 lower): `bd5cb7c` (B1, before B2) 806, `9c93671` 886 (+80: B2's three objects and B3's), B4 903 (+17). B4's pre-migration backup expects **808 + 80 = 888**. (Corrected by Brad, 6 Nov 2026: I first gave 891, adding the +80 to B2's 811 as if `bd5cb7c` were B2's commit.)
   - **Screens and PDFs** in `~/lvrf-backups/l41-screens` (`b4reg/`), every page looked at.
+
+### B4 addendum: producing and locking a run on the tenant's own account — Gate A, 6 Nov 2026 (UTC)
+
+**Found at B4's Gate B (Brad, 6 Nov 2026):** Act 5 could not be performed. W7 and W8 live in `OutsideInWalk`, which the
+tenant's own account does not render (it has no walk), so Skillsoft had no Produce or Lock control. Gate A had not
+caught it because its rehearsal produced and locked the run by route. Acts 1–4 were performed on prod through the page;
+their Gate C read is clean.
+
+- **Built (client only):** `RunControls.tsx` holds the produce form (W7's three fields: banner, note, run source label)
+  and the lock form, shared by the walk (W7's later runs, W8) and by card 05 on the tenant's own account, which lists
+  each engagement's runs and offers "Produce a new run…" or "Lock run N". The same routes, so the same records:
+  producing is create-only (the run row is its record), locking is the steward-attributed `lock` act. No server,
+  schema or hardening change.
+- **Standing Gate A rule (Brad, 6 Nov 2026):** every act in an act-session rehearsal goes through the page; an act done
+  by route is named in the report as not proven through the page.
+- **Gate A:** `verify_commit_measure_verify.sh` **157/0**: acts 1–6 through the page, acts 3–4's confirmations now compared
+  word for word; break **M9** (card 05's controls hidden on the tenant's own account) caught, nothing produced under it;
+  run 2 produced with act 5's run source label and locked by the steward with act 6's reason, one `lock` act.
+  The full regression: 52 scripts pass in one run, build and lint clean (the one warning `ActorContext.tsx`'s); break targets 40 of 42 identical to HEAD, the 2 that differ (`OutsideInWalk.tsx`, `InstitutionPage.tsx`) only by this change; equivalence against `36b2f9e` 77/77, no added keys. Bundle `index-C83Pd23g.js` / `index-CJhpJCOf.css`. Screens `b4_card05_*` in `~/lvrf-backups/l41-screens/b4reg`.

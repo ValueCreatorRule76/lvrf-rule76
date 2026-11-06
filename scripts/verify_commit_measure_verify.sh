@@ -12,7 +12,7 @@
 #   M1  a commit without the method       M2  the method changed after commit      M3  a measurement on inferred evidence
 #   M4  the class rule removed            M5  a withdrawal's kept values not checked
 #   M6  the not-shown line removed        M7  an unsourced claimed impact printed as a figure
-#   M8  the AMENDMENT-005 exemption widened past a withdrawal
+#   M8  the AMENDMENT-005 exemption widened past a withdrawal      M9  card 05's run controls hidden on the tenant's own account
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -31,7 +31,8 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_spine.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PAGE=client/src/pages/ValueCasePage.tsx
-EDITED=("$PAGE")
+INSTPAGE=client/src/pages/InstitutionPage.tsx
+EDITED=("$PAGE" "$INSTPAGE")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -179,6 +180,8 @@ export R2="The target of 100% was committed by [SIM] Customer Sponsor, a simulat
 export R3="A simulated assessment, not Skillsoft's dollar retention; the measurement it supported is withdrawn."
 export R4="A simulated export of a figure Skillsoft has not reported; the measurement it supported is withdrawn."
 export C1="Withdraw the measurement of f23ee6a8, Dollar Retention Rate (trailing twelve months): actual 100.4 %, measured 2026-07-31, realized 8,400,000 USD. The outcome reads committed again; the withdrawn values stay on the record."
+export C3="Withdraw 2c10e091, “Assessed capability in value-based renewal execution across the enterprise sales”, from Dollar Retention Rate (trailing twelve months): it supports the actual now, and will support nothing."
+export C4="Withdraw eea43d9a, “LTM dollar retention rate of 100.4% at Q2 FY2027 period end.”, from Dollar Retention Rate (trailing twelve months): it supports the actual now, and will support nothing."
 export C2="Withdraw the commitment of f23ee6a8, Dollar Retention Rate (trailing twelve months): target 100 %, committed by [SIM] Customer Sponsor. The outcome reads claimed; the withdrawn values stay on the record."
 cw spineacts
 [ "$(q "SELECT kind || ':' || (withdrawn_values->>'actual_value') || ':' || (withdrawn_values->>'realized_currency_impact') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'measurement'")" = "measurement:100.4:8400000" ] && ok "act 1: the measurement's values kept exactly (actual 100.4, realized 8400000)" || bad "act 1 values: $(q "SELECT withdrawn_values FROM outcome_withdrawals WHERE value_outcome_id = '$OUT'")"
@@ -203,8 +206,26 @@ reharden
 sqlrefused "  ...with it back: the same link refused" "$NEWSIM" "simulated evidence may not support a measured actual"
 
 step "5. Acts 5-7: Skillsoft's first v5 run, locked, read under the CFO lens"
-expect POST "/api/engagements/$ENG/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "Skillsoft's own case as it stands: the published DRR baseline of 98%, no committed target, no measured actual." source_fixture 'Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun 2026)')" 201 "act 5: produced"; RS="$(rj b.value_run_id)"
-expect POST "/api/value-runs/$RS/lock" "$(J lock_reason "Skillsoft's own case as it stands, locked as the record its value case and its print are read from.")" 200 "act 6: locked"
+# Acts 5-6 through the page, on card 05 (Brad, 6 Nov 2026: every act in a rehearsal goes through the page).
+export ENG NEXT="$(q "SELECT coalesce(max(run_number), 0) + 1 FROM value_runs WHERE engagement_id = '$ENG'")"
+export N5="Skillsoft's own case as it stands: the published DRR baseline of 98%, no committed target, no measured actual."
+export S5="Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun 2026)"
+export L6="Skillsoft's own case as it stands, locked as the record its value case and its print are read from."
+# M9: card 05's run controls hidden on the tenant's own account: the walk cannot perform act 5.
+edit "$INSTPAGE" "{view.institution.is_tenant_self && <EngagementRuns" "{false && <EngagementRuns"
+sleep 6
+cw runacts > "$W/m9.out" 2>&1 || true
+grep -q "FAIL  card 05: the tenant's own engagement offers" "$W/m9.out" && ok "M9: card 05's run controls hidden → caught: act 5 cannot be performed through the page" || bad "M9: $(grep -c FAIL "$W/m9.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/m9.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/m9.out" || true)))
+[ "$(q "SELECT count(*) FROM value_runs WHERE engagement_id = '$ENG' AND run_number >= $NEXT")" = "0" ] && ok "  ...and nothing was produced under the break" || bad "  ...a run was produced under M9"
+restore "$INSTPAGE"; sleep 4
+A0="$(q "SELECT count(*) FROM governance_acts")"
+cw runacts
+RS="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND run_number = $NEXT")"
+[ -n "$RS" ] && [ "$(q "SELECT (locked_at IS NOT NULL) || '|' || source_fixture || '|' || lock_reason || '|' || (locked_by_person_id = '$S') FROM value_runs WHERE id = '$RS'")" = "true|$S5|$L6|true" ] \
+  && ok "acts 5-6 recorded through the page: run $NEXT produced with act 5's run source label, locked by the steward with act 6's reason" || bad "acts 5-6: $(q "SELECT run_number, locked_at, source_fixture, lock_reason FROM value_runs WHERE engagement_id = '$ENG' ORDER BY run_number")"
+[ "$(q "SELECT count(*) || '|' || string_agg(act::text || ':' || (actor_person_id = '$S') || ':' || (reason = '$(printf %s "$L6" | sed "s/'/''/g")'), ',') FROM governance_acts WHERE subject_table = 'value_runs' AND subject_id = '$RS'")" = "1|lock:true:true" ] && [ "$(q "SELECT count(*) FROM governance_acts")" = "$((A0 + 1))" ] \
+  && ok "  ...one act: the steward's lock, with act 6's reason (producing is create-only: the run row is its record)" || bad "  ...acts: $A0 -> $(q "SELECT count(*) FROM governance_acts"); on the run: $(q "SELECT string_agg(act::text, ',') FROM governance_acts WHERE subject_id = '$RS'")"
 [ "$(q "SELECT payload->>'payloadVersion' || '|' || coalesce(payload->>'actualValue','-') || '|' || coalesce(payload->>'realizedCurrencyImpact','-') || '|' || (payload->'case'->'cost_of_delay'->>'status') FROM value_runs WHERE id = '$RS'")" = "5|-|-|refused" ] && ok "  ...v5, sealing no actual, no realized impact, and cost of delay refused" || bad "  ...sealed: $(q "SELECT payload->>'actualValue', payload->>'realizedCurrencyImpact' FROM value_runs WHERE id = '$RS'")"
 HASHS="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RS'")"
 CFOR="$(q "SELECT CASE WHEN confidence_score < 55 THEN 'below_threshold,' ELSE '' END FROM value_runs WHERE id = '$RS'")no_actual"

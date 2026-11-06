@@ -385,7 +385,7 @@ if (MODE === 'spineacts') {
     check(await waitFor(`(${row}?.textContent ?? '').includes(${JSON.stringify(kind === 'measurement' ? 'not measured' : 'no commitment')})`), `  ...recorded: the outcome reads ${kind === 'measurement' ? 'not measured' : 'with no commitment'}`, await ev(`(${row}?.textContent ?? '').slice(0, 300)`));
   }
   // Acts 3 and 4: the two simulated actual links, on card 01c (muted rows: "Show actions" first).
-  for (const [id, reason] of [[E.SIM1, E.R3], [E.SIM2, E.R4]]) {
+  for (const [id, reason, expected] of [[E.SIM1, E.R3, E.C3], [E.SIM2, E.R4, E.C4]]) {
     const r = `document.querySelector('[data-evidence="${id}"]')`;
     if (await ev(`!!${r}?.querySelector('[data-testid=show-actions]') && !${r}.querySelector('[data-testid=withdraw-link-open]')`)) { await ev(`${r}.querySelector('[data-testid=show-actions]').click()`); await sleep(300); }
     check(await ev(`(${r}.querySelector('[data-testid=danger-zone] [data-testid=evidence-link-withdraw]')?.textContent ?? '').includes('Link: the actual of')`), `${id.slice(0, 8)}: "Withdraw this link…" under "Link: the actual of …"`);
@@ -394,11 +394,32 @@ if (MODE === 'spineacts') {
     await setField(f, 'Why', reason); await sleep(200);
     await submitIn(f, 'Withdraw the link'); await sleep(300);
     const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
-    check(ct.startsWith(`Withdraw ${id.slice(0, 8)}, “`) && ct.endsWith('it supports the actual now, and will support nothing.'), `  ...its confirmation names ${id.slice(0, 8)}`, ct);
+    check(ct === expected, `  ...${id.slice(0, 8)}: its confirmation reads exactly as the act session quotes it`, ct);
     await confirmIn(f); await sleep(1200);
     await page();
   }
   await shot('b4_card01d_after_1280', 1280);
+}
+
+if (MODE === 'runacts') {
+  // B4 acts 5-6 through the page (Brad, 6 Nov 2026: every act in a rehearsal goes through the page). The tenant's own
+  // account has no walk: card 05 produces and locks its runs, by W7's and W8's routes. E.ENG the engagement; E.N5 the
+  // note, E.S5 the run source label, E.L6 the lock reason; E.NEXT the run number expected.
+  await open(`/accounts/${E.SELF_INST}`, `!!document.querySelector('[data-testid=engagement-runs][data-engagement="${E.ENG}"]')`);
+  const box = `document.querySelector('[data-testid=engagement-runs][data-engagement="${E.ENG}"]')`;
+  check(await ev(`!!${box}?.querySelector('[data-testid=new-run-open]')`), 'card 05: the tenant\'s own engagement offers "Produce a new run…"', await ev(`(${box}?.textContent ?? 'no card 05 run controls').slice(0, 200)`));
+  await ev(`${box}?.querySelector('[data-testid=new-run-open]')?.click()`); await sleep(300);
+  const nf = `${box}?.querySelector('[data-testid=new-run]')`;
+  check(await ev(`${nf}?.querySelector('[data-testid=new-run-banner]')?.value ?? ''`) === 'OUTSIDE-IN HYPOTHESIS', '  ...W7\'s three fields, the banner reading OUTSIDE-IN HYPOTHESIS');
+  await setField(nf, 'Note', E.N5); await setField(nf, 'Run source label', E.S5); await sleep(200);
+  check(await submitIn(nf, `Produce run ${E.NEXT}`), `act 5: "Produce run ${E.NEXT}" pressed`); await sleep(2500);
+  check(await waitFor(`!!${box}?.querySelector('[data-testid=engagement-run][data-locked=false]') && !!${box}?.querySelector('[data-testid=lock-run]')`), `  ...run ${E.NEXT} listed, not locked, and "Lock run ${E.NEXT}" offered`, await ev(`(${box}?.textContent ?? '').slice(0, 300)`));
+  await shot('b4_card05_produced_1280', 1280);
+  const lf = `${box}?.querySelector('[data-testid=lock-run]')`;
+  await setField(lf, 'Lock reason', E.L6); await sleep(200);
+  check(await submitIn(lf, `Lock run ${E.NEXT}`), `act 6: "Lock run ${E.NEXT}" pressed`); await sleep(2500);
+  check(await waitFor(`!!${box}?.querySelector('[data-testid=engagement-run][data-locked=true]') && ![...${box}.querySelectorAll('[data-testid=engagement-run]')].some(r=>r.dataset.locked==='false') && !!${box}.querySelector('[data-testid=new-run-open]')`), `  ...run ${E.NEXT} locked; "Produce a new run…" offered again`, await ev(`(${box}?.textContent ?? '').slice(0, 300)`));
+  await shot('b4_card05_locked_1280', 1280);
 }
 
 if (MODE === 'stewardsafety') {

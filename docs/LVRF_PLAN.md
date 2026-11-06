@@ -3700,10 +3700,11 @@ confirmations; Gate A compares them word for word.
    is withdrawn.`
 4. **Card 01c, `eea43d9a`**, the same way. Why: `A simulated export of a figure Skillsoft has not reported; the measurement it
    supported is withdrawn.`
-5. **W7, "Produce".** Banner `OUTSIDE-IN HYPOTHESIS`; Note `Skillsoft's own case as it stands: the published DRR baseline of
+5. **Card 05, Engagements, "Produce a new run…"** (the tenant's own account has no walk; the same form and route as
+   W7; added 6 Nov 2026 after Act 5 was blocked). Banner `OUTSIDE-IN HYPOTHESIS`; Note `Skillsoft's own case as it stands: the published DRR baseline of
    98%, no committed target, no measured actual.`; Run source label `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun
    2026)`.
-6. **W8, lock.** Lock reason `Skillsoft's own case as it stands, locked as the record its value case and its print are
+6. **Card 05, "Lock run 2"** (W8's form and route). Lock reason `Skillsoft's own case as it stands, locked as the record its value case and its print are
    read from.`
 7. **The case under the CFO lens; Print** (the print request is recorded); save the PDF to
    `~/lvrf-backups/l41-screens/skillsoft_case_cfo.pdf`, chmod 600. Expected: both banners and the full hash on every page;
