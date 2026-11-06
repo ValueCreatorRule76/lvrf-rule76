@@ -3652,11 +3652,27 @@ withdrawing the measurement clears it, and `outcome_withdrawals` keeps it with t
 the Customer Zero demonstration, 29 Aug), and stays as it is. B4 prints a realized currency only under `control_group`
 or `comparison_group`, with a source.
 
-**Gate A breaks, each caught (with the plan's own):** a commit without the method or the class; the method or class
+**Gate A breaks, each caught (with the plan's own):** the not-shown line removed (item 5 below); a commit without the method or the class; the method or class
 changed after commit; a measurement on simulated or inferred evidence only; a compliance class priced at a performance
 rate computed; causal language under any method but `control_group`; realized currency shown under trend, estimate or
 contribution; a withdrawal that loses the withdrawn values; **an unsourced claimed impact printed as a figure** (B3 printed
 "a vendor claim of $7,000,000 is on record"; Brad, 5 Nov 2026); run 1's case printing 8,400,000.
+
+### B4: added after the stage-10 rehearsal (Brad, 5 Nov 2026)
+
+The rehearsal (an independent subagent, read-only, on Gate A's PDFs and their clone) found both PDFs failing. Approved
+into B4's part 2, each with a Gate A check:
+1. **A figure's footnote carries its figure check:** where the sealed check flags it, the footnote says the quoted source
+   does not state the figure.
+2. **The target is footnoted** on the executive page and in the outcomes table: its basis, and whether the committer is
+   customer-side as the record reads it.
+3. **The falsifier says which way**, in the POV's sentence (e.g. "at or above its baseline of 1.4").
+4. **An ask for a customer-side committer** (`committer_not_customer_side`) when the committer is not.
+5. **The OUTSIDE-IN banner (ruling):** it prints unless a figure the case prints rests on customer-side evidence. When a
+   sealed customer-side item exists but is not printed, one line names it, e.g. "One customer-side item is on record but
+   not shown: the controller's rate attestation, because cost of delay is refused." **D-M21's share gate follows the
+   printed banners** (`lvrf_run_banners`). Gate A break: the not-shown line removed must be caught.
+6. "1 incidents": left; units print as recorded.
 
 ### B4: the act session (after B4's deploy; rule 10)
 
