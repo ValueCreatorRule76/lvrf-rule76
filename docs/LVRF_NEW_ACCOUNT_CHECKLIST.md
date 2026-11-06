@@ -156,6 +156,8 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 
 ## 10. Share and print *(B3)*
 
+- [ ] **Before printing, untick Chrome's "Headers and footers"** in the print dialog's "More settings" (Brad, 6 Nov 2026):
+      otherwise the browser adds its own date, title, URL and page numbers to every page, outside the record.
 - [ ] **Print to PDF and look at every page:** both banners and the run's full hash on each.
 - [ ] **Before each share, an independent agent checks the printed PDF against the record** (Brad, 5 Nov 2026, a CVAF
       pattern): every figure and its basis, every footnote, both banners on every page, and the full hash against the
