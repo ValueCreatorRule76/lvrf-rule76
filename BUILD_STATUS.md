@@ -13846,3 +13846,24 @@ their Gate C read is clean.
   word for word; break **M9** (card 05's controls hidden on the tenant's own account) caught, nothing produced under it;
   run 2 produced with act 5's run source label and locked by the steward with act 6's reason, one `lock` act.
   The full regression: 52 scripts pass in one run, build and lint clean (the one warning `ActorContext.tsx`'s); break targets 40 of 42 identical to HEAD, the 2 that differ (`OutsideInWalk.tsx`, `InstitutionPage.tsx`) only by this change; equivalence against `36b2f9e` 77/77, no added keys. Bundle `index-C83Pd23g.js` / `index-CJhpJCOf.css`. Screens `b4_card05_*` in `~/lvrf-backups/l41-screens/b4reg`.
+
+### B4: deployed; Brad's act session; the stage-10 check; Gate C — 6 Nov 2026 (UTC)
+
+**Deployed at `5b834f2`** (B4 at `efd1484`/`36b2f9e`, the card 05 addendum at `5b834f2`); bundle `index-C83Pd23g.js` /
+`index-CJhpJCOf.css`. The pre-B4 dump read TOC 888; a second dump was taken before the addendum's pull.
+
+- **Acts 1–7, Brad's, through the page:** the measurement and the commitment of `f23ee6a8` withdrawn (`outcome_withdrawals`
+  holds both, values as the outcome held them, including the realized 8,400,000); the actual links `2c10e091` and
+  `eea43d9a` withdrawn; run 2 (`98a71a82`) produced on card 05 and locked, payload v5, sealing no actual and no realized
+  impact, cost of delay refused; the case printed under the CFO lens (`print_request`, `cfo`).
+- **Gate C (read-only):** 209 triggers; drift none at 50 migrations and 1246 objects; 130 CHECKs; ownership clean; 26
+  runs, hashes 26 of 26; acts 169 → 174 (four `withdraw`, one `lock`, each Brad's with his reason; producing is
+  create-only); 4 current links; record documents 5 → 6; no refusal and no audit row without an actor in the day.
+- **The stage-10 independent check** (a subagent, read-only, on the PDF and prod): every printed figure traceable to the
+  seal or the live lens; the one footnote exact; both banners and the full hash on both pages; no short id; 7,000,000,
+  8,400,000 and 100.4 nowhere. **One FAIL against the act session's expectation:** under a CFO refusal the case prints no
+  outcomes section, so the claimed impact is neither shown nor said to be withheld ("A claimed impact is recorded with
+  no source behind it, so it is not shown" is not printed). Gate A's CFO walk did not expect that line (only the general
+  lens's did): the expectation was wrong, not the print. Open for Brad's ruling, with the check's other findings (the
+  "What we need from you" title on two sections; the lens read live, not sealed; run 2's sealed findings naming a
+  synthetic committer and verifier the people fields no longer hold).
