@@ -138,8 +138,8 @@ writes. A dump that dies partway exits non-zero *and* leaves a truncated file wi
 a normal name, indistinguishable for 14 days. Fix by dumping to `.partial` and
 renaming on success.
 
-**Known item:** dumps live on `/dev/sda1`, the same volume as the database. This
-covers a bad migration; it does not cover losing the VPS. No offsite copy exists.
+Dumps live on `/dev/sda1`, the same volume as the database. The off-site copy is
+`lvrf-offsite.sh`, below.
 
 Restore verification — never into `lvrf`:
 
@@ -157,6 +157,44 @@ hard deletes is the worst version of this failure.
 
 ---
 
+### `lvrf-offsite.sh`
+
+| | |
+|---|---|
+| VPS path | `/usr/local/bin/lvrf-offsite.sh` |
+| Owner / mode | `root:root` **`700`** |
+| Schedule | `/etc/cron.d/lvrf-offsite` → `30 3 * * * root /usr/local/bin/lvrf-offsite.sh 2>&1 \| logger -t lvrf-offsite` |
+| Depends on | `rclone`; `/root/.config/rclone/rclone.conf` (remotes `lvrf-b2` and `lvrf-offsite`) |
+
+Copies the newest nightly dump to Backblaze B2, encrypted on the box (rclone
+`crypt`). Fails loudly if the newest dump is over 26 h old, so a dead nightly
+backup shows here too. Check runs with `journalctl -t lvrf-offsite`.
+
+**The bucket has Object Lock, Compliance mode, 30-day default retention.** No key,
+the box's or the master key, can delete a copy younger than 30 days, so root on
+the box cannot erase the off-site history. Pruning is the bucket's lifecycle rule
+(hide after 35 days, delete 1 day later). The box's key is bucket-only, Read and
+Write, with List All Bucket Names.
+
+**The crypt password lives in the password manager, not only in `rclone.conf`.**
+There is one (password2, the salt, is blank). Losing the VPS loses `rclone.conf`;
+without the password every off-site copy is unreadable. The restore test below
+proves it was saved: on 14 Nov 2026 the first attempt failed because the saved
+password was not the one in use (recovered on the box with `rclone reveal`).
+Check: `rclone cryptdecode --reverse lvrf-offsite: nightly/<name>` gives the same
+encrypted name on the Mac as on the box. Verified 14 Nov 2026: the off-site copy
+of `lvrf-20261114-030002.dump` matched the local one by SHA-256 and restored 16/0.
+
+Restore test, from the Mac, never into `lvrf`:
+
+```
+rclone lsf lvrf-offsite:nightly | tail -1
+rclone copyto lvrf-offsite:nightly/<name> ~/lvrf-backups/<name> && chmod 600 ~/lvrf-backups/<name>
+./scripts/restore_prod_copy.sh ~/lvrf-backups/<name>
+```
+
+---
+
 ## Not in this repo, by design
 
 | | |
@@ -166,6 +204,8 @@ hard deletes is the worst version of this failure.
 | `/etc/cron.d/lvrf-backup` | one line, documented above |
 | `~/.ssh/deploy_lvrf` | read-only deploy key, VPS only |
 | `/var/backups/lvrf/*.dump` | database contents |
+| `/root/.config/rclone/rclone.conf` | B2 key and crypt passwords (password also in the password manager) |
+| `/etc/cron.d/lvrf-offsite` | one line, documented above |
 
 Confirm `.gitignore` covers `.env` and `*.dump` before committing anything here.
 
