@@ -142,9 +142,9 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: the migrations and section 33 write nothing to a run" || bad "  ...a run changed"
 [ "$(q "SELECT string_agg(DISTINCT kind, ',') || '|' || count(*) FROM record_documents")" = "rendering|$(q "SELECT count(*) FROM record_documents")" ] && ok "  ...every existing record document reads 'rendering'" || bad "  ...kinds: $(q "SELECT string_agg(DISTINCT kind, ',') FROM record_documents")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^131 CHECKs in the database: 131 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 
@@ -398,7 +398,7 @@ HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 |
 printf '%s' "$(HASHES)" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $(HASHES)" || bad "hashes: $(HASHES)"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.source_fixture IS DISTINCT FROM 'value_case_fixture'")" = "$RUNS0" ] && ok "every run on the copy byte-identical after all of this" || bad "an older run changed"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^131 CHECKs in the database: 131 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 

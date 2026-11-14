@@ -55,7 +55,15 @@ export interface FindingsInput {
   committerSynthetic: boolean;
   /** F3 — the two conditions the ANY/EVERY gate can independently refuse on. */
   anyActualEvidenceVerified: boolean;
+  /** A named verifier who is simulated. B4 addendum: never set for an absent verifier (verifierAbsent says that). */
   verifierSynthetic: boolean;
+  /**
+   * B4 addendum (Brad, 6 Nov 2026): no verifier of record is named. Absence is not a synthetic person; before this,
+   * produce-run sealed "the verifier of record is synthetic" for no one (lvrf_misstated_findings states each such seal).
+   */
+  verifierAbsent?: boolean;
+  /** B4 addendum: the outcome's realization as sealed; F3 states it, never a fixed 'measured'. */
+  realization?: string;
   /** F4 */
   confidenceBand: 'low' | 'medium' | 'high';
   confidenceScore: number;
@@ -119,18 +127,19 @@ export function computeFindings(input: FindingsInput): Finding[] {
   // F3 — verification refused. The gate: canVerify = anyActualEvidenceVerified
   // && !verifierSynthetic. Message names only the condition(s) that actually
   // held, not both unconditionally.
-  const canVerify = input.anyActualEvidenceVerified && !input.verifierSynthetic;
+  const canVerify = input.anyActualEvidenceVerified && !input.verifierSynthetic && !input.verifierAbsent;
   if (!canVerify) {
     const reasons: string[] = [];
     if (!input.anyActualEvidenceVerified) reasons.push('no evidence supporting the actual has credit > 0');
-    if (input.verifierSynthetic) reasons.push('the verifier of record is synthetic');
+    if (input.verifierAbsent) reasons.push('no verifier of record has been named');
+    else if (input.verifierSynthetic) reasons.push('the verifier of record is synthetic');
     const cause = reasons.length > 0 ? reasons.join(' and ') : 'no verifier of record';
     findings.push({
       code: 'F3',
       severity: 'warning',
       subject: 'outcome',
       message:
-        `Verification REFUSED — ${cause}. The outcome remains 'measured'. Schema CHECK ` +
+        `Verification REFUSED — ${cause}. The outcome remains '${input.realization ?? 'measured'}'. Schema CHECK ` +
         "'value_outcomes_verified_requires_human' would reject an attempt to force 'verified'.",
     });
   }

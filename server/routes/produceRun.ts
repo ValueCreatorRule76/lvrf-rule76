@@ -426,7 +426,9 @@ export function produceRunRouter(pool: Pool): Router {
         committerSynthetic = !committer || committer.simulated;
         committerName = committer ? committer.full_name : null;
       } else {
-        committerSynthetic = true;
+        // B4 addendum (Brad, 6 Nov 2026): no committer is absence, not a synthetic committer. F2 fires only for a named
+        // simulated person; the scorer reads the absent name first, so no score changes.
+        committerSynthetic = false;
         committerName = null;
       }
 
@@ -440,7 +442,8 @@ export function produceRunRouter(pool: Pool): Router {
         verifierSynthetic = !verifier || verifier.simulated;
         verifierName = verifier ? verifier.full_name : null;
       } else {
-        verifierSynthetic = true;
+        // B4 addendum: no verifier is absence (verifierAbsent below), not a synthetic verifier.
+        verifierSynthetic = false;
         verifierName = null;
       }
 
@@ -584,6 +587,8 @@ export function produceRunRouter(pool: Pool): Router {
         committerSynthetic,
         anyActualEvidenceVerified,
         verifierSynthetic,
+        verifierAbsent: verifierName === null,
+        realization: vo.realization,
         driftChecksRan,
         driftFindings,
         confidenceBand: confidence.band,

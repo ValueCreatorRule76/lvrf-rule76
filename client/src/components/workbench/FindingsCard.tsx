@@ -12,6 +12,8 @@ const SEVERITY_TONE: Record<string, 'healthy' | 'watch' | 'warning' | 'critical'
 // identifier (mono); the message is the record's own words, as sealed.
 export function FindingsCard({ run }: { run: Run }) {
   const findings = run.payload.findings;
+  // B4 addendum: a current misstated-finding erratum shows under the finding it corrects; the sealed message stays as sealed.
+  const misstated = (run.errata ?? []).filter((x) => x.superseded_by_id === null && x.kind === 'misstated_finding');
 
   return (
     <Card title="Findings" badge={<Badge tone="neutral">{findings.length}</Badge>}>
@@ -28,6 +30,10 @@ export function FindingsCard({ run }: { run: Run }) {
                 <span className="font-mono text-[10.5px] text-ink-45">{f.code}</span>
               </div>
               <p className="m-0 mt-1 text-[12.5px] text-ink" data-record>{f.message}</p>
+              {misstated.filter((x) => x.finding_code === f.code).map((x) => (
+                <p key={x.id} className="m-0 mt-1 border-l-2 border-ink pl-2 text-[12px] text-ink" data-testid="finding-erratum">
+                  <span className="font-semibold">ERRATUM</span>, recorded after sealing by {x.recorded_by}: {x.what_is_right}
+                </p>))}
             </li>
           ))}
         </ul>

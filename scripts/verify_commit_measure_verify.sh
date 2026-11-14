@@ -13,6 +13,8 @@
 #   M4  the class rule removed            M5  a withdrawal's kept values not checked
 #   M6  the not-shown line removed        M7  an unsourced claimed impact printed as a figure
 #   M8  the AMENDMENT-005 exemption widened past a withdrawal      M9  card 05's run controls hidden on the tenant's own account
+#   M10 an absent committer sealed as synthetic again  M11 the errata guard admits a true finding (Skillsoft run 1)
+#   M12 the withheld-claim line removed from the CFO refusal page
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -32,7 +34,8 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_spine.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PAGE=client/src/pages/ValueCasePage.tsx
 INSTPAGE=client/src/pages/InstitutionPage.tsx
-EDITED=("$PAGE" "$INSTPAGE")
+PRODUCE=server/routes/produceRun.ts
+EDITED=("$PAGE" "$INSTPAGE" "$PRODUCE")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -132,9 +135,9 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 [ "$(q "SELECT count(*) FROM value_outcomes WHERE attribution_method IS NOT NULL OR measure_class IS NOT NULL")" = "0" ] && ok "  ...D1: every commitment made before B4 keeps no method or class" || bad "  ...a method was filled in"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^131 CHECKs in the database: 131 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 [ "$(q "SELECT has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'INSERT') || '|' || has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'UPDATE')")" = "true|false" ] && ok "outcome_withdrawals: INSERT, never UPDATE, for the app" || bad "privileges"
 
 step "3. The session and the server"
@@ -228,11 +231,20 @@ RS="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND run_number =
   && ok "  ...one act: the steward's lock, with act 6's reason (producing is create-only: the run row is its record)" || bad "  ...acts: $A0 -> $(q "SELECT count(*) FROM governance_acts"); on the run: $(q "SELECT string_agg(act::text, ',') FROM governance_acts WHERE subject_id = '$RS'")"
 [ "$(q "SELECT payload->>'payloadVersion' || '|' || coalesce(payload->>'actualValue','-') || '|' || coalesce(payload->>'realizedCurrencyImpact','-') || '|' || (payload->'case'->'cost_of_delay'->>'status') FROM value_runs WHERE id = '$RS'")" = "5|-|-|refused" ] && ok "  ...v5, sealing no actual, no realized impact, and cost of delay refused" || bad "  ...sealed: $(q "SELECT payload->>'actualValue', payload->>'realizedCurrencyImpact' FROM value_runs WHERE id = '$RS'")"
 HASHS="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RS'")"
+# B4 addendum (§35): run 2 seals no committer and no verifier; its findings say so, never "synthetic", and state its realization.
+[ "$(q "SELECT (NOT (payload->'findings' @> '[{\"code\":\"F2\"}]')) || '|' || coalesce((SELECT bool_and(f->>'message' LIKE '%no verifier of record has been named%' AND f->>'message' LIKE '%remains ''claimed''%' AND f->>'message' NOT LIKE '%synthetic%') FROM jsonb_array_elements(payload->'findings') f WHERE f->>'code' = 'F3'), false) || '|' || (SELECT count(*) FROM lvrf_misstated_findings('$RS')) FROM value_runs WHERE id = '$RS'")" = "true|true|0" ] \
+  && ok "  ...its findings: no F2 for an absent committer; F3 names no verifier and the claimed outcome; nothing for an erratum to state" || bad "  ...findings: $(q "SELECT payload->'findings' FROM value_runs WHERE id = '$RS'")"
 CFOR="$(q "SELECT CASE WHEN confidence_score < 55 THEN 'below_threshold,' ELSE '' END FROM value_runs WHERE id = '$RS'")no_actual"
 RUN="$RS" LENS=cfo TAG=skillsoft EXPECT_ASKS="baseline_not_system_of_record+q,no_commitment+q,no_rate+q,no_measure_class+q,no_actual+q,no_verifier+q" \
-  EXPECT_CFO_REFUSED=1 EXPECT_CFO_REASONS="$CFOR" FORBID2="100.4" HASH="$HASHS" EXPECT_OUTSIDE_IN=1 cw valuecase
+  EXPECT_CFO_REFUSED=1 EXPECT_CFO_REASONS="$CFOR" FORBID2="100.4" HASH="$HASHS" EXPECT_OUTSIDE_IN=1 EXPECT_CLAIM_REFUSED=1 \
+  EXPECT_BANNER="OUTSIDE-IN HYPOTHESIS — built from published sources only; no figure rests on Skillsoft’s own records or on a named person at Skillsoft" PRESS_PRINT=1 \
+  EXPECT_TEXT="What we need from you: the asks||Why the CFO lens refuses||set out under “Why the CFO lens refuses”||What would meet them is under “What we need from you: the asks”, below." cw valuecase
+# B4 addendum (ruling 3): act 7's print request, pressed on the page, names the CFO lens policy it applied.
+[ "$(q "SELECT (lens_policy_id = (SELECT l.id FROM lens_policies l WHERE l.persona = 'cfo' AND l.tenant_id = '$TEN' AND NOT EXISTS (SELECT 1 FROM lens_policies x WHERE x.supersedes_id = l.id))) || '|' || (rendered_by_person_id = '$S') FROM record_documents WHERE kind = 'print_request' AND value_run_id = '$RS' AND lens = 'cfo' ORDER BY rendered_at DESC LIMIT 1")" = "true|true" ] \
+  && ok "  ...the print request records the CFO lens policy it applied, by the steward" || bad "  ...print request: $(q "SELECT kind, lens, lens_policy_id FROM record_documents WHERE value_run_id = '$RS'")"
+sqlrefused "  ...a CFO-lens print request naming no lens policy" "INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, value_run_id, document_version, disclosure, content_hash, payload, rendered_by_person_id, kind, lens) SELECT '$TEN', engagement_id, '$OUT', id, 99, 'internal', payload_hash, '{}'::jsonb, '$S', 'print_request', 'cfo' FROM value_runs WHERE id = '$RS'" "names the CFO lens policy it applied"
 RUN="$RS" LENS=general TAG=skillsoft EXPECT_ASKS="baseline_not_system_of_record+q,no_commitment+q,no_rate+q,no_measure_class+q,no_actual+q,no_verifier+q" \
-  EXPECT_CLAIM_REFUSED=1 FORBID2="7,000,000" HASH="$HASHS" EXPECT_OUTSIDE_IN=1 cw valuecase
+  EXPECT_CLAIM_REFUSED=1 FORBID2="7,000,000" HASH="$HASHS" EXPECT_OUTSIDE_IN=1 EXPECT_BANNER="OUTSIDE-IN HYPOTHESIS — built from published sources only; no figure rests on Skillsoft’s own records or on a named person at Skillsoft" cw valuecase
 # Run 1 (the Customer Zero demonstration, payload v1, locked 29 Aug) seals the realized 8,400,000: its case never prints it.
 RUN="$RUN1" LENS=general TAG=skillsoft_run1 EXPECT_ASKS=skip FORBID2="8,400,000" HASH="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RUN1'")" cw valuecase
 
@@ -306,7 +318,8 @@ produce "$ENGC" "Verification: the compliance case."; RC="$RUN"; HASHC="$(q "SEL
 [ "$(q "SELECT lvrf_run_banners('$RC')->>'outside_in' || '|' || jsonb_array_length(lvrf_run_banners('$RC')->'not_shown')")" = "true|1" ] && ok "the banner ruling: no printed figure rests on customer-side evidence, so OUTSIDE-IN; the unprinted rate attestation is named" || bad "banners: $(q "SELECT lvrf_run_banners('$RC')")"
 RUN="$RC" LENS=general TAG=compliance EXPECT_ASKS="baseline_not_system_of_record+q,class_rate_mismatch+q,no_actual+q,committer_not_customer_side+q,no_verifier+q" EXPECT_OUTSIDE_IN=1 \
   EXPECT_NOT_SHOWN="One customer-side item is on record but not shown: Controller states 250,000 USD per point of TRIR per year (fixture), because cost of delay is refused." \
-  EXPECT_FALSIFIER="at or above its baseline of 2.1" HASH="$HASHC" cw valuecase
+  EXPECT_FALSIFIER="at or above its baseline of 2.1" HASH="$HASHC" \
+  EXPECT_BANNER="OUTSIDE-IN HYPOTHESIS — no figure rests on B4 account ${TS}’s own records or on a named person at B4 account ${TS}" cw valuecase
 expect POST "/api/value-runs/$RC/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"
 expect POST "/api/value-runs/$RC/share-for-review" "$(J shared_with 'Pat Example, Prospect Co (fixture)' lens general)" 201 "D-M21 follows the printed banners: the case prints OUTSIDE-IN, so it may be shared for review"
 # M6, M7: the not-shown line removed; an unsourced claim printed as a figure.
@@ -321,6 +334,69 @@ RUN="$RS" LENS=general TAG=break7 EXPECT_ASKS=skip EXPECT_CLAIM_REFUSED=1 FORBID
 grep -q "FAIL    ...a claimed impact with no source prints its refusal" "$W/m7.out" && grep -q 'FAIL    ...the case never prints "7,000,000"' "$W/m7.out" && ok "M7: an unsourced claimed impact printed as a figure → caught (the refusal gone, \$7,000,000 printed)" || bad "M7: $(grep -c FAIL "$W/m7.out")"
 FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/m7.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/m7.out" || true)))
 restore "$PAGE"; sleep 3
+# M12: the withheld-claim line removed from the CFO refusal page: the claim would be silently absent again.
+edit "$PAGE" "{o0 && o0.claimed_currency_impact !== null && o0.claimed_currency_impact !== undefined && (o0.sources.impact_basis" "{false && (o0.sources.impact_basis"
+sleep 6
+RUN="$RS" LENS=cfo TAG=break12 EXPECT_ASKS=skip EXPECT_CFO_REFUSED=1 EXPECT_CLAIM_REFUSED=1 HASH="$HASHS" cw valuecase > "$W/m12.out" 2>&1 || true
+grep -q "FAIL    ...a claimed impact with no source prints its refusal" "$W/m12.out" && ok "M12: the withheld-claim line removed from the CFO refusal page → caught" || bad "M12: $(grep -c FAIL "$W/m12.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/m12.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/m12.out" || true)))
+restore "$PAGE"; sleep 3
+
+step "6b. Findings: absence is absence (M10); the misstated-finding errata, through the page (M11)"
+outcome "B4 TRIR absent" 1.6; OA="$OC"; ENGA="$ENGO"
+expect POST "/api/value-outcomes/$OA/evidence" "$(EVB public_filing 'TRIR FY25 1.6 (fixture)' baseline)" 201 "  ...a published baseline; no commitment, no verifier"
+produce "$ENGA" "Verification: no committer, no verifier."; RA0="$RUN"
+[ "$(q "SELECT (NOT (payload->'findings' @> '[{\"code\":\"F2\"}]')) || '|' || (SELECT count(*) FROM lvrf_misstated_findings('$RA0')) FROM value_runs WHERE id = '$RA0'")" = "true|0" ] && ok "an outcome with no committer seals no F2, and nothing its seal contradicts" || bad "absent: $(q "SELECT payload->'findings' FROM value_runs WHERE id = '$RA0'")"
+edit "$PRODUCE" "        committerSynthetic = false;
+        committerName = null;" "        committerSynthetic = true;
+        committerName = null;"
+stop_server; start_server
+produce "$ENGA" "Verification: M10, absence sealed as synthetic."; RA1="$RUN"
+[ "$(q "SELECT (payload->'findings' @> '[{\"code\":\"F2\"}]') || '|' || (SELECT count(*) FROM lvrf_misstated_findings('$RA1') WHERE code = 'F2') FROM value_runs WHERE id = '$RA1'")" = "true|1" ] \
+  && ok "M10: an absent committer sealed as synthetic again → caught: F2 sealed, and lvrf_misstated_findings names it" || bad "M10: $(q "SELECT payload->'findings' FROM value_runs WHERE id = '$RA1'")"
+restore "$PRODUCE"; stop_server; start_server
+# The dry run, from the seals of the 5 Nov copy's runs (prod adds Skillsoft run 2: 41 on 25 there).
+expect GET /api/errata/misstated-findings "" 200 "the dry run"
+MCOUNT="$(rj b.count)"; MRUNS="$(rj b.runs)"
+[ "$MCOUNT|$MRUNS" = "39|24" ] && ok "  ...39 findings on 24 runs: every F3 but Skillsoft run 1's, and every F2 on a run that named no committer" || bad "  ...dry run: $MCOUNT on $MRUNS"
+[ "$(rj "b.errata.some(e=>e.run_id==='$RUN1')")" = "false" ] && ok "  ...Skillsoft run 1, a named simulated sponsor and verifier, measured: its findings are true, so not listed" || bad "  ...run 1 listed"
+[ "$(rj "JSON.stringify(b.errata.map(e=>[e.run_id,e.code,e.false_text,e.true_text]))")" = "$(q "SELECT json_agg(json_build_array(x.run_id, x.code, x.false_text, x.true_text) ORDER BY x.account, x.run_number, x.code)::text FROM (SELECT r.id AS run_id, i.name AS account, r.run_number, m.* FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.tenant_id = '$TEN' AND r.locked_at IS NOT NULL) x" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s))))")" ] \
+  && ok "  ...every row's two sentences are lvrf_misstated_findings()'s, read from the seal" || bad "  ...the list differs from the seal's"
+[ "$(q "SELECT bool_and(m.false_text = (SELECT f->>'message' FROM jsonb_array_elements(r.payload->'findings') f WHERE f->>'code' = m.code)) FROM value_runs r CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m")" = "t" ] && ok "  ...each false sentence is the sealed finding, verbatim" || bad "  ...false sentence differs"
+expect POST /api/errata/misstated-findings "$(J expected_count "$MCOUNT" reason 'Verification: X records them.')" 403 "  ...the batch by X" "steward" "$X"
+expect POST /api/errata/misstated-findings "$(J expected_count "$((MCOUNT + 1))" reason 'Verification: a count that was off.')" 409 "  ...the batch with the count off" "The count changed"
+expect POST /api/errata/misstated-findings "$(J expected_count "$MCOUNT" reason 'Verification: a typed sentence.' true_text 'Typed by a person.')" 400 "  ...a typed sentence" "read from its run's seal"
+# M11 (Brad's break): the guard must refuse a run whose finding is true.
+R1F3="$(q "SELECT f->>'message' FROM value_runs r, jsonb_array_elements(r.payload->'findings') f WHERE r.id = '$RUN1' AND f->>'code' = 'F3'" | sed "s/'/''/g")"
+TRUE1="In this run's seal no verifier of record was named."
+MF() { printf "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, kind, finding_code, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, recorded_by_person_id) SELECT '%s', id, lvrf_run_outcome_at_sealing(id), 'misstated_finding', '%s', '%s', '%s', 'Verification: a misstated-finding erratum.', confidence_score, confidence_band, 'From this run''s seal: verification.', '%s' FROM value_runs WHERE id = '%s'" "$TEN" "$1" "$2" "$(printf %s "$3" | sed "s/'/''/g")" "$S" "$4"; }
+sqlrefused "  ...an erratum on Skillsoft run 1's true F3" "$(MF F3 "$R1F3" "$TRUE1" "$RUN1")" "is not contradicted by its own seal"
+fnbreak lvrf_run_erratum_steward_only "  IF NEW.kind = 'misstated_finding' AND NOT EXISTS (" "  IF false AND NOT EXISTS ("
+M11R="$(sqlaccepted "$(MF F3 "$R1F3" "$TRUE1" "$RUN1")")"
+[ "$M11R" = "ACCEPTED" ] && ok "M11: the errata guard admitting a true finding → caught: an erratum on Skillsoft run 1's true F3 lands" || bad "M11: $M11R"
+reharden
+sqlrefused "  ...with it back: refused again" "$(MF F3 "$R1F3" "$TRUE1" "$RUN1")" "is not contradicted by its own seal"
+SR="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id WHERE i.name = 'Scotts Miracle-Gro' AND r.run_number = 2")"
+SF="$(q "SELECT false_text FROM lvrf_misstated_findings('$SR') WHERE code = 'F3'" | sed "s/'/''/g")"
+sqlrefused "  ...a misstated finding with a typed true sentence" "$(MF F3 "$SF" "In this run's seal everything was fine, typed." "$SR")" "is not contradicted by its own seal"
+# NULL inputs for the widened CHECK and the new one: each reads false, never NULL.
+CK() { q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = '$1'" | sed -E 's/^CHECK \(//; s/\)$//' | sed "s/$2\.//g"; }
+[ "$(q "SELECT ($(CK run_errata_kind_complete run_errata)) IS FALSE FROM (SELECT 'misstated_finding'::text AS kind, NULL::text AS finding_code, NULL::uuid AS evidence_id, NULL::text AS corrected_to_supports, NULL::uuid AS supersedes_id, NULL::numeric AS recomputed_score, NULL::text AS recomputed_band, NULL::numeric AS points_not_credited, NULL::uuid AS figure_finding_id, 'From this run''s seal: x'::text AS recompute_method) v")" = "t" ] \
+  && ok "NULL: a misstated-finding erratum with no finding code reads false" || bad "NULL: kind_complete"
+[ "$(q "SELECT ($(CK record_documents_lens_policy_scope record_documents)) IS FALSE FROM (SELECT gen_random_uuid() AS lens_policy_id, NULL::text AS kind, 'cfo'::text AS lens) v")" = "t" ] \
+  && ok "NULL: a lens policy on a document of no kind reads false" || bad "NULL: lens_policy_scope"
+# The batch, through the page (the steward's act after the deploy; rule 10).
+export MCOUNT MRUNS RUN1 SR
+export SAMPLE_TRUE="$(q "SELECT true_text FROM lvrf_misstated_findings('$SR') WHERE code = 'F3'")" SAMPLE_FALSE="$(q "SELECT false_text FROM lvrf_misstated_findings('$SR') WHERE code = 'F3'")"
+export MREASON="Produce-run sealed an absent committer or verifier as synthetic, and said a claimed outcome remained measured. Each erratum states the sealed finding and what the run's own seal holds."
+A1="$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum'")"
+COUNT="$MCOUNT" RUNS="$MRUNS" SAMPLE_RUN="$SR" SAMPLE_CODE=F3 ACT=1 REASON="$MREASON" \
+  CONFIRM="Record $MCOUNT misstated-finding errata on $MRUNS runs, one beside each finding listed. If the record now calls for a different number, nothing is recorded." cw misstated
+[ "$(q "SELECT count(*) || '|' || count(DISTINCT value_run_id) || '|' || bool_and(recorded_by_person_id = '$S') || '|' || bool_and(reason = '$(printf %s "$MREASON" | sed "s/'/''/g")') FROM run_errata WHERE kind = 'misstated_finding'")" = "$MCOUNT|$MRUNS|true|true" ] \
+  && ok "the batch recorded: $MCOUNT errata on $MRUNS runs, each the steward's, with the reason" || bad "batch: $(q "SELECT count(*) FROM run_errata WHERE kind = 'misstated_finding'")"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum'")" = "$((A1 + MCOUNT))" ] && ok "  ...one record_erratum act each" || bad "  ...acts"
+expect GET /api/errata/misstated-findings "" 200 "  ...the dry run again"
+[ "$(rj b.count)" = "0" ] && ok "  ...nothing left to state" || bad "  ...$(rj b.count) left"
 
 step "7. What held"
 HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1; }

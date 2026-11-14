@@ -63,6 +63,7 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/institutions/:institutionId/customer-roles': ['grant'],
   'POST /api/customer-roles/:id/revoke': ['withdraw'],
   'POST /api/errata/non-customer-credit': ['record_erratum'],
+  'POST /api/errata/misstated-findings': ['record_erratum'],
   'POST /api/system-exercise/marks': ['mark'],
   // C3b: a figure with no source on record.
   'POST /api/value-outcomes/:outcomeId/figure-findings': ['find'],

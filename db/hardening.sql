@@ -1446,6 +1446,8 @@ LANGUAGE sql STABLE AS $$
            WHEN x.kind = 'unsourced_figure' THEN (SELECT 'erratum: its ' || CASE f.field WHEN 'baseline_value' THEN 'baseline' WHEN 'actual_value' THEN 'actual'
                                                           ELSE 'claimed currency impact' END || ', ' || trim_scale(f.value)::text || ', has no source on record'
                                                    FROM figure_findings f WHERE f.id = x.figure_finding_id)
+           -- B4 addendum (§35): a sealed finding its own seal contradicts.
+           WHEN x.kind = 'misstated_finding' THEN 'erratum: its finding ' || x.finding_code || ' misstates the seal'
            WHEN x.recomputed_score IS NULL THEN 'erratum: a link corrected since sealing; not recomputed'
            ELSE 'erratum: a link corrected since sealing; recomputed ' || trim(to_char(x.recomputed_score, 'FM999.9'), '.') || ' / 100' END
     FROM run_errata x WHERE x.id = p_erratum
@@ -2249,6 +2251,47 @@ LANGUAGE sql IMMUTABLE AS $$
                     AND btrim(regexp_replace(lower(a), '[[:space:]]+', ' ', 'g'), ' .') = btrim(regexp_replace(lower(b), '[[:space:]]+', ' ', 'g'), ' .'))
 $$;
 
+-- B4 addendum (§35; Brad, 6 Nov 2026): a sealed finding its own seal contradicts. Until the fix, produce-run sealed an
+-- absent committer or verifier as "synthetic" (F2; F3's "the verifier of record is synthetic") and F3 said the outcome
+-- "remains 'measured'" whatever its realization. Each row: the finding code, its sealed sentence (false), and the true
+-- sentence, composed only from the run's own seal: its committer and verifier factor notes and its realization. The
+-- "[SIM] (no sponsor of record)" / "(no verifier of record)" placeholder of early runs is absence (Brad's ruling). A run
+-- whose finding is true (e.g. Skillsoft run 1: a named simulated sponsor and verifier, measured) yields no row.
+CREATE OR REPLACE FUNCTION lvrf_misstated_findings(p_run uuid) RETURNS TABLE(code text, false_text text, true_text text)
+LANGUAGE sql STABLE AS $$
+  WITH r AS (
+    SELECT v.payload AS p, v.payload->>'realization' AS realization,
+           (SELECT f->>'note' FROM jsonb_array_elements(coalesce(v.payload->'confidence'->'factors', '[]'::jsonb)) f
+             WHERE f->>'factor' = 'human_commit_of_record' LIMIT 1) AS cnote,
+           (SELECT f->>'note' FROM jsonb_array_elements(coalesce(v.payload->'confidence'->'factors', '[]'::jsonb)) f
+             WHERE f->>'factor' = 'human_verifier_of_record' LIMIT 1) AS vnote
+      FROM value_runs v WHERE v.id = p_run),
+  a AS (
+    SELECT r.*,
+           coalesce(r.cnote LIKE 'No committer of record has been named%' OR r.cnote LIKE '%[SIM] (no sponsor of record)%', false) AS c_absent,
+           coalesce(r.cnote LIKE '%[SIM] (no sponsor of record)%', false) AS c_placeholder,
+           coalesce(r.vnote LIKE 'No verifier of record has been named%' OR r.vnote LIKE '%[SIM] (no verifier of record)%', false) AS v_absent,
+           coalesce(r.vnote LIKE '%[SIM] (no verifier of record)%', false) AS v_placeholder
+      FROM r),
+  f AS (
+    SELECT a.*, x->>'code' AS fcode, x->>'message' AS msg,
+           coalesce(x->>'message' LIKE '%the verifier of record is synthetic%', false) AS says_synthetic_verifier,
+           coalesce(x->>'message' LIKE '%remains ''measured''%', false) AS says_measured
+      FROM a, jsonb_array_elements(coalesce(a.p->'findings', '[]'::jsonb)) x)
+  SELECT 'F2'::text, f.msg,
+         'In this run''s seal no committer of record was named: its committer factor reads “' || f.cnote || '”'
+           || CASE WHEN f.c_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END || '.'
+    FROM f WHERE f.fcode = 'F2' AND f.c_absent
+  UNION ALL
+  SELECT 'F3'::text, f.msg,
+         'In this run''s seal ' || array_to_string(ARRAY[
+           CASE WHEN f.v_absent AND f.says_synthetic_verifier THEN 'no verifier of record was named: its verifier factor reads “' || f.vnote || '”'
+                  || CASE WHEN f.v_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END END,
+           CASE WHEN f.says_measured AND f.realization IS DISTINCT FROM 'measured'
+                THEN 'the outcome was sealed as ' || coalesce(f.realization, 'no realization') || ', not measured' END], '; and ') || '.'
+    FROM f WHERE f.fcode = 'F3' AND ((f.v_absent AND f.says_synthetic_verifier) OR (f.says_measured AND f.realization IS DISTINCT FROM 'measured'))
+$$;
+
 CREATE OR REPLACE FUNCTION lvrf_run_erratum_steward_only() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -2272,7 +2315,8 @@ BEGIN
      AND NOT (NEW.kind = 'non_customer_credit' AND r.outcome IS NULL
               AND EXISTS (SELECT 1 FROM value_outcomes vo JOIN value_runs vr ON vr.engagement_id = vo.engagement_id
                            WHERE vr.id = NEW.value_run_id AND vo.id = NEW.value_outcome_id))
-     AND NOT (NEW.kind = 'unsourced_figure' AND r.outcome IS NULL AND lvrf_run_outcome_at_sealing(NEW.value_run_id) = NEW.value_outcome_id) THEN
+     AND NOT (NEW.kind = 'unsourced_figure' AND r.outcome IS NULL AND lvrf_run_outcome_at_sealing(NEW.value_run_id) = NEW.value_outcome_id)
+     AND NOT (NEW.kind = 'misstated_finding' AND r.outcome IS NULL AND lvrf_run_outcome_at_sealing(NEW.value_run_id) = NEW.value_outcome_id) THEN
     RAISE EXCEPTION 'LVRF: run_errata: the erratum''s outcome is not the one run % sealed.', NEW.value_run_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
@@ -2282,6 +2326,15 @@ BEGIN
         WHERE f.id = NEW.figure_finding_id AND f.value_outcome_id = NEW.value_outcome_id
           AND (vr.payload->>(CASE f.field WHEN 'baseline_value' THEN 'baselineValue' WHEN 'actual_value' THEN 'actualValue' ELSE 'claimedCurrencyImpact' END))::numeric = f.value) THEN
     RAISE EXCEPTION 'LVRF: run_errata: an unsourced-figure erratum names its finding, beside a run whose seal carries that figure at that value.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
+  END IF;
+  -- B4 addendum (§35): a misstated-finding erratum states a finding its own seal contradicts, in the words read from the
+  -- seal (lvrf_misstated_findings), never typed; a run whose finding is true has none to state.
+  IF NEW.kind = 'misstated_finding' AND NOT EXISTS (
+       SELECT 1 FROM lvrf_misstated_findings(NEW.value_run_id) m
+        WHERE m.code = NEW.finding_code AND m.false_text = NEW.what_was_wrong AND m.true_text = NEW.what_is_right) THEN
+    RAISE EXCEPTION 'LVRF: run_errata: run %''s sealed finding % is not contradicted by its own seal in these words; a misstated-finding erratum states only what lvrf_misstated_findings() reads from the seal.',
+      NEW.value_run_id, coalesce(NEW.finding_code, '(none)')
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   -- C3b (condition 3): what the erratum states of the account stays true whenever it is written.
@@ -3736,6 +3789,14 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
   END IF;
   IF NEW.kind = 'print_request' THEN
+    -- B4 addendum (§35; ruling 3): a CFO-lens print request names the CFO lens policy it applied: the tenant's current one,
+    -- or none when none is ratified. The lens stays read live (O-D1); this records which row was read.
+    IF NEW.lens = 'cfo' AND NEW.lens_policy_id IS DISTINCT FROM (
+         SELECT l.id FROM lens_policies l WHERE l.tenant_id = NEW.tenant_id AND l.persona = 'cfo'
+            AND NOT EXISTS (SELECT 1 FROM lens_policies s WHERE s.supersedes_id = l.id)) THEN
+      RAISE EXCEPTION 'LVRF: record_documents: a CFO-lens print request names the CFO lens policy it applied, the tenant''s current one.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
+    END IF;
     IF NEW.disclosure::text <> 'internal' THEN
       RAISE EXCEPTION 'LVRF: record_documents: a print request is internal; sharing is its own act.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';

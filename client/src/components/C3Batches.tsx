@@ -423,3 +423,71 @@ export function SupersessionBatch() {
     </section>
   );
 }
+
+interface MisstatedErratum { run_id: string; account: string; run_number: number; code: string; false_text: string; true_text: string }
+interface MisstatedDryRun { count: number; runs: number; errata: MisstatedErratum[] }
+
+/**
+ * B4 addendum (Brad, 6 Nov 2026): the sealed findings their own seals contradict — an absent committer or verifier
+ * sealed as "synthetic", and "remains 'measured'" on a claimed outcome. A dry run first (account, run, finding, the
+ * false sentence and the true one, both read from the seal by the server), then one confirmation by the steward.
+ */
+export function MisstatedFindingsBatch() {
+  const { actor } = useActor();
+  const [reload, setReload] = useState(0);
+  const [reason, setReason] = useState('');
+  const data = useJson<MisstatedDryRun>('/api/errata/misstated-findings', reload);
+  const [recorded, setRecorded] = useState<number | null>(null);
+  const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  return (
+    <section className="mt-8 flex flex-col gap-3" data-testid="misstated-errata-batch">
+      <h2 className={H2}>Findings their seals contradict</h2>
+      <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-45">
+        Each locked run whose sealed finding says something its own seal does not hold: a committer or verifier sealed as synthetic when none was named, or an
+        outcome said to remain measured when it was sealed otherwise. Both sentences are read from the seal; nothing is typed and no score changes. This list writes nothing.
+      </p>
+      {data === null ? <p className="m-0 text-[12.5px] text-ink-45">Reading the seals…</p>
+        : data === 'error' ? <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the list.</p>
+          : <>
+            {recorded !== null && <p className="m-0 text-[13px] text-healthy" data-testid="misstated-errata-recorded">Recorded {recorded}.</p>}
+            <p className="m-0 text-[13px] text-ink" data-testid="misstated-errata-count">{data.count === 0 ? 'No sealed finding is contradicted by its seal.' : `${data.count} ${data.count === 1 ? 'finding' : 'findings'} on ${data.runs} ${data.runs === 1 ? 'run' : 'runs'} call for an erratum.`}</p>
+            {data.count > 0 && (
+              <div className="overflow-x-auto border border-rule bg-white">
+                <table className="w-full border-collapse text-left text-[12px]" data-testid="misstated-errata-list">
+                  <thead><tr className="border-b border-rule text-[10px] uppercase tracking-[.14em] text-ink-45">
+                    <th className="px-3 py-2">Account</th><th className="px-3 py-2">Run</th><th className="px-3 py-2">Finding</th>
+                    <th className="px-3 py-2">What the seal says (false)</th><th className="px-3 py-2">What the seal holds (true)</th></tr></thead>
+                  <tbody>
+                    {data.errata.map((e) => (
+                      <tr key={e.run_id + e.code} className="border-b border-rule-soft align-top last:border-b-0" data-testid="misstated-erratum-candidate" data-run={e.run_id} data-code={e.code}>
+                        <td className="px-3 py-2 text-ink">{e.account}</td>
+                        <td className="whitespace-nowrap px-3 py-2"><Link to={`/runs/${e.run_id}`} className={'font-semibold text-ink hover:text-gold-ink ' + FOCUS_RING}>run {e.run_number}</Link> <ShortId id={e.run_id} /></td>
+                        <td className="px-3 py-2 font-mono">{e.code}</td>
+                        <td className="px-3 py-2 text-ink-70" data-testid="misstated-false">{e.false_text}</td>
+                        <td className="px-3 py-2 text-ink" data-testid="misstated-true">{e.true_text}</td>
+                      </tr>))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {data.count > 0 && (
+              <GovernedForm<{ recorded: number; runs: number }>
+                path="/api/errata/misstated-findings"
+                provenanceLabel="What this records"
+                provenance={<p className="m-0 text-[12.5px] text-ink">One erratum beside each finding listed, by you, dated, each with its act. <strong>No sealed run is changed</strong> and no score is recomputed: each erratum states the sealed sentence and the true one, as read from its seal.</p>}
+                fields={<label className="block"><span className={L}>Why they are recorded</span>
+                  <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} /></label>}
+                confirm={<span data-testid="confirm-text">Record {data.count} misstated-finding {data.count === 1 ? 'erratum' : 'errata'} on {data.runs} {data.runs === 1 ? 'run' : 'runs'}, one beside each finding listed. If the record now calls for a different number, nothing is recorded.</span>}
+                disabledReason={notSteward}
+                canSubmit={reason.trim().length >= 12}
+                unmet={reason.trim().length < 12 ? ['say why, in at least 12 characters'] : []}
+                buildBody={() => ({ expected_count: data.count, reason: reason.trim() })}
+                submitLabel={`Record the ${data.count} errata`}
+                onSuccess={(d) => { setReason(''); setRecorded(d.recorded); setReload((n) => n + 1); }}
+                renderSuccess={(d) => <>Recorded {d.recorded}.</>}
+              />
+            )}
+          </>}
+    </section>
+  );
+}

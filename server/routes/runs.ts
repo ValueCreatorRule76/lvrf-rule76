@@ -47,7 +47,7 @@ export function runsRouter(pool: Pool): Router {
       // C1: the errata recorded beside this sealed run (never part of it), every one of them;
       // a superseded erratum names its successor, and a superseding one its predecessor.
       const { rows: errata } = await pool.query(
-        `SELECT x.id, x.kind, x.points_not_credited, x.figure_finding_id, lvrf_erratum_line(x.id) AS line, x.evidence_id, x.corrected_to_supports, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
+        `SELECT x.id, x.kind, x.points_not_credited, x.figure_finding_id, x.finding_code, lvrf_erratum_line(x.id) AS line, x.evidence_id, x.corrected_to_supports, x.what_was_wrong, x.what_is_right, x.reason, x.model_version, x.model_fingerprint,
                 x.sealed_score, x.sealed_band, x.recomputed_score, x.recomputed_band, x.recompute_method,
                 p.full_name AS recorded_by, x.recorded_at,
                 x.supersedes_id, x.supersession_reason,

@@ -1222,6 +1222,12 @@ export const recordDocuments = pgTable('record_documents', {
   kind: text('kind').notNull().default('rendering'),
   /** B3: the lens a value case was read under ('cfo' or 'general'); null on a rendering. */
   lens: text('lens'),
+  /**
+   * B4 addendum (Brad, 6 Nov 2026, ruling 3): the CFO lens policy a print request applied. The lens stays read live
+   * (O-D1); the request records which row it read. NULL on every other document, and on a print request made before
+   * this column (or under the general lens). The guard holds it to the tenant's current CFO lens.
+   */
+  lensPolicyId: uuid('lens_policy_id').references(() => lensPolicies.id, { onDelete: 'restrict' }),
   /** B3: with whom a run was shared for review, as the steward states it (a person and their organisation). */
   sharedWith: text('shared_with'),
 }, (t) => [
@@ -1229,6 +1235,9 @@ export const recordDocuments = pgTable('record_documents', {
   index('record_documents_engagement_idx').on(t.engagementId),
   check('record_documents_kind_known', sql`${t.kind} IN ('rendering', 'print_request', 'share_for_review')`),
   check('record_documents_lens_known', sql`${t.lens} IS NULL OR ${t.lens} IN ('cfo', 'general')`),
+  /** B4 addendum: only a CFO-lens print request names a lens policy. Every term definite under NULL. */
+  check('record_documents_lens_policy_scope',
+    sql`${t.lensPolicyId} IS NULL OR (coalesce(${t.kind}, '') = 'print_request' AND coalesce(${t.lens}, '') = 'cfo')`),
   /** A case's print request and its share name the lens; a share names with whom. Every term definite under NULL. */
   check('record_documents_kind_complete',
     sql`(${t.kind} = 'rendering' AND ${t.lens} IS NULL AND ${t.sharedWith} IS NULL)
@@ -2840,6 +2849,12 @@ export const runErrata = pgTable('run_errata', {
   /** C3b: for an 'unsourced_figure' erratum, the finding it states, beside a run whose seal carries that figure. */
   figureFindingId: uuid('figure_finding_id').references(() => figureFindings.id, { onDelete: 'restrict' }),
   /**
+   * B4 addendum (Brad, 6 Nov 2026): for a 'misstated_finding' erratum, the sealed finding its own seal contradicts (F2 or
+   * F3). what_was_wrong is that finding's sealed sentence and what_is_right the true one, both read from the seal by
+   * lvrf_misstated_findings(), never typed; the errata guard refuses any other text.
+   */
+  findingCode: text('finding_code'),
+  /**
    * C1 review (Brad, 25 Oct 2026): one erratum per run and correction. An
    * erratum is corrected only by a new one that supersedes it, naming it, with
    * a reason; it is superseded at most once (run_errata_superseded_once).
@@ -2875,18 +2890,25 @@ export const runErrata = pgTable('run_errata', {
   uniqueIndex('run_errata_one_credit_erratum').on(t.valueRunId).where(sql`${t.kind} = 'non_customer_credit'`),
   // C3b: one unsourced-figure erratum per run and finding.
   uniqueIndex('run_errata_one_per_finding').on(t.valueRunId, t.figureFindingId).where(sql`${t.kind} = 'unsourced_figure'`),
-  check('run_errata_kind_known', sql`${t.kind} IN ('link_correction', 'non_customer_credit', 'unsourced_figure')`),
+  // B4 addendum: one misstated-finding erratum per run and sealed finding.
+  uniqueIndex('run_errata_one_per_sealed_finding').on(t.valueRunId, t.findingCode).where(sql`${t.kind} = 'misstated_finding'`),
+  check('run_errata_kind_known', sql`${t.kind} IN ('link_correction', 'non_customer_credit', 'unsourced_figure', 'misstated_finding')`),
   /** C3: a link correction names its link; a credit erratum names none, states its points, and recomputes nothing. Every term definite under NULL. */
   /** C3b: an unsourced-figure erratum names its finding, no link and no points, and recomputes nothing. */
   check('run_errata_kind_complete',
-    sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL AND ${t.figureFindingId} IS NULL)
+    sql`(${t.kind} = 'link_correction' AND ${t.evidenceId} IS NOT NULL AND ${t.correctedToSupports} IS NOT NULL AND ${t.pointsNotCredited} IS NULL AND ${t.figureFindingId} IS NULL
+            AND ${t.findingCode} IS NULL)
         OR (${t.kind} = 'non_customer_credit' AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL AND ${t.supersedesId} IS NULL
-            AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.figureFindingId} IS NULL
+            AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.figureFindingId} IS NULL AND ${t.findingCode} IS NULL
             AND ${t.pointsNotCredited} IS NOT NULL AND ${t.pointsNotCredited} >= 0 AND ${t.pointsNotCredited} <= 100
             AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')
         OR (${t.kind} = 'unsourced_figure' AND ${t.figureFindingId} IS NOT NULL AND ${t.evidenceId} IS NULL AND ${t.correctedToSupports} IS NULL
             AND ${t.supersedesId} IS NULL AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.pointsNotCredited} IS NULL
-            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%' AND ${t.recomputeMethod} LIKE '%has no source on record%')`),
+            AND ${t.findingCode} IS NULL
+            AND ${t.recomputeMethod} LIKE 'From this run''s seal:%' AND ${t.recomputeMethod} LIKE '%has no source on record%')
+        OR (${t.kind} = 'misstated_finding' AND coalesce(${t.findingCode}, '') IN ('F2', 'F3') AND ${t.evidenceId} IS NULL
+            AND ${t.correctedToSupports} IS NULL AND ${t.supersedesId} IS NULL AND ${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL
+            AND ${t.pointsNotCredited} IS NULL AND ${t.figureFindingId} IS NULL AND ${t.recomputeMethod} LIKE 'From this run''s seal:%')`),
   /** C3b (Brad's ruling 2): an unsourced-figure erratum says "no source on record", never "invented". */
   check('run_errata_never_invented',
     sql`${t.kind} <> 'unsourced_figure' OR (${t.whatWasWrong} || ' ' || ${t.whatIsRight} || ' ' || ${t.reason} || ' ' || ${t.recomputeMethod}) !~* '\\m(invent(ed|s|ing)?|fabricat[a-z]*|made up)\\M'`),
@@ -2903,7 +2925,7 @@ export const runErrata = pgTable('run_errata', {
     sql`${t.sealedBand} IN ('low', 'medium', 'high') AND (${t.recomputedBand} IS NULL OR ${t.recomputedBand} IN ('low', 'medium', 'high'))`),
   /** C2: recomputed (score, band and model, the method not "Not recomputed:"), or not (score and band NULL, the method saying why). */
   check('run_errata_recompute_complete',
-    sql`${t.kind} IN ('non_customer_credit', 'unsourced_figure') OR (${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
+    sql`${t.kind} IN ('non_customer_credit', 'unsourced_figure', 'misstated_finding') OR (${t.recomputedScore} IS NOT NULL AND ${t.recomputedBand} IS NOT NULL AND ${t.modelVersion} IS NOT NULL AND ${t.modelFingerprint} IS NOT NULL
          AND ${t.recomputeMethod} NOT LIKE 'Not recomputed:%')
         OR (${t.recomputedScore} IS NULL AND ${t.recomputedBand} IS NULL AND ${t.recomputeMethod} LIKE 'Not recomputed:%'
          AND (${t.modelVersion} IS NULL) = (${t.modelFingerprint} IS NULL))`),

@@ -240,10 +240,12 @@ export interface SystemExerciseMark { reason: string; marked_by: string; marked_
 export interface RunErratum {
   id: string;
   /** C3: 'link_correction' (C1), or 'non_customer_credit' (points the seal credited to a person not customer-side). */
-  kind: 'link_correction' | 'non_customer_credit' | 'unsourced_figure';
+  kind: 'link_correction' | 'non_customer_credit' | 'unsourced_figure' | 'misstated_finding';
   /** C3b: the finding an unsourced-figure erratum states; this erratum's one line (lvrf_erratum_line). */
   figure_finding_id?: string | null;
   line?: string | null;
+  /** B4 addendum: for a misstated-finding erratum, the sealed finding (F2 or F3) its seal contradicts; null otherwise. */
+  finding_code?: string | null;
   /** C3: for a credit erratum, the sealed points that rest on people not customer-side. */
   points_not_credited: string | null;
   /** A link correction's evidence; NULL on a credit erratum. */

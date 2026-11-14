@@ -133,7 +133,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: section 32 writes nothing" || bad "  ...a run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"

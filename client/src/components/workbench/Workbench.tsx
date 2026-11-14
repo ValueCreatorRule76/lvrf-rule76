@@ -91,7 +91,7 @@ function RunBanners({ run, account, compact = false }: { run: Run; account: Acco
             <div className={'border-b-2 border-ink bg-white px-4 py-2 font-mono text-[12px] tracking-[.02em] text-ink sm:px-6' + line} data-testid="banner-erratum-line">
               {errata.length === 1
                 // The figures and the pointer first: if the line is clipped, only who and when are cut (Brad, 25 Oct 2026).
-                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? (Number(errata[0].points_not_credited) === 0 ? 'a confirmer not recoverable from the seal' : 'credit to a person not customer-side') : errata[0].kind === 'unsourced_figure' ? 'a figure with no source on record' : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
+                ? <><span className="font-semibold">ERRATUM</span>: {errata[0].kind === 'non_customer_credit' ? (Number(errata[0].points_not_credited) === 0 ? 'a confirmer not recoverable from the seal' : 'credit to a person not customer-side') : errata[0].kind === 'unsourced_figure' ? 'a figure with no source on record' : errata[0].kind === 'misstated_finding' ? `its finding ${errata[0].finding_code} misstates the seal` : errata[0].recomputed_score === null ? 'not recomputed' : <>recomputed {Number(errata[0].recomputed_score)} / 100</>} (sealed {Number(errata[0].sealed_score)} / 100). Full text on page 1. Recorded after sealing, {day(errata[0].recorded_at)}, by {errata[0].recorded_by}.</>
                 : <><span className="font-semibold">{errata.length} ERRATA</span>. Full text on page 1. Recorded after sealing, the latest {day(errata[errata.length - 1].recorded_at)}.</>}
             </div>
           )
@@ -123,6 +123,9 @@ function ErratumBanner({ x }: { x: RunErratum }) {
         : x.kind === 'unsourced_figure'
         // C3b: the figure the seal carries with no source on record, read from the seal and the record; nothing recomputed.
         ? <>{' '}<span data-testid="erratum-unsourced">{x.recompute_method.replace(/\s*The sealed record below is unchanged\.$/, '')}</span></>
+        : x.kind === 'misstated_finding'
+        // B4 addendum: a sealed finding its own seal contradicts; both texts read from the seal; nothing recomputed.
+        ? <>{' '}<span data-testid="erratum-misstated">{x.recompute_method.replace(/\s*The sealed record is unchanged\.$/, '')}</span></>
         : x.recomputed_score === null || x.recomputed_band === null
         // C2 (Brad, 25 Oct 2026): the server could not reproduce the seal; its sentence says why. No score is shown but the sealed one.
         ? <>{' '}<span data-testid="erratum-not-recomputed">{x.recompute_method.replace(/\s*The sealed run is unchanged\.$/, '').replace(/\.$/, '')}</span> (sealed: {Number(x.sealed_score)} / 100 · {band(x.sealed_band)}).</>

@@ -422,6 +422,35 @@ if (MODE === 'runacts') {
   await shot('b4_card05_locked_1280', 1280);
 }
 
+if (MODE === 'misstated') {
+  // B4 addendum (Brad, 6 Nov 2026): the misstated-finding errata batch through the Runs page: the dry-run list (account,
+  // run, finding, the false sentence and the true one), then one confirmation. E.COUNT and E.RUNS as the record calls for;
+  // E.RUN1 a run whose findings are true (absent from the list); E.SAMPLE_RUN / E.SAMPLE_CODE / E.SAMPLE_TRUE one row.
+  check(await open('/runs', `!!document.querySelector('[data-testid=misstated-errata-batch] [data-testid=misstated-errata-count]')`), 'the Runs page: "Findings their seals contradict"');
+  const box = `document.querySelector('[data-testid=misstated-errata-batch]')`;
+  const countText = await ev(`${box}.querySelector('[data-testid=misstated-errata-count]').textContent`);
+  check(countText === `${E.COUNT} findings on ${E.RUNS} runs call for an erratum.`, `  ...the dry run: ${E.COUNT} findings on ${E.RUNS} runs`, countText);
+  const rows = await ev(`[...${box}.querySelectorAll('[data-testid=misstated-erratum-candidate]')].map(r=>({run:r.dataset.run,code:r.dataset.code,cells:[...r.querySelectorAll('td')].map(c=>c.textContent)}))`);
+  check(rows.length === Number(E.COUNT) && rows.every((r) => r.cells.length === 5 && r.cells.every((c) => c.trim() !== '')), '  ...each row: account, run, finding, the false sentence, the true sentence', JSON.stringify(rows.slice(0, 2)));
+  check(!rows.some((r) => r.run === E.RUN1), "  ...Skillsoft run 1, whose findings are true, is not listed");
+  const sample = rows.find((r) => r.run === E.SAMPLE_RUN && r.code === E.SAMPLE_CODE);
+  check(sample && sample.cells[4] === E.SAMPLE_TRUE && sample.cells[3] === E.SAMPLE_FALSE, '  ...a sample row reads exactly as its seal', JSON.stringify(sample));
+  await shot('b4_misstated_dryrun_1280', 1280);
+  if (E.ACT === '1') {
+    const f = `${box}`;
+    await setField(f, 'Why they are recorded', E.REASON); await sleep(200);
+    check(await submitIn(f, `Record the ${E.COUNT} errata`), `  ...the batch: "Record the ${E.COUNT} errata" pressed`); await sleep(400);
+    const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
+    check(ct === E.CONFIRM, '  ...its confirmation reads exactly as the act session quotes it', ct);
+    await confirmIn(f); await sleep(2500);
+    check(await waitFor(`(${box}?.textContent ?? '').includes('Recorded ${E.COUNT}.')`), `  ...recorded ${E.COUNT}`, await ev(`(${box}?.textContent ?? '').slice(0, 200)`));
+    check(await open(`/runs/${E.SAMPLE_RUN}`, `!!document.querySelector('[data-testid=findings]')`), "  ...the sample run's page");
+    const fe = await ev(`[...document.querySelectorAll('[data-testid=finding-erratum]')].map(x=>x.textContent).join(' | ')`);
+    check(fe.includes(E.SAMPLE_TRUE), '  ...its Findings card shows the erratum under the finding it corrects', fe.slice(0, 300));
+    await shot('b4_misstated_run_1280', 1280);
+  }
+}
+
 if (MODE === 'stewardsafety') {
   // Steward safety (Brad, 5 Nov 2026): card 01c and the pack page. E.EXPECT = current|history|muted (current rows),
   // read from the record. BREAK names the break this walk runs under, so its FAIL lines are the catch.
@@ -541,6 +570,15 @@ if (MODE === 'valuecase') {
   // B4 (§14; the stage-10 rehearsal's items, D4, the banner ruling).
   if (E.FORBID2) check(!(await ev(`document.body.textContent.includes(${JSON.stringify(E.FORBID2)})`)), `  ...the case never prints "${E.FORBID2}"`);
   if (E.EXPECT_CLAIM_REFUSED === '1') check(await has('claim-refused') && !(await has('vendor-claim')), '  ...a claimed impact with no source prints its refusal, not the figure (D4)');
+  // B4 addendum: exact texts on the case (E.EXPECT_TEXT, '||'-separated), the OUTSIDE-IN banner word for word, and Print pressed.
+  if (E.EXPECT_TEXT) for (const t of E.EXPECT_TEXT.split('||')) check(await ev(`(document.querySelector('[data-testid=value-case]')?.textContent ?? '').includes(${JSON.stringify(t)})`), `  ...the case reads "${t}"`);
+  if (E.EXPECT_BANNER) { const bt = await ev(`document.querySelector('[data-testid=banner-outside-in]')?.textContent ?? 'none'`); check(bt === E.EXPECT_BANNER, '  ...the OUTSIDE-IN banner reads, word for word, as ruled', bt); }
+  if (E.PRESS_PRINT === '1') {
+    await ev(`(()=>{window.print=()=>{};return true})()`);
+    await ev(`document.querySelector('[data-testid=print-case]').click()`);
+    await sleep(1500);
+    check(!(await ev(`!!document.querySelector('[data-testid=print-note]')`)), '  ...act 7: "Print" pressed on the page, and not refused', await ev(`document.querySelector('[data-testid=print-note]')?.textContent ?? ''`));
+  }
   if (E.EXPECT_NOT_SHOWN) check((await ev(`document.querySelector('[data-testid=not-shown]')?.textContent ?? ''`)).includes(E.EXPECT_NOT_SHOWN), '  ...the customer-side item on record but not shown is named', await ev(`document.querySelector('[data-testid=not-shown]')?.textContent ?? 'none'`));
   if (E.EXPECT_FOOTNOTE) check((await ev(`[...document.querySelectorAll('[data-testid=footnote]')].map(x=>x.textContent).join(' | ')`)).includes(E.EXPECT_FOOTNOTE), `  ...a footnote says: "${E.EXPECT_FOOTNOTE}"`, await ev(`[...document.querySelectorAll('[data-testid=footnote]')].map(x=>x.textContent).join(' | ')`));
   if (E.EXPECT_FALSIFIER) check((await ev(`document.querySelector('[data-testid=falsifier]')?.textContent ?? ''`)).includes(E.EXPECT_FALSIFIER), '  ...the falsifier says which way', await ev(`document.querySelector('[data-testid=falsifier]')?.textContent ?? 'none'`));

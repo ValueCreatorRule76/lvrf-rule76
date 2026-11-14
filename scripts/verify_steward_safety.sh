@@ -127,6 +127,7 @@ step "3. Every confirmation names what it acts on"
 # A confirmation of an act on an existing row names its short id; one that creates a row, or a batch listed above it
 # with short ids, names it in words. The second list is closed: a new confirmation must be added to it on purpose.
 NAMED_IN_WORDS='C3Batches.tsx:Record {plural
+C3Batches.tsx:Record {data.count} misstated
 C3Batches.tsx:Mark {chosen.length}
 C3Batches.tsx:State what {data.count}
 C3Batches.tsx:Supersede {plan.count}

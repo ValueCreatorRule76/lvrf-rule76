@@ -134,14 +134,14 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (281 + 3)" || bad "  ...rows"
 if [ -z "$POST" ]; then
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^105 CHECKs in the database: 105 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 else
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^131 CHECKs in the database: 131 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 fi
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")" = "$AUD0" ] && ok "0045 and hardening write no evidence row: the audit log gains nothing (L41-D3)" || bad "audit grew"
 [ "$(q "SELECT count(*) || '|' || md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" = "${EV0%%|*}|$(q "SELECT md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" ] && ok "  ...all ${EV0%%|*} rows kept" || bad "  ...rows"
@@ -449,14 +449,14 @@ reharden
 [ "$(q "SELECT convalidated FROM pg_constraint WHERE conname = 'evidence_about_stated'")" = "t" ] && ok "evidence_about_stated validated" || bad "about not validated"
 [ "$(q "SELECT convalidated FROM pg_constraint WHERE conname = 'evidence_verified_opened'")" = "t" ] && ok "evidence_verified_opened added, valid" || bad "verified CHECK"
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 50 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 51 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
 PLAIN2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN2" | grep -qE "^130 CHECKs in the database: 130 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
+printf '%s' "$PLAIN2" | grep -qE "^131 CHECKs in the database: 131 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
 else
 reharden
 [ "$(q "SELECT string_agg(conname || '=' || convalidated, ',' ORDER BY conname) FROM pg_constraint WHERE conname IN ('evidence_about_stated', 'evidence_verified_opened')")" = "evidence_about_stated=true,evidence_verified_opened=true" ] && ok "the re-run keeps both CHECKs validated" || bad "CHECKs after the re-run"
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 50 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 51 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
 fi
 reharden
 sqlrefused "evidence_verified_opened: verified, no opening, past the guard (NULL-free input)" "ALTER TABLE evidence DISABLE TRIGGER evidence_final; UPDATE evidence SET source_verified = true WHERE id = '$UNOPENED'" "evidence_verified_opened"

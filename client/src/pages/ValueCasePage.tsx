@@ -174,12 +174,22 @@ export function ValueCasePage() {
   const hypotheses = d.hypotheses.filter((h) => !h.superseded_by && !h.withdrawn);
   const summary = [...d.summaries].filter((s) => s.lens === d.lens || s.lens === 'general').sort((a, b) => (a.lens === d.lens ? -1 : 1) - (b.lens === d.lens ? -1 : 1))[0] ?? null;
   const cfoRefused = d.lens === 'cfo' && Boolean(d.cfo?.refused);
+  // B4 addendum (Brad, 6 Nov 2026, ruling 4): the OUTSIDE-IN wording names the account. "Built from published sources only"
+  // is said only when every sourced figure the case prints rests on published evidence; otherwise that clause is left out,
+  // since a figure may rest on an inference or an assumption.
+  const o0 = d.outcomes[0];
+  // A printed figure with no sealed source counts as not published (null).
+  const printedBases = o0 ? [o0.baseline !== null ? o0.sources.baseline?.basis ?? null : undefined, o0.actual !== null ? o0.sources.actual?.basis ?? null : undefined,
+    o0.target !== null ? o0.sources.target_commitment?.basis ?? null : undefined, d.cost_of_delay?.status === 'computed' ? d.cost_of_delay?.basis ?? null : undefined]
+    .filter((b): b is string | null => b !== undefined) : [];
+  const allPublished = printedBases.length > 0 && printedBases.every((b) => b === 'published');
+  const outsideInText = `OUTSIDE-IN HYPOTHESIS — ${allPublished ? 'built from published sources only; ' : ''}no figure rests on ${d.account.name}’s own records or on a named person at ${d.account.name}`;
   const printedOn = new Date().toISOString().slice(0, 10);
 
   const banners = (
     <div data-testid="banners" className="text-[10.5px] tracking-[.03em]">
       {d.marker && <div className="border-b border-rule px-1 py-1 font-mono text-ink-70" data-testid="banner-reference">{MARKER_KIND[d.marker.kind].banner}</div>}
-      {d.banners?.outside_in && <div className="border-b border-rule px-1 py-1 font-mono text-ink-70" data-testid="banner-outside-in">OUTSIDE-IN HYPOTHESIS — no figure in this case has customer-side evidence behind it</div>}
+      {d.banners?.outside_in && <div className="border-b border-rule px-1 py-1 font-mono text-ink-70" data-testid="banner-outside-in">{outsideInText}</div>}
       {d.banners?.unverified && <div className="border-b border-warning px-1 py-1 font-mono text-warning" data-testid="banner-unverified">UNVERIFIED — this case has no verified actual</div>}
     </div>
   );
@@ -245,21 +255,26 @@ export function ValueCasePage() {
 
               <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">{cfoRefused ? 'Under the CFO lens' : 'The money at stake'}</h2>
               {cfoRefused
-                ? <p className="m-0 text-[13px]" data-testid="exec-refused">This case is refused under the CFO lens, for {d.cfo!.reasons.length === 1 ? 'one reason' : `${d.cfo!.reasons.length} reasons`} set out under “What we need from you”, each with the question that clears it. What would meet it is below.</p>
+                ? <p className="m-0 text-[13px]" data-testid="exec-refused">This case is refused under the CFO lens, for {d.cfo!.reasons.length === 1 ? 'one reason' : `${d.cfo!.reasons.length} reasons`} set out under “Why the CFO lens refuses”, each with the question that clears it. What would meet them is under “What we need from you: the asks”, below.</p>
                 : <p className="m-0 text-[13px]" data-testid="exec-money">{codLine()}</p>}
               {o && <p className="m-0 mt-1 text-[12.5px] text-ink-70" data-testid="exec-baseline">Baseline {baselineText ?? 'not recorded'}{baselineText && cite(sourceNote('Baseline', o.sources.baseline))}; target {o.target !== null ? withUnit(o.target, o.unit) : 'not committed: a hypothesis'}{o.target !== null && cite(targetNote(o))}; actual {o.actual !== null ? withUnit(o.actual, o.unit) : 'not measured'}{o.actual !== null && cite(sourceNote('Actual', o.sources.actual))}.</p>}
               {cfoRefused && <p className="m-0 mt-1 text-[12.5px] text-ink-70">{codLine()}</p>}
 
-              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">What we need from you</h2>
+              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45" data-testid="asks-title">What we need from you: the asks</h2>
               <AskList asks={d.asks} testid="exec-asks" />
             </section>
 
             {cfoRefused && d.cfo && (
-              <Section title="What we need from you" testid="cfo-refusal">
+              <Section title="Why the CFO lens refuses" testid="cfo-refusal">
                 <p className="m-0 text-[13px]" data-testid="cfo-refusal-text">{d.cfo.policy ? d.cfo.policy.refusal_text : 'No CFO lens has been ratified yet, so the CFO lens refuses every case and says why.'}</p>
                 {d.cfo.policy && <p className="m-0 mt-1 text-[11px] text-ink-45">The CFO lens: at least {d.cfo.policy.min} computed confidence, ratified by {d.cfo.policy.ratified_by} on {d.cfo.policy.ratified_on}.</p>}
-                <h3 className="m-0 mb-1 mt-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">Why it is refused</h3>
+                <h3 className="m-0 mb-1 mt-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">The reasons</h3>
                 <AskList asks={d.cfo.reasons} testid="cfo-reasons" />
+                {/* B4 addendum (ruling 1): the outcomes section is not printed under a CFO refusal, so a claimed impact is said
+                    to be withheld here, never silently absent. D4's line when no impact-basis source is sealed. */}
+                {o0 && o0.claimed_currency_impact !== null && o0.claimed_currency_impact !== undefined && (o0.sources.impact_basis
+                  ? <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="cfo-claim-withheld">A vendor claim with a sealed source is on record; it is not shown while the CFO lens refuses this case.</p>
+                  : <p className="m-0 mt-2 text-[12px] text-ink-70" data-testid="claim-refused">A claimed impact is recorded with no source behind it, so it is not shown.</p>)}
                 <p className="m-0 mt-3 text-[12.5px] text-ink-70" data-testid="cfo-asks-pointer">What would meet it: the {d.asks.length} {d.asks.length === 1 ? 'ask' : 'asks'} on the first page, each with its question.</p>
               </Section>
             )}

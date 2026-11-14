@@ -346,12 +346,17 @@ export function caseRecordsRouter(pool: Pool): Router {
       if (!['cfo', 'general'].includes(lens)) throw new Refusal(422, 'A lens is the CFO lens or general.');
       if (!r.outcome) throw new Refusal(409, 'This run names no outcome, so it has no value case to print.');
       const version = await nextVersion(client, r.outcome);
+      // B4 addendum (ruling 3): a CFO-lens print records the lens policy row it applied (the tenant's current CFO lens, or
+      // none when none is ratified); the lens itself stays read live (O-D1). The guard holds it to the current row.
+      const lensPolicyId = lens !== 'cfo' ? null : ((await client.query<{ id: string }>(
+        `SELECT l.id FROM lens_policies l WHERE l.tenant_id = $1 AND l.persona = 'cfo'
+            AND NOT EXISTS (SELECT 1 FROM lens_policies s WHERE s.supersedes_id = l.id)`, [tenantId])).rows[0]?.id ?? null);
       const { rows: [row] } = await client.query<{ id: string }>(
         `INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, value_run_id, document_version, disclosure, content_hash, payload,
-                                       rendered_by_person_id, kind, lens)
-         VALUES ($1, $2, $3, $4, $5, 'internal', $6, $7, $8, 'print_request', $9) RETURNING id`,
-        [tenantId, r.engagement_id, r.outcome, runId, version, r.payload_hash, { run: runId, payload_hash: r.payload_hash, lens }, req.actor!.personId, lens]);
-      res.status(201).json({ record_document_id: row.id, document_version: version, payload_hash: r.payload_hash });
+                                       rendered_by_person_id, kind, lens, lens_policy_id)
+         VALUES ($1, $2, $3, $4, $5, 'internal', $6, $7, $8, 'print_request', $9, $10) RETURNING id`,
+        [tenantId, r.engagement_id, r.outcome, runId, version, r.payload_hash, { run: runId, payload_hash: r.payload_hash, lens, lens_policy_id: lensPolicyId }, req.actor!.personId, lens, lensPolicyId]);
+      res.status(201).json({ record_document_id: row.id, document_version: version, payload_hash: r.payload_hash, lens_policy_id: lensPolicyId });
     } catch (err) {
       if (await refuse(pool, req, res, err, ctx())) return;
       respondServerError(res, err);

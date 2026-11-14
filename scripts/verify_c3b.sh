@@ -176,7 +176,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
 [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 50 migrations, newest 0049_b4_attribution" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^[0-9]+ CHECKs in the database: [0-9]+ with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 [ "$(q "SELECT count(*) || '|' || coalesce(string_agg(md5(e::text), '' ORDER BY id), '') FROM run_errata e")" = "$ERR0" ] && ok "0044 orphans nothing: all ${ERR0%%|*} errata kept, each unchanged" || bad "errata after 0044"

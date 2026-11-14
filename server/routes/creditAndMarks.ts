@@ -17,6 +17,8 @@ import { blockers, enteredBy, findingText, FIGURE_FIELDS, figureText, isFigureFi
  *   POST /api/customer-roles/:id/revoke                    revoke it, with a reason (append-only)
  *   GET  /api/errata/non-customer-credit                    the dry run: the errata the seals call for (C3b: both kinds)
  *   POST /api/errata/non-customer-credit                    record them, one per run, refused if either count changed
+ *   GET  /api/errata/misstated-findings                     B4 addendum: the dry run, each sealed finding its own seal contradicts
+ *   POST /api/errata/misstated-findings                     record them, one per run and finding, refused if the count changed
  *   GET  /api/value-outcomes/:outcomeId/figure-findings     C3b: each figure, its finding, and what a finding would say
  *   POST /api/value-outcomes/:outcomeId/figure-findings     C3b: record that a figure has no source on record
  *   GET  /api/system-exercise/candidates                    every unmarked evidence row and run, with its own note
@@ -235,6 +237,85 @@ export function creditErrataRouter(pool: Pool): Router {
         ids.push(row.id);
       }
       res.status(201).json({ recorded: ids.length, credit: list.length, unsourced: unsourced.length, erratum_ids: ids });
+    } catch (err) {
+      await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId: null });
+    }
+  });
+  return router;
+}
+
+/**
+ * B4 addendum (Brad, 6 Nov 2026): every sealed finding its own seal contradicts, for the tenant's locked runs, with no
+ * current misstated-finding erratum yet. Both texts come from lvrf_misstated_findings(), never typed; the errata guard
+ * refuses any other text, and a run whose finding is true (Skillsoft run 1) yields none.
+ */
+interface MisstatedFinding {
+  run_id: string; value_outcome_id: string; account: string; run_number: number; code: string; false_text: string; true_text: string;
+  model_version: string | null; model_fingerprint: string | null; sealed_score: string; sealed_band: string;
+}
+async function listMisstatedFindings(client: PoolClient, tenantId: string): Promise<MisstatedFinding[]> {
+  const { rows } = await client.query<MisstatedFinding>(
+    `SELECT r.id AS run_id, lvrf_run_outcome_at_sealing(r.id) AS value_outcome_id, i.name AS account, r.run_number, m.code,
+            m.false_text, m.true_text, r.payload->'confidence'->>'modelVersion' AS model_version,
+            CASE WHEN r.payload->'confidence'->>'modelVersion' IS NULL THEN NULL ELSE r.payload->'confidence'->>'modelFingerprint' END AS model_fingerprint,
+            trim_scale(r.confidence_score)::text AS sealed_score, r.confidence_band AS sealed_band
+       FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id
+       CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m
+      WHERE r.tenant_id = $1 AND r.deleted_at IS NULL AND r.locked_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM run_errata x WHERE x.value_run_id = r.id AND x.kind = 'misstated_finding' AND x.finding_code = m.code)
+      ORDER BY i.name, r.run_number, m.code`, [tenantId]);
+  return rows;
+}
+const MISSTATED_METHOD = "From this run's seal: its findings, its committer and verifier factor notes and its realization, read by lvrf_misstated_findings(); nothing recomputed. The sealed record is unchanged.";
+
+export function misstatedFindingsRouter(pool: Pool): Router {
+  const router = Router();
+  router.get('/misstated-findings', async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN READ ONLY');
+      const list = await listMisstatedFindings(client, actorTenantId(req));
+      await client.query('ROLLBACK');
+      res.json({ count: list.length, runs: new Set(list.map((e) => e.run_id)).size,
+        errata: list.map((e) => ({ run_id: e.run_id, account: e.account, run_number: e.run_number, code: e.code, false_text: e.false_text, true_text: e.true_text })) });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      respondServerError(res, err);
+    } finally {
+      client.release();
+    }
+  });
+  router.post('/misstated-findings', requireSteward(pool), async (req, res) => {
+    const endpoint = 'POST /api/errata/misstated-findings';
+    const client: PoolClient = req.dbClient!;
+    const tenantId = actorTenantId(req);
+    try {
+      const actor = actorOf(req);
+      if (await refuseUnknownFields(pool, req, res, ['expected_count', 'reason'],
+        { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId: null },
+        (k) => (/text|finding|code|run|method/.test(k) ? `body.${k} is not taken: what each erratum states is read from its run's seal by the server` : null))) return;
+      const b = isRecord(req.body) ? req.body : {};
+      if (typeof b.expected_count !== 'number' || !Number.isInteger(b.expected_count) || b.expected_count < 1) {
+        throw new Refusal(422, 'Give the count the dry run showed (expected_count).');
+      }
+      const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+      if (reason.length < MIN_REASON) throw new Refusal(422, `Say why they are recorded, in at least ${MIN_REASON} characters.`);
+      const list = await listMisstatedFindings(client, tenantId);
+      if (list.length !== b.expected_count) {
+        throw new Refusal(409, `The count changed: the record now calls for ${list.length} misstated-finding errata, not ${b.expected_count}. Nothing was recorded; read the list again.`);
+      }
+      const ids: string[] = [];
+      for (const e of list) {
+        const { rows: [row] } = await client.query<{ id: string }>(
+          `INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, kind, finding_code, what_was_wrong, what_is_right, reason,
+             model_version, model_fingerprint, sealed_score, sealed_band, recompute_method, recorded_by_person_id)
+           VALUES ($1, $2, $3, 'misstated_finding', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+          [tenantId, e.run_id, e.value_outcome_id, e.code, e.false_text, e.true_text, reason,
+            e.model_version, e.model_fingerprint, e.sealed_score, e.sealed_band, MISSTATED_METHOD, actor]);
+        await recordAct(client, req, 'POST /api/errata/misstated-findings', { act: 'record_erratum', tenantId, subjectTable: 'run_errata', subjectId: row.id, resultTable: 'value_runs', resultId: e.run_id, reason });
+        ids.push(row.id);
+      }
+      res.status(201).json({ recorded: ids.length, runs: new Set(list.map((e) => e.run_id)).size, erratum_ids: ids });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'run_errata', subjectId: null, tenantId, institutionId: null });
     }
