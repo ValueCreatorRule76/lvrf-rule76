@@ -225,6 +225,13 @@ cut line applied first.
     its child (about 22 vite processes after one full regression). Stop them by port, as `scripts/equivalence_gets.sh`
     does.
 
+- **From S1's Gate C (Brad, 15 Nov 2026):** **a correction path for a pack-basis note.** A metric's basis note is
+  final once set (the route refuses a second basis: "supersede the metric instead"), and on Skillsoft act 4's note
+  (`eed11e02`) holds the claim's text by mistake. The correction is an **appended correction row that points to the
+  original, never an edit**: the original row, its text and its link stay as recorded. Card 01c's "Supersede…" is not
+  this shape: it sets `superseded_by_id` on the original and moves its links. Until it exists, a further observation on
+  01c carries the corrected note (Brad's act, 15 Nov 2026).
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the

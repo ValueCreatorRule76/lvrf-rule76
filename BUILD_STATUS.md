@@ -14540,9 +14540,10 @@ draft's leading "Value-based renewal execution, ", so the lever line no longer r
   - The route refuses a second basis on a metric (409: "a basis is not amended — supersede the metric instead"), and
     no correction path exists for an observation row.
   - The row is not sealed in run 3 (its payload names neither `eed11e02` nor `6f8d5cb3`) and does not print.
-  - **For Brad's ruling** (not built). Either it stands, recorded here. Or Brad records a further observation on 01c
-    with the drafted note, and `eed11e02` stays on record. Or a correction path for a pack-basis note goes to 3.1.
-    Superseding `e7edeaae` would only replace a basis that is right; the note is the only wrong part.
+  - **Ruled (Brad, 15 Nov 2026): options 2 and 3, and the departure recorded.** `eed11e02` holds the claim's text
+    instead of the drafted basis note; it is not sealed in run 3 and does not print; the metric's link
+    (`e7edeaae` → `2bd87345`) is correct. It stays on record. Brad records the drafted note as a further observation
+    on 01c (his act, below); a correction path for pack-basis notes goes to 3.1 (`docs/LVRF_3.0_CRITICAL_PATH.md`).
 - **The hypothesis `d3239949`:**
   - The only current hypothesis on `f23ee6a8`. Brad's, on lever `71934ebc`.
   - Reference `baseline`, value 98 (recorded 30 Apr 2026), due 2027-06-30, the drafted conditions, not post hoc.
@@ -14564,10 +14565,8 @@ draft's leading "Value-based renewal execution, ", so the lever line no longer r
 `skillsoft_run3_default.pdf`, 102366 bytes, 3 pages). Both were read with `pdftotext`, and neither was modified, re-saved
 or copied:
 
-- **No browser header or footer.**
-  - No "11/15/26", no title line, no URL.
-  - The "Page x of y" at the bottom right is the app's own `@page` margin box (`client/src/index.css`, UX-1 slice 3, in
-    Menlo 8pt), not the browser's.
+- **No browser header or footer**: no "11/15/26", no title line, no URL. The "Page x of y" at the bottom right is the
+  app's own `@page` footer (`client/src/index.css`, UX-1 slice 3), by design; kept (Brad, 15 Nov 2026).
 - **Every page** carries the OUTSIDE-IN HYPOTHESIS and UNVERIFIED banners and the footer's record hash
   `fb2917d18928c1eda1f5735d11ff402c01cea13f5282ac02fc98f2b30c0c372c`, equal to run 3's stored `payload_hash`.
 - **"one point of Dollar Retention Rate (trailing twelve months)"** prints where the rate is asked: in ask 3 on both
@@ -14579,4 +14578,25 @@ or copied:
   lower than a year earlier. Watch first: Share of Skillsoft renewals entered with a verified value case (not yet
   measured).` The name appears once. The CFO print is refused and has no Value hypotheses section, as designed.
 
-**S1 closed, Gate C clean but for act 4's note, which awaits Brad's ruling.** Prod was only read.
+**Brad's correcting observation and the post-act check (read-only, 15 Nov 2026, UTC).**
+
+- **The first attempt did not reach prod.** At 20:59:50 there was no new row, no audit row since 18:49:13, and the API
+  journal held no request but two health checks.
+- **Recorded at 21:04:58** (`POST /api/institutions/:institutionId/evidence` 201, session): **`c56a3d33`** on
+  Skillsoft's 01c.
+  - Observation, `quote` form, about Skillsoft, captured by Brad.
+  - Unverified, not opened, not AI-sourced, not simulated.
+  - **As drafted:** the provenance (naming `eed11e02` and `6f8d5cb3`), the citation (the EDGAR URL), the quote
+    (byte-identical to `6f8d5cb3`'s) and how it was read (naming `6f8d5cb3`).
+- **Not as drafted: "What it states" holds only the last 340 of the 556 characters.** It begins `2027 release, 9 Sep
+  2026): “Dollar retention rate …` and ends as drafted.
+  - The 216 missing characters are the correction sentence, "Skillsoft's DRR is its own measure, not this entry's
+    cohort ARR rate.", and the start of the next sentence, including `6f8d5cb3`.
+  - The audit row's `new_row` equals the stored text, so the API received it so.
+  - No code shortens it: the form sets no `maxLength`, and the route only trims.
+  - The row still points to the original and the source through its provenance and how-read. **For Brad's ruling.**
+- **Unchanged:** acts **227** (recording a source writes none); no refusal; 1 audit row (the insert, with its actor).
+  `eed11e02` is as recorded, and `e7edeaae` → `2bd87345`.
+- **Run 3's hash** is still `fb2917d1…c0c372c`; `check_run_hashes` 27/27; all 27 runs byte-identical to the Gate C read.
+
+**Gate C clean but for act 4's note, ruled above; Brad's correcting observation `c56a3d33` recorded with its summary cut short, for his ruling.** Prod was only read.
