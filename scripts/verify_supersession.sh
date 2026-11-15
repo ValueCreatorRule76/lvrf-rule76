@@ -162,6 +162,26 @@ fi
 SELF_INST="$(q "SELECT id FROM institutions WHERE is_tenant_self LIMIT 1")"; CURIA="$(q "SELECT institution_id FROM evidence WHERE id = '$R1'")"; SCOTTS="$(q "SELECT institution_id FROM evidence WHERE id = '$RT'")"
 sf() { J about account kind public_filing provenance 'Fixture filing (not a source)' summary "$1" evidence_form quote quote_text 'Named in the fixture document as stated here.' how_read 'Read from the fixture document, page one (fixture).'; }
 fixture() { expect POST "/api/institutions/$SELF_INST/evidence" "$(sf "$1")" 201 "a fixture row: $1"; FX="$(rj b.evidence_id)"; }
+# Gate A, 14 Nov 2026 (L39): the rows this script moves are chosen by the links they hold, not only by id. On the 14 Nov
+# copy, card 01c's 4 Nov swap put f23ee6a8's baseline on 9a36e675 (271a449a's successor), and Brad's 5 Nov withdrawal
+# left c1d0f877 (9765335f's successor) with no live link, so 9765335f's chain holds no baseline and no current row about
+# the account holds the outcome's impact basis. R9 is then the current row about the account that holds a live baseline;
+# R2, where no other current row about the account holds that outcome's impact basis, a fixture row linked as it through
+# the route. Prod's own rows are asserted as recorded: c1d0f877's last link withdrawn by Brad, with his reason.
+LIVE() { q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$1' AND supports = '$2' AND withdrawn_at IS NULL"; }
+if [ "$(LIVE "$R9" baseline)" = "0" ]; then
+  [ "$(q "SELECT count(*) FILTER (WHERE withdrawn_at IS NULL) || '|' || bool_and(withdrawn_at IS NULL OR (withdrawn_by_person_id IS NOT NULL AND length(btrim(withdrawal_reason)) >= 12)) FROM value_outcome_evidence WHERE evidence_id = '$R9'")" = "0|true" ] \
+    && ok "(${R9:0:8}, 9765335f's chain end, holds no live link on the copy: each of its links withdrawn by a named person, with a reason)" || bad "${R9:0:8}'s links: $(q "SELECT supports, withdrawn_at, withdrawal_reason FROM value_outcome_evidence WHERE evidence_id = '$R9'")"
+  R9="$(q "SELECT e.id FROM evidence e JOIN value_outcome_evidence l ON l.evidence_id = e.id AND l.supports = 'baseline' AND l.withdrawn_at IS NULL JOIN value_outcomes vo ON vo.id = l.value_outcome_id WHERE e.superseded_by_id IS NULL AND e.deleted_at IS NULL AND NOT e.ai_sourced AND e.about_institution_id = vo.institution_id AND vo.institution_id = '$SELF_INST' ORDER BY e.created_at, e.id LIMIT 1")"
+  [ -n "$R9" ] && ok "  ...R9 is ${R9:0:8}: the current row about the account that holds its live baseline" || { bad "no current row about the account holds a live baseline"; exit 1; }
+fi
+OUT9="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$R9' AND supports = 'baseline' AND withdrawn_at IS NULL")"
+if [ "$R2" = "$R9" ] || [ "$(LIVE "$R2" impact_basis)" = "0" ]; then
+  expect POST "/api/value-outcomes/$OUT9/evidence" "$(J kind public_filing provenance 'Fixture filing (not a source)' summary 'L39 fixture: the impact basis of the outcome R9 is the baseline of (verification)' supports impact_basis confidence medium source_verified false ai_sourced false simulated false about account evidence_form quote quote_text 'Named in the fixture document as stated here.' how_read 'Read from the fixture document, page one (fixture).')" 201 "  ...R2: a fixture row linked as the impact basis of ${OUT9:0:8}, through the route"
+  R2="$(rj b.evidence_id)"
+fi
+[ "$(LIVE "$R9" baseline)|$(LIVE "$R2" impact_basis)|$(q "SELECT count(DISTINCT value_outcome_id) FROM value_outcome_evidence WHERE evidence_id IN ('$R9', '$R2') AND withdrawn_at IS NULL")" = "1|1|1" ] \
+  && ok "  ...R9 holds the live baseline and R2 the live impact basis, of the same outcome" || bad "  ...R9/R2 links: $(q "SELECT left(evidence_id::text, 8), supports, withdrawn_at FROM value_outcome_evidence WHERE evidence_id IN ('$R9', '$R2')")"
 
 step "4. Gate B's acts, replayed on the clone: every row about its own account, as recorded"
 if [ -z "$POST" ]; then
@@ -396,6 +416,8 @@ expect POST "/api/evidence/$N2/supersede" "$(SR "$N2")" 422 "B4: a live link lef
 restore "$AEV"; stop_server; start_server
 expect POST "/api/evidence/$N2/supersede" "$(SR "$N2")" 201 "  ...restored: the single route moves it too"; N22="$(rj b.evidence_id)"
 OC9="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id = '$N9' AND withdrawn_at IS NULL")"
+# Gate A, 14 Nov 2026: with no live link on N9 there is no outcome to seal; say so and stop cleanly, never an empty id.
+[ -n "$OC9" ] || { bad "N9 (${N9:0:8}, R9's successor) holds no live link: the baseline did not move, so there is no outcome to seal after the move"; exit 1; }
 ENG9="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$OC9'")"
 expect POST "/api/engagements/$ENG9/produce-run" "$(J banner_title 'L52 V3' note 'Verification: sealed after the move.' source_fixture l52_fixture)" 201 "a run after the move"
 RUNN="$(rj b.value_run_id)"

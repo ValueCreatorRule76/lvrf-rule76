@@ -144,6 +144,9 @@ const CASES = [
   { route: 'GET /api/system-exercise/candidates', kind: 'list', path: '/api/system-exercise/candidates', aIds: [E.EV_A, E.RUN_A], bIds: [] },
   { route: 'GET /api/errata/non-customer-credit', kind: 'list', path: '/api/errata/non-customer-credit', aIds: [], bIds: [] },
   { route: 'POST /api/errata/non-customer-credit', kind: 'actor' },
+  // B4 addendum: the misstated-finding errata batch takes the actor's tenant, never an id; checked in F.
+  { route: 'GET /api/errata/misstated-findings', kind: 'list', path: '/api/errata/misstated-findings', aIds: [], bIds: [] },
+  { route: 'POST /api/errata/misstated-findings', kind: 'actor' },
   // C3b: a figure with no source on record, on an outcome.
   { route: 'GET /api/value-outcomes/:outcomeId/figure-findings', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/figure-findings`,
     notFound: [404, `value outcome ${E.OUTCOME_A} not found`], target: ['value_outcomes', E.OUTCOME_A] },
@@ -493,6 +496,18 @@ step("F. C3's batches take the actor's tenant: B can neither mark nor record err
   e.status === 409 && /^The count changed: the record now calls for \d+ credit errata and \d+ unsourced-figure errata/.test(e.message ?? '')
     ? ok(`credit errata: B's batch reads B's own seals only (B's count ${g.json?.count}); a count that is not B's -> 409`)
     : bad(`credit errata as B -> ${e.status} ${JSON.stringify(e.message)}`);
+  // B4 addendum: B's misstated-finding dry run reads B's own seals only; a batch with A's count is refused, nothing recorded.
+  const aMis = q(`SELECT count(*) FROM value_runs r CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.tenant_id = '${E.TENANT_A}' AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL`);
+  const aMisRuns = q(`SELECT coalesce(string_agg(DISTINCT r.id::text, ','), '') FROM value_runs r CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.tenant_id = '${E.TENANT_A}' AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL`).split(',').filter(Boolean);
+  const gm = await call(cookieB, 'GET', '/api/errata/misstated-findings');
+  const leakedM = aMisRuns.filter((id) => gm.text.includes(id));
+  gm.status === 200 && leakedM.length === 0 && gm.json?.count === 0
+    ? ok(`misstated findings: B's dry run lists none of A's ${aMisRuns.length} run(s) (A's count ${aMis}; B's ${gm.json?.count})`)
+    : bad(`misstated findings as B -> ${gm.status} count ${gm.json?.count}; A's runs leaked: ${leakedM.join(', ')}`);
+  const em = await call(cookieB, 'POST', '/api/errata/misstated-findings', { expected_count: Math.max(1, Number(aMis)), reason: note('Verification: P3 tenant scope checks.') });
+  em.status === 409 && /^The count changed: the record now calls for 0 misstated-finding errata/.test(em.message ?? '')
+    ? ok(`  ...B's batch with A's count (${Math.max(1, Number(aMis))}) -> 409: B's tenant calls for none`)
+    : bad(`  ...misstated batch as B -> ${em.status} ${JSON.stringify(em.message)}`);
   const marksAfter = q('SELECT count(*) FROM system_exercise_marks');
   const errataAfter = q('SELECT count(*) FROM run_errata');
   marksAfter === marksBefore && errataAfter === errataBefore ? ok(`nothing marked, no erratum recorded (marks ${marksBefore}, errata ${errataBefore})`) : bad(`marks ${marksBefore} -> ${marksAfter}; errata ${errataBefore} -> ${errataAfter}`);

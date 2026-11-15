@@ -128,6 +128,7 @@ step "2. Clone; migrate 0049; harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
+RUNIDS0="$(q "SELECT string_agg(quote_literal(id::text), ',' ORDER BY id) FROM value_runs")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "209" ] && ok "209 triggers: section 34 adds 5" || bad "triggers: $(trig)"
@@ -155,10 +156,29 @@ ENG="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$OUT'")"
 RUN1="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND run_number = 1")"
 [ -n "$OUT" ] && [ -n "$SIM1" ] && [ -n "$SIM2" ] && ok "Skillsoft's outcome f23ee6a8 and its two simulated actual links, as on prod" || { bad "fixtures from the copy"; exit 1; }
 start_server && ok "API up on $PORT"
-# As on prod (Brad's B3 act session, 5 Nov 2026): D = 6, N = 2, and the CFO lens, set by the steward on the clone.
-expect POST /api/policies/values "$(J key cost_of_delay_months value 6 reason 'Verification: D, as on prod.')" 201 "D = 6, as on prod"
-expect POST /api/policies/values "$(J key pack_ratification_institutions value 2 reason 'Verification: N, as on prod.')" 201 "N = 2, as on prod"
-expect POST /api/policies/lenses "$(J persona cfo min_confidence_score 55 admitted_bases '["system_of_record","published"]' suppresses '["consumption"]' refusal_text 'The CFO lens shows a value case only when its computed confidence is at least 55 and every actual it reports rests on a system of record or a published source. This case does not meet that yet. Below is each reason, and what would meet it.' reason 'Verification: the CFO lens, as on prod.')" 201 "the CFO lens, as on prod"
+# As on prod (Brad's B3 act session, 5 Nov 2026): D = 6, N = 2, and the CFO lens. A copy taken after that session holds
+# them: each is asserted as recorded, Brad's, with his act and his reason (Gate A, 14 Nov 2026). An earlier copy has none,
+# and the steward sets them on the clone. Rehearsing the B3 acts themselves is verify_value_case's, on a fixture tenant.
+PV() {  # KEY VALUE — the current value, the steward's, with its ratify act and the same reason
+  q "SELECT trim_scale(v.value) || '|' || (v.set_by_person_id = '$S') || '|' || (length(btrim(v.reason)) >= 12) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'ratify' AND a.subject_table = 'policy_values' AND a.subject_id = v.id AND a.actor_person_id = v.set_by_person_id AND a.reason = v.reason) FROM policy_values v WHERE v.tenant_id = '$TEN' AND v.key = '$1' AND NOT EXISTS (SELECT 1 FROM policy_values n WHERE n.supersedes_id = v.id)"
+}
+S_NAME="$(q "SELECT full_name FROM persons WHERE id = '$S'")"
+if [ -n "$(PV cost_of_delay_months)" ]; then
+  [ "$(PV cost_of_delay_months)" = "6|true|true|1" ] && ok "D = 6 on the copy, as recorded: ${S_NAME}'s, with his ratify act and reason" || bad "D on the copy: $(PV cost_of_delay_months)"
+else
+  expect POST /api/policies/values "$(J key cost_of_delay_months value 6 reason 'Verification: D, as on prod.')" 201 "D = 6, as on prod"
+fi
+if [ -n "$(PV pack_ratification_institutions)" ]; then
+  [ "$(PV pack_ratification_institutions)" = "2|true|true|1" ] && ok "N = 2 on the copy, as recorded: ${S_NAME}'s, with his ratify act and reason" || bad "N on the copy: $(PV pack_ratification_institutions)"
+else
+  expect POST /api/policies/values "$(J key pack_ratification_institutions value 2 reason 'Verification: N, as on prod.')" 201 "N = 2, as on prod"
+fi
+LP="$(q "SELECT trim_scale(l.min_confidence_score) || '|' || array_to_string(l.admitted_bases, '+') || '|' || array_to_string(l.suppresses, '+') || '|' || (l.ratified_by_person_id = '$S') || '|' || (length(btrim(l.reason)) >= 12) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'ratify' AND a.subject_table = 'lens_policies' AND a.subject_id = l.id AND a.actor_person_id = l.ratified_by_person_id AND a.reason = l.reason) FROM lens_policies l WHERE l.tenant_id = '$TEN' AND l.persona = 'cfo' AND NOT EXISTS (SELECT 1 FROM lens_policies n WHERE n.supersedes_id = l.id)")"
+if [ -n "$LP" ]; then
+  [ "$LP" = "55|system_of_record+published|consumption|true|true|1" ] && ok "the CFO lens on the copy, as recorded: ${S_NAME}'s ratification, with his act and reason" || bad "the CFO lens on the copy: $LP"
+else
+  expect POST /api/policies/lenses "$(J persona cfo min_confidence_score 55 admitted_bases '["system_of_record","published"]' suppresses '["consumption"]' refusal_text 'The CFO lens shows a value case only when its computed confidence is at least 55 and every actual it reports rests on a system of record or a published source. This case does not meet that yet. Below is each reason, and what would meet it.' reason 'Verification: the CFO lens, as on prod.')" 201 "the CFO lens, as on prod"
+fi
 # As on prod (Brad's acts, 5 Nov 2026): the outcome's impact-basis link is withdrawn, so the claim has no source.
 for E in $(q "SELECT evidence_id FROM value_outcome_evidence WHERE value_outcome_id = '$OUT' AND supports = 'impact_basis' AND withdrawn_at IS NULL"); do
   expect POST "/api/value-outcomes/$OUT/evidence/$E/withdraw" "$(J reason 'Verification: as on prod, the impact-basis link withdrawn.')" 200 "  ...the impact-basis link of ${E:0:8} withdrawn, as on prod"
@@ -186,6 +206,49 @@ export C1="Withdraw the measurement of f23ee6a8, Dollar Retention Rate (trailing
 export C3="Withdraw 2c10e091, “Assessed capability in value-based renewal execution across the enterprise sales”, from Dollar Retention Rate (trailing twelve months): it supports the actual now, and will support nothing."
 export C4="Withdraw eea43d9a, “LTM dollar retention rate of 100.4% at Q2 FY2027 period end.”, from Dollar Retention Rate (trailing twelve months): it supports the actual now, and will support nothing."
 export C2="Withdraw the commitment of f23ee6a8, Dollar Retention Rate (trailing twelve months): target 100 %, committed by [SIM] Customer Sponsor. The outcome reads claimed; the withdrawn values stay on the record."
+# Gate A, 14 Nov 2026 (L39): a copy taken after Brad's B4 act session (6 Nov 2026) holds acts 1-4. Each is asserted as
+# recorded (Brad's, his reason, his act), and the rehearsal runs on a fixture in the pre-act shape: f23ee6a8 as it stood
+# before act 1 (its own engagement on the account; the values its two withdrawals kept) and copies of its two simulated
+# rows, linked as its actual. Those links cannot be made through any route today (AMENDMENT-005 refuses them; prod's
+# predate the guard), so the fixture rows are written on the clone with triggers suspended for that one transaction,
+# then every guard is in force for the rehearsal. The confirmations are §14's, with the fixture's short ids.
+if [ "$(q "SELECT count(*) FROM outcome_withdrawals WHERE value_outcome_id = '$OUT'")" != "0" ]; then
+  REC() {  # KIND REASON — the withdrawal row, by the steward, with its reason, and its withdraw act naming it
+    q "SELECT (w.withdrawn_by_person_id = '$S') || '|' || (w.reason = \$r\$$2\$r\$) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'withdraw' AND a.subject_table = 'value_outcomes' AND a.subject_id = '$OUT' AND a.result_table = 'outcome_withdrawals' AND a.result_id = w.id AND a.actor_person_id = w.withdrawn_by_person_id AND a.reason = w.reason) FROM outcome_withdrawals w WHERE w.value_outcome_id = '$OUT' AND w.kind = '$1'"
+  }
+  LREC() {  # EVIDENCE REASON — the actual link withdrawn by the steward, with its reason, and its withdraw act
+    q "SELECT (l.withdrawn_by_person_id = '$S') || '|' || (l.withdrawal_reason = \$r\$$2\$r\$) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'withdraw' AND a.subject_table = 'value_outcome_evidence' AND a.subject_id = '$OUT' AND a.result_table = 'evidence' AND a.result_id = l.evidence_id AND a.actor_person_id = l.withdrawn_by_person_id AND a.reason = l.withdrawal_reason) FROM value_outcome_evidence l WHERE l.value_outcome_id = '$OUT' AND l.evidence_id = '$1' AND l.supports = 'actual' AND l.withdrawn_at IS NOT NULL"
+  }
+  [ "$(REC measurement "$R1")" = "true|true|1" ] && [ "$(q "SELECT (withdrawn_values->>'actual_value') || ':' || (withdrawn_values->>'realized_currency_impact') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'measurement'")" = "100.4:8400000" ] \
+    && ok "act 1 on the copy, as recorded: f23ee6a8's measurement withdrawn by ${S_NAME}, with act 1's reason and his act; actual 100.4 and realized 8400000 kept" || bad "act 1 on the copy: $(REC measurement "$R1")"
+  [ "$(REC commitment "$R2")" = "true|true|1" ] && [ "$(q "SELECT (withdrawn_values->>'target_value') || ':' || (withdrawn_values->>'committed_by') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'commitment'")" = "100:[SIM] Customer Sponsor" ] \
+    && ok "act 2 on the copy, as recorded: the commitment withdrawn by ${S_NAME}, with act 2's reason and his act; target 100 by [SIM] Customer Sponsor kept" || bad "act 2 on the copy: $(REC commitment "$R2")"
+  [ "$(LREC "$SIM1" "$R3")" = "true|true|1" ] && ok "act 3 on the copy, as recorded: 2c10e091's actual link withdrawn by ${S_NAME}, with act 3's reason and his act" || bad "act 3 on the copy: $(LREC "$SIM1" "$R3")"
+  [ "$(LREC "$SIM2" "$R4")" = "true|true|1" ] && ok "act 4 on the copy, as recorded: eea43d9a's actual link withdrawn by ${S_NAME}, with act 4's reason and his act" || bad "act 4 on the copy: $(LREC "$SIM2" "$R4")"
+  FENG="$(uuidgen | tr 'A-Z' 'a-z')"; FOUT="$(uuidgen | tr 'A-Z' 'a-z')"; FS1="$(uuidgen | tr 'A-Z' 'a-z')"; FS2="$(uuidgen | tr 'A-Z' 'a-z')"
+  FIX="$(psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 <<SQL
+BEGIN;
+SET LOCAL session_replication_role = replica;
+INSERT INTO engagements SELECT (jsonb_populate_record(NULL::engagements, to_jsonb(g) || jsonb_build_object('id', '$FENG', 'name', 'Fixture: f23ee6a8 before the B4 act session (verification)'))).* FROM engagements g WHERE g.id = '$ENG';
+INSERT INTO evidence SELECT (jsonb_populate_record(NULL::evidence, to_jsonb(e) || jsonb_build_object('id', CASE e.id WHEN '$SIM1' THEN '$FS1' ELSE '$FS2' END))).* FROM evidence e WHERE e.id IN ('$SIM1', '$SIM2');
+INSERT INTO value_outcomes SELECT (jsonb_populate_record(NULL::value_outcomes, to_jsonb(o)
+    || (SELECT withdrawn_values FROM outcome_withdrawals WHERE value_outcome_id = o.id AND kind = 'measurement')
+    || ((SELECT withdrawn_values FROM outcome_withdrawals WHERE value_outcome_id = o.id AND kind = 'commitment') - 'committed_by' - 'value_stage')
+    || jsonb_build_object('id', '$FOUT', 'engagement_id', '$FENG'))).* FROM value_outcomes o WHERE o.id = '$OUT';
+INSERT INTO value_outcome_evidence SELECT (jsonb_populate_record(NULL::value_outcome_evidence, to_jsonb(l) || jsonb_build_object('value_outcome_id', '$FOUT',
+    'evidence_id', CASE l.evidence_id WHEN '$SIM1' THEN '$FS1' ELSE '$FS2' END, 'withdrawn_at', NULL, 'withdrawn_by_person_id', NULL, 'withdrawal_reason', NULL))).*
+  FROM value_outcome_evidence l WHERE l.value_outcome_id = '$OUT' AND l.evidence_id IN ('$SIM1', '$SIM2') AND l.supports = 'actual';
+SELECT 'FIXTURE';
+COMMIT;
+SQL
+)"
+  [ "$FIX" = "FIXTURE" ] || { bad "the fixture: $FIX"; exit 1; }
+  [ "$(q "SELECT realization || '|' || trim_scale(actual_value) || '|' || trim_scale(realized_currency_impact) || '|' || trim_scale(target_value) || '|' || (SELECT full_name FROM persons WHERE id = committed_by_person_id) || '|' || (SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$FOUT' AND supports = 'actual' AND withdrawn_at IS NULL) || '|' || (SELECT bool_and(simulated) FROM evidence WHERE id IN ('$FS1', '$FS2')) FROM value_outcomes WHERE id = '$FOUT'")" = "measured|100.4|8400000|100|[SIM] Customer Sponsor|2|true" ] \
+    && ok "the fixture ${FOUT:0:8}: measured, actual 100.4, realized 8400000, target 100 by [SIM] Customer Sponsor, two simulated rows (${FS1:0:8}, ${FS2:0:8}) as its actual: f23ee6a8 before act 1" || bad "the fixture: $(q "SELECT realization, actual_value, target_value FROM value_outcomes WHERE id = '$FOUT'")"
+  [ "$(trig)" = "209" ] && ok "  ...every guard in force again: 209 triggers" || bad "  ...triggers: $(trig)"
+  C1="${C1//f23ee6a8/${FOUT:0:8}}"; C2="${C2//f23ee6a8/${FOUT:0:8}}"; C3="${C3//2c10e091/${FS1:0:8}}"; C4="${C4//eea43d9a/${FS2:0:8}}"
+  OUT="$FOUT"; SIM1="$FS1"; SIM2="$FS2"; export OUT SIM1 SIM2 C1 C2 C3 C4
+fi
 cw spineacts
 [ "$(q "SELECT kind || ':' || (withdrawn_values->>'actual_value') || ':' || (withdrawn_values->>'realized_currency_impact') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'measurement'")" = "measurement:100.4:8400000" ] && ok "act 1: the measurement's values kept exactly (actual 100.4, realized 8400000)" || bad "act 1 values: $(q "SELECT withdrawn_values FROM outcome_withdrawals WHERE value_outcome_id = '$OUT'")"
 [ "$(q "SELECT (withdrawn_values->>'target_value') || ':' || (withdrawn_values->>'committed_by') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'commitment'")" = "100:[SIM] Customer Sponsor" ] && ok "act 2: the commitment's values kept exactly" || bad "act 2 values"
@@ -242,7 +305,7 @@ RUN="$RS" LENS=cfo TAG=skillsoft EXPECT_ASKS="baseline_not_system_of_record+q,no
 # B4 addendum (ruling 3): act 7's print request, pressed on the page, names the CFO lens policy it applied.
 [ "$(q "SELECT (lens_policy_id = (SELECT l.id FROM lens_policies l WHERE l.persona = 'cfo' AND l.tenant_id = '$TEN' AND NOT EXISTS (SELECT 1 FROM lens_policies x WHERE x.supersedes_id = l.id))) || '|' || (rendered_by_person_id = '$S') FROM record_documents WHERE kind = 'print_request' AND value_run_id = '$RS' AND lens = 'cfo' ORDER BY rendered_at DESC LIMIT 1")" = "true|true" ] \
   && ok "  ...the print request records the CFO lens policy it applied, by the steward" || bad "  ...print request: $(q "SELECT kind, lens, lens_policy_id FROM record_documents WHERE value_run_id = '$RS'")"
-sqlrefused "  ...a CFO-lens print request naming no lens policy" "INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, value_run_id, document_version, disclosure, content_hash, payload, rendered_by_person_id, kind, lens) SELECT '$TEN', engagement_id, '$OUT', id, 99, 'internal', payload_hash, '{}'::jsonb, '$S', 'print_request', 'cfo' FROM value_runs WHERE id = '$RS'" "names the CFO lens policy it applied"
+sqlrefused "  ...a CFO-lens print request naming no lens policy" "INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, value_run_id, document_version, disclosure, content_hash, payload, rendered_by_person_id, kind, lens) SELECT '$TEN', engagement_id, lvrf_run_outcome_at_sealing(id), id, 99, 'internal', payload_hash, '{}'::jsonb, '$S', 'print_request', 'cfo' FROM value_runs WHERE id = '$RS'" "names the CFO lens policy it applied"
 RUN="$RS" LENS=general TAG=skillsoft EXPECT_ASKS="baseline_not_system_of_record+q,no_commitment+q,no_rate+q,no_measure_class+q,no_actual+q,no_verifier+q" \
   EXPECT_CLAIM_REFUSED=1 FORBID2="7,000,000" HASH="$HASHS" EXPECT_OUTSIDE_IN=1 EXPECT_BANNER="OUTSIDE-IN HYPOTHESIS — built from published sources only; no figure rests on Skillsoft’s own records or on a named person at Skillsoft" cw valuecase
 # Run 1 (the Customer Zero demonstration, payload v1, locked 29 Aug) seals the realized 8,400,000: its case never prints it.
@@ -355,10 +418,27 @@ produce "$ENGA" "Verification: M10, absence sealed as synthetic."; RA1="$RUN"
 [ "$(q "SELECT (payload->'findings' @> '[{\"code\":\"F2\"}]') || '|' || (SELECT count(*) FROM lvrf_misstated_findings('$RA1') WHERE code = 'F2') FROM value_runs WHERE id = '$RA1'")" = "true|1" ] \
   && ok "M10: an absent committer sealed as synthetic again → caught: F2 sealed, and lvrf_misstated_findings names it" || bad "M10: $(q "SELECT payload->'findings' FROM value_runs WHERE id = '$RA1'")"
 restore "$PRODUCE"; stop_server; start_server
-# The dry run, from the seals of the 5 Nov copy's runs (prod adds Skillsoft run 2: 41 on 25 there).
+# The dry run. An independent oracle in plain SQL over the payloads, never lvrf_misstated_findings() (Brad, 14 Nov 2026):
+# over the locked runs the copy held when restored, every F3 but Skillsoft run 1's, plus every F2 on a run whose committer
+# factor names no committer ("No committer of record has been named", or the early "[SIM] (no sponsor of record)"
+# placeholder, which is absence). The route's count and the function's must both equal it; the runs made on the clone,
+# all sealed by the fixed code, contribute none. The 5 Nov copy gives 39 on 24; the 14 Nov copy (prod's state) 41 on 25.
+ORACLE="$(q "WITH r AS (SELECT r.id, r.payload FROM value_runs r WHERE r.tenant_id = '$TEN' AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL AND r.id IN ($RUNIDS0)),
+  f AS (SELECT r.id, x->>'code' AS code,
+               (SELECT c->>'note' FROM jsonb_array_elements(coalesce(r.payload->'confidence'->'factors', '[]'::jsonb)) c WHERE c->>'factor' = 'human_commit_of_record' LIMIT 1) AS cnote
+          FROM r, jsonb_array_elements(coalesce(r.payload->'findings', '[]'::jsonb)) x),
+  o AS (SELECT id FROM f WHERE code = 'F3' AND id <> '$RUN1'
+        UNION ALL SELECT id FROM f WHERE code = 'F2' AND (cnote LIKE 'No committer of record has been named%' OR cnote LIKE '%[SIM] (no sponsor of record)%'))
+  SELECT count(*) || '|' || count(DISTINCT id) FROM o")"
+FUNC="$(q "SELECT count(*) || '|' || count(DISTINCT r.id) FROM value_runs r CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.tenant_id = '$TEN' AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL")"
+NEWRUNS="$(q "SELECT count(*) FROM value_runs r CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.id NOT IN ($RUNIDS0) AND r.tenant_id = '$TEN' AND r.locked_at IS NOT NULL AND r.deleted_at IS NULL")"
 expect GET /api/errata/misstated-findings "" 200 "the dry run"
 MCOUNT="$(rj b.count)"; MRUNS="$(rj b.runs)"
-[ "$MCOUNT|$MRUNS" = "39|24" ] && ok "  ...39 findings on 24 runs: every F3 but Skillsoft run 1's, and every F2 on a run that named no committer" || bad "  ...dry run: $MCOUNT on $MRUNS"
+[ "$MCOUNT|$MRUNS" = "$ORACLE" ] && [ "$FUNC" = "$ORACLE" ] && [ "$NEWRUNS" = "0" ] \
+  && ok "  ...$MCOUNT findings on $MRUNS runs: the route, lvrf_misstated_findings() and the plain-SQL oracle agree (every F3 but Skillsoft run 1's, every F2 on a run that named no committer); the clone's own locked runs add none (M10's unlocked break run is the only one misstated, and the batch lists locked runs only)" \
+  || bad "  ...dry run $MCOUNT|$MRUNS, function $FUNC, oracle $ORACLE, from the clone's own runs $NEWRUNS"
+[ "$(rj "b.errata.some(e=>e.run_id==='$RA1')")|$(q "SELECT locked_at IS NULL FROM value_runs WHERE id = '$RA1'")" = "false|t" ] && ok "  ...M10's run, misstated by the break, is unlocked and not listed: the batch reads locked runs only" || bad "  ...M10's run: listed or locked"
+if [ -n "${EXPECT_MISSTATED:-}" ]; then [ "$ORACLE" = "$EXPECT_MISSTATED" ] && ok "  ...as expected for this copy: $EXPECT_MISSTATED" || bad "  ...expected $EXPECT_MISSTATED for this copy, the oracle reads $ORACLE"; fi
 [ "$(rj "b.errata.some(e=>e.run_id==='$RUN1')")" = "false" ] && ok "  ...Skillsoft run 1, a named simulated sponsor and verifier, measured: its findings are true, so not listed" || bad "  ...run 1 listed"
 [ "$(rj "JSON.stringify(b.errata.map(e=>[e.run_id,e.code,e.false_text,e.true_text]))")" = "$(q "SELECT json_agg(json_build_array(x.run_id, x.code, x.false_text, x.true_text) ORDER BY x.account, x.run_number, x.code)::text FROM (SELECT r.id AS run_id, i.name AS account, r.run_number, m.* FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id CROSS JOIN LATERAL lvrf_misstated_findings(r.id) m WHERE r.tenant_id = '$TEN' AND r.locked_at IS NOT NULL) x" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s))))")" ] \
   && ok "  ...every row's two sentences are lvrf_misstated_findings()'s, read from the seal" || bad "  ...the list differs from the seal's"

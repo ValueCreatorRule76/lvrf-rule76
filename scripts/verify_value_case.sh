@@ -134,13 +134,17 @@ step "2. Clone the prod copy; migrate 0047 and 0048; harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
+RD0="$(q "SELECT count(*) || '|' || coalesce(string_agg(DISTINCT kind, ','), '') || '|' || md5(coalesce(string_agg(id::text || ':' || kind, ',' ORDER BY id), '')) FROM record_documents")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > "$W/own.log" 2>&1 && ok "ownership.sql" || bad "ownership: $(grep -m2 ERROR "$W/own.log")"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5): section 33 adds 18" || bad "triggers: $(trig)"
 [ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: the migrations and section 33 write nothing to a run" || bad "  ...a run changed"
-[ "$(q "SELECT string_agg(DISTINCT kind, ',') || '|' || count(*) FROM record_documents")" = "rendering|$(q "SELECT count(*) FROM record_documents")" ] && ok "  ...every existing record document reads 'rendering'" || bad "  ...kinds: $(q "SELECT string_agg(DISTINCT kind, ',') FROM record_documents")"
+# Gate A, 14 Nov 2026: a copy taken after B3 holds print requests too (Brad's act 7, 6 Nov); the migrations change no kind.
+[ "$(q "SELECT count(*) || '|' || coalesce(string_agg(DISTINCT kind, ','), '') || '|' || md5(coalesce(string_agg(id::text || ':' || kind, ',' ORDER BY id), '')) FROM record_documents")" = "$RD0" ] \
+  && [ "$(q "SELECT count(*) FROM record_documents WHERE kind NOT IN ('rendering', 'print_request', 'share_for_review')")" = "0" ] \
+  && ok "  ...every existing record document keeps its kind (${RD0%|*}): the migrations change none" || bad "  ...kinds: $RD0 -> $(q "SELECT string_agg(DISTINCT kind, ',') FROM record_documents")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
@@ -155,6 +159,39 @@ LATER="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 90, 'YYYY-MM-DD')"
 LATER2="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 120, 'YYYY-MM-DD')")"
 S="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"
 TEN="$(q "SELECT tenant_id FROM persons WHERE id = '$S'")"
+S0="$S"; TEN0="$TEN"; S0_NAME="$(q "SELECT full_name FROM persons WHERE id = '$S'")"
+# Gate A, 14 Nov 2026 (L39): a copy taken after Brad's B3 act session (5 Nov 2026) holds D, N and the CFO lens. Each is
+# asserted as recorded (Brad's, his act, his reason). The act session and every check that needs them unset (D unset, no
+# lens) then run on a fixture tenant on the clone: its own steward, and a copy of the copy's manufacturing pack (the
+# industry, its current measures, their accepted research results, the offerings), written with triggers suspended for
+# that one transaction. Everything after goes through the routes as the fixture tenant's steward; Curia is read as the
+# real tenant's steward.
+PV0() { q "SELECT trim_scale(v.value) || '|' || (v.set_by_person_id = '$S0') || '|' || (length(btrim(v.reason)) >= 12) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'ratify' AND a.subject_table = 'policy_values' AND a.subject_id = v.id AND a.actor_person_id = v.set_by_person_id AND a.reason = v.reason) FROM policy_values v WHERE v.tenant_id = '$TEN0' AND v.key = '$1' AND NOT EXISTS (SELECT 1 FROM policy_values n WHERE n.supersedes_id = v.id)"; }
+LP0="$(q "SELECT trim_scale(l.min_confidence_score) || '|' || array_to_string(l.admitted_bases, '+') || '|' || array_to_string(l.suppresses, '+') || '|' || (l.ratified_by_person_id = '$S0') || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'ratify' AND a.subject_table = 'lens_policies' AND a.subject_id = l.id AND a.actor_person_id = l.ratified_by_person_id AND a.reason = l.reason) FROM lens_policies l WHERE l.tenant_id = '$TEN0' AND l.persona = 'cfo' AND NOT EXISTS (SELECT 1 FROM lens_policies n WHERE n.supersedes_id = l.id)")"
+if [ -n "$(PV0 cost_of_delay_months)$(PV0 pack_ratification_institutions)$LP0" ]; then
+  [ "$(PV0 cost_of_delay_months)" = "6|true|true|1" ] && ok "D = 6 on the copy, as recorded: ${S0_NAME}'s, with his ratify act and reason" || bad "D on the copy: $(PV0 cost_of_delay_months)"
+  [ "$(PV0 pack_ratification_institutions)" = "2|true|true|1" ] && ok "N = 2 on the copy, as recorded: ${S0_NAME}'s, with his ratify act and reason" || bad "N on the copy: $(PV0 pack_ratification_institutions)"
+  [ "$LP0" = "55|system_of_record+published|consumption|true|1" ] && ok "the CFO lens on the copy, as recorded: ${S0_NAME}'s ratification, with his act and reason" || bad "the CFO lens on the copy: $LP0"
+  TEN="$(uuidgen | tr 'A-Z' 'a-z')"; S="$(uuidgen | tr 'A-Z' 'a-z')"
+  FIX="$(psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 <<SQL
+BEGIN;
+SET LOCAL session_replication_role = replica;
+INSERT INTO tenants SELECT (jsonb_populate_record(NULL::tenants, to_jsonb(t) || jsonb_build_object('id', '$TEN', 'name', 'Fixture tenant $TS (verification)', 'steward_person_id', '$S'))).* FROM tenants t WHERE t.id = '$TEN0';
+INSERT INTO persons SELECT (jsonb_populate_record(NULL::persons, to_jsonb(p) || jsonb_build_object('id', '$S', 'tenant_id', '$TEN', 'full_name', 'Fixture steward (verification)', 'email', 'steward.$TS@vcase.example', 'steward_person_id', NULL))).* FROM persons p WHERE p.id = '$S0';
+CREATE TEMP TABLE fx_ind AS SELECT id AS old, gen_random_uuid() AS new FROM industries WHERE tenant_id = '$TEN0' AND slug = 'manufacturing';
+CREATE TEMP TABLE fx_m AS SELECT m.id AS old, gen_random_uuid() AS new FROM industry_measures m JOIN fx_ind ON fx_ind.old = m.industry_id WHERE m.deleted_at IS NULL AND m.superseded_by_id IS NULL;
+INSERT INTO industries SELECT (jsonb_populate_record(NULL::industries, to_jsonb(i) || jsonb_build_object('id', fx_ind.new, 'tenant_id', '$TEN'))).* FROM industries i JOIN fx_ind ON fx_ind.old = i.id;
+INSERT INTO industry_measures SELECT (jsonb_populate_record(NULL::industry_measures, to_jsonb(m) || jsonb_build_object('id', fx_m.new, 'tenant_id', '$TEN', 'industry_id', fx_ind.new, 'steward_person_id', '$S'))).* FROM industry_measures m JOIN fx_m ON fx_m.old = m.id JOIN fx_ind ON fx_ind.old = m.industry_id;
+INSERT INTO research_results SELECT (jsonb_populate_record(NULL::research_results, to_jsonb(r) || jsonb_build_object('id', gen_random_uuid(), 'tenant_id', '$TEN', 'industry_id', fx_ind.new, 'industry_measures_id', fx_m.new))).* FROM research_results r JOIN fx_m ON fx_m.old = r.industry_measures_id JOIN fx_ind ON fx_ind.old = r.industry_id WHERE r.review_state = 'accepted';
+INSERT INTO offerings SELECT (jsonb_populate_record(NULL::offerings, to_jsonb(o) || jsonb_build_object('id', gen_random_uuid(), 'tenant_id', '$TEN', 'steward_person_id', '$S'))).* FROM offerings o WHERE o.tenant_id = '$TEN0' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL;
+SELECT 'FIXTURE ' || (SELECT count(*) FROM fx_m) || ' ' || (SELECT count(*) FROM research_results WHERE tenant_id = '$TEN') || ' ' || (SELECT count(*) FROM offerings WHERE tenant_id = '$TEN');
+COMMIT;
+SQL
+)"
+  case "$FIX" in "FIXTURE "*) ok "a fixture tenant on the clone, D, N and the CFO lens unset: its steward, the manufacturing pack (${FIX#FIXTURE }: measures, accepted results, offerings)" ;; *) bad "the fixture tenant: $FIX"; exit 1 ;; esac
+  [ "$(trig)" = "209" ] && ok "  ...every guard in force again: 209 triggers" || bad "  ...triggers: $(trig)"
+  [ "$(q "SELECT count(*) FROM policy_values WHERE tenant_id = '$TEN'")|$(q "SELECT count(*) FROM lens_policies WHERE tenant_id = '$TEN'")" = "0|0" ] && ok "  ...no policy value and no lens on the fixture tenant" || bad "  ...fixture tenant policies"
+fi
 S_EMAIL="$(q "SELECT email FROM persons WHERE id = '$S'")"
 X="$(q "INSERT INTO persons (tenant_id, full_name, email) VALUES ('$TEN', 'Authorized X (verification)', 'x.$TS@vcase.example') RETURNING id" | head -1)"
 PW="verification-password-$TS"
@@ -165,7 +202,7 @@ q "UPDATE tenants SET steward_person_id = '$S' WHERE id = '$TEN'" > /dev/null
 q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) SELECT '$S', '$TEN', '$S', 'Verification fixture grant' WHERE NOT EXISTS (SELECT 1 FROM access_grants WHERE person_id = '$S' AND tenant_id = '$TEN' AND revoked_at IS NULL)" > /dev/null
 q "INSERT INTO access_grants (person_id, tenant_id, granted_by_person_id, reason) VALUES ('$X', '$TEN', '$S', 'Verification fixture grant')" > /dev/null
 # The real Manufacturing TRIR entry, which carries a reviewer's note (ruling 4: it must not reach the case).
-E="$(q "SELECT m.id FROM industry_measures m JOIN industries i ON i.id = m.industry_id WHERE i.slug = 'manufacturing' AND m.name = 'Total Recordable Incident Rate (TRIR)' AND m.deleted_at IS NULL")"
+E="$(q "SELECT m.id FROM industry_measures m JOIN industries i ON i.id = m.industry_id WHERE i.slug = 'manufacturing' AND i.tenant_id = '$TEN' AND m.name = 'Total Recordable Incident Rate (TRIR)' AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL")"
 NOTE_PART="BLS formula quoted"
 [ -n "$E" ] && [ "$(q "SELECT count(*) FROM research_results WHERE industry_measures_id = '$E' AND review_state = 'accepted' AND review_note LIKE '%$NOTE_PART%'")" = "1" ] && ok "the TRIR entry, with a reviewer's note on record" || { bad "TRIR entry"; exit 1; }
 UNIT="incidents per 200,000 hours"
@@ -227,8 +264,8 @@ cw() {  # MODE
 }
 A0="$(q "SELECT count(*) FROM governance_acts WHERE act = 'ratify' AND subject_table IN ('policy_values', 'lens_policies')")"
 cw policies
-[ "$(q "SELECT key || '=' || trim_scale(value) FROM policy_values ORDER BY key" | tr '\n' ' ')" = "cost_of_delay_months=6 pack_ratification_institutions=2 " ] && ok "D = 6 and N = 2, as set on the page" || bad "policy values: $(q "SELECT key, value FROM policy_values")"
-[ "$(q "SELECT persona || ':' || trim_scale(min_confidence_score) || ':' || array_to_string(admitted_bases, '+') || ':' || array_to_string(suppresses, '+') FROM lens_policies")" = "cfo:55:system_of_record+published:consumption" ] && ok "  ...the CFO lens as ratified on the page" || bad "  ...lens: $(q "SELECT * FROM lens_policies")"
+[ "$(q "SELECT key || '=' || trim_scale(value) FROM policy_values WHERE tenant_id = '$TEN' ORDER BY key" | tr '\n' ' ')" = "cost_of_delay_months=6 pack_ratification_institutions=2 " ] && ok "D = 6 and N = 2, as set on the page" || bad "policy values: $(q "SELECT key, value FROM policy_values")"
+[ "$(q "SELECT persona || ':' || trim_scale(min_confidence_score) || ':' || array_to_string(admitted_bases, '+') || ':' || array_to_string(suppresses, '+') FROM lens_policies WHERE tenant_id = '$TEN'")" = "cfo:55:system_of_record+published:consumption" ] && ok "  ...the CFO lens as ratified on the page" || bad "  ...lens: $(q "SELECT * FROM lens_policies")"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'ratify' AND subject_table IN ('policy_values', 'lens_policies')")" = "$((A0 + 3))" ] && ok "  ...three ratify acts, each the steward's" || bad "  ...acts"
 
 step "5. Policies: who sets them, and never lowered (C9)"
@@ -308,15 +345,15 @@ stop_server; start_server
 req GET "/api/value-runs/$RA/case?lens=cfo"; grep -qF "$NOTE_PART" "$W/r.json" && ok "C7: the note joined into the case → caught" || bad "C7"
 restore "$CASE"; stop_server; start_server
 CURIA_RUN="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagement_id JOIN institutions i ON i.id = g.institution_id WHERE i.name = 'Curia' AND r.locked_at IS NOT NULL ORDER BY r.walked_at DESC LIMIT 1")"
-req GET "/api/value-runs/$CURIA_RUN/case?lens=cfo"
+req GET "/api/value-runs/$CURIA_RUN/case?lens=cfo" "" "$S0"
 [ "$(rj "b.cfo.reasons.some(r=>r.code==='reference_example') + '|' + b.v5 + '|' + (b.cost_of_delay === null)")" = "true|false|true" ] && ok "Curia (a reference example) never reads through the CFO lens; its pre-v5 run has no cost of delay, roadmap or solutioning" || bad "curia: $(rj "JSON.stringify({cfo:b.cfo,v5:b.v5,cod:b.cost_of_delay})")"
 edit "$CASE" "        if (marker) reasons.push('reference_example');" "        if (false && marker) reasons.push('reference_example');"
 stop_server; start_server
-req GET "/api/value-runs/$CURIA_RUN/case?lens=cfo"; [ "$(rj "b.cfo.reasons.some(r=>r.code==='reference_example')")" = "false" ] && ok "C4: the reference-example test removed → caught" || bad "C4"
+req GET "/api/value-runs/$CURIA_RUN/case?lens=cfo" "" "$S0"; [ "$(rj "b.cfo.reasons.some(r=>r.code==='reference_example')")" = "false" ] && ok "C4: the reference-example test removed → caught" || bad "C4"
 restore "$CASE"; stop_server; start_server
 edit "$CASE" "      const cod = version >= 5 ? sealedCase?.cost_of_delay ?? null : null;" "      const cod = (await pool.query('SELECT lvrf_cost_of_delay(\$1) AS c', [p.valueOutcomeId])).rows[0]?.c ?? null;"
 stop_server; start_server
-req GET "/api/value-runs/$CURIA_RUN/case"; [ "$(rj "b.cost_of_delay !== null")" = "true" ] && ok "C5: a pre-v5 run given today's cost of delay → caught (the case would read live, not sealed)" || bad "C5"
+req GET "/api/value-runs/$CURIA_RUN/case" "" "$S0"; [ "$(rj "b.cost_of_delay !== null")" = "true" ] && ok "C5: a pre-v5 run given today's cost of delay → caught (the case would read live, not sealed)" || bad "C5"
 restore "$CASE"; stop_server; start_server
 
 step "9. Share for review (D-M21) and the print request (C8)"
@@ -348,8 +385,8 @@ step "10. NULL inputs: every new CHECK refuses them"
 nullref() { sqlrefused "NULL: $1" "$2" "$3"; }
 nullref "a policy value's key" "INSERT INTO policy_values (tenant_id, key, value, reason, set_by_person_id) VALUES ('$TEN', NULL, 6, 'Verification: null.', '$S')" "null value"
 nullref "a policy value's value" "INSERT INTO policy_values (tenant_id, key, value, reason, set_by_person_id) VALUES ('$TEN', 'cost_of_delay_months', NULL, 'Verification: null.', '$S')" "null value"
-nullref "a lens's admitted bases holding a NULL" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT '$TEN', 'cfo', 55, ARRAY['published', NULL], '{}', 'Verification refusal text, long enough.', 'Verification: null.', '$S', id FROM lens_policies" "lens_policies_bases_known"
-nullref "a lens's suppresses holding a NULL" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT '$TEN', 'cfo', 55, '{published}', ARRAY[NULL]::text[], 'Verification refusal text, long enough.', 'Verification: null.', '$S', id FROM lens_policies" "lens_policies_suppresses_known"
+nullref "a lens's admitted bases holding a NULL" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT '$TEN', 'cfo', 55, ARRAY['published', NULL], '{}', 'Verification refusal text, long enough.', 'Verification: null.', '$S', id FROM lens_policies WHERE tenant_id = '$TEN'" "lens_policies_bases_known"
+nullref "a lens's suppresses holding a NULL" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT '$TEN', 'cfo', 55, '{published}', ARRAY[NULL]::text[], 'Verification refusal text, long enough.', 'Verification: null.', '$S', id FROM lens_policies WHERE tenant_id = '$TEN'" "lens_policies_suppresses_known"
 nullref "a rate correction's reason" "$(CORR "$RE" | sed "s/'Verification: the evidence changes.'/NULL/")" "monetization_rates_correction_says_why"
 nullref "a milestone change's reason" "INSERT INTO roadmap_milestones (tenant_id, engagement_id, title, due_on, owner_stated, planned_by_person_id, supersedes_id, reason) VALUES ('$TEN', '$ENGA', 'Verification change', '$LATER', 'A owner (fixture)', '$S', '$MS2', NULL)" "roadmap_milestones_change_says_why"
 nullref "a done milestone's evidence" "INSERT INTO roadmap_milestones (tenant_id, engagement_id, title, due_on, owner_stated, planned_by_person_id, status, done_evidence_id) VALUES ('$TEN', '$ENGA', 'Verification done', '$LATER', 'A owner (fixture)', '$S', 'done', NULL)" "roadmap_milestones_done_has_evidence"

@@ -13867,3 +13867,187 @@ their Gate C read is clean.
   lens's did): the expectation was wrong, not the print. Open for Brad's ruling, with the check's other findings (the
   "What we need from you" title on two sections; the lens read live, not sealed; run 2's sealed findings naming a
   synthetic committer and verifier the people fields no longer hold).
+
+### B4 findings lens — Gate A, 14 Nov 2026 (UTC)
+
+**Built; Gate A passed; not deployed.** Branch `b4-findings-lens` (`fc718b2`, main merged in at `2bd7273`: `947379f`, ops
+only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN §14/§35), on top of the deployed `5b834f2`.
+
+- **Migration 0050** (`0050_b4_findings_lens`): `run_errata.finding_code` (F2 or F3) and the kind `misstated_finding`
+  (`run_errata_kind_known`, `run_errata_kind_complete`, `run_errata_recompute_complete` widened; a partial unique index
+  `run_errata_one_per_sealed_finding`, one erratum per run and finding); `record_documents.lens_policy_id` (FK to
+  `lens_policies`, `ON DELETE RESTRICT`; CHECK `record_documents_lens_policy_scope`: only on a CFO print request). Both
+  columns nullable. **It orphans nothing:** on the rehearsal every existing row satisfies the new and widened CHECKs (55
+  errata, 6 record documents, none failing), no value is backfilled (`finding_code` set on 0 rows, `lens_policy_id` on 0;
+  the 6 Nov CFO print request keeps NULL, since which lens row it read was not recorded), and nothing is dropped.
+- **The misstated-finding errata.** `lvrf_misstated_findings(run)` (hardening §35) reads F2 and F3 from the run's own
+  seal: the sealed finding (false) and the true sentence, built only from the committer and verifier factor notes and the
+  sealed realization. The "[SIM] (no sponsor of record)" / "(no verifier of record)" placeholder of early runs is
+  absence (Brad's ruling). A run whose finding is true (Skillsoft run 1: a named simulated sponsor and verifier,
+  measured) yields none. The errata guard admits a `misstated_finding` row only in those exact words. Routes
+  `GET /api/errata/misstated-findings` (the dry run) and `POST` (steward; one `record_erratum` act per erratum, refused
+  if the count changed). The batch is on the Runs page, "Findings their seals contradict". The erratum shows under its
+  finding on the run page and in the banner line.
+- **The CFO lens on a print request:** `record_documents.lens_policy_id` names the CFO lens row a CFO print applied
+  (ruling 3; the lens stays read live, O-D1). The guard holds it to the tenant's current row.
+- **Absence is not synthetic:** produce-run no longer seals an absent committer or verifier as "synthetic". F2 fires
+  only for a named simulated person; F3 names "no verifier of record has been named" and states the sealed realization,
+  never a fixed "measured". No score changes.
+- **The case:** the OUTSIDE-IN wording names the account and says "built from published sources only" only when every
+  printed figure rests on published evidence (ruling 4). Under a CFO refusal the withheld claim is said, never silently
+  absent (ruling 1, the stage-10 check's FAIL). "Why the CFO lens refuses" and "What we need from you: the asks" are now
+  two titles.
+- **Gate A:**
+  - **The copy:** the box's `~/lvrf_snapshot_20261114.dump` (19:56:30 UTC, sha256 `5dd04f9d…`, TOC 905), copied
+    read-only with the LVRF key alone. `restore_prod_copy.sh` 16/0: 26 runs, 209 triggers, ownership clean.
+  - **The first run failed, and was reported before anything was changed** (9 of 49 scripts). There were two causes,
+    and neither was in the product code:
+    - 4 scripts had not been brought up to `fc718b2`'s own code: `tenant_scope`, `steward_acts`, `acts_lineage`'s
+      act-route list, and `run_page`'s B11 target string.
+    - 5 assumed the 5 Nov copy, and prod has moved since: Brad's 5 Nov acts (D, N, the CFO lens, two supersessions,
+      three lever withdrawals, a link withdrawal) and his 6 Nov B4 acts 1–7.
+  - **The fixes (Brad's conditions, 14 Nov 2026; no check weakened):**
+    - **Group A:** tenant cases for both new routes. Block F: B's dry run lists none of A's runs, and B's batch with A's
+      count is refused with nothing recorded. The steward count is 32 and the act-route list carries the new route.
+      `run_page`'s B11 target is the branch's line.
+    - **Group B, L39:** where a rehearsal needs a state prod has moved past, that state is a fixture on the clone, and
+      prod's own rows are asserted as recorded.
+      - `commit_measure_verify`: D, N and the CFO lens are asserted as Brad's, with his act and reason. Acts 1–4 on
+        `f23ee6a8`, `2c10e091` and `eea43d9a` are asserted as recorded: his reasons word for word, his acts, the kept
+        values (100.4, 8,400,000; target 100 by `[SIM] Customer Sponsor`). Acts 1–4 and M8 are then rehearsed through
+        the page on a fixture: `f23ee6a8` before act 1, on its own engagement, with copies of its two simulated rows as
+        its actual. Those rows are written with triggers suspended for that one transaction, since no route can make a
+        simulated actual link today (AMENDMENT-005). Every guard is in force for the rehearsal, and the confirmations
+        are §14's with the fixture's short ids.
+      - `value_case`: B3's act session, "D unset" and "no CFO lens" run on a fixture tenant (its own steward, a copy of
+        the manufacturing pack). Curia is read as the real steward.
+      - `pov_print`: Scotts' lever `d58a08c5` is withdrawn on the copy and the page says "withdrawn since" (Brad's act,
+        his reason). "Ratified by" is read from a fixture lever on the clone, never skipped.
+      - `acts_lineage`: the migration changes no row's `import_id` (34 NULL, 9 naming their import).
+      - `supersession`: R9 and R2 are chosen by the links they hold.
+    - **The misstated count:** an independent oracle in plain SQL over the payloads. It counts every F3 but Skillsoft
+      run 1's, plus every F2 on a run whose committer factor names no committer. It must equal both the route's count
+      and `lvrf_misstated_findings()`'s, and the clone's own locked runs must add none. M10's unlocked break run is
+      checked as not listed.
+  - **`verify_supersession`'s root cause (condition 4), found before any edit:** the script took its "live baseline" by
+    fixed id (`9765335f` → `c1d0f877`).
+    - Card 01c's 4 Nov swap, made after the 5 Nov snapshot was taken, moved `f23ee6a8`'s baseline to `9a36e675`.
+    - Brad's 5 Nov withdrawal then left `c1d0f877` with no live link.
+    - A row with no live link correctly has no blocker. The guard (`accountEvidence.ts`) blocks only a live baseline or
+      actual moved off its account, and on the clone it still does: R9 is now `9a36e675`, which holds the live baseline.
+      **No baseline can rest on evidence about another company.**
+    - The empty-`OC9` path now ends in a named FAIL, not a crash.
+  - **The full regression: all 49 scripts pass in one run** on clones of the 14 Nov copy. Per script:
+    access_grants 76 · account_research 160 · account_workbench 28 · accounts_home 63 · acts_lineage 190 · c2 159 ·
+    c2c 79 · c3 202 · c3b 237 · case_snapshot 110 · cohort 79 · commit_before_response 17 · commit_measure_verify 215 ·
+    corrections 212 · deploy_reexec 13 · drift 30 · engagement_retire 17 · evidence_final 181 · evidence_form 99 ·
+    exclusions 28 · fact_supersession 38 · frozen_outcomes 21 · grant_enforcement 31 · hygiene 19 · outside_in_walk
+    121 · ownership 75 · pack_entry_retire 73 · pack_research 62 · pack_review 17 · plain_refusals 76 · pov_print 121 ·
+    refusal_attribution 13 · request_log 38 · research_contract 100 · run_page 273 · runs_list 10 · set_email 29 ·
+    signin_p1 35 · signin_p2a 49 · signin_p2b 44 · steward_acts 38 · steward_safety 31 · supersession 219 ·
+    tenant_scope (setup 13/0, cases passed) · value_case 198 · value_hypotheses 154 · value_levers 171 · walk_runs 119 ·
+    workspace_path 107. Every one is n/0.
+    - **Recorded, not changed (Brad, 14 Nov 2026):** only 17 of the 49 clone the prod copy (accounts_home, acts_lineage,
+      c2, c2c, c3, c3b, case_snapshot, commit_measure_verify, corrections, evidence_final, evidence_form, ownership,
+      pov_print, run_page, steward_safety, supersession, value_case). The other 32 clone local dev `lvrf`
+      (`make_clone`'s default). Added to the 3.1 list.
+    - **Early exit, re-confirmed on the run:** all 49 load `finish.sh`, trap `finish` and set `REACHED_TALLY=1`. All 49
+      reached their tally; none stopped early.
+    - `verify_commit_measure_verify` **215/0**: M1–M12 each caught. The dry run read **41 on 25**: the route,
+      `lvrf_misstated_findings()` and the oracle agree, and the copy matches `EXPECT_MISSTATED=41|25`. The batch was
+      recorded on the clone through the page.
+  - **Break targets (Brad's standing guard):** 52 files any verify script breaks. None differs from HEAD after the run.
+    47 are identical to main. The 5 that differ (`FindingsCard.tsx`, `Workbench.tsx`, `ValueCasePage.tsx`,
+    `creditAndMarks.ts`, `produceRun.ts`) differ only by `fc718b2`, read line by line, with no break residue.
+  - **Build:** server `tsc` 0; client `tsc -b && vite build` clean; `oxlint` gives the one `ActorContext.tsx` warning.
+    **Bundle `index-59Y07al1.js` / `index-BpSO_jig.css`.**
+  - **Equivalence against `5b834f2`:** `scripts/equivalence_gets.sh`, now saved in the repo (the earlier 77-GET harness
+    was never kept). Every deployed GET route over every row of the copy: **213 GETs.**
+    - 192 are identical.
+    - **21 differ only by an added key, `errata[].finding_code`**, on `GET /api/runs/:id` for each run that carries
+      errata. It is `null` on every existing erratum, and the bodies are identical once it is removed. It comes from
+      `runs.ts` now selecting `x.finding_code`. **This is not "no added keys": it is open for Brad.**
+    - 10 are non-200 identically on both sides (retired engagements, metrics with no prompt, gaps on a frozen outcome).
+    - `GET /api/errata/misstated-findings` is the branch's own route and is not compared.
+  - **Rehearsal of 0050** on a clone of the deployed-state copy: migrated as `lvrf_migrate`, then `db/ownership.sql`,
+    then `db/hardening.sql` (exit 0, 0 ERROR lines).
+    - Journal **51 migrations, newest `0050_b4_findings_lens`**.
+    - **131 CHECKs, each with a plain sentence** (0 without, 0 stale).
+    - **209 triggers** (0050 adds none); 328 `information_schema` rows; 209 manifest rows.
+    - Drift none at 1251 objects (+5); `drift_report` D1, D3, D4 no findings.
+    - Ownership clean, with `lvrf_ownership_violations()` 0.
+    - All 26 runs byte-identical, and `check_run_hashes` 26/26 (recompute and embedded).
+  - **Backup TOC for Gate B, from actual dumps.** A dump of the deployed-state copy reads 903 and the box's own 14 Nov
+    snapshot reads 905. The difference is exactly the two `vector` entries the copy filters out; owners differ only by
+    name. **The pre-migration `pg_dump -Fc` expects 905.** After 0050 the copy reads 906 (+3: the FK, the function, the
+    partial index), so the box should read 908.
+  - **Step 6, the dry run on the rehearsed copy, through the route:** `GET /api/errata/misstated-findings` → 200, **41
+    findings on 25 runs**, as expected for prod. Skillsoft run 2 (`98a71a82`) is listed, F2 and F3. **Skillsoft run 1
+    (`88f6a6e1`) is not listed.**
+  - **Screens** in `~/lvrf-backups/l41-screens/b4lens/<script>/`; B4's are under `verify_commit_measure_verify/`:
+    `b4_misstated_dryrun_1280.png`, `b4_misstated_run_1280.png`, `b4_withdraw_measurement_1280.png`,
+    `b4_card01d_after_1280.png`, `b4_card05_*`.
+- **Open for Brad before the act (the erratum text is permanent):**
+  - Every true sentence that quotes a factor note ending in a full stop prints doubled punctuation: `…has been named.”.`
+    and `…(no verifier of record)).”, a placeholder…`. It is not a false claim. The guard accepts only the function's
+    exact words, so once the 41 rows are recorded the wording is fixed. Changing it means changing
+    `lvrf_misstated_findings()` before Gate B.
+  - The added `finding_code` key above.
+- **Found and left as found:** the regression's scripts stop vite and the API by a subshell's pid, so the children keep
+  running (about 22 vite processes left after this run, every one proxying to a verify port). The new harness stops its
+  servers by port. Recorded for 3.1.
+
+#### Gate B (not run; Brad's)
+
+1. **Merge** `b4-findings-lens` into main and push (Brad's call; Gate A did not merge).
+2. **On the box,** pull, then back up before migrating (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-b4lens-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   The last line **expects 905.** Stop if it differs.
+3. **Migrate 0050** as `lvrf_migrate`, then ownership, then hardening:
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_b4lens.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_b4lens.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+   ```
+   Expect `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **209** triggers.
+4. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle `index-59Y07al1.js` / `index-BpSO_jig.css`,
+   steps 5b, 5c and 5d passed, health 200 and fail-closed.
+
+**Brad's acts (rule 10: the steward's, through the page):**
+
+- **The misstated-finding batch:** the Runs page, "Findings their seals contradict".
+  - The dry run reads "41 findings on 25 runs call for an erratum."
+  - **Why they are recorded:** `Produce-run sealed an absent committer or verifier as synthetic, and said a claimed
+    outcome remained measured. Each erratum states the sealed finding and what the run's own seal holds.`
+  - **The confirmation, as the page prints it with prod's count:** `Record 41 misstated-finding errata on 25 runs, one
+    beside each finding listed. If the record now calls for a different number, nothing is recorded.` The button reads
+    "Record the 41 errata".
+  - **The 25 runs listed** (from the rehearsed copy):
+    - Curia, F2 and F3 (13): run 1 `1fd8e160`, run 1 `535387da`, run 2 `95cedb9e`, run 3 `96372205`, run 4
+      `ddd0c167`, run 5 `48b8a997`, run 6 `9841e045`, run 7 `2a245551`, run 8 `1c7eff05`, run 9 `f8914c91`, run 10
+      `b9a49d3f`, run 11 `53c75cb2`, run 12 `71fc55f9`.
+    - Curia, F3 only (9): run 13 `0cb2bf96`, run 14 `de0155cc`, run 15 `90914085`, run 16 `2a02b44d`, run 17
+      `f2af7abf`, run 18 `b77737b5`, run 19 `884c5736`, run 20 `3b9f6e11`, run 21 `294cdc9c`.
+    - Scotts Miracle-Gro, F2 and F3: run 1 `12c4dc66`, run 2 `ba5b5109`.
+    - Skillsoft, F2 and F3: run 2 `98a71a82`.
+    - Not listed: Skillsoft run 1 `88f6a6e1`.
+
+**Gate C (read-only, after the acts):**
+
+- 51 migrations, newest `0050_b4_findings_lens`; drift none at 1251 objects; 131 CHECKs, each with a plain sentence;
+  209 triggers (pg_trigger, DISTINCT); ownership clean (`check_ownership`, `lvrf_ownership_violations()` 0).
+- `run_errata` of kind `misstated_finding`: 41 on 25 runs, the codes as listed above.
+  - Each was recorded by Brad, with the reason word for word.
+  - Each `what_was_wrong` / `what_is_right` equals `lvrf_misstated_findings()`'s row for its run and code.
+  - None is on Skillsoft run 1.
+- `governance_acts`: +41 `record_erratum` on `POST /api/errata/misstated-findings`, each Brad's, `result_id` its run.
+- The dry run reads 0 ("No sealed finding is contradicted by its seal").
+- Runs: 26, every row byte-identical to the 14 Nov snapshot (compared in UTC); `check_run_hashes` 26/26.
+- `record_documents`: no new row without `lens_policy_id` on a CFO print request; the 6 Nov one keeps NULL.
+- No refusal and no audit row without an actor since the deploy.
+- The run page of one listed run (e.g. Skillsoft run 2): its findings unchanged as sealed, with the erratum under each.

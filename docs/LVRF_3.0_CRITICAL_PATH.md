@@ -167,6 +167,14 @@ cut line applied first.
   - accessibility: the contrast of secondary text, focus, labels;
   - code-splitting (the bundle is over 600 kB; L40).
 - Loose ends L46–L53 not closed by item 1, and any finding frozen out by rule 1.
+- **From the B4 findings lens Gate A (14 Nov 2026), recorded, not changed:**
+  - **32 of the 49 verify scripts clone local dev `lvrf`, not the prod copy** (`make_clone`'s default template). Only
+    17 run on prod's data. Point them at the copy, or say in each why dev data is the right fixture. For example,
+    `verify_tenant_scope`'s misstated-finding leak check reads tenant A with no misstated run on dev `lvrf`, so it has
+    nothing to leak.
+  - **The verify scripts leave their vite and API servers running:** cleanup kills the `( … ) &` subshell's pid, not
+    its child (about 22 vite processes after one full regression). Stop them by port, as `scripts/equivalence_gets.sh`
+    does.
 
 ## 4.0 (recorded so nothing is lost)
 

@@ -122,6 +122,10 @@ step "3. Clone the prod copy; migrate through 0041; harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RR0="$(q "SELECT count(*) FROM research_results")"
+# A copy taken after P2 deployed holds results imported since, each naming its import (P2, 0041): the migration must change
+# no row's import_id, whichever the copy holds (Gate A, 14 Nov 2026: the 14 Nov copy holds 9 of 43 with an import).
+RRI() { q "SELECT count(*) FILTER (WHERE import_id IS NULL) || '|' || count(import_id) || '|' || md5(coalesce(string_agg(id::text || ':' || coalesce(import_id::text, '-'), ',' ORDER BY id), '')) FROM research_results"; }
+RRI0="$([ -n "$(q "SELECT 1 FROM information_schema.columns WHERE table_name = 'research_results' AND column_name = 'import_id'")" ] && RRI || echo "$RR0|0|")"
 # The copy's own acts and imports (prod's, since P2 deployed), kept apart from the script's: P2-D2 is "no backfill", not "none".
 ACTS_PRE="$(q "SELECT count(*) || '|' || (SELECT count(*) FROM research_imports) FROM governance_acts")"
 PRE_ACT_IDS="$(q "SELECT coalesce(string_agg(quote_literal(id::text), ',' ORDER BY id), '''00000000-0000-0000-0000-000000000000''') FROM governance_acts")"
@@ -131,8 +135,14 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 141 + section 27's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0041 ($DRIFT)" || bad "drift: $DRIFT"
-[ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
-  && ok "all $RR0 existing research results keep import_id NULL: none blank-filled, none invented" || bad "import_id after 0041"
+RRI1="$(RRI)"
+if [ -z "${RRI0##*|}" ]; then
+  [ "$(q "SELECT count(*) || '|' || count(*) FILTER (WHERE import_id IS NULL) FROM research_results")" = "$RR0|$RR0" ] \
+    && ok "all $RR0 existing research results keep import_id NULL: none blank-filled, none invented" || bad "import_id after 0041"
+else
+  [ "$RRI1" = "$RRI0" ] && [ "$(q "SELECT count(*) FROM research_results")" = "$RR0" ] \
+    && ok "all $RR0 research results keep import_id exactly as the copy held it (${RRI0%%|*} NULL, $(echo "$RRI0" | cut -d'|' -f2) naming the import they came from): none blank-filled, none invented" || bad "import_id after the migration: $RRI0 -> $RRI1"
+fi
 [ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "$ACTS_PRE" ] && ok "governance_acts and research_imports as before the migration ($ACTS_PRE, the copy's own): none backfilled (P2-D2)" || bad "acts/imports changed by the migration: $ACTS_PRE → $(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")"
 [ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "28" ] \
   && ok "28 _act_present triggers (B4's outcome_withdrawals; P2's 18, C3's customer_role_grants and system_exercise_marks, C3b's figure_findings, B1's industries, B3's policy_values, lens_policies, monetization_rates, roadmap_milestones and record_documents), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
@@ -330,8 +340,8 @@ act_is "supersede (entity)" "supersede:institution_entities:institution_entities
 SCRIPT_ROUTES="$(q "SELECT string_agg(DISTINCT route, E'\n' ORDER BY route) FROM governance_acts WHERE id::text NOT IN ($PRE_ACT_IDS)")"
 ACT_ROUTES="$(npx tsx -e "import('$(pwd)/server/lib/governanceAct.ts').then(m => console.log(Object.entries(m.ROUTE_ACTS).filter(([, a]) => a !== 'create-only').map(([r]) => r).sort().join('\n')))" 2>/dev/null)"
 NOT_HERE="$(comm -23 <(printf '%s\n' "$ACT_ROUTES") <(printf '%s\n' "$SCRIPT_ROUTES" | sort) | paste -sd'|' -)"
-[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/engagements/:engagementId/milestones|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/evidence/supersession-batch|POST /api/industries|POST /api/institutions/:institutionId/customer-roles|POST /api/policies/lenses|POST /api/policies/values|POST /api/roadmap-milestones/:id/supersede|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/commitment/withdraw|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings|POST /api/value-outcomes/:outcomeId/measurement/withdraw|POST /api/value-outcomes/:outcomeId/monetization-rates|POST /api/value-runs/:runId/share-for-review" ] \
-  && ok "29 distinct act routes exercised by this script; the other 19 act routes in ROUTE_ACTS by their own scripts (B4's two withdrawals: verify_commit_measure_verify; B3's six: verify_value_case; withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
+[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "29" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/engagements/:engagementId/milestones|POST /api/errata/misstated-findings|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/evidence/supersession-batch|POST /api/industries|POST /api/institutions/:institutionId/customer-roles|POST /api/policies/lenses|POST /api/policies/values|POST /api/roadmap-milestones/:id/supersede|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/commitment/withdraw|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings|POST /api/value-outcomes/:outcomeId/measurement/withdraw|POST /api/value-outcomes/:outcomeId/monetization-rates|POST /api/value-runs/:runId/share-for-review" ] \
+  && ok "29 distinct act routes exercised by this script; the other 20 act routes in ROUTE_ACTS by their own scripts (B4's two withdrawals and the B4 addendum's misstated-finding batch: verify_commit_measure_verify; B3's six: verify_value_case; withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
 
 step "8. Lineage — a fixture chain made after P2"
 LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvrf_lineage('$1', '$2'${3:+, '$3'})"; }

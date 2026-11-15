@@ -237,7 +237,17 @@ look() {  # NAME ID EXPECT_JSON BANNER SEAL [OUTDIR]
 }
 
 step "3. Scotts (locked runs, a hypothesis, a lever, published facts)"
-look scotts "$SCOTTS" '{"confidence":"35 / 100 · Low","falsifiers":1,"lever":"ratified by Brad Piver, 19 Oct 2026","facts":["$3,413.1 million","5,200 people"],"labels":["Disclosure regime","Public filer","Stated priority","SEC CIK","General"],"verbatim":["provided that: Same TRIR definition and denominator as the published baseline"],"runs":{"latest":["Scotts Miracle-Gro — reference example, not an engagement (retired), run 2"],"buttons":["Show all 2 runs"],"total":2}}' "OUTSIDE-IN TEST" "record hash"
+# Gate A, 14 Nov 2026: on a copy taken after Brad's 5 Nov acts, the lever Scotts' hypothesis rests on is withdrawn, and the
+# page says so. Read from the copy which it holds; a withdrawn lever must be Brad's act, with its reason, and read "withdrawn since".
+SLEV="$(q "SELECT h.value_lever_id FROM value_hypotheses h WHERE h.institution_id = '$SCOTTS' AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL LIMIT 1")"
+if [ "$(q "SELECT status FROM value_levers WHERE id = '$SLEV'")" = "retired" ]; then
+  [ "$(q "SELECT (p.full_name = 'Brad Piver') || '|' || (length(btrim(l.retirement_reason)) >= 12) || '|' || (SELECT count(*) FROM governance_acts a WHERE a.act = 'withdraw' AND a.subject_id = l.id AND a.actor_person_id = l.retired_by_person_id AND a.reason = l.retirement_reason) FROM value_levers l JOIN persons p ON p.id = l.retired_by_person_id WHERE l.id = '$SLEV'")" = "true|true|1" ] \
+    && ok "Scotts' lever ${SLEV:0:8} is withdrawn on the copy: Brad's act, with his reason, as recorded" || bad "Scotts' lever ${SLEV:0:8}: $(q "SELECT retired_by_person_id, retirement_reason FROM value_levers WHERE id = '$SLEV'")"
+  SCOTTS_LEVER="withdrawn since"
+else
+  SCOTTS_LEVER="ratified by Brad Piver, 19 Oct 2026"
+fi
+look scotts "$SCOTTS" '{"confidence":"35 / 100 · Low","falsifiers":1,"lever":"'"$SCOTTS_LEVER"'","facts":["$3,413.1 million","5,200 people"],"labels":["Disclosure regime","Public filer","Stated priority","SEC CIK","General"],"verbatim":["provided that: Same TRIR definition and denominator as the published baseline"],"runs":{"latest":["Scotts Miracle-Gro — reference example, not an engagement (retired), run 2"],"buttons":["Show all 2 runs"],"total":2}}' "OUTSIDE-IN TEST" "record hash"
 SCOTTS_PAGES="$PAGES_N"
 step "4. Curia (a locked run, no hypothesis)"
 look curia "$CURIA" '{"confidence":"10 / 100 · Low","labels":["Definition","Document","Person","Open; can still be closed"],"runs":{"latest":["Curia — lot acceptance, pack-grounded hypothesis, run 1","Curia — reference example, not an engagement (retired), run 13"],"buttons":["Show all 21 runs"],"total":22}}' "OUTSIDE-IN TEST" "record hash"
@@ -338,6 +348,27 @@ sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" scotts "$SCOTT
 r="$(python3 "$W/hashes.py" "$B/ux1s3_pov_scotts.pdf" "$W/pov.scotts.json" 2>&1)"
 case "$r" in BAD*latest-run-2*) ok "B5: the first run's hash in the footer instead of the latest → caught (Scotts: run 2 is the latest)" ;; *) bad "B5: not caught: $r" ;; esac
 restore "$POVPAGE"
+# Gate A, 14 Nov 2026 (L39): where the copy's Scotts lever is withdrawn, the "ratified by" line is not read from prod's rows,
+# so it is read from a fixture on the clone: a lever ratified by the steward on Scotts' measure, and Scotts' hypothesis
+# restated on it (the withdrawn one withdrawn, a new one stated), both through the routes. Never skipped.
+if [ "$SCOTTS_LEVER" = "withdrawn since" ]; then
+  post() { CODE="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $S" -d "$2" "$BASE$1")"; }
+  rj() { node -e "const b=require('$W/r.json'); console.log($1)"; }
+  SH="$(q "SELECT id FROM value_hypotheses WHERE institution_id = '$SCOTTS' AND deleted_at IS NULL AND superseded_by_id IS NULL LIMIT 1")"
+  SM="$(q "SELECT industry_measure_id FROM value_levers WHERE id = '$SLEV'")"
+  post "/api/industry-measures/$SM/levers" '{"name":"Fixture lever (verification)","mechanism":"EHS procedural training improves observed safe-work behaviour (fixture).","leading_indicator":"Share of safety observations rated safe (fixture)","citation":"Verification citation, not a source."}'
+  FL="$(rj b.value_lever_id)"; [ "$CODE" = "201" ] && ok "fixture: a lever ratified by the steward on Scotts' measure -> 201" || bad "fixture lever -> $CODE $(cat "$W/r.json" | head -c 300)"
+  post "/api/value-hypotheses/$SH/withdraw" '{"retirement_reason":"Verification: restated on the fixture lever."}'
+  [ "$CODE" = "200" ] && ok "  ...Scotts' hypothesis on the withdrawn lever withdrawn -> 200" || bad "  ...withdraw -> $CODE $(head -c 300 "$W/r.json")"
+  HB="$(q "SELECT json_build_object('value_outcome_id', value_outcome_id, 'value_lever_id', '$FL', 'statement', statement || ' (restated on the clone)', 'falsifier_reference', falsifier_reference, 'falsifier_due', to_char(falsifier_due, 'YYYY-MM-DD'), 'falsifier_conditions', falsifier_conditions) FROM value_hypotheses WHERE id = '$SH'")"
+  post "/api/institutions/$SCOTTS/hypotheses" "$HB"
+  [ "$CODE" = "201" ] && ok "  ...restated on the fixture lever -> 201" || bad "  ...restate -> $CODE $(head -c 300 "$W/r.json")"
+  WANT="ratified by $(q "SELECT full_name FROM persons WHERE id = '$S'"), $(q "SELECT to_char(created_at AT TIME ZONE 'UTC', 'FMDD Mon YYYY') FROM value_levers WHERE id = '$FL'")"
+  mkdir -p "$SHOTS/fixture_lever"
+  node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$SHOTS/fixture_lever" scotts "$SCOTTS" "$(J_LEVER="$WANT" node -e 'console.log(JSON.stringify({falsifiers:1,lever:process.env.J_LEVER}))')" > "$W/look.fixture.log" 2>&1 || bad "the fixture-lever walk crashed: $(tail -3 "$W/look.fixture.log")"
+  grep -E '^(PASS|FAIL)  scotts @(1280|390): the lever reads' "$W/look.fixture.log" | while IFS= read -r line; do echo "  $line"; done
+  [ "$(grep -cE '^PASS  scotts @(1280|390): the lever reads' "$W/look.fixture.log")" = "2" ] && ok "the fixture: the lever reads \"$WANT\" at 1280 and 390" || bad "the fixture lever: $(grep -E 'lever reads' "$W/look.fixture.log" | head -2)"
+fi
 for f in "$POVPAGE" "$FORMAT" "$ROUTE"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $SHOTS"
 
