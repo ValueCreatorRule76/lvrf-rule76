@@ -2278,18 +2278,23 @@ LANGUAGE sql STABLE AS $$
            coalesce(x->>'message' LIKE '%the verifier of record is synthetic%', false) AS says_synthetic_verifier,
            coalesce(x->>'message' LIKE '%remains ''measured''%', false) AS says_measured
       FROM a, jsonb_array_elements(coalesce(a.p->'findings', '[]'::jsonb)) x)
-  SELECT 'F2'::text, f.msg,
-         'In this run''s seal no committer of record was named: its committer factor reads “' || f.cnote || '”'
-           || CASE WHEN f.c_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END || '.'
-    FROM f WHERE f.fcode = 'F2' AND f.c_absent
-  UNION ALL
-  SELECT 'F3'::text, f.msg,
-         'In this run''s seal ' || array_to_string(ARRAY[
-           CASE WHEN f.v_absent AND f.says_synthetic_verifier THEN 'no verifier of record was named: its verifier factor reads “' || f.vnote || '”'
-                  || CASE WHEN f.v_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END END,
-           CASE WHEN f.says_measured AND f.realization IS DISTINCT FROM 'measured'
-                THEN 'the outcome was sealed as ' || coalesce(f.realization, 'no realization') || ', not measured' END], '; and ') || '.'
-    FROM f WHERE f.fcode = 'F3' AND ((f.v_absent AND f.says_synthetic_verifier) OR (f.says_measured AND f.realization IS DISTINCT FROM 'measured'))
+  -- The factor note is quoted verbatim, never trimmed. The sentence's own full stop is added only when the sentence does
+  -- not already end in one inside the closing quote (Brad, 14 Nov 2026: no "named.”."), so the text is s, closed once.
+  SELECT x.code, x.false_text, x.s || CASE WHEN x.s LIKE '%.”' THEN '' ELSE '.' END
+    FROM (
+      SELECT 'F2'::text AS code, f.msg AS false_text,
+             'In this run''s seal no committer of record was named: its committer factor reads “' || f.cnote || '”'
+               || CASE WHEN f.c_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END AS s
+        FROM f WHERE f.fcode = 'F2' AND f.c_absent
+      UNION ALL
+      SELECT 'F3'::text, f.msg,
+             'In this run''s seal ' || array_to_string(ARRAY[
+               CASE WHEN f.v_absent AND f.says_synthetic_verifier THEN 'no verifier of record was named: its verifier factor reads “' || f.vnote || '”'
+                      || CASE WHEN f.v_placeholder THEN ', a placeholder for no one, not a simulated person' ELSE '' END END,
+               CASE WHEN f.says_measured AND f.realization IS DISTINCT FROM 'measured'
+                    THEN 'the outcome was sealed as ' || coalesce(f.realization, 'no realization') || ', not measured' END], '; and ')
+        FROM f WHERE f.fcode = 'F3' AND ((f.v_absent AND f.says_synthetic_verifier) OR (f.says_measured AND f.realization IS DISTINCT FROM 'measured'))
+    ) x
 $$;
 
 CREATE OR REPLACE FUNCTION lvrf_run_erratum_steward_only() RETURNS trigger

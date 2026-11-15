@@ -230,6 +230,104 @@ export ROUTES
 if node scripts/verify_tenant_scope_cases.mjs; then CASES_OK=1; else CASES_OK=0; fi
 # The driver prints its own PASS/FAIL lines and a final count line.
 
+step "5c. The misstated-finding errata, two tenants (Brad, 14 Nov 2026): B's misstated run never reaches A"
+# A real negative case on the clone. Each tenant gets a locked run whose sealed F3 calls an absent verifier "synthetic":
+# produce-run is broken back to its pre-fix line (absence sealed as synthetic, as prod's old runs were), each run is
+# produced and locked through the routes by its own tenant's staff, and the file is restored. Then A's dry run must not
+# list B's run, and A's batch must record A's errata only. Under the tenant filter removed from the dry run's query, both
+# must fail: that filter is what keeps them apart.
+PRODUCE=server/routes/produceRun.ts; CREDIT=server/routes/creditAndMarks.ts
+B5="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_p3_5c.XXXXXX")"; cp "$PRODUCE" "$B5/produceRun.ts"; cp "$CREDIT" "$B5/creditAndMarks.ts"
+restore5c() { for f in "$PRODUCE" "$CREDIT"; do [ -f "$B5/$(basename "$f")" ] && { cmp -s "$B5/$(basename "$f")" "$f" || cp "$B5/$(basename "$f")" "$f"; }; done; true; }
+cleanup() { restore5c; stop_port "$PORT"; [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -f "$LOG"; }
+stop_port() { local p; for p in $(lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null); do kill "$p" 2>/dev/null || true; done; }
+restart() {
+  stop_port "$PORT"; [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1
+  env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=0 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$LOG" 2>&1 < /dev/null &
+  SERVER_PID=$!
+  for _ in $(seq 1 40); do curl -s -o /dev/null "http://127.0.0.1:$PORT/api/health" && return 0; sleep 0.5; done
+  bad "server did not restart: $(tail -3 "$LOG")"; exit 1
+}
+brk() {  # FILE OLD NEW
+  python3 - "$1" "$2" "$3" <<'PYB'
+import sys; p, a, b = sys.argv[1:4]; s = open(p).read()
+assert s.count(a) == 1, a; open(p, 'w').write(s.replace(a, b))
+PYB
+}
+JAR="$(mktemp "${TMPDIR:-/tmp}/lvrf_p3_jar5c.XXXXXX")"
+AS() {  # EMAIL — sign in by session
+  rm -f "$JAR"; PA /api/auth/login "{\"email\":\"$1\",\"password\":\"$PW\"}"; [ "$CODE" = "200" ] || { bad "sign-in as $1: $CODE $PA_OUT"; exit 1; }
+}
+JAR_A="$JAR"
+GA() { PA_OUT="$(curl -s -b "$JAR" -w '\n%{http_code}' "http://127.0.0.1:$PORT$1")"; CODE="${PA_OUT##*$'\n'}"; PA_OUT="${PA_OUT%$'\n'*}"; }
+EVBASE() { printf '{"kind":"public_filing","provenance":"Fixture source for: %s (not a source)","summary":"%s","supports":"baseline","confidence":"medium","source_verified":false,"ai_sourced":false,"simulated":false,"about":"account","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}' "$1" "$1"; }
+mk_run() {  # ENGAGEMENT LABEL -> RUN (produced and locked by the signed-in tenant's steward)
+  PA "/api/engagements/$1/produce-run" "{\"banner_title\":\"OUTSIDE-IN HYPOTHESIS\",\"note\":\"Verification: $2, absence sealed as synthetic (5c).\",\"source_fixture\":\"p3_misstated_fixture\"}"
+  [ "$CODE" = "201" ] || { bad "$2: produce -> $CODE $PA_OUT"; exit 1; }
+  RUN="$(pj .value_run_id)"
+  PA "/api/value-runs/$RUN/lock" '{"lock_reason":"Verification: locked for the misstated-finding tenant case."}'
+  [ "$CODE" = "200" ] || { bad "$2: lock -> $CODE $PA_OUT"; exit 1; }
+}
+brk "$PRODUCE" "        committerSynthetic = false;
+        committerName = null;" "        committerSynthetic = true;
+        committerName = null;"
+brk "$PRODUCE" "        verifierSynthetic = false;
+        verifierName = null;" "        verifierSynthetic = true;
+        verifierName = null;"
+brk "$PRODUCE" "        verifierAbsent: verifierName === null," "        verifierAbsent: false,"
+restart
+# Tenant A: the hypothesis fixture's engagement (4b), with a published baseline.
+AS "$EMAIL_A"
+ENG_H="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$OUTCOME_H'")"
+PA "/api/value-outcomes/$OUTCOME_H/evidence" "$(EVBASE 'Tenant A baseline (5c fixture)')"; [ "$CODE" = "201" ] || { bad "A baseline: $CODE $PA_OUT"; exit 1; }
+mk_run "$ENG_H" "tenant A"; RUN_MA="$RUN"
+# Tenant B: one offering of its own (B's fixtures are written on the clone, as above), then a capability, an outcome
+# with a published baseline, a run and its lock, all through the routes as B's staff.
+OFF_B="offering-b-$TS"
+q "INSERT INTO offerings SELECT (jsonb_populate_record(NULL::offerings, to_jsonb(o) || jsonb_build_object('id', gen_random_uuid(), 'tenant_id', '$TENANT_B', 'offering_key', '$OFF_B', 'name', 'Offering B (verification)', 'steward_person_id', '$STAFF_B'))).* FROM offerings o WHERE o.tenant_id = '$TENANT_A' AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL ORDER BY o.offering_key LIMIT 1" > /dev/null
+AS "$EMAIL_B"
+PA "/api/institutions/$INST_B/offerings" "{\"offering_key\":\"$OFF_B\",\"capability_name\":\"Capability B (verification)\",\"owner_person_id\":\"$CUST_B\",\"is_primary\":false,\"basis\":\"Verification: attached for the 5c fixture.\"}"
+[ "$CODE" = "201" ] || { bad "B capability: $CODE $PA_OUT"; exit 1; }
+PA "/api/institutions/$INST_B/value-outcomes" "{\"engagement_name\":\"Engagement B5c (verification)\",\"engagement_owner_person_id\":\"$CUST_B\",\"capability_name\":\"Capability B (verification)\",\"metric\":{\"name\":\"Metric B $TS\",\"unit\":\"count\",\"direction\":\"increase\",\"source_system\":\"verification system of record\",\"owner_person_id\":\"$CUST_B\"},\"baseline_value\":0,\"baseline_measured_at\":\"2026-09-30T00:00:00Z\"}"
+[ "$CODE" = "201" ] || { bad "B outcome: $CODE $PA_OUT"; exit 1; }
+OUTCOME_B="$(pj .value_outcome_id)"; ENG_B5="$(pj .engagement_id)"
+PA "/api/value-outcomes/$OUTCOME_B/evidence" "$(EVBASE 'Tenant B baseline (5c fixture)')"; [ "$CODE" = "201" ] || { bad "B baseline: $CODE $PA_OUT"; exit 1; }
+mk_run "$ENG_B5" "tenant B"; RUN_MB="$RUN"
+restore5c; restart
+git diff --quiet -- "$PRODUCE" && ok "produce-run restored byte-identical; the server restarted on it" || bad "produce-run differs after restore"
+MIS() { q "SELECT count(*) FILTER (WHERE code = 'F3') || '|' || count(*) FROM lvrf_misstated_findings('$1')"; }
+[ "$(q "SELECT tenant_id FROM value_runs WHERE id = '$RUN_MA'")|$(q "SELECT tenant_id FROM value_runs WHERE id = '$RUN_MB'")" = "$TENANT_A|$TENANT_B" ] \
+  && [ "$(MIS "$RUN_MA" | cut -d'|' -f1)" = "1" ] && [ "$(MIS "$RUN_MB" | cut -d'|' -f1)" = "1" ] \
+  && ok "A's run ${RUN_MA:0:8} and B's run ${RUN_MB:0:8}, each locked by its tenant's steward, each sealing an absent verifier as synthetic (F3 misstated)" || bad "the 5c runs: A $(MIS "$RUN_MA"), B $(MIS "$RUN_MB")"
+CHECK5C() {  # LABEL -> sets OK5C=1 when both hold: A's dry run lists no run of B's; A's batch records A's errata only
+  OK5C=1
+  AS "$EMAIL_A"; GA /api/errata/misstated-findings
+  local acount; acount="$(pj .count)"
+  if [ "$CODE" = "200" ] && [ "$(pj ".errata.some(e=>e.run_id==='$RUN_MB')")" = "false" ] && [ "$(pj ".errata.some(e=>e.run_id==='$RUN_MA')")" = "true" ]; then echo "  ...$1: A's dry run lists A's run and not B's ($acount)"; else OK5C=0; echo "  ...$1: A's dry run lists B's run ${RUN_MB:0:8} (or not A's): $(printf '%s' "$PA_OUT" | head -c 200)"; fi
+  local before_b; before_b="$(q "SELECT count(*) FROM run_errata WHERE value_run_id = '$RUN_MB'")"
+  PA /api/errata/misstated-findings "{\"expected_count\":${acount:-0},\"reason\":\"Verification: A records its own misstated findings (5c).\"}"
+  local code="$CODE" onb; onb="$(q "SELECT count(*) FROM run_errata WHERE value_run_id = '$RUN_MB'")"
+  if [ "$code" = "201" ] && [ "$onb" = "$before_b" ] && [ "$(q "SELECT count(*) FROM run_errata x JOIN value_runs r ON r.id = x.value_run_id WHERE x.kind = 'misstated_finding' AND x.tenant_id = '$TENANT_A' AND r.tenant_id <> '$TENANT_A'")" = "0" ]; then echo "  ...$1: A's batch -> 201, recording on A's runs only; none on B's"; else OK5C=0; echo "  ...$1: A's batch -> $code; errata on B's run $before_b -> $onb: $(printf '%s' "$PA_OUT" | head -c 200)"; fi
+}
+CHECK5C "clean"
+[ "$OK5C" = "1" ] && ok "A's dry run lists A's run ${RUN_MA:0:8} and never B's ${RUN_MB:0:8}; A's batch records on A's runs only" || bad "the tenant case fails"
+AS "$EMAIL_B"; GA /api/errata/misstated-findings
+[ "$(pj ".errata.some(e=>e.run_id==='$RUN_MB')")|$(pj ".errata.some(e=>e.run_id==='$RUN_MA')")" = "true|false" ] && ok "  ...and B's dry run still lists B's run, untouched by A's batch, and not A's" || bad "  ...B's dry run: $(printf '%s' "$PA_OUT" | head -c 200)"
+# The break: the tenant filter removed from the dry run's query. A's own run is recorded now, so A's dry run should
+# read none; under the break it reads B's run, and A's batch is sent with that count.
+brk "$CREDIT" "      WHERE r.tenant_id = \$1 AND r.deleted_at IS NULL AND r.locked_at IS NOT NULL" "      WHERE (\$1::uuid IS NOT NULL) AND r.deleted_at IS NULL AND r.locked_at IS NOT NULL"
+restart
+CHECK5C "under the break"
+LANDED="$(q "SELECT count(*) FROM run_errata WHERE value_run_id = '$RUN_MB'")"
+[ "$OK5C" = "0" ] && ok "BREAK: the tenant filter removed from the misstated dry run → caught: A's dry run lists B's run ${RUN_MB:0:8}" || bad "BREAK not caught: with the tenant filter removed, A still saw only its own"
+[ "$LANDED" = "0" ] && echo "  INFO  under the break A's batch landed nothing on B's run: the database guard refused the cross-tenant erratum" \
+  || echo "  INFO  under the break A's batch recorded $LANDED erratum/errata on B's run: the route's tenant filter is the only thing that stops it"
+restore5c; restart
+git diff --quiet -- "$CREDIT" && ok "  ...creditAndMarks.ts restored byte-identical" || bad "  ...creditAndMarks.ts differs"
+AS "$EMAIL_A"; GA /api/errata/misstated-findings
+[ "$(pj ".errata.some(e=>e.run_id==='$RUN_MB')")" = "false" ] && ok "  ...restored: A's dry run lists no run of B's again" || bad "  ...restored: A still sees B's run"
+rm -f "$JAR"; rm -rf "$B5"
+
 step "6. Unchanged"
 T="$(q "SELECT count(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$T" = "$EXPECT_TRIGGERS" ] && ok "trigger count unchanged ($T)" || bad "triggers: $T"

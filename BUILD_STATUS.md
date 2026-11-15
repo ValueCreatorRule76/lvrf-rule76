@@ -13910,15 +13910,28 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
     - **Group A:** tenant cases for both new routes. Block F: B's dry run lists none of A's runs, and B's batch with A's
       count is refused with nothing recorded. The steward count is 32 and the act-route list carries the new route.
       `run_page`'s B11 target is the branch's line.
+    - **`verify_tenant_scope` step 5c, a real negative case (Brad's decision 3):** each of two tenants gets a locked run
+      whose sealed F3 calls an absent verifier "synthetic".
+      - Each run is produced and locked through the routes by its own tenant's staff, with produce-run broken back to its
+        pre-fix line for the two productions and then restored byte-identical. Tenant B gets one offering of its own,
+        written on the clone like B's other fixtures; its capability, outcome, baseline, run and lock go through the
+        routes.
+      - Then A's dry run lists A's run and never B's; A's batch → 201, recording on A's runs only and none on B's; and
+        B's dry run still lists B's run and not A's.
+      - **Break:** the tenant filter is removed from the dry run's query (`creditAndMarks.ts`) → **caught:** A's dry run
+        lists B's run. A's batch under the break → 422 from the database: `LVRF: run_errata: run … is not of tenant …`,
+        so nothing landed on B's run.
+      - Restored byte-identical; A's dry run lists no run of B's again.
     - **Group B, L39:** where a rehearsal needs a state prod has moved past, that state is a fixture on the clone, and
       prod's own rows are asserted as recorded.
       - `commit_measure_verify`: D, N and the CFO lens are asserted as Brad's, with his act and reason. Acts 1–4 on
         `f23ee6a8`, `2c10e091` and `eea43d9a` are asserted as recorded: his reasons word for word, his acts, the kept
         values (100.4, 8,400,000; target 100 by `[SIM] Customer Sponsor`). Acts 1–4 and M8 are then rehearsed through
         the page on a fixture: `f23ee6a8` before act 1, on its own engagement, with copies of its two simulated rows as
-        its actual. Those rows are written with triggers suspended for that one transaction, since no route can make a
-        simulated actual link today (AMENDMENT-005). Every guard is in force for the rehearsal, and the confirmations
-        are §14's with the fixture's short ids.
+        its actual. **No route can create a simulated actual link today** (AMENDMENT-005 refuses it; prod's two predate
+        the guard), **so the acts 1–4 fixture was written on the clone with triggers suspended for one transaction**
+        (Brad's decision 4). Every guard is back in force for the rehearsal (209 triggers checked), and the
+        confirmations are §14's with the fixture's short ids.
       - `value_case`: B3's act session, "D unset" and "no CFO lens" run on a fixture tenant (its own steward, a copy of
         the manufacturing pack). Curia is read as the real steward.
       - `pov_print`: Scotts' lever `d58a08c5` is withdrawn on the copy and the page says "withdrawn since" (Brad's act,
@@ -13945,7 +13958,7 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
     121 · ownership 75 · pack_entry_retire 73 · pack_research 62 · pack_review 17 · plain_refusals 76 · pov_print 121 ·
     refusal_attribution 13 · request_log 38 · research_contract 100 · run_page 273 · runs_list 10 · set_email 29 ·
     signin_p1 35 · signin_p2a 49 · signin_p2b 44 · steward_acts 38 · steward_safety 31 · supersession 219 ·
-    tenant_scope (setup 13/0, cases passed) · value_case 198 · value_hypotheses 154 · value_levers 171 · walk_runs 119 ·
+    tenant_scope (setup 13/0, cases passed; 20/0 with step 5c, below) · value_case 198 · value_hypotheses 154 · value_levers 171 · walk_runs 119 ·
     workspace_path 107. Every one is n/0.
     - **Recorded, not changed (Brad, 14 Nov 2026):** only 17 of the 49 clone the prod copy (accounts_home, acts_lineage,
       c2, c2c, c3, c3b, case_snapshot, commit_measure_verify, corrections, evidence_final, evidence_form, ownership,
@@ -13964,9 +13977,10 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
   - **Equivalence against `5b834f2`:** `scripts/equivalence_gets.sh`, now saved in the repo (the earlier 77-GET harness
     was never kept). Every deployed GET route over every row of the copy: **213 GETs.**
     - 192 are identical.
-    - **21 differ only by an added key, `errata[].finding_code`**, on `GET /api/runs/:id` for each run that carries
-      errata. It is `null` on every existing erratum, and the bodies are identical once it is removed. It comes from
-      `runs.ts` now selecting `x.finding_code`. **This is not "no added keys": it is open for Brad.**
+    - **21 differ by one named allowance (Brad's decision 2): the added key `errata[].finding_code`**, on
+      `GET /api/runs/:id` for each run that carries errata. It is `null` on all 21, and the bodies are identical once it
+      is removed. It is the branch's intended change: `runs.ts` now selects `x.finding_code`. This is not "no added
+      keys": it is one added key, allowed by name.
     - 10 are non-200 identically on both sides (retired engagements, metrics with no prompt, gaps on a frozen outcome).
     - `GET /api/errata/misstated-findings` is the branch's own route and is not compared.
   - **Rehearsal of 0050** on a clone of the deployed-state copy: migrated as `lvrf_migrate`, then `db/ownership.sql`,
@@ -13987,14 +14001,34 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
   - **Screens** in `~/lvrf-backups/l41-screens/b4lens/<script>/`; B4's are under `verify_commit_measure_verify/`:
     `b4_misstated_dryrun_1280.png`, `b4_misstated_run_1280.png`, `b4_withdraw_measurement_1280.png`,
     `b4_card01d_after_1280.png`, `b4_card05_*`.
-- **Open for Brad before the act (the erratum text is permanent):**
-  - Every true sentence that quotes a factor note ending in a full stop prints doubled punctuation: `…has been named.”.`
-    and `…(no verifier of record)).”, a placeholder…`. It is not a false claim. The guard accepts only the function's
-    exact words, so once the 41 rows are recorded the wording is fixed. Changing it means changing
-    `lvrf_misstated_findings()` before Gate B.
-  - The added `finding_code` key above.
+- **The doubled full stop, fixed before Gate B (Brad's decision 1).** A true sentence that ended on a quoted factor note
+  ending in a full stop printed `…has been named.”.` (4 of the 41: the F2s on runs with no committer named; every other sentence
+  continues after the quote and was not affected). The text is permanent, since the guard admits only the function's exact words.
+  - **The fix:** `lvrf_misstated_findings()` (hardening §35) still quotes the note verbatim and never trims it. The
+    sentence's own closing full stop is added only when the text does not already end in a full stop inside the closing
+    quote. No migration: the function is in `hardening.sql`, re-applied at Gate B.
+  - **Re-run after the fix:** `commit_measure_verify` 215/0 (41 on 25; the route, the function and the oracle agree;
+    the sample row reads exactly as its seal), `tenant_scope` (setup 20/0, cases passed), and every script that writes
+    errata through the guard: `c2` 159, `c2c` 79, `c3` 202, `c3b` 237, `corrections` 212, `acts_lineage` 190,
+    `run_page` 273, `supersession` 219. All n/0.
+  - **The rehearsal again, from the deployed state** (`5b834f2`'s own restore, then 0050, ownership.sql and the fixed
+    hardening.sql): 51 migrations, 209 triggers, 0 ERROR lines, drift none at 1251 objects, 131 CHECKs with a plain
+    sentence, ownership clean, all 26 runs byte-identical, `check_run_hashes` 26/26, 0 doubled stops. TOC 903 → 906, as
+    before. Equivalence the same: 213 GETs, 192 identical, 21 by the allowance.
+  - **The dry run through the route: 41|25; the function 41|25; the oracle 41|25.** Skillsoft run 1 is not listed.
+  - **Sample true sentences, exactly as they will be recorded:**
+    - F2, Skillsoft run 2 (`98a71a82`): `In this run's seal no committer of record was named: its committer factor reads
+      “No committer of record has been named.”`
+    - F3, Skillsoft run 2 (`98a71a82`): `In this run's seal no verifier of record was named: its verifier factor reads
+      “No verifier of record has been named.”; and the outcome was sealed as claimed, not measured.`
+    - F2, Curia run 1 (`1fd8e160`): `In this run's seal no committer of record was named: its committer factor reads
+      “Sponsor of record is synthetic ([SIM] (no sponsor of record)).”, a placeholder for no one, not a simulated
+      person.`
+    - F3, Curia run 13 (`0cb2bf96`): `In this run's seal no verifier of record was named: its verifier factor reads
+      “Verifier of record is synthetic ([SIM] (no verifier of record)).”, a placeholder for no one, not a simulated
+      person; and the outcome was sealed as claimed, not measured.`
 - **Found and left as found:** the regression's scripts stop vite and the API by a subshell's pid, so the children keep
-  running (about 22 vite processes left after this run, every one proxying to a verify port). The new harness stops its
+  running (20 vite pairs after the full run, stopped by PID with Brad's approval, and 6 more after the re-runs). The new harness stops its
   servers by port. Recorded for 3.1.
 
 #### Gate B (not run; Brad's)
@@ -14027,6 +14061,8 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
   - **The confirmation, as the page prints it with prod's count:** `Record 41 misstated-finding errata on 25 runs, one
     beside each finding listed. If the record now calls for a different number, nothing is recorded.` The button reads
     "Record the 41 errata".
+  - **What each erratum states** is read from its run's seal by the fixed function: the four sample sentences above,
+    exactly. Hardening must be re-applied at step 3 before this act, or the guard admits the old wording.
   - **The 25 runs listed** (from the rehearsed copy):
     - Curia, F2 and F3 (13): run 1 `1fd8e160`, run 1 `535387da`, run 2 `95cedb9e`, run 3 `96372205`, run 4
       `ddd0c167`, run 5 `48b8a997`, run 6 `9841e045`, run 7 `2a245551`, run 8 `1c7eff05`, run 9 `f8914c91`, run 10
@@ -14043,7 +14079,8 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
   209 triggers (pg_trigger, DISTINCT); ownership clean (`check_ownership`, `lvrf_ownership_violations()` 0).
 - `run_errata` of kind `misstated_finding`: 41 on 25 runs, the codes as listed above.
   - Each was recorded by Brad, with the reason word for word.
-  - Each `what_was_wrong` / `what_is_right` equals `lvrf_misstated_findings()`'s row for its run and code.
+  - Each `what_was_wrong` / `what_is_right` equals `lvrf_misstated_findings()`'s row for its run and code, and no
+    `what_is_right` contains `.”.`.
   - None is on Skillsoft run 1.
 - `governance_acts`: +41 `record_erratum` on `POST /api/errata/misstated-findings`, each Brad's, `result_id` its run.
 - The dry run reads 0 ("No sealed finding is contradicted by its seal").
