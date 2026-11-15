@@ -14043,12 +14043,14 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
    The last line **expects 905.** Stop if it differs.
 3. **Migrate 0050** as `lvrf_migrate`, then ownership, then hardening:
    ```
-   cd /srv/lvrf && DATABASE_URL="$(grep '^DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
    sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
    sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_b4lens.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_b4lens.log
    sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
    ```
    Expect `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **209** triggers.
+   (Corrected by Brad, 15 Nov 2026: the box's `~/.lvrf_migrate.env` holds `MIGRATE_DATABASE_URL=`, not `DATABASE_URL=`;
+   the first draft of this step would have passed an empty URL.)
 4. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle `index-59Y07al1.js` / `index-BpSO_jig.css`,
    steps 5b, 5c and 5d passed, health 200 and fail-closed.
 
@@ -14088,3 +14090,45 @@ only). The B4 act session's open items (Brad's rulings of 6 Nov 2026, LVRF_PLAN 
 - `record_documents`: no new row without `lens_policy_id` on a CFO print request; the 6 Nov one keeps NULL.
 - No refusal and no audit row without an actor since the deploy.
 - The run page of one listed run (e.g. Skillsoft run 2): its findings unchanged as sealed, with the erratum under each.
+
+### B4 findings lens: deployed at `cd38210`; Brad's act; Gate C — 15 Nov 2026 (UTC)
+
+**Gate B.** main fast-forwarded to `cd38210` and pushed (14 Nov). On the box (`/srv/lvrf` at `cd38210`):
+
+- **Backup:** `~/lvrf-pre-b4lens-20261115T025031Z.dump` (archive created 02:50:42 UTC), **TOC 905**, as Gate A expected.
+- **Migrate:** the first attempt failed closed with nothing applied (Brad's report). The cause was Gate B's step 3 as
+  first written: it read `'^DATABASE_URL='` from `~/.lvrf_migrate.env`, which holds the URL under
+  `MIGRATE_DATABASE_URL=` (checked by `grep -c`: 1 line, and no `DATABASE_URL=` line). Corrected in step 3 above and
+  in LVRF_PLAN §4. Run again with `'^MIGRATE_DATABASE_URL='`, it applied 0050: 51 migrations, newest
+  `0050_b4_findings_lens`, applied once. Then `db/ownership.sql` and `db/hardening.sql`
+  (`~/lvrf_hardening_b4lens.log`: 0 ERROR lines), installing the fixed `lvrf_misstated_findings()`.
+- **Deploy:** `lvrf-deploy.sh`; the API restarted at 02:56:28 UTC. It serves bundle `index-59Y07al1.js` /
+  `index-BpSO_jig.css`; health 200, `origin_check` configured, `actor_header` off.
+
+**Brad's act, through the Runs page** (03:00:34 UTC): the misstated-finding batch, 41 errata on 25 runs, with the
+reason as written.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+
+- **Schema:** 51 migrations, newest `0050_b4_findings_lens`; drift none at 1251 objects; `drift_report` D1, D3, D4 no
+  findings; 131 CHECKs, 131 with a plain sentence; **209 triggers** (pg_trigger, DISTINCT), none disabled; ownership
+  clean (`check_ownership`; `lvrf_ownership_violations()` 0).
+- **The errata:** `run_errata` of kind `misstated_finding` reads **41 on 25 runs**: 16 F2, 25 F3 (Curia 13 F2 and 22
+  F3, Scotts 2 and 2, Skillsoft 1 and 1).
+  - All 41 were recorded by Brad as the tenant's steward, with the reason verbatim.
+  - All 41 equal `lvrf_misstated_findings()`'s row for their run and code, false text and true text.
+  - **None contains `.”.`.** None is on Skillsoft run 1 (`88f6a6e1`).
+  - Each names the outcome its run sealed; all are current.
+  - The 25 runs are exactly those listed at Gate A.
+- **Acts:** +41 `record_erratum` on `POST /api/errata/misstated-findings`, each Brad's, each naming its erratum, with
+  the erratum's reason and `result_id` its run. Acts 174 → 215. Those 41 are the only acts since the deploy.
+- **The dry run reads 0.**
+- **Runs:** 26, every row byte-identical to the 14 Nov snapshot (per-row md5 in UTC, the box against the snapshot
+  restored locally); `check_run_hashes` 26/26, recomputed and embedded.
+- **`record_documents`:** 6, none since the deploy. The 6 Nov CFO print request keeps `lens_policy_id` NULL (never
+  backfilled); no row carries one yet.
+- **Since the deploy:** no refusal; 82 audit rows, none without an actor.
+- **Post-act dump:** pending Brad's paste (`sudo -u postgres` asks for a password over ssh). It is expected to read
+  **908**: 905 + 3 for 0050's FK, function and partial index; errata are rows, not TOC entries.
+
+**B4 findings lens closed: Gate C clean.** `lvrf_rehearse0050` can go.

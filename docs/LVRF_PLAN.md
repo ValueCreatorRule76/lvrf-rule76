@@ -1683,8 +1683,10 @@ the only roles are `lvrf_app` and `postgres`.
    its self-update re-exec runs once.
 4. **Migrations run as `lvrf_migrate`.**
    - **On the box:** its URL is in **`~/.lvrf_migrate.env`**, `chmod 600`, owner brad,
-     never in `/srv/lvrf/.env`. The migrate paste line is `DATABASE_URL="$(grep
-     '^DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate`.
+     never in `/srv/lvrf/.env`, under the key **`MIGRATE_DATABASE_URL=`**. The migrate paste line is
+     `DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate`.
+     (Corrected 15 Nov 2026, B4 findings lens Gate B: this line read `'^DATABASE_URL='`, a key the file does not
+     hold, so the paste passed an empty URL and the migrate failed closed with nothing applied.)
    - **`scripts/check_migrate_role.ts`** (new, read-only) prints `current_user` and
      `current_role`, and exits 1 unless they are `lvrf_migrate` and `lvrf_owner`. The
      paste runs it on the line before migrating.
