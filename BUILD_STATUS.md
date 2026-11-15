@@ -14479,3 +14479,104 @@ review decision is final; L54's "Correct the reviewer's note", 3.1, is the path)
 (each `npm exec vite --port 51xx–52xx` and its `node …/client/node_modules/.bin/vite` child), all from this repo.
 They were stopped by those PIDs; none was left. They leak because the scripts kill a subshell's pid (the 3.1 item);
 the final regression below leaks them again, and those were stopped the same way.
+
+### S1: deployed at `2306ab3`; Brad's act session; Gate C; the stage-10 check — 15 Nov 2026 (UTC)
+
+**Gate B (Brad's pastes).** main fast-forwarded `59a72f2..2306ab3` and pushed. On the box (`/srv/lvrf` at `2306ab3`):
+
+- **Backup:** `~/lvrf-pre-s1-20261115T153212Z.dump` (archive created 15:32:22 UTC), **TOC 908**, as expected.
+- **Migrate:** nothing to apply (51 migrations, newest `0050_b4_findings_lens`). Then `db/ownership.sql` and
+  `db/hardening.sql` (`~/lvrf_hardening_s1.log`: 0 ERROR lines), **210 triggers**.
+- **After hardening:** `~/lvrf-post-s1-hardening-20261115T153408Z.dump` (15:34:08 UTC), **TOC 910**, as expected.
+- **Deploy:** the API restarted at 15:34:50 UTC. It serves bundle **`index-_8iD1UlG.js`** / `index-BpSO_jig.css`;
+  health 200, `origin_check` configured, `actor_header` off.
+
+**Brad's act session, through the page** (times UTC, from the rows):
+
+| # | Act | At | Row | Governance act |
+|---|---|---|---|---|
+| R1–R3 | Retire `0795acc2`, `e15c4a21`, `dd1d688b`, with the drafted reason verbatim | 15:38:43, 15:38:57, 15:39:11 | status `retired`, `deleted_at` set | 3 × `withdraw` |
+| E1 | Record the Q2 FY2027 Ex. 99.1 on 01c | 15:42:16 | `6f8d5cb3` | none |
+| E2 | Open it, Yes | 15:43:55 | `6f8d5cb3` source-verified | `open_citation` |
+| 1 | The lever | 15:58:26 | `71934ebc` | `ratify` |
+| 2 | Classify Skillsoft | 16:03:07 | `learning-platforms`; observation `e4a47f31` | none |
+| 3 | The claim | 16:04:36 | `aa5e3977` → `2bd87345` | none |
+| 4 | The pack basis | 16:32:52 | `e7edeaae` → `2bd87345`; observation `eed11e02` | none |
+| 5 | The hypothesis | 18:18:08 | `d3239949`, due 2027-06-30 | none |
+| 6 | Produce run 3 | 18:28:01 | `0061c95f` | none |
+| 7 | Lock run 3 | 18:28:38 | locked by Brad | `lock` |
+| 8 | Print, both lenses | 18:29:35 to 18:49:13 | 7 print requests (4 CFO, 3 general), all `fb2917d1…` | none |
+
+Brad typed the lever's mechanism as `Not yet tested at Skillsoft: the hypothesis is that it raises dollar retention,
+which the Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point lower than a year earlier.` It omits the
+draft's leading "Value-based renewal execution, ", so the lever line no longer repeats the name.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone, `default_transaction_read_only` on):**
+
+- **Schema:**
+  - 51 migrations; drift none at 1251 objects; `drift_report` D1, D3, D4 no findings.
+  - 131 CHECKs, each with a plain sentence.
+  - **210 triggers**, none disabled.
+  - Ownership clean (`check_ownership`).
+  - TOC 910 (above).
+- **The retirements:**
+  - The three entries are `retired`, by Brad, with R1–R3's reason verbatim. Their accepted results are unchanged.
+  - `2bd87345` is the only current entry in Learning platforms.
+- **E1 (`6f8d5cb3`):**
+  - `public_filing`, about Skillsoft, `quote` form.
+  - The quote is byte-identical to the one checked against EDGAR.
+  - The provenance, citation and how-read are as drafted.
+  - Captured and opened by Brad; source-verified, not AI-sourced, not simulated.
+  - One `open_citation` act on it.
+- **The lever:** one on `2bd87345` (`71934ebc`), Brad's, with the mechanism above, the drafted indicator and citation.
+- **Classification and claim:**
+  - Skillsoft is classified `learning-platforms`.
+  - There is one claim (`aa5e3977` → `2bd87345`), Brad's, with the drafted text.
+  - Its metric `e7edeaae` rests on `2bd87345`.
+- **Act 4's basis note is not on record as drafted.** The pack-basis observation on 01c, `eed11e02` ("Asserted at pack
+  basis by Brad Piver", 16:32:52), holds the **claim's text** (`Claimed, not yet tested: that value-based renewal
+  execution raises …`), not the drafted note.
+  - No row anywhere holds "Skillsoft's DRR is its own measure…" or cites `6f8d5cb3`.
+  - The route refuses a second basis on a metric (409: "a basis is not amended — supersede the metric instead"), and
+    no correction path exists for an observation row.
+  - The row is not sealed in run 3 (its payload names neither `eed11e02` nor `6f8d5cb3`) and does not print.
+  - **For Brad's ruling** (not built). Either it stands, recorded here. Or Brad records a further observation on 01c
+    with the drafted note, and `eed11e02` stays on record. Or a correction path for a pack-basis note goes to 3.1.
+    Superseding `e7edeaae` would only replace a basis that is right; the note is the only wrong part.
+- **The hypothesis `d3239949`:**
+  - The only current hypothesis on `f23ee6a8`. Brad's, on lever `71934ebc`.
+  - Reference `baseline`, value 98 (recorded 30 Apr 2026), due 2027-06-30, the drafted conditions, not post hoc.
+- **Runs:**
+  - Run 3 `0061c95f` is locked by Brad, with the drafted reason. Its seal names `d3239949`, `2bd87345` and the
+    mechanism, with no doubled name.
+  - `check_run_hashes` 27/27, recomputed and embedded.
+  - The 26 earlier runs are byte-identical to the 14 Nov snapshot (per-row md5 in UTC, the box against
+    `lvrf_prodcopy`).
+- **Acts:**
+  - **221 → 227, +6 as expected:** three `withdraw`, `open_citation`, `ratify`, `lock`, all Brad's.
+  - They are the only acts since 06:53:17.
+- **Since the deploy:**
+  - no refusal;
+  - 27 audit rows, none without an actor: 6 governance acts, 3 soft-deletes, 4 evidence, 1 lever, 1 classification,
+    1 claim, 1 basis, 1 hypothesis, 2 run, 7 print requests.
+
+**Stage 10 on run 3's prints** (`~/lvrf-backups/skillsoft_run3_cfo.pdf`, 73540 bytes, 2 pages;
+`skillsoft_run3_default.pdf`, 102366 bytes, 3 pages). Both were read with `pdftotext`, and neither was modified, re-saved
+or copied:
+
+- **No browser header or footer.**
+  - No "11/15/26", no title line, no URL.
+  - The "Page x of y" at the bottom right is the app's own `@page` margin box (`client/src/index.css`, UX-1 slice 3, in
+    Menlo 8pt), not the browser's.
+- **Every page** carries the OUTSIDE-IN HYPOTHESIS and UNVERIFIED banners and the footer's record hash
+  `fb2917d18928c1eda1f5735d11ff402c01cea13f5282ac02fc98f2b30c0c372c`, equal to run 3's stored `payload_hash`.
+- **"one point of Dollar Retention Rate (trailing twelve months)"** prints where the rate is asked: in ask 3 on both
+  prints (2 on the CFO print), and in the cost of delay on the default print (3 in all).
+- **"one point of net retention" never prints**, nor do the why-it-pays, `$2.5M`, `$5.4M`, `2,500,000` or `5,400,000`.
+- **No short id or row code prints**: the only hex token is the hash.
+- **The default lens's lever line:** `Through: Value-based renewal execution. Not yet tested at Skillsoft: the hypothesis
+  is that it raises dollar retention, which the Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point
+  lower than a year earlier. Watch first: Share of Skillsoft renewals entered with a verified value case (not yet
+  measured).` The name appears once. The CFO print is refused and has no Value hypotheses section, as designed.
+
+**S1 closed, Gate C clean but for act 4's note, which awaits Brad's ruling.** Prod was only read.
