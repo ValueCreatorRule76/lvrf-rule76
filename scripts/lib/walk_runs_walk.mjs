@@ -6,7 +6,8 @@
 //   node scripts/lib/walk_runs_walk.mjs MODE VITE_PORT CDP_PORT SHOTS DB INST S_EMAIL X_EMAIL PW S_NAME PHASE
 //
 // MODE: main | break-unmet | break-lock | break-gate | pov-retired | break-frozen | break-runs | pov-marker | break-marker.
-// PHASE (main only): before-lever | after-lever.
+// PHASE (main only): before-lever | after-lever | runs. S1 (§20, R5-3.1a): a run seals its hypothesis, so the hypothesis
+// is stated (after-lever) before run 1 is produced, and the run list is read after it (runs).
 import { writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -155,7 +156,7 @@ if (MODE === 'pov-retired' || MODE === 'break-frozen' || MODE === 'break-runs') 
     check(await ev(`!(${wit}).querySelector('.text-critical')`), '  ...not in critical red: a frozen outcome is not a failure');
     check(!UUID.test(await ev('document.body.textContent')), 'no id anywhere in the page text (payload hashes are not ids)', (await ev('document.body.textContent')).match(UUID)?.[0]);
     check(runs.length === 3 && [1, 2, 3].every((n) => runs.some((t) => t.includes(`(retired), run ${n}`))), '"Locked runs" lists all three locked runs, each marked retired', JSON.stringify(runs));
-    check(await ev(`document.body.textContent.includes('Q4m: hazard recognition reduces recordable injuries at this account.')`), 'the open hypothesis is still on the POV');
+    check(await ev(`document.body.textContent.includes('Verification fixture: the capability moves this outcome (S1 helper).')`), 'the open hypothesis is still on the POV');
     await shot('q4m_1_pov_retired');
   } else if (MODE === 'break-frozen') {
     check(await ev(`!(${wit}).querySelector('[data-testid=frozen]') && (${wit}).textContent.includes('belongs to a retired engagement')`),
@@ -191,8 +192,6 @@ if (MODE === 'main' && PHASE === 'before-lever') {
   check(await waitFor(`location.pathname === '/packs/manufacturing' && document.body.textContent.includes('Q4l TRIR (fixture)')`), '  ...the link opens the Manufacturing pack, showing the entry');
   await send('Page.navigate', { url: `${APP}/accounts/${INST}` });
   await waitFor(`!!${hyp} && !!${step('w9')}`);
-  // A form that names nothing of its own still explains itself (W9's retire form, untouched).
-  check(await ev(`${step('w9')}?.querySelector('[data-testid=form-unmet]')?.textContent === 'Fill in every required field to submit.'`), "a form with no list of its own (W9) still explains its disabled button");
   // The marker's kind starts unchosen.
   const ref = card('Reference example');
   await click(ref, 'Mark as a reference example…');
@@ -220,6 +219,7 @@ if (MODE === 'main' && PHASE === 'before-lever') {
   check(await waitFor(`(${hyp}).querySelector('[data-testid=notice-hyp]')?.textContent === 'Hypothesis stated. Its verdict is open until a verified actual exists on or after 2027-09-30.'`),
     'stated, and the card says so in a plain sentence');
   await markShot(hyp); await shot('q4l_2_hypothesis_stated', '[data-shot="1"]');
+} else if (MODE === 'main' && PHASE === 'runs') {
   // (2) The run list says what run 1 sealed; open the citation; produce run 2; lock it.
   const w7 = step('w7');
   check(await ev(`[...(${w7}).querySelectorAll('[data-testid=w7-sealed]')].some(l=>l.textContent.includes('AI-sourced, citation not opened') && l.textContent.includes('basis assumed'))`),
@@ -250,6 +250,9 @@ if (MODE === 'main' && PHASE === 'before-lever') {
   check(await waitFor(`(${w8}).textContent.includes('Run 2 locked')`), 'run 2 locked, and W8 names it');
   check(await waitFor(`[...(${w7}).querySelectorAll('[data-testid=w7-run]')].every(x=>x.dataset.locked==='true')`), '  ...both runs locked; "Produce a new run…" is offered again for a third');
   await markShot(w7); await shot('q4l_3_runs_sealed', '[data-shot="1"]');
+  // A form that names nothing of its own still explains itself (W9's retire form, untouched). S1: read here, once the
+  // runs are locked, since W9 waits for a locked run and run 1 now follows the hypothesis.
+  check(await ev(`${step('w9')}?.querySelector('[data-testid=form-unmet]')?.textContent === 'Fill in every required field to submit.'`), "a form with no list of its own (W9) still explains its disabled button");
 } else if (MODE === 'break-unmet') {
   const f = await openStateForm();
   await setField(f, 'Statement', 'Too short.');

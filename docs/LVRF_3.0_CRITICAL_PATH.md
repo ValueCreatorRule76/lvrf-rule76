@@ -165,6 +165,8 @@ cut line applied first.
   - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
     (P8, above). **Approved:** adding, changing or retiring an offering is a steward act with its own act row.
   - **Copy:** an ask on a percentage measure says "one point", not "one unit" (the Skillsoft CFO print, 15 Nov 2026). **Approved.**
+  - **Classify as… on an unclassified customer account** (the shared component S1 built), with the account frame.
+    Raised at S1's Gate A (Brad, 15 Nov 2026); not in S1. Until then a customer account is classified when it is created.
 - **3.1 build order (Brad, 15 Nov 2026).** Before the pilot starts on 4 Jan 2027: the case links and the copy fix; the
   hypothesis rule with the tenant's hypothesis path; in-app AI research; the printed case and POV brought into the CVAF
   family. During the pilot: the account frame, then the War Room, once mock-ups are approved. After: the solution

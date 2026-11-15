@@ -19,6 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 . scripts/lib/acts.sh
 . scripts/lib/raw_text.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -88,7 +89,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -154,6 +155,7 @@ F_PRI="$(rj b.fact_id)"
 FL='"evidence_kind":"public_filing","provenance":"Fixture 10-K FY2025 (not a source)","confidence":"medium","source_verified":false,"ai_sourced":false,"evidence_form":"locator","locator":{"document":"Fixture 10-K FY2025","table":"Consolidated statements of operations","row":"Net sales","column":"2025","value":3413.1,"scale":"millions"},"how_read":"Net sales for 2025 from the income statement, stated in millions."'
 expect POST "/api/institutions/$INST/facts" "{\"kind\":\"headcount\",\"value_numeric\":5200,\"unit\":\"people\",\"as_of\":\"2025-09-30\",$(FQ 'We employ about 5,200 people.' 'Headcount from the fixture 10-K, Item 1.')}" 201 "a headcount fact resting on a quote"
 F_HC="$(rj b.fact_id)"
+state_hypothesis "$ENG1" || bad "S1: no hypothesis stated on $ENG1"
 expect POST "/api/engagements/$ENG1/produce-run" '{"banner_title":"FORM CHECK","note":"Verification: a run sealed after 0039.","source_fixture":"form_check"}' 201 "a run produced after 0039"
 RUN="$(rj b.value_run_id)"
 expect POST "/api/value-runs/$RUN/lock" '{"lock_reason":"Verification: sealed with forms."}' 200 "  ...locked"

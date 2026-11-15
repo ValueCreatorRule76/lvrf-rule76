@@ -87,7 +87,8 @@ the **Packs** page:
 ## 1. Create and classify the account
 
 - [ ] **Accounts:** "Create account" (card 01). Give the name, what the customer says it does, and "Classify as" the
-      industry, with a note of why. An account can be created unclassified and classified later.
+      industry, with a note of why. **Classify a customer account when it is created:** no control classifies an existing
+      customer account yet (3.1, with the account frame; Brad, 15 Nov 2026).
 - [ ] **Mark it a reference example** if it is one ("Mark as a reference example…"; for a published-only account the kind
       is **outside-in test**). The kind starts unchosen, and a correction that changes nothing is refused.
 
@@ -136,6 +137,8 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 ## 7. Run and lock (workspace step 5)
 
 - [ ] **W7, Produce the run.** It seals the evidence, facts and case as they stand, the case chain included (§16, B2).
+      **A run needs a current hypothesis** (S1, R5-3.1a; LVRF_PLAN §20): until step 5 above has one, W7 says so and
+      points to "State a hypothesis…" in step 3, and produce-run refuses.
 - [ ] **W8, Lock the run**, with a reason. A locked run never changes. Corrections go beside it as errata.
 
 ## 8. The point of view (workspace step 6)

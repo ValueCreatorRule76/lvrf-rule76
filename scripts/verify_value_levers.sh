@@ -23,6 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 . scripts/lib/acts.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -202,6 +203,7 @@ expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_c
 expect POST "/api/institutions/$INST/value-outcomes" "{\"engagement_name\":\"Levers engagement\",\"engagement_owner_person_id\":\"$OWNER\",\"capability_name\":\"Levers capability\",\"metric\":{\"name\":\"Levers TRIR $TS\",\"unit\":\"incidents per 200,000 hours\",\"direction\":\"decrease\",\"source_system\":\"verification system of record\",\"owner_person_id\":\"$OWNER\"},\"baseline_value\":0,\"baseline_measured_at\":\"2026-09-30T00:00:00Z\"}" 201 "an outcome, baseline 0 (zero is data)"
 OUTC="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"
 expect POST "/api/value-outcomes/$OUTC/evidence" '{"kind":"public_filing","provenance":"Fixture disclosures, page 21 (not a source)","summary":"Baseline fixture","supports":"baseline","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":false,"simulated":false}' 201 "outcome evidence on a public filing"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"note":"Verification: O1 run one.","source_fixture":"verify_value_levers_1"}' 201 "produce run one"
 R1="$(rj b.value_run_id)"
 [ "$(q "SELECT payload->'entity'->>'legalName' || '|' || (payload->'entity'->>'identifier') || '|' || (payload->'entity'->>'basis') FROM value_runs WHERE id = '$R1'")" = "Levers Fixture Corp|0000000042|published" ] \
@@ -213,6 +215,7 @@ R1="$(rj b.value_run_id)"
 [ "$(rehash "id = '$R1'")" = "$R1 ok" ] && ok "  ...and the hash covers them: recomputed from the stored payload, it matches" || bad "  ...hash: $(rehash "id = '$R1'")"
 H1="$(q "SELECT payload_hash FROM value_runs WHERE id = '$R1'")"
 expect POST "/api/institutions/$INST/facts/$F_FILING/supersede" "$(FACT system 'Fixture HRIS (corrected)' public_filing ',"supersession_reason":"Verification: the filing named a different system."')" 201 "the filing fact is corrected after run one"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"note":"Verification: O1 run two.","source_fixture":"verify_value_levers_2"}' 201 "produce run two"
 R2="$(rj b.value_run_id)"
 [ "$(q "SELECT (payload->'institutionFacts')::text LIKE '%Fixture HRIS (corrected)%' AND (payload->'institutionFacts')::text NOT LIKE '%Fixture HRIS (filing)%' FROM value_runs WHERE id = '$R2'")" = "t" ] \
@@ -370,6 +373,7 @@ import sys; p = sys.argv[1]; s = open(p).read(); a = "        entity,\n        i
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, ""))
 PY
 stop_server; start_server
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"note":"Verification: B2.","source_fixture":"verify_value_levers_b2"}' 201 "B2: produce a run without the sealing"
 RB="$(rj b.value_run_id)"
 [ "$(q "SELECT (payload ? 'institutionFacts')::text || (payload ? 'entity')::text FROM value_runs WHERE id = '$RB'")" = "falsefalse" ] \

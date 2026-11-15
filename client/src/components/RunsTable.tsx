@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import type { RunListItem } from '../types/runsIndex';
 import { Card, Badge } from './workbench/Card';
+import { CaseLinks } from './valueCase/CaseLinks';
 
 const CONFIDENCE_TONE: Record<string, 'healthy' | 'watch' | 'critical'> = {
   high: 'healthy',
@@ -107,6 +108,8 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px] font-mono">
                   {r.run_number}
+                  {/* S1 (§20 item 3): the value case, both lenses, per row. */}
+                  <span className="block whitespace-nowrap font-sans text-[11px]" data-testid="runs-case-links"><CaseLinks runId={r.id} testid="runs-case-link" /></span>
                 </td>
                 <td className="border-b border-rule-soft px-3 py-[9px]">
                   <ProvenanceCell sourceFixture={r.source_fixture} />

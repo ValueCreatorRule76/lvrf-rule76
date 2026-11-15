@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/http';
 import { GovernedForm, FOCUS_RING } from './GovernedForm';
 import { shortId } from '../lib/shortId';
+import { CaseLinks } from './valueCase/CaseLinks';
 
 /**
  * Producing and locking a run: one component for the outside-in walk (W7's later runs, W8) and for the tenant's own
@@ -101,6 +102,7 @@ export function EngagementRuns({ engagementId, onChanged }: { engagementId: stri
             <li key={r.id} className="py-0.5 text-[12.5px] text-ink" data-testid="engagement-run" data-locked={r.locked_at ? 'true' : 'false'}>
               <Link to={`/runs/${r.id}`} className={'font-semibold text-gold-ink ' + FOCUS_RING}>Run {r.run_number}</Link>
               {' '}<span className="font-mono text-[11px] text-ink-45" data-testid="run-short-id">{shortId(r.id)}</span> · {r.locked_at ? `locked ${r.locked_at.slice(0, 10)}` : 'not locked'} · confidence {r.confidence_band ?? '—'}{r.confidence_score !== null ? ` ${r.confidence_score}` : ''}
+              {' · '}<span data-testid="engagement-run-case-links"><CaseLinks runId={r.id} testid="engagement-run-case-link" /></span>
             </li>))}
         </ul>)}
       {open ? (

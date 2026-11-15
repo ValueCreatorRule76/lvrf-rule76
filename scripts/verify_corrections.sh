@@ -36,6 +36,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -119,8 +120,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: the function as declared, 209 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: the function as declared, 210 triggers (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 seals() { q "SELECT string_agg(r.id || ':' || md5(r::text), ' ' ORDER BY r.run_number) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -137,7 +138,7 @@ HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | t
 printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0040_corrections and later)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 # (0040 orphaning nothing and leaving Scotts' runs byte-identical was proven at C1's Gate A, on a copy
@@ -230,11 +231,13 @@ expect POST "/api/business-metrics/$MET_W/pack-basis" "{\"industry_measure_id\":
 expect POST "/api/institutions/$INST_W/hypotheses" "{\"value_outcome_id\":\"$O_S\",\"value_lever_id\":\"$L_W\",\"statement\":\"Frontline hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 365, 'YYYY-MM-DD')")\",\"falsifier_conditions\":\"on the same denominator, among the covered population\"}" 201 "  ...a hypothesis on the outcome"
 expect POST "/api/value-outcomes/$O_S/evidence" "$(EVB public_filing 'other company filing' "$WRONG" baseline true)" 201 "  ...another company's filing linked as its baseline (the error), source-verified"
 EV_V="$(rj b.evidence_id)"
+state_hypothesis "$ENG_W" || bad "S1: no hypothesis stated on $ENG_W"
 expect POST "/api/engagements/$ENG_W/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run 1, the wrong link its only baseline.","source_fixture":"corrections"}' 201 "  ...run 1"
 R1="$(rj b.value_run_id)"
 expect POST "/api/value-runs/$R1/lock" '{"lock_reason":"Verification: run 1 sealed."}' 200 "  ...run 1 locked"
 expect POST "/api/value-outcomes/$O_S/evidence" "$(EVB public_filing 'own filing' 'TRIR FY25 own filing (fixture)' baseline true)" 201 "  ...the account's own filing, as the baseline too"
 EV_B="$(rj b.evidence_id)"
+state_hypothesis "$ENG_W" || bad "S1: no hypothesis stated on $ENG_W"
 expect POST "/api/engagements/$ENG_W/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run 2, both baseline items.","source_fixture":"corrections"}' 201 "  ...run 2"
 R2="$(rj b.value_run_id)"
 expect POST "/api/value-runs/$R2/lock" '{"lock_reason":"Verification: run 2 sealed."}' 200 "  ...run 2 locked"
@@ -295,6 +298,7 @@ expect GET "/api/institutions/$INST/walk" "" 200 "the walk"
   && ok "  ...the same: current impact_basis; withdrawn baseline" || bad "  ...walk"
 expect GET "/api/value-outcomes/$O_F/gaps" "" 200 "the gap register"
 GAPS="$(cat "$W/r.json")"
+state_hypothesis "$ENG_F" || bad "S1: no hypothesis stated on $ENG_F"
 expect POST "/api/engagements/$ENG_F/produce-run" '{"banner_title":"CORRECTION CHECK","note":"Verification: a run after a correction.","source_fixture":"corrections"}' 201 "a run produced after the correction"
 RF1="$(rj b.value_run_id)"
 [ "$(q "SELECT string_agg(x->>'supports', ',' ORDER BY x->>'supports') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RF1' AND x->>'summary' = 'TRIR FY25 (fixture)'")" = "impact_basis" ] \
@@ -430,6 +434,7 @@ step "12. C1-D2: the other legitimate acts on a retired engagement still succeed
 expect POST "/api/institutions/$INST/value-outcomes" "$(OUTB two "$OWNER")" 201 "a second fixture engagement and outcome"
 O_F3="$(rj b.value_outcome_id)"; ENG_F3="$(rj b.engagement_id)"
 expect POST "/api/value-outcomes/$O_F3/evidence" "$(EVB public_filing filing 'TRIR FY25 third (fixture)' baseline)" 201 "  ...its evidence"
+state_hypothesis "$ENG_F3" || bad "S1: no hypothesis stated on $ENG_F3"
 expect POST "/api/engagements/$ENG_F3/produce-run" '{"note":"Verification: retire after lock.","source_fixture":"corrections"}' 201 "  ...a run"
 expect POST "/api/value-runs/$(rj b.value_run_id)/lock" '{"lock_reason":"Verification: sealed before retirement."}' 200 "  ...locked"
 expect POST "/api/engagements/$ENG_F3/retire" '{"retirement_reason":"Verification: retired under section 26."}' 200 "engagement retirement, under the new guard"
@@ -494,6 +499,7 @@ edit "$PRODUCE" "        WHERE voe.value_outcome_id = \$1 AND voe.withdrawn_at I
 stop_server; start_server
 # §16: the account was marked a reference example after RF1 was produced, so RF1's case has moved and its lock is refused.
 expect POST "/api/value-runs/$RF1/lock" '{"lock_reason":"Verification: locked for B5."}' 422 "§16: RF1 not locked: the account's marker changed after it was produced" "the case changed after this run was produced"
+state_hypothesis "$ENG_F" || bad "S1: no hypothesis stated on $ENG_F"
 expect POST "/api/engagements/$ENG_F/produce-run" '{"note":"Verification: B5.","source_fixture":"corrections_b5"}' 201 "B5: a run with produce-run's filter removed"
 [ "$(q "SELECT string_agg(x->>'supports', ',' ORDER BY x->>'supports') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$(rj b.value_run_id)' AND x->>'summary' = 'TRIR FY25 (fixture)'")" = "baseline,impact_basis" ] \
   && ok "B5: caught — the run seals the withdrawn baseline link beside the current one; the filter is what keeps it out" || bad "B5: not caught"

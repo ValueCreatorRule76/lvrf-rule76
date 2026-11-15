@@ -375,6 +375,39 @@ const place = (target: Element | null | undefined, node: ReactNode) => (target ?
 
 export type { PovStatus };
 
+/**
+ * S1 (3.1; LVRF_PLAN §20 item 2, D1): the tenant's own account has no workspace (L33), so its hypothesis path sits on
+ * card 05, beside each engagement's runs: the hypotheses on that engagement's outcomes, and "State a hypothesis…",
+ * the same form and the same route (POST /api/institutions/:id/hypotheses) as the workspace's card 06. A run is
+ * refused while its outcome has none (R5-3.1a); this is where the tenant states one.
+ */
+export function EngagementHypotheses({ institutionId, engagementId, onChanged }: { institutionId: string; engagementId: string; onChanged?: () => void }) {
+  const [pov, setPov] = useState<Pov | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const load = useCallback(() => {
+    fetchPov(institutionId).then((r) => { if (r.status === 'ok') { setPov(r.pov); setError(null); } else setError(r.message); });
+  }, [institutionId]);
+  useEffect(() => { load(); }, [load]);
+  if (error) return <p className="m-0 text-[12px] text-critical">{error}</p>;
+  if (!pov) return <p className="m-0 text-[12px] text-ink-45">Reading the hypotheses…</p>;
+  const outcomes = pov.outcomes.filter((o) => o.engagement_id === engagementId);
+  const ids = new Set(outcomes.map((o) => o.id));
+  const hypotheses = pov.hypotheses.filter((h) => ids.has(h.value_outcome_id));
+  const said = (n?: string) => { if (n) setNotice(n); load(); onChanged?.(); };
+  return (
+    <div className="mt-1" data-testid="engagement-hypotheses" data-engagement={engagementId}>
+      <Notice text={notice} testId="notice-engagement-hyp" />
+      {hypotheses.length === 0
+        ? <p className="m-0 text-[12px] text-ink-45" data-testid="no-hypothesis">No hypothesis on this engagement&apos;s outcome yet; a run is produced only once one is stated.</p>
+        : <ul className="m-0 list-none p-0" data-testid="hypotheses">
+            {hypotheses.map((h) => <HypothesisItem key={h.id} h={h} outcome={outcomes.find((o) => o.id === h.value_outcome_id)} onChanged={said} />)}
+          </ul>}
+      <StateHypothesis pov={{ ...pov, outcomes }} onChanged={said} />
+    </div>
+  );
+}
+
 export function PovAuthoring({ institutionId, onStatus, targets, primary = null }: {
   institutionId: string;
   onStatus?: (s: PovStatus) => void;

@@ -19,6 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -116,8 +117,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -131,8 +132,8 @@ RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs
 RUNIDS0="$(q "SELECT string_agg(quote_literal(id::text), ',' ORDER BY id) FROM value_runs")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers: section 34 adds 5" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (320 + 8)" || bad "  ...rows"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1): section 34 adds 5" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "329" ] && ok "  ...329 information_schema rows (S1: +1) (320 + 8)" || bad "  ...rows"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 [ "$(q "SELECT count(*) FROM value_outcomes WHERE attribution_method IS NOT NULL OR measure_class IS NOT NULL")" = "0" ] && ok "  ...D1: every commitment made before B4 keeps no method or class" || bad "  ...a method was filled in"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
@@ -245,7 +246,7 @@ SQL
   [ "$FIX" = "FIXTURE" ] || { bad "the fixture: $FIX"; exit 1; }
   [ "$(q "SELECT realization || '|' || trim_scale(actual_value) || '|' || trim_scale(realized_currency_impact) || '|' || trim_scale(target_value) || '|' || (SELECT full_name FROM persons WHERE id = committed_by_person_id) || '|' || (SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$FOUT' AND supports = 'actual' AND withdrawn_at IS NULL) || '|' || (SELECT bool_and(simulated) FROM evidence WHERE id IN ('$FS1', '$FS2')) FROM value_outcomes WHERE id = '$FOUT'")" = "measured|100.4|8400000|100|[SIM] Customer Sponsor|2|true" ] \
     && ok "the fixture ${FOUT:0:8}: measured, actual 100.4, realized 8400000, target 100 by [SIM] Customer Sponsor, two simulated rows (${FS1:0:8}, ${FS2:0:8}) as its actual: f23ee6a8 before act 1" || bad "the fixture: $(q "SELECT realization, actual_value, target_value FROM value_outcomes WHERE id = '$FOUT'")"
-  [ "$(trig)" = "209" ] && ok "  ...every guard in force again: 209 triggers" || bad "  ...triggers: $(trig)"
+  [ "$(trig)" = "210" ] && ok "  ...every guard in force again: 210 triggers" || bad "  ...triggers: $(trig)"
   C1="${C1//f23ee6a8/${FOUT:0:8}}"; C2="${C2//f23ee6a8/${FOUT:0:8}}"; C3="${C3//2c10e091/${FS1:0:8}}"; C4="${C4//eea43d9a/${FS2:0:8}}"
   OUT="$FOUT"; SIM1="$FS1"; SIM2="$FS2"; export OUT SIM1 SIM2 C1 C2 C3 C4
 fi
@@ -285,6 +286,9 @@ grep -q "FAIL  card 05: the tenant's own engagement offers" "$W/m9.out" && ok "M
 FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/m9.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/m9.out" || true)))
 [ "$(q "SELECT count(*) FROM value_runs WHERE engagement_id = '$ENG' AND run_number >= $NEXT")" = "0" ] && ok "  ...and nothing was produced under the break" || bad "  ...a run was produced under M9"
 restore "$INSTPAGE"; sleep 4
+# S1 (§20, D4): run 3 seals the hypothesis it tests, so the fixture states one on f23ee6a8 first (the shared helper,
+# through the routes), before the act count is read: the helper's own acts are not acts 5-6.
+state_hypothesis "$ENG" && ok "S1: a fixture hypothesis on the outcome (${HYP_ID:0:8}) before act 5" || bad "S1: no hypothesis stated on $ENG"
 A0="$(q "SELECT count(*) FROM governance_acts")"
 cw runacts
 RS="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND run_number = $NEXT")"
@@ -360,7 +364,7 @@ CK() { q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = '$
 [ "$(q "SELECT ($(CK outcome_withdrawals_values_kept)) IS FALSE FROM (VALUES ('{}'::jsonb), ('[]'::jsonb), ('\"x\"'::jsonb)) v(withdrawn_values)" | sort -u)" = "t" ] && ok "  ...values_kept reads false on empty, array and scalar values" || bad "  ...values_kept: $(CK outcome_withdrawals_values_kept)"
 [ "$(q "SELECT ($(CK outcome_withdrawals_reason_stated)) IS FALSE FROM (VALUES (''::text), ('short'::text)) v(reason)" | sort -u)" = "t" ] && ok "  ...reason_stated reads false on an empty or short reason" || bad "  ...reason_stated"
 [ "$(q "SELECT ($(CK outcome_withdrawals_kind_known)) IS FALSE FROM (VALUES ('other'::text)) v(kind)")" = "t" ] && ok "  ...kind_known reads false on another kind" || bad "  ...kind_known"
-produce() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture spine_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
+produce() { state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"; expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture spine_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
 produce "$ENGK" "Verification: the control-group case."; RK="$RUN"
 RUN="$RK" LENS=general TAG=control EXPECT_ASKS=skip EXPECT_ATTRIBUTION="Attribution: a control group." EXPECT_FOOTNOTE="The quoted source does not state this figure (figure check:" HASH="$(q "SELECT payload_hash FROM value_runs WHERE id = '$RK'")" cw valuecase
 # The class rule, the committer ask, the falsifier, the not-shown line, and the unsourced claim.

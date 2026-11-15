@@ -20,6 +20,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -204,6 +205,7 @@ expect POST "/api/value-outcomes/$OUT_API/evidence" "$(EVB public_filing 'Q4k pe
 EV_PLAIN="$(rj b.evidence_id)"
 expect POST "/api/institutions/$INST_API/facts" '{"kind":"system","value_text":"Q4k fact system","as_of":"2026-09-30","evidence_kind":"public_filing","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","provenance":"Verification fixture, not a source","ai_sourced":true,"research_query":"q","research_tool":"t"}' 201 "an AI-sourced account fact (its evidence is research's)"
 EV_FACT="$(q "SELECT evidence_id FROM institution_facts WHERE institution_id = '$INST_API' AND value_text = 'Q4k fact system'")"
+state_hypothesis "$ENG_API" || bad "S1: no hypothesis stated on $ENG_API"
 expect POST "/api/engagements/$ENG_API/produce-run" '{"note":"Verification: Q4k run one, before the citation is opened.","source_fixture":"verify_q4k_1"}' 201 "run one, before the citation is opened"
 R1="$(rj b.value_run_id)"
 expect POST "/api/value-runs/$R1/lock" '{"lock_reason":"Verification: locked before the opening."}' 200 "  ...locked"
@@ -231,6 +233,7 @@ sqlrefused "un-marking AI origin (before any opening, on the other tenant's row)
 [ "$(q "SELECT payload_hash FROM value_runs WHERE id = '$R1'")" = "$H1" ] && [ "$(q "SELECT (e->>'citation_resolved') || '|' || (e->>'basis') FROM value_runs, jsonb_array_elements(payload->'evidence') e WHERE id = '$R1' AND e->>'summary' = 'Q4k AI baseline (fixture)'")" = "false|assumed" ] \
   && ! (DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>/dev/null || true) | grep -qF "MISMATCH $R1" \
   && ok "the LOCKED run one is unchanged: same hash, still 'not opened, assumed', and it recomputes to its hash" || bad "run one changed"
+state_hypothesis "$ENG_API" || bad "S1: no hypothesis stated on $ENG_API"
 expect POST "/api/engagements/$ENG_API/produce-run" '{"note":"Verification: Q4k run two, after the opening.","source_fixture":"verify_q4k_2"}' 201 "run two, after the opening"
 R2="$(rj b.value_run_id)"
 [ "$(q "SELECT (e->>'citation_resolved') || '|' || (e->>'source_verified') || '|' || (e->>'basis') FROM value_runs, jsonb_array_elements(payload->'evidence') e WHERE id = '$R2' AND e->>'summary' = 'Q4k AI baseline (fixture)'")" = "true|true|published" ] \

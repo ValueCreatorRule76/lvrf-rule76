@@ -20,6 +20,7 @@ import { CompareCard, type EarlierRuns } from './CompareCard';
 import { ConfidenceInstrument } from './ConfidenceInstrument';
 import { shortId } from '../../lib/shortId';
 import { CaseSealed } from '../snapshots/CaseSealed';
+import { CaseLinks } from '../valueCase/CaseLinks';
 
 /**
  * UX-1 slice 4: the run page (DESIGN_SPEC §9, LVRF_PLAN §7g; mock-up
@@ -628,6 +629,8 @@ export function Workbench({ run, account, onChanged }: { run: Run; account: Acco
                   <p className="m-0 text-[13px] text-ink-70" data-testid="run-subject">
                     {p.engagement}{run.engagement_retired ? ' (retired)' : ''} · {p.capability} · {businessMetricName(bm)}{direction}
                   </p>
+                  {/* S1 (§20 item 3): the value case, both lenses, from the run's header. */}
+                  <p className="m-0 text-[12px] print:hidden" data-testid="run-case-links"><CaseLinks runId={run.id} testid="run-case-link" /></p>
                 </div>
                 <div className="min-w-[220px] border border-ink bg-white px-4 py-3" data-testid="confidence">
                   <span className={KICKER}>Computed confidence</span>

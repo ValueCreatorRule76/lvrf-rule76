@@ -26,6 +26,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -122,8 +123,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -138,8 +139,8 @@ RD0="$(q "SELECT count(*) || '|' || coalesce(string_agg(DISTINCT kind, ','), '')
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > "$W/own.log" 2>&1 && ok "ownership.sql" || bad "ownership: $(grep -m2 ERROR "$W/own.log")"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5): section 33 adds 18" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5): section 33 adds 18" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "329" ] && ok "  ...329 information_schema rows (S1: +1) (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: the migrations and section 33 write nothing to a run" || bad "  ...a run changed"
 # Gate A, 14 Nov 2026: a copy taken after B3 holds print requests too (Brad's act 7, 6 Nov); the migrations change no kind.
 [ "$(q "SELECT count(*) || '|' || coalesce(string_agg(DISTINCT kind, ','), '') || '|' || md5(coalesce(string_agg(id::text || ':' || kind, ',' ORDER BY id), '')) FROM record_documents")" = "$RD0" ] \
@@ -189,7 +190,7 @@ COMMIT;
 SQL
 )"
   case "$FIX" in "FIXTURE "*) ok "a fixture tenant on the clone, D, N and the CFO lens unset: its steward, the manufacturing pack (${FIX#FIXTURE }: measures, accepted results, offerings)" ;; *) bad "the fixture tenant: $FIX"; exit 1 ;; esac
-  [ "$(trig)" = "209" ] && ok "  ...every guard in force again: 209 triggers" || bad "  ...triggers: $(trig)"
+  [ "$(trig)" = "210" ] && ok "  ...every guard in force again: 210 triggers" || bad "  ...triggers: $(trig)"
   [ "$(q "SELECT count(*) FROM policy_values WHERE tenant_id = '$TEN'")|$(q "SELECT count(*) FROM lens_policies WHERE tenant_id = '$TEN'")" = "0|0" ] && ok "  ...no policy value and no lens on the fixture tenant" || bad "  ...fixture tenant policies"
 fi
 S_EMAIL="$(q "SELECT email FROM persons WHERE id = '$S'")"
@@ -224,7 +225,7 @@ EVB() {  # KIND SUMMARY SUPPORTS [ATTESTER]
 COND="on the same denominator, among the covered population"
 HB() { J value_outcome_id "$1" value_lever_id "$2" statement "$3" falsifier_reference baseline falsifier_due "$LATER" falsifier_conditions "$COND"; }
 LV() { J name "$1" mechanism 'EHS procedural training improves observed safe-work behaviour (fixture).' leading_indicator 'Share of safety observations rated safe' citation 'Verification citation, not a source.'; }
-produce() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture value_case_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
+produce() { state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"; expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture value_case_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
 lock() { expect POST "/api/value-runs/$1/lock" "$(J lock_reason 'Verification: sealed for the value case.')" 200 "  ...locked"; }
 
 acct "B3 client-stated account"; INSTA="$INST"; OWNA="$OWNER"; FINA="$FIN"

@@ -21,6 +21,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -102,8 +103,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -130,8 +131,8 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0046
 POST="$([ "$(q "SELECT count(*) FROM evidence WHERE about_institution_id IS NULL AND about_other_party IS NULL")" = "0" ] && echo 1 || true)"
 [ -n "$POST" ] && ok "(a copy taken after L41's acts: the pre-act blocks read the state Gate C recorded)" || ok "(a copy taken before L41's acts: every block as written)"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (281 + 3)" || bad "  ...rows"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "329" ] && ok "  ...329 information_schema rows (S1: +1) (B4: +8) (B3: +32) (281 + 3)" || bad "  ...rows"
 if [ -z "$POST" ]; then
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations, newest 0050_b4_findings_lens" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
@@ -182,7 +183,7 @@ outcome() {  # NAME OWNER BASELINE -> O, ENG, MET
   expect POST "/api/institutions/$INST/value-outcomes" "$(J engagement_name "L41 engagement $1" engagement_owner_person_id "$2" capability_name 'L41 capability' metric "$(J name "L41 days to productivity $1" unit days direction decrease source_system "$SRCSYS" owner_person_id "$2")" baseline_value "$3" baseline_measured_at 2023-06-30T00:00:00Z)" 201 "outcome $1, baseline $3"
   O="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"; MET="$(rj b.business_metric_id)"
 }
-seal() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'VALIDATED BASELINE' note "$2" source_fixture l41_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; expect POST "/api/value-runs/$RUN/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"; }
+seal() { state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"; expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'VALIDATED BASELINE' note "$2" source_fixture l41_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; expect POST "/api/value-runs/$RUN/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"; }
 Q='"evidence_form":"quote","quote_text":"Named in the fixture document as stated here.","how_read":"Read from the fixture document, page one (fixture)."'
 FORMQ() { J evidence_form quote quote_text 'Named in the fixture document as stated here.' how_read 'Read from the fixture document, page one (fixture).'; }
 acct "L41 account (fixture)" "[$(J full_name 'L41 owner (fixture)' email "owner.$TS@l41.example" title Owner)]"; INSTA="$INST"; OWNER="$P0"; ACCTA="$ACCT"
@@ -391,6 +392,7 @@ done
 CURIA_INST="$CURIA" cw fourlinked
 CZO="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id::text LIKE '9765335f%'")"
 CZE="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$CZO'")"
+state_hypothesis "$CZE" || bad "S1: no hypothesis stated on $CZE"
 expect POST "/api/engagements/$CZE/produce-run" "$(J banner_title 'L41 V3' note 'Verification: sealed with a row verified and unopened.' source_fixture l41_fixture)" 201 "a run while a row is verified and unopened"; RV="$(rj b.value_run_id)"
 [ "$(q "SELECT x->>'verified_unopened' FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RV' AND x->>'evidence_id' LIKE '9765335f%'")" = "true" ] && ok "condition 3: the v3 seal carries \"verified without the source being opened\" beside it" || bad "condition 3"
 [ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RV'")" = "5" ] && ok "  ...payloadVersion 5 (B3; §16: v3's keys, and the case)" || bad "  ...version"
@@ -437,6 +439,7 @@ expect POST "/api/evidence/$LG/withdraw-verification" "$(J reason 'Verification:
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: nothing to withdraw.')" 409 "  ...on a row not verified: refused" "not verified"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: not the steward.')" 403 "  ...not the steward: refused" "" "$X"
 CZE="$(q "SELECT g.id FROM engagements g WHERE g.institution_id = '$SELF_INST' AND g.deleted_at IS NULL ORDER BY g.created_at LIMIT 1")"
+state_hypothesis "$CZE" || bad "S1: no hypothesis stated on $CZE"
 expect POST "/api/engagements/$CZE/produce-run" "$(J banner_title 'L41 V3' note 'Verification: sealed after the acts.' source_fixture l41_fixture)" 201 "a run on the tenant's own engagement"; RV="$(rj b.value_run_id)"
 [ "$(q "SELECT payload->>'payloadVersion' FROM value_runs WHERE id = '$RV'")|$(q "SELECT count(*) FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RV' AND x->>'verified_unopened' = 'true'")" = "5|0" ] && ok "  ...payloadVersion 5 (B3; §16), and no item sealed verified unopened" || bad "  ...seal"
 

@@ -14132,3 +14132,242 @@ reason as written.
   Brad, **TOC 908** as expected: 905 + 3 for 0050's FK, function and partial index; errata are rows, not TOC entries.
 
 **B4 findings lens closed: Gate C clean.** `lvrf_rehearse0050` can go.
+
+### S1: a hypothesis sealed with every run; the case links; "one point" — Gate A, 15 Nov 2026 (UTC)
+
+LVRF_PLAN §20, approved by Brad 15 Nov 2026 with D1–D4 as recommended; R5-3.1a and R5-3.1e. Branch
+`s1-hypothesis-rule` from `59a72f2`. **Not merged, not deployed.** Nothing was written to prod, and nothing went to main.
+
+**What it builds.**
+- **The rule, in two halves.** `produceRun.ts` refuses a run while the outcome has no current hypothesis (not withdrawn,
+  not superseded). It answers 409, records a route refusal, and says: `{metric} (outcome {short id}) has no current
+  hypothesis, and a run seals the hypothesis it tests. State a hypothesis… on this outcome first, then produce the run.
+  Runs already sealed are unchanged.`
+  - **The database half** is `hardening.sql` section 35, `value_runs_hypothesis_current` (BEFORE INSERT only), reading
+    `payload->>'valueOutcomeId'`. A run naming no outcome, or one that is not an id, is refused too (no NULL hole).
+  - **No migration** (journal 51); D3: the case chain already seals every hypothesis with its verdict, so no column.
+  - **Counts:** 210 triggers (+1), 329 `information_schema` rows (+1), CHECKs unchanged at 131.
+- **The helper** `scripts/lib/hypothesis.sh` (D4). `state_hypothesis ENGAGEMENT` builds what the chain lacks through the
+  routes, as the steward, then states the hypothesis. It is a no-op when one is current, and it never names a steward.
+  - **Used by** the 21 producing scripts, before each produce, and by the outside-in walk before W7.
+  - **Fixture rows:** a fixture pack entry, when needed, is named after the metric, never an id. A printed case shows no
+    short id.
+- **The value case under both lenses** ("Value case · under the CFO lens", the Workbench's markup as one `CaseLinks`):
+  the run page's header, every row of the Runs list, and each run on the tenant's own account (card 05).
+- **"one point"** (D2): the no_rate ask and question, and the rate form, read "one point of {metric}" for a percentage
+  unit, "one {unit} of {metric}" otherwise. `oneStep()` lives in `caseQuestions.ts` only; the case read carries it as
+  `outcomes[].one`, so the page does not restate the rule. Composed at render: no sealed run changes.
+- **The tenant's own account** (D1; Brad's ruling 2, 15 Nov 2026):
+  - **Card 04b, "What its value case rests on":** "Classify as…" (the create form's classify fields, now one
+    `ClassifyFields`, and the existing route), the capability's claim (W3) and the metric's pack basis (W5). The last
+    two are the walk's own forms, moved unchanged into `ClaimForm` and `PackBasisForm`, which the walk now uses too.
+  - **Card 05** gains "State a hypothesis…" per engagement: the workspace's form and route.
+  - **The intake card** now says the account "is classified only to carry its own value case… never to be read as one
+    of the tenant's customers" (it said "it never will be").
+  - **The pack-basis badge** reads "Pack basis" when the tenant's metric has one (it always read "Not applicable").
+- **The customer workspace** (Brad's ruling 1): W7 and W8 already render in step 5, after "State a hypothesis…" (step 3)
+  and the summary (step 4), as the checklist orders them. The walk read now reports each outcome's
+  `current_hypotheses`. With none, W7 says so ("A run seals the hypothesis it tests…") and offers "State a hypothesis…
+  in step 3", which opens that step, instead of a Produce that would 409. W7 reads again when step 3's hypotheses change.
+
+**Gate A, on clones of the 14 Nov copy (`lvrf_prodcopy`).**
+- **Build, tsc (server and client), oxlint:** 0 errors. Every file's warning count matches main, except React rules the
+  temporary main worktree did not load, on files S1 does not touch: S1 adds no warning.
+- **Full regression, 50 scripts:** 49 n/0, and `steward_safety` 30/1. My "Classify as…" confirmation named no short id.
+  It now reads `Classify this account (9c1f41f3) as …`, and `steward_safety` re-ran 31/0.
+  - **Re-run after that fix and the fixture change:** `s1_hypothesis_rule` 184/0, `accounts_home` 63/0,
+    `account_workbench` 28/0, `account_research` 160/0.
+  - **Scripts brought to the rule** (no check weakened). Every producer now states a hypothesis first.
+    - `walk_runs` is reordered: leverless checks, the lever, then the hypothesis through the page, then runs 1 and 2. Its
+      W9 check is read once the runs are locked, and its retire check counts the one hypothesis run 3 sealed.
+    - `case_snapshot`'s "no pack entry still seals" is now its refusal: 409, nothing sealed. The chain still reads
+      pack_entry null.
+    - `commit_measure_verify` states the hypothesis before the act count.
+    - `drift` and `hygiene` name their dev clone tenant's first staff member steward, on the clone only.
+    - `tenant_scope` compares its restore with its own backup, not `git diff`, which fails while the branch has
+      uncommitted edits.
+  - **No break was left in place:** every file's SHA-256 matched after the run, and no clone was left.
+- **`verify_s1_hypothesis_rule.sh` (new), 184/0.** Each break is caught, each with a positive control:
+  - H1, the route check removed: the trigger refuses (422, its own sentence, the refusal recorded with its constraint).
+  - H2, the trigger dropped: the route refuses (409), and a SQL insert lands. Restored, the insert is refused.
+  - H3, a withdrawn hypothesis counted as current (both halves): a run lands. Restored, refused.
+  - H4, a superseded hypothesis counted as current (both halves): a run lands. Restored, refused.
+  - H5, the case links dropped from the run page header: caught on the page.
+  - H6, a percentage ask reading "unit": caught in the case read and on the page.
+  - H7, W7 rendered before the hypothesis step: caught by document order.
+  - H8, the tenant's badge back to "Not applicable" whatever its basis: caught on the page.
+  - **Also:** NULL inputs to the trigger (no outcome, null, not an id). A post hoc hypothesis satisfies the rule and is
+    sealed marked post hoc.
+  - **Every one of the copy's 26 sealed runs is byte-identical** after section 35 installs and at the end.
+    `check_run_hashes` matches all 27 (26 + run 3), recompute and embedded. Drift none (journal 51, newest 0050), 131
+    CHECKs each with a plain sentence, ownership clean.
+- **D1 rehearsed end to end through the page,** as the steward by session, none by route:
+  - Add the industry; generate the prompt; parse a response; accept the DRR entry (prod's exact text, below).
+  - Propose its lever; "Classify as…"; the claim; the pack basis.
+  - Card 05 refuses a run before the hypothesis, in words.
+  - "State a hypothesis…" on `f23ee6a8`: reference 98 (the published baseline), not post hoc. Its preview: `Dollar
+    Retention Rate (trailing twelve months) at or below its baseline of 98 % (recorded 30 Apr 2026) by {due}, provided
+    that: on the trailing twelve months, as Skillsoft reports it.`
+  - Produce and lock run 3; open its case under the CFO lens from the run header; print.
+  - **The print:** 2 pages, each with the disclosure banner and run 3's `payload_hash`, and the ask reads "one point of
+    Dollar Retention Rate".
+  - **Screens** in `~/lvrf-backups/l41-screens/s1/verify_s1_hypothesis_rule/`: `s1_d1_1…8_*`, `s1_d1_c0…c3_*`,
+    `s1_d1_metric_pack_basis_1280`, `s1_w7_needs_hypothesis_1280`, `s1_run_header_links_{1280,390}`,
+    `s1_runs_list_links_1280`, `s1_tenant_card05_links_1280`, `s1_case_ask_pct_1280`, `s1_case_rate_form_pct_1280`,
+    and `s1_d1_case_cfo.pdf`.
+- **Equivalence against the deployed `cd38210`** (`scripts/equivalence_gets.sh`, the 14 Nov snapshot):
+  - **214 GETs, every deployed GET route:** 159 identical. `/api/errata/misstated-findings` was compared by hand, which
+    the path list does not instantiate: identical, 41 on 25.
+  - **55 differ, every one by a named allowance,** none unexplained:
+    - 52 case reads add `outcomes[].one`; 2 of them, Skillsoft run 2 under both lenses, also read "one point of"
+      for "one unit of".
+    - 3 walk reads add `outcomes[].current_hypotheses`.
+  - **The 10 non-200 answers** (5 × 404, 2 × 409, 3 × 422) are the same status on both sides.
+- **Backup TOC, from real dumps.** The 14 Nov copy reads 906; after S1's ownership and hardening, 908 (+2: the function
+  `lvrf_run_hypothesis_current` and the trigger `value_runs_hypothesis_current`, nothing else).
+  - **The box's own dump** (`~/lvrf-post-b4lens-20261115T032612Z.dump`, read on the box) is 908, two more than the
+    copy: the two `vector` entries the copy filters out.
+  - **Prod's live catalog,** read tonight after Brad's acts, matches that dump object type by object type: 53 tables,
+    93 indexes, 86 functions, 209 triggers, 70 constraints, 228 FKs, 34 types, 3 sequences. Rows add no TOC entry.
+  - **So the pre-S1 backup expects 908, and 910 after hardening.** The nightly backups in `/var/backups/lvrf` are root
+    only, and were not read.
+- **Bundle:** `index-_cp4PhOt.js` / `index-BpSO_jig.css`.
+
+**Brad's acts on prod tonight, before S1 (read read-only on the box, 15 Nov 2026, UTC).** All through the live
+routes the page uses, all by Brad Piver:
+
+| Time | Act | Act id | Subject → result | Reason or note |
+|---|---|---|---|---|
+| 06:40:16 | `add_industry` | `2d98ec77` | industry `1f4b59f0` Learning platforms (`learning-platforms`) | `Skillsoft's own account needs a pack entry for its renewal measure, so its value case can seal a hypothesis (LVRF_PLAN §20, D1).` |
+| 06:40:23 | (prompt) | — | prompt `3ed981a1`, industry_measure, contract v4, template v2, SHA-256 `f35c6a13…` | — |
+| 06:45:10 | `import` | `4f2658cd` | import `c0fd8e78`, 25,987 bytes, SHA-256 `2ec12771…`: **nine** results, research tool "Claude Opus 5.5 (claude-opus-5-5), using the WebSearch tool in standard mode" | — |
+| 06:48:41 | `accept` | `358db8af` | `253bf88f` Active Members → entry `0795acc2` | note A (below) |
+| 06:48:54 | `accept` | `70e0d0ef` | `65693a49` Course completion rate → `e15c4a21` | note A |
+| 06:49:07 | `accept` | `17a829ad` | `1fcdc2c9` Course development cycle time → `dd1d688b` | note A |
+| 06:53:17 | `accept` | `ce8921a7` | `4370acbb` Enterprise net (dollar) retention rate → **`2bd87345`** (%, increase, proposed, v1) | note B |
+
+- **Note A, as stored, on three rows:** `Accepted as proposed. Dollar retention rate as Skillsoft's Q2 FY2027 release
+  defines it (8-K Ex. 99.1, 9 Sep 2026): subscription renewals, upgrades, churn and downgrades over the beginning
+  renewable base. Citation opened and read; higher is better; percent. Stays proposed until two institutions' systems
+  of record (N = 2).`
+- **Note B, as stored:** `Accepted as proposed, for Skillsoft's own value case. Skillsoft's DRR is a variant: renewals,
+  upgrades, churn and downgrades over the beginning renewable base (8-K Ex. 99.1, 9 Sep 2026), not cohort ARR. State
+  the basis; never compare rates across vendors. Udemy's 93% (2025) found in its 10-K; Coursera's figure not yet opened,
+  and its definition changed after the May 2026 Udemy combination. The dollar-per-point figures are the research's own
+  arithmetic: do not quote them. Stays proposed until two institutions' systems of record (N = 2).`
+- **Pending (five):**
+  - `7050f7f5` Enterprise licence (seat) activation rate
+  - `cbd03a2d` First contact resolution (learner and customer support)
+  - `c373f899` Online degree student retention (term-to-term persistence)
+  - `58545dfc` Paid subscriber penetration (consumer)
+  - `1073de9a` Student withdrawal rate (online K-12 / virtual schools)
+- **No exclusions. No lever.** Skillsoft (`9c1f41f3`) is unclassified, with no claim, no pack basis and no hypothesis,
+  and runs 1 (`88f6a6e1`) and 2 (`98a71a82`) only.
+- **Every governance act since the B4-lens Gate C (02:56:28 UTC)** is the six above. 221 acts in all; the 41
+  misstated-finding errata are B4's, before it. No refusal since. 51 migrations and 209 triggers, unchanged.
+- **Found, for Brad's ruling (not changed):**
+  - **Note A describes another measure.** It describes Skillsoft's DRR, but sits on the Active Members, Course
+    completion rate and Course development cycle time accepts. A review decision is final, so it stays on the record
+    as stored.
+  - **There is no evidence row for the Q2 FY2027 release** (8-K, 9 Sep 2026) that both notes cite. The only opened DRR
+    row on Skillsoft's account is `9a36e675` (Q1 FY2027 release, 9 Jun 2026: "LTM DRR of 98%"), and the [SIM] row
+    `eea43d9a` still says Q2 FY2027 "does not exist". A lever's citation names an opened row (checklist §0), so the
+    act session cites `9a36e675`, unless the Q2 release is recorded and opened on card 01c first.
+  - **The entry's definition is cohort ARR** (Coursera and Udemy), while Skillsoft's DRR is a renewable-base variant,
+    as note B says. The pack-basis note below states Skillsoft's basis.
+- **"Why it pays" renders only on the industry pack page.** The case, the POV and the run page do not render it. The
+  sealed case chain carries the entry's name, unit, direction, definition, confounders, status and version;
+  why-it-pays enters only its SHA-256 fingerprint.
+- **The rehearsal uses prod's exact entry text** (`scripts/fixtures/s1_drr_entry_prod.json`, read read-only from
+  `2bd87345`). It asserts the stored text holds $2.5M and $5.4M (the control). Run 3's print, its case read under both
+  lenses, and its seal carry neither.
+
+#### Gate B (not run; Brad's)
+
+1. **Merge** `s1-hypothesis-rule` into main and push (Brad's call).
+2. **On the box, back up before hardening** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s1-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   The last line **expects 908.** Stop if it differs.
+3. **Migrate (nothing to apply; journal 51), then ownership, then hardening (section 35):**
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_s1.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_s1.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+   ```
+   Expect the migrate to apply nothing, `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **210** triggers.
+4. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle `index-_cp4PhOt.js` / `index-BpSO_jig.css`,
+   steps 5b, 5c and 5d passed, health 200 and fail-closed.
+
+**Brad's act session (rule 10: the steward's, through the page), from tonight's state.** Already done: the industry
+`1f4b59f0`, the prompt `3ed981a1`, and **the DRR entry `2bd87345`, accepted.** That entry is the one the lever names and
+the claim and the pack basis rest on. Each text below is a draft for Brad to type or change; ids the act creates are
+named when the page shows them.
+
+1. **The lever.** Packs → Learning platforms → "Enterprise net (dollar) retention rate" → "Add a lever…".
+   - Lever name `Value-based renewal execution`.
+   - Mechanism `Account teams who evidence realized value at renewal retain and expand more recurring revenue.`
+   - Leading indicator `Renewals entered with a verified value case`.
+   - Citation `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened)`.
+   - **Confirmation:** `Propose the lever “Value-based renewal execution” on Enterprise net (dollar) retention rate
+     (2bd87345), citing: “…”. A steward's proposal reads ratified.`
+2. **Classify Skillsoft.** Skillsoft (`9c1f41f3`) → card 04b "What its value case rests on" → "Classify as…".
+   - Classify as `Learning platforms`.
+   - Why `Classified only to carry its own value case; its renewal measure rests on this pack (S1, D1).`
+   - **Confirmation:** `Classify this account (9c1f41f3) as Learning platforms (learning-platforms), because: “…”.
+     Final: a wrong classification is corrected by superseding the account.`
+3. **The capability's claim.** The same card, "The capability's claim on a pack entry".
+   - Capability `Value-based renewal execution` (`aa5e3977`).
+   - Pack entry `Enterprise net (dollar) retention rate` (`2bd87345`); the entry's confounders show first.
+   - Claim `Value-based renewal execution moves dollar retention: renewals entered with a verified value case are kept
+     and expanded more often.`
+   - "Record the claim" (no confirmation step: the walk's W3 form).
+4. **The metric's pack basis.** The same card: `Dollar Retention Rate (trailing twelve months)` (metric `e7edeaae`)
+   → `Enterprise net (dollar) retention rate`.
+   - Basis note `Skillsoft's LTM DRR is a variant of this measure: renewals, upgrades, churn and downgrades over the
+     beginning renewable base, not cohort ARR (8-K Ex. 99.1). Its basis is stated; it is not compared across vendors.`
+   - "Set the basis". The badge then reads "Pack basis".
+5. **The hypothesis.** Card 05 → "Customer Zero — Value-Based Renewal Capability" (`e1e2e370`) → "State a hypothesis…".
+   - Outcome `f23ee6a8`; lever, the one from act 1.
+   - Statement `Value-based renewal execution holds Skillsoft dollar retention above its published baseline.`
+   - Measured against: its recorded baseline (98 %, recorded 30 Apr 2026).
+   - Due: Brad's choice; a date after the release that reports LTM DRR at 30 Apr 2027.
+   - Conditions `on the trailing twelve months, as Skillsoft reports it`.
+   - "State the hypothesis". The preview reads `… at or below its baseline of 98 % (recorded 30 Apr 2026) by {due},
+     provided that: on the trailing twelve months, as Skillsoft reports it.`
+6. **Produce run 3** on card 05.
+   - Banner `OUTSIDE-IN HYPOTHESIS`.
+   - Note `Skillsoft's own case with its hypothesis: the published DRR baseline of 98%, no committed target, no measured
+     actual.`
+   - Run source label `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun 2026)`.
+   - "Produce run 3".
+7. **Lock run 3:** `Skillsoft's own case with the hypothesis it tests, locked as the record its value case and its print
+   are read from.` → "Lock run 3".
+8. **Print the case under the CFO lens:** run 3's page header → "under the CFO lens" → print.
+
+Left as they are: the five pending results, and note A on the three earlier accepts, both for Brad's ruling.
+
+**Gate C (read-only, after the acts), and the stage-10 check on run 3's print.**
+- 51 migrations; drift none; 131 CHECKs, each with a plain sentence; **210** triggers; ownership clean.
+- One lever on `2bd87345`, Brad's, citing `9a36e675`. Skillsoft classified `learning-platforms`, with one claim
+  (`aa5e3977` → `2bd87345`) and its metric on `2bd87345`.
+- One current hypothesis on `f23ee6a8`, Brad's: reference `baseline`, value 98, not post hoc.
+- Run 3 locked, sealing that hypothesis and `pack_entry.id = 2bd87345`. `check_run_hashes` 27/27, and the 26 earlier
+  runs byte-identical to the 14 Nov snapshot.
+- Acts: +7 (lever, classify, claim, pack basis, hypothesis, run 3's lock; producing writes none). No refusal except
+  any Brad met, and no actorless audit row.
+- **Stage 10 on run 3's print,** every page:
+  - The disclosure banner and run 3's `payload_hash` on every page.
+  - "one point of Dollar Retention Rate" where the rate is asked.
+  - **Not printed: the entry's why-it-pays, or its dollar-per-point figures `$2.5M` and `$5.4M`** (the research's own
+    arithmetic, note B). Gate A shows the case does not render that text at all; check the printed PDF's text for
+    "2.5M", "5.4M" and "one point of net retention".
+  - No short id or row code except the hash.
+
+**Left as found:** about 20 vite servers from the regression's scripts are still listening on 51xx–52xx ports. They
+leak because the scripts kill a subshell's pid (the 3.1 item). They are not stopped here: stopping them by PID needs
+Brad's approval.

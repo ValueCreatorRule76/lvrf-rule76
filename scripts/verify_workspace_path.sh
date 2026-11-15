@@ -17,6 +17,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -184,6 +185,7 @@ look mid '{"statuses":["done","done","now","wait","wait","wait"],"now":3,"primar
 step "5. State: locked (hypothesis, summary, run 1 produced and locked): the point of view is next"
 expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\",\"value_lever_id\":\"$(q "SELECT id FROM value_levers WHERE name = 'UX1 lever'")\",\"statement\":\"UX1: hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"on the same denominator\"}" 201 "the hypothesis"
 expect POST "/api/institutions/$INST/executive-summaries" '{"lens":"general","body":"UX1: a summary written by a named person, long enough for the CHECK.","drafted_with_ai":false}' 201 "the summary"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run one.","source_fixture":"ux1_run_1"}' 201 "run 1"
 expect POST "/api/value-runs/$(rj b.value_run_id)/lock" '{"lock_reason":"Verification: locked for the workspace check."}' 200 "run 1 locked"
 expect POST "/api/institutions/$INST/reference-example" '{"kind":"outside_in_test","source_citation":"UX1 published disclosures (fixture) https://example.com/ux1-long-citation/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-cccccccccccccccccccccccccccccc/report-2025-annual-disclosures.pdf","note":"Verification: an outside-in test of published material."}' 201 "(the steward marks it an outside-in test)"

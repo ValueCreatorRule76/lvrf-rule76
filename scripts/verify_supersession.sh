@@ -23,6 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -105,8 +106,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -126,7 +127,7 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18; before:: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
 
 step "3. Fixtures and the server"
 TS="$(date +%s)"
@@ -419,6 +420,7 @@ OC9="$(q "SELECT value_outcome_id FROM value_outcome_evidence WHERE evidence_id 
 # Gate A, 14 Nov 2026: with no live link on N9 there is no outcome to seal; say so and stop cleanly, never an empty id.
 [ -n "$OC9" ] || { bad "N9 (${N9:0:8}, R9's successor) holds no live link: the baseline did not move, so there is no outcome to seal after the move"; exit 1; }
 ENG9="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$OC9'")"
+state_hypothesis "$ENG9" || bad "S1: no hypothesis stated on $ENG9"
 expect POST "/api/engagements/$ENG9/produce-run" "$(J banner_title 'L52 V3' note 'Verification: sealed after the move.' source_fixture l52_fixture)" 201 "a run after the move"
 RUNN="$(rj b.value_run_id)"
 [ "$(q "SELECT count(*) FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RUNN' AND x->>'evidence_id' = '$N9'")|$(q "SELECT count(*) FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$RUNN' AND x->>'evidence_id' = '$R9'")" = "1|0" ] && ok "  ...the next run seals the new row, not the old" || bad "  ...seal"

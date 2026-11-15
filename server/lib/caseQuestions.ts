@@ -1,7 +1,7 @@
 /**
  * B3 (LVRF_PLAN §19, added 5 Nov 2026; a CVAF pattern) — what the value case asks for, and the one converting question
  * the account executive asks to clear each refusal. One entry per reason code; the case renders the account and metric
- * into {account} and {metric}. Every code the CFO page or lvrf_cost_of_delay() can give must be here:
+ * into {account} and {metric}, and {one} (S1, §20 D2: "one point" for a percentage unit, "one {unit}" otherwise). Every code the CFO page or lvrf_cost_of_delay() can give must be here:
  * verify_value_case.sh fails a code with no entry.
  *
  *   need:     what we need from you, as the refusal page says it
@@ -61,8 +61,8 @@ export const CASE_ASKS: Record<string, CaseAsk> = {
     question: 'Is the committed target for {metric} meant to be an improvement on the baseline?',
   },
   no_rate: {
-    need: 'What one unit of {metric} is worth to {account} per year, stated by {account}.',
-    question: 'What is one unit of {metric} worth to {account} each year, and who in finance would stand behind that figure?',
+    need: 'What one {one} of {metric} is worth to {account} per year, stated by {account}.',
+    question: 'What is one {one} of {metric} worth to {account} each year, and who in finance would stand behind that figure?',
   },
   rate_basis: {
     need: 'The rate stated by {account}, or taken from its own records.',
@@ -82,9 +82,21 @@ export const CASE_ASKS: Record<string, CaseAsk> = {
   },
 };
 
-export function askFor(code: string, account: string, metric: string): CaseAsk & { code: string } {
+/**
+ * S1 (§20, D2; R5-3.1e): the step a rate is asked per. A percentage unit (written "%", "percent" or "percentage",
+ * alone or leading, e.g. "% of revenues") reads "point", so "one point of Dollar Retention Rate"; any other unit reads
+ * as itself, "one {unit}"; no unit reads "unit". Composed when the case renders; nothing sealed changes.
+ */
+export function oneStep(unit: string | null | undefined): string {
+  const u = (unit ?? '').trim();
+  if (u === '') return 'unit';
+  if (/^(%|percent\b|percentage\b)/i.test(u)) return 'point';
+  return u;
+}
+
+export function askFor(code: string, account: string, metric: string, unit: string | null = null): CaseAsk & { code: string } {
   const a = CASE_ASKS[code];
   if (!a) throw new Error(`LVRF: the value case has no ask for reason "${code}"`);
-  const fill = (t: string) => t.replaceAll('{account}', account).replaceAll('{metric}', metric);
+  const fill = (t: string) => t.replaceAll('{account}', account).replaceAll('{metric}', metric).replaceAll('{one}', oneStep(unit));
   return { code, need: fill(a.need), question: fill(a.question) };
 }

@@ -23,6 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -290,6 +291,7 @@ api "/api/institutions/$FINST/value-outcomes" "$(J engagement_name 'C1b engageme
 FO="$(aj value_outcome_id)"; FENG="$(aj engagement_id)"
 api "/api/value-outcomes/$FO/evidence" "$(J kind public_filing provenance 'Fixture filing (not a source)' summary 'C1b TRIR FY25 (fixture)' supports baseline source_verified true ai_sourced false simulated false evidence_form quote quote_text 'Our total recordable incident rate was 1.4 in FY25.' how_read 'The FY25 TRIR, from the fixture report, read as published.')" 201
 FEV="$(aj evidence_id)"
+state_hypothesis "$FENG" || bad "S1: no hypothesis stated on $FENG"
 api "/api/engagements/$FENG/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note 'Verification: a run for the print check.' source_fixture c1b)" 201
 FRUN="$(aj value_run_id)"
 api "/api/value-runs/$FRUN/lock" "$(J lock_reason 'Verification: sealed for the print check.')" 200

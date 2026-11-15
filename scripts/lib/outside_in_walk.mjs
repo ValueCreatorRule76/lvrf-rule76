@@ -147,6 +147,19 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   await setField(evScope, 'Simulated', 'false');
   await sleep(300); await click(evScope, 'Submit');
   check(await done('w6'), 'W6 done: the baseline evidence, before the first run');
+  // S1 (Brad's ruling 1): with no hypothesis yet, W7 says so and offers no produce (no submit that would 409).
+  check(await waitFor(`!!${step('w7')}?.querySelector('[data-testid=w7-needs-hypothesis]')`), 'W7, before any hypothesis: says a run seals the hypothesis it tests, and that none is current');
+  check(await ev(`![...${step('w7')}.querySelectorAll('button')].some(b=>b.textContent.trim()==='Produce')`), '  ...and offers no Produce');
+  // S1 (§20, D4): a run seals the hypothesis it tests, so the fixture states one first, by the shared helper
+  // (scripts/lib/hypothesis.sh, through the routes), before W7 produces the run.
+  const eng = psql(`SELECT engagement_id FROM value_outcomes WHERE institution_id = '${INST}' AND deleted_at IS NULL AND superseded_by_id IS NULL`);
+  try {
+    execFileSync('bash', ['-c', '. scripts/lib/hypothesis.sh && state_hypothesis "$0"', eng], { env: { ...process.env, VERIFY_DB: DB, BASE: process.env.HYP_BASE }, stdio: ['ignore', 'ignore', 'inherit'] });
+    check(true, 'S1: a hypothesis stated on the outcome before W7 (the shared helper)');
+  } catch { check(false, 'S1: the helper could not state a hypothesis before W7'); }
+  // The walk reads again (as it does when step 3 states one): W7 now offers Produce.
+  await send('Page.reload');
+  check(await waitFor(`[...(${step('w7')}?.querySelectorAll('button') ?? [])].some(b=>b.textContent.trim()==='Produce')`, 20000), '  ...with a hypothesis current, W7 offers Produce');
   await setField(step('w7'), 'Note', 'Verification: an outside-in hypothesis from published material.');
   await setField(step('w7'), 'Run source label', 'walk_ui_outside_in');
   await sleep(200); await click(step('w7'), 'Produce');

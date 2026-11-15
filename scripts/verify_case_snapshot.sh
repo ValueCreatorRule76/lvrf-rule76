@@ -20,6 +20,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -115,8 +116,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -129,8 +130,8 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "328" ] && ok "  ...328 information_schema rows (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "329" ] && ok "  ...329 information_schema rows (S1: +1) (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: section 32 writes nothing" || bad "  ...a run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 51 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
@@ -206,7 +207,7 @@ outcome "Case TRIR two" 1.4; O2="$OUT"; ENG2="$(q "SELECT engagement_id FROM val
 expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing 'TRIR FY25 1.4 (fixture)' baseline)" 201 "baseline evidence"
 expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O1" "$L" baseline "$LATER")" 201 "H1 on outcome one" "" "$X"; H1="$(rj b.value_hypothesis_id)"
 expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O2" "$L" baseline "$TODAY")" 201 "H2 on outcome two, due today" "" "$X"; H2="$(rj b.value_hypothesis_id)"
-produce() { expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture case_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
+produce() { state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"; expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture case_fixture)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; }
 lock() { req POST "/api/value-runs/$1/lock" "$(J lock_reason "${2:-Verification: sealed.}")"; }
 
 step "4. The seal (payloadVersion 5 since B3: v4's case and B3's keys)"
@@ -220,11 +221,13 @@ C() { q "SELECT $1 FROM value_runs r WHERE r.id = '$R1'"; }
 [ "$(C "length(payload->'case'->'pack_entry'->>'fingerprint') || '|' || (payload->'case'->'pack_entry'->>'status')")" = "64|proposed" ] && ok "  ...the pack entry with a SHA-256 of its fields (CS-D3), proposed" || bad "  ...pack entry"
 HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1; }
 printf '%s' "$(HASHES)" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "the v4 run hashes, under the same payloadHash" || bad "hashes: $(HASHES)"
-# NULL inputs: a metric with no pack entry seals null, not a failure.
+# NULL inputs: a metric with no pack entry reads null in the chain, not a failure. S1 (§20, R5-3.1a): it can hold no
+# hypothesis (a lever needs a pack entry), so its run is refused, in words, and nothing is sealed.
 N=$((N + 1)); req POST "/api/institutions/$INST/value-outcomes" "{\"engagement_name\":\"Case engagement no pack $TS\",\"engagement_owner_person_id\":\"$OWNER\",\"capability_name\":\"Hyp safety capability\",\"metric\":{\"name\":\"Case metric no pack\",\"unit\":\"incidents per 200,000 hours\",\"direction\":\"decrease\",\"source_system\":\"Fixture EHS system\"},\"baseline_value\":1.4,\"baseline_measured_at\":\"2025-09-30T00:00:00Z\"}"
 ONP="$(rj b.value_outcome_id)"; ENP="$(rj b.engagement_id)"
-produce "$ENP" "Verification: no pack entry."
-[ "$(q "SELECT (payload->'case'->'pack_entry') IS NULL OR jsonb_typeof(payload->'case'->'pack_entry') = 'null' FROM value_runs WHERE id = '$RUN'")|$(q "SELECT jsonb_array_length(payload->'case'->'hypotheses') FROM value_runs WHERE id = '$RUN'")" = "t|0" ] && ok "a metric on no pack entry: pack_entry null, no hypotheses, the run still sealed" || bad "no-pack seal: $(q "SELECT payload->'case' FROM value_runs WHERE id = '$RUN'")"
+[ "$(q "SELECT (lvrf_case_chain('$ONP')->'pack_entry') IS NULL OR jsonb_typeof(lvrf_case_chain('$ONP')->'pack_entry') = 'null'")|$(q "SELECT jsonb_array_length(lvrf_case_chain('$ONP')->'hypotheses')")" = "t|0" ] && ok "a metric on no pack entry: the chain reads pack_entry null and no hypotheses" || bad "no-pack chain: $(q "SELECT lvrf_case_chain('$ONP')")"
+expect POST "/api/engagements/$ENP/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note 'Verification: no pack entry.' source_fixture case_fixture)" 409 "  ...and its run is refused (S1): no hypothesis can be stated on it" "has no current hypothesis"
+[ "$(q "SELECT count(*) FROM value_runs WHERE engagement_id = '$ENP'")" = "0" ] && ok "  ...nothing sealed" || bad "  ...a run was sealed on the no-pack engagement"
 # B1 — a chain item dropped.
 fnbreak lvrf_case_chain "    'marker', (SELECT jsonb_build_object('kind', k.kind," "    'marker_dropped', (SELECT jsonb_build_object('kind', k.kind,"
 produce "$ENG1" "Verification: B1."; RB1="$RUN"

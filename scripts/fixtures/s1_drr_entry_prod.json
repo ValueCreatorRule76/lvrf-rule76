@@ -1,0 +1,14 @@
+{
+ "name": "Enterprise net (dollar) retention rate",
+ "unit": "%",
+ "direction": "increase",
+ "definition": "Take the cohort of paid enterprise customers who were active 12 months before period end. Divide that cohort's ARR at period end by the same cohort's ARR 12 months earlier, and multiply by 100. The numerator includes expansion and is net of contraction and churn over the trailing 12 months. It excludes revenue from customers acquired during the period. Coursera computes ARR as the most recent month's recurring revenue × 12. Udemy uses the annualized value of contracts for customers with active seats on the last day of the period. State which ARR basis is used.",
+ "why_it_pays": "Enterprise learning revenue is seat-based subscriptions renewed every year or every few years. Net retention shows how much of the installed base renews and expands with no new acquisition spend. The bases are large and high-margin: Coursera Enterprise segment revenue was $255.3M in FY2025 at about 70% segment gross margin, and Udemy Business ARR was about $540M at end-2025. On those bases one point of net retention is worth roughly $2.5M of Coursera Enterprise revenue and $5.4M of Udemy Business ARR a year. Both companies say falling upsell and expansion pushed their rates below 100%.",
+ "confounders": "Customer budget pressure and macro conditions (Udemy cites budget scrutiny and longer sales cycles); price changes; customer layoffs and M&A; segment mix (Coursera credits Government and Campus for its 2025 improvement); catalogue and product changes; FX; changes to the metric's definition (for example after the 2026 Coursera–Udemy combination).",
+ "citation": "Coursera, Inc. Form 10-K for FY2025 (SEC EDGAR, https://www.sec.gov/Archives/edgar/data/1651562/000165156226000015/cour-20251231.htm), Key Business Metrics: 'Net Retention Rate for Paid Enterprise Customers' 93% (2025) vs 87% (2024); calculation method also given in Coursera's Q3 2025 results release. Udemy, Inc. Form 10-K for FY2025 (https://www.sec.gov/Archives/edgar/data/1607939/000160793926000034/udmy-20251231.htm), MD&A: 'Udemy Business Net Dollar Retention Rate' 93% (2025), 98% (2024), 106% (2023); ARR $539,973K; NDRR calculation method in the FY2023 10-K (https://www.sec.gov/Archives/edgar/data/1607939/000160793924000037/udmy-20231231.htm).",
+ "addressable_by_workforce_capability": {
+  "value": true,
+  "why": "Renewal, expansion and churn prevention are run by customer success, account management and renewal staff. Pluralsight reported that after it restructured its customer success operations (health scoring, playbooks, sponsor tracking), gross retention rose 14 points and net retention reached 127%."
+ },
+ "caveats": []
+}

@@ -15,6 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 . scripts/lib/acts.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -131,6 +132,9 @@ env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABAS
 SERVER_PID=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$BASE/api/health" && break; sleep 0.5; done
 ENG="$(q "SELECT e.id FROM engagements e WHERE e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND (SELECT count(*) FROM value_outcomes vo WHERE vo.engagement_id = e.id AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL) = 1 ORDER BY e.created_at LIMIT 1")"
+# S1: this dev clone's tenant has no steward, and the helper never names one; the fixture names its first staff member, on the clone only.
+q "UPDATE tenants t SET steward_person_id = (SELECT p.id FROM persons p WHERE p.tenant_id = t.id AND NOT p.simulated AND p.institution_id IS NULL AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL ORDER BY p.created_at LIMIT 1) WHERE t.id = (SELECT g.tenant_id FROM engagements g WHERE g.id = '$ENG') AND t.steward_person_id IS NULL" > /dev/null
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 C="$(curl -s -o "$W/r.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $STAFF" -d '{"source_fixture":"drift","note":"Drift wiring check"}' "$BASE/api/engagements/$ENG/produce-run")"
 RUN="$(node -e "console.log(require('$W/r.json').value_run_id ?? '')")"
 CODES="$(q "SELECT string_agg(f->>'code', ',' ORDER BY f->>'code') FROM value_runs, jsonb_array_elements(payload->'findings') f WHERE id = '$RUN' AND f->>'subject' = 'instrument'")"

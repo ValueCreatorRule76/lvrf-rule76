@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
-import { askFor } from '../lib/caseQuestions.js';
+import { askFor, oneStep } from '../lib/caseQuestions.js';
 import { falsifierSentence } from './valueHypotheses.js';
 
 /**
@@ -96,8 +96,8 @@ export function valueCaseRouter(pool: Pool): Router {
       if (!p.people?.verifier) codes.push('no_verifier');
       const ours = new Set(['no_months', 'no_lens']);
       const unique = [...new Set(codes)];
-      const asks = unique.filter((c) => !ours.has(c)).map((c) => askFor(c, r.account, metric));
-      const vendorGaps = unique.filter((c) => ours.has(c)).map((c) => askFor(c, r.account, metric));
+      const asks = unique.filter((c) => !ours.has(c)).map((c) => askFor(c, r.account, metric, unit));
+      const vendorGaps = unique.filter((c) => ours.has(c)).map((c) => askFor(c, r.account, metric, unit));
 
       // The CFO lens, applied at read (O3, O-D1, O-D3).
       let cfo = null;
@@ -116,7 +116,7 @@ export function valueCaseRouter(pool: Pool): Router {
         cfo = {
           policy: policy ?? null,
           refused: reasons.length > 0,
-          reasons: reasons.map((c) => askFor(c, r.account, metric)),
+          reasons: reasons.map((c) => askFor(c, r.account, metric, unit)),
           reference_example: Boolean(marker),
         };
       }
@@ -124,7 +124,9 @@ export function valueCaseRouter(pool: Pool): Router {
       const outcomeFloor = [baseline?.basis ?? null, ...(p.actualValue !== null && p.actualValue !== undefined ? [actual?.basis ?? null] : [])]
         .sort((a, b) => rank(a) - rank(b))[0] ?? null;
       const outcomes = floorFirst([{
-        value_outcome_id: p.valueOutcomeId ?? null, metric, unit, direction: p.businessMetric?.direction ?? null,
+        // S1 (§20, D2): `one` is the step a rate is asked per ("point" for a percentage unit), from oneStep(), so the page
+        // does not restate the rule.
+        value_outcome_id: p.valueOutcomeId ?? null, metric, unit, one: oneStep(unit), direction: p.businessMetric?.direction ?? null,
         baseline: p.baselineValue ?? null, target: p.targetValue ?? null, actual: p.actualValue ?? null, realization: p.realization ?? null,
         claimed_currency_impact: p.claimedCurrencyImpact ?? null, realized_currency_impact: p.realizedCurrencyImpact ?? null, currency: p.currencyCode ?? null,
         committer: p.people?.committer?.name ?? null, committer_customer_side: p.people?.committer?.customer_side ?? null,

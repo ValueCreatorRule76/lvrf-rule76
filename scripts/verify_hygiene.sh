@@ -14,6 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
 
@@ -90,6 +91,9 @@ fi
 ENG="$(q "SELECT e.id FROM engagements e WHERE e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND (SELECT count(*) FROM value_outcomes vo WHERE vo.engagement_id = e.id AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL) = 1 ORDER BY e.created_at LIMIT 1")"
 NEWRUNS=()
 for i in 1 2; do
+  # S1: this dev clone's tenant has no steward, and the helper never names one; the fixture names its first staff member, on the clone only.
+  q "UPDATE tenants t SET steward_person_id = (SELECT p.id FROM persons p WHERE p.tenant_id = t.id AND NOT p.simulated AND p.institution_id IS NULL AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL ORDER BY p.created_at LIMIT 1) WHERE t.id = (SELECT g.tenant_id FROM engagements g WHERE g.id = '$ENG') AND t.steward_person_id IS NULL" > /dev/null
+  state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
   C="$(code POST "/api/engagements/$ENG/produce-run" "${JSON[@]}" -d "{\"source_fixture\":\"hygiene-$i\",\"note\":\"Hygiene verification run $i\"}")"
   RID="$(rj .value_run_id)"
   [ "$C" = "201" ] && NEWRUNS+=("$RID") || bad "produce-run $i -> $C $(cat "$W/r.json")"

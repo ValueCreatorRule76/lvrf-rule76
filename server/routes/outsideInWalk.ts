@@ -92,6 +92,9 @@ export function outsideInWalkRouter(pool: Pool): Router {
                                                 'source_system', bm.source_system, 'industry_measure_id', bm.industry_measure_id),
                     -- C2c: how many locked runs sealed this outcome, for the correction's confirmation.
                     'sealed_run_count', (SELECT count(*) FROM value_runs r WHERE r.locked_at IS NOT NULL AND r.deleted_at IS NULL AND r.payload->>'valueOutcomeId' = vo.id::text),
+                    -- S1 (§20, R5-3.1a; Brad's ruling 1, 15 Nov 2026): the outcome's current hypotheses (not withdrawn, not
+                    -- superseded), the same reading produce-run refuses on, so W7 waits for one instead of offering a 409.
+                    'current_hypotheses', (SELECT count(*) FROM value_hypotheses h WHERE h.value_outcome_id = vo.id AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL),
                     -- C3b: a steward's finding that a figure has no source on record, shown beside the figure.
                     'figure_findings', (SELECT coalesce(json_agg(json_build_object('field', f.field, 'value', trim_scale(f.value)::text, 'finding_text', f.finding_text,
                                           'recorded_by', fp.full_name, 'recorded_on', to_char(f.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) ORDER BY f.field), '[]')

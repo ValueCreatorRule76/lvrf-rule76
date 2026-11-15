@@ -31,6 +31,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 . scripts/lib/acts.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 [ -n "$EXPECT_TRIGGERS" ] || { echo "REFUSING: no 'Total: N distinct triggers' line in db/hardening.sql"; exit 1; }
@@ -262,6 +263,7 @@ JAR_A="$JAR"
 GA() { PA_OUT="$(curl -s -b "$JAR" -w '\n%{http_code}' "http://127.0.0.1:$PORT$1")"; CODE="${PA_OUT##*$'\n'}"; PA_OUT="${PA_OUT%$'\n'*}"; }
 EVBASE() { printf '{"kind":"public_filing","provenance":"Fixture source for: %s (not a source)","summary":"%s","supports":"baseline","confidence":"medium","source_verified":false,"ai_sourced":false,"simulated":false,"about":"account","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written."}' "$1" "$1"; }
 mk_run() {  # ENGAGEMENT LABEL -> RUN (produced and locked by the signed-in tenant's steward)
+  HYP_COOKIE="$JAR" state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"  # as the signed-in steward
   PA "/api/engagements/$1/produce-run" "{\"banner_title\":\"OUTSIDE-IN HYPOTHESIS\",\"note\":\"Verification: $2, absence sealed as synthetic (5c).\",\"source_fixture\":\"p3_misstated_fixture\"}"
   [ "$CODE" = "201" ] || { bad "$2: produce -> $CODE $PA_OUT"; exit 1; }
   RUN="$(pj .value_run_id)"
@@ -294,7 +296,7 @@ OUTCOME_B="$(pj .value_outcome_id)"; ENG_B5="$(pj .engagement_id)"
 PA "/api/value-outcomes/$OUTCOME_B/evidence" "$(EVBASE 'Tenant B baseline (5c fixture)')"; [ "$CODE" = "201" ] || { bad "B baseline: $CODE $PA_OUT"; exit 1; }
 mk_run "$ENG_B5" "tenant B"; RUN_MB="$RUN"
 restore5c; restart
-git diff --quiet -- "$PRODUCE" && ok "produce-run restored byte-identical; the server restarted on it" || bad "produce-run differs after restore"
+cmp -s "$B5/produceRun.ts" "$PRODUCE" && ok "produce-run restored byte-identical; the server restarted on it" || bad "produce-run differs after restore"
 MIS() { q "SELECT count(*) FILTER (WHERE code = 'F3') || '|' || count(*) FROM lvrf_misstated_findings('$1')"; }
 [ "$(q "SELECT tenant_id FROM value_runs WHERE id = '$RUN_MA'")|$(q "SELECT tenant_id FROM value_runs WHERE id = '$RUN_MB'")" = "$TENANT_A|$TENANT_B" ] \
   && [ "$(MIS "$RUN_MA" | cut -d'|' -f1)" = "1" ] && [ "$(MIS "$RUN_MB" | cut -d'|' -f1)" = "1" ] \

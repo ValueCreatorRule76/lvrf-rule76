@@ -15,10 +15,11 @@ import { CustomerRoles } from '../components/CustomerRoles';
 import { AccountEvidence } from '../components/AccountEvidence';
 import { OutcomeSpine } from '../components/OutcomeSpine';
 import { EngagementRuns } from '../components/RunControls';
+import { TenantChain } from '../components/TenantChain';
 import { AccountResearch, type ResearchStatus } from '../components/AccountResearch';
 import { STEP_TITLES, day, deriveSteps } from '../lib/workspaceStatus';
 import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
-import { PovAuthoring, type PovStatus } from '../components/PovAuthoring';
+import { EngagementHypotheses, PovAuthoring, type PovStatus } from '../components/PovAuthoring';
 import { ConfidenceBadge, PrimaryLink, StepRail, WorkspaceStep } from '../components/workbench/Workspace';
 import { MARKER_KIND } from '../api/pov';
 
@@ -62,8 +63,8 @@ const STATUS_TONE: Record<string, 'healthy' | 'watch' | 'critical' | 'neutral'> 
  *                account failed to measure, it is a metric the account
  *                measures with no pack basis, the inverse direction of
  *                the same question. NOT APPLICABLE is the is_tenant_self
- *                case: there is no pack for a tenant's own metric (DRR) to
- *                belong to, and never will be (section 00's own claim) —
+ *                case: a tenant's own metric (DRR) has no pack basis unless
+ *                it is given one to carry its own value case (S1, §20 D1) —
  *                that is a fact about the frame, not a deficiency, so it
  *                gets the same neutral tone as PACK BASIS, not the watch
  *                tone NO PACK BASIS uses for a customer account's genuine
@@ -90,7 +91,8 @@ function coverageBadge(measured: boolean) {
 }
 
 function basisBadge(industryMeasureId: string | null, isTenantSelf: boolean) {
-  if (isTenantSelf) {
+  // S1 (§20 D1): the tenant's own metric may rest on an entry, to carry its own value case; then it reads as one.
+  if (isTenantSelf && !industryMeasureId) {
     return <Badge tone="neutral">Not applicable</Badge>;
   }
   return (
@@ -141,8 +143,9 @@ function ClassificationSection({ view }: { view: InstitutionView }) {
             </p>
           ) : institution.is_tenant_self ? (
             <p className="m-0 mt-1.5 text-[13px] leading-snug text-ink-45">
-              This is the tenant's own customer-zero account. It is not classified against a
-              taxonomy built for the tenant's customers, and it never will be.
+              This is the tenant's own customer-zero account. It is classified only to carry its own
+              value case ("Classify as…", under "What its value case rests on"), never to be read as one of the
+              tenant's customers.
             </p>
           ) : (
             <p className="m-0 mt-1.5 text-[13px] leading-snug text-ink-45">
@@ -195,9 +198,9 @@ function PackSection({
         <p className="m-0 text-[12.5px] text-ink-45">
           {isTenantSelf
             ? // Not "yet" — an industry pack describes what carries money for
-              // a CUSTOMER, and this account is the tenant itself. No amount
-              // of time makes one apply; this must not contradict section
-              // 00's "and it never will be."
+              // a CUSTOMER, and this account is the tenant itself; it is
+              // classified only to carry its own value case (S1, §20 D1),
+              // as section 00 says.
               'No pack applies — an industry pack describes what carries money for a customer, and this is the tenant’s own account.'
             : 'No pack — this account is not classified against an industry yet.'}
         </p>
@@ -257,6 +260,7 @@ function MetricsSection({
             <li
               key={m.name}
               className="flex flex-wrap items-center justify-between gap-2 border-b border-rule-soft py-2.5 last:border-b-0"
+              data-testid="metric-row"
             >
               <div>
                 <span className="text-[13.5px] font-semibold text-ink">{m.name}</span>
@@ -422,6 +426,7 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
             <AccountResearch institutionId={id} onFactsChanged={refresh} onStatus={setResearch} primary={now === 1} />
           </>)}
           {step(1, <OutsideInWalk institutionId={id} onChanged={refresh} onStatus={setWalk} targets={{ run: runEl, retire: retireEl }}
+            hypothesesKey={pov ? pov.hypotheses.map((h) => `${h.created_at}:${h.verdict}`).join(',') : ''}
             primaryFor={now === 2 ? ['w1', 'w2', 'w3', 'w4', 'w5', 'w6'] : now === 5 ? ['w7', 'w8'] : []} />)}
           {step(2, <div ref={setHypEl} />)}
           {step(3, <div ref={setSumEl} />)}
@@ -595,6 +600,9 @@ export function InstitutionPage() {
       <MetricsSection metrics={view.metrics} isTenantSelf={view.institution.is_tenant_self} />
       <GapSection gap={view.gap} pack={view.pack} />
 
+      {/* S1 (§20 D1; Brad's ruling 2): the chain a hypothesis needs, on the tenant's own account (it has no walk). */}
+      {view.institution.is_tenant_self && <TenantChain institutionId={view.institution.id} onChanged={refresh} />}
+
       <Card n="05" title="Engagements" badge={<Badge tone="neutral">{view.engagements.length}</Badge>}>
         {view.engagements.length === 0 ? (
           <p className="m-0 text-[12.5px] text-ink-45">No engagements recorded for this account.</p>
@@ -604,6 +612,8 @@ export function InstitutionPage() {
               <li key={e.id} className="border-b border-rule-soft py-1.5 last:border-b-0">
                 <span className="text-[13px] text-ink">{e.name}</span>
                 {/* Brad, 6 Nov 2026: the tenant's own account has no walk, so its runs are produced and locked here, by W7's and W8's routes. */}
+                {/* S1 (§20 item 2): the hypothesis its runs seal, stated here first (R5-3.1a). */}
+                {view.institution.is_tenant_self && <EngagementHypotheses institutionId={view.institution.id} engagementId={e.id} onChanged={refresh} />}
                 {view.institution.is_tenant_self && <EngagementRuns engagementId={e.id} onChanged={refresh} />}
               </li>
             ))}

@@ -120,48 +120,8 @@ export function CreateAccountCard({ primary = false }: { primary?: boolean } = {
               </p>
             </label>
 
-            <label className="mb-3 block">
-              <span className={LABEL_CLASS}>Classify as (optional)</span>
-              <select
-                value={industrySlug}
-                onChange={(e) => setIndustrySlug(e.target.value)}
-                className={INPUT_CLASS}
-                disabled={!industries}
-              >
-                <option value="">— leave unclassified —</option>
-                {(industries ?? []).map((i) => (
-                  <option key={i.slug} value={i.slug}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
-              {industriesError ? (
-                <p className={HELP_CLASS}>Taxonomy unavailable: {industriesError}</p>
-              ) : (
-                <p className={HELP_CLASS}>
-                  Classification decides which industry pack applies. It is a judgement, and it
-                  is final for this account — a wrong one is corrected by superseding the
-                  account, not by editing it. Unclassified is an honest state.
-                </p>
-              )}
-            </label>
-
-            {classifying && (
-              <label className="block">
-                <span className={LABEL_CLASS}>Why this classification (required)</span>
-                <textarea
-                  required
-                  rows={3}
-                  value={classificationNote}
-                  onChange={(e) => setClassificationNote(e.target.value)}
-                  className={INPUT_CLASS}
-                />
-                <p className={HELP_CLASS}>
-                  Recorded as evidence under your name — an observation, low confidence,
-                  unverified. A classification with no stated reasoning is refused.
-                </p>
-              </label>
-            )}
+            <ClassifyFields industries={industries} industriesError={industriesError} industrySlug={industrySlug}
+              setIndustrySlug={setIndustrySlug} classificationNote={classificationNote} setClassificationNote={setClassificationNote} />
           </>
         }
         fields={
@@ -191,5 +151,104 @@ export function CreateAccountCard({ primary = false }: { primary?: boolean } = {
         }
       />
     </Card>
+  );
+}
+
+/**
+ * The classification fields of "Create account" ("Classify as", and why), shared with "Classify as…" on the tenant's
+ * own account (S1, §20 D1; Brad's ruling 2, 15 Nov 2026): one form, the same words, two places.
+ */
+export function ClassifyFields({ industries, industriesError, industrySlug, setIndustrySlug, classificationNote, setClassificationNote }: {
+  industries: IndustryListItem[] | null; industriesError: string | null;
+  industrySlug: string; setIndustrySlug: (v: string) => void; classificationNote: string; setClassificationNote: (v: string) => void;
+}) {
+  const classifying = industrySlug !== '';
+  return (
+    <>
+    <label className="mb-3 block">
+      <span className={LABEL_CLASS}>Classify as (optional)</span>
+      <select
+        value={industrySlug}
+        onChange={(e) => setIndustrySlug(e.target.value)}
+        className={INPUT_CLASS}
+        disabled={!industries}
+      >
+        <option value="">— leave unclassified —</option>
+        {(industries ?? []).map((i) => (
+          <option key={i.slug} value={i.slug}>
+            {i.name}
+          </option>
+        ))}
+      </select>
+      {industriesError ? (
+        <p className={HELP_CLASS}>Taxonomy unavailable: {industriesError}</p>
+      ) : (
+        <p className={HELP_CLASS}>
+          Classification decides which industry pack applies. It is a judgement, and it
+          is final for this account — a wrong one is corrected by superseding the
+          account, not by editing it. Unclassified is an honest state.
+        </p>
+      )}
+    </label>
+
+    {classifying && (
+      <label className="block">
+        <span className={LABEL_CLASS}>Why this classification (required)</span>
+        <textarea
+          required
+          rows={3}
+          value={classificationNote}
+          onChange={(e) => setClassificationNote(e.target.value)}
+          className={INPUT_CLASS}
+        />
+        <p className={HELP_CLASS}>
+          Recorded as evidence under your name — an observation, low confidence,
+          unverified. A classification with no stated reasoning is refused.
+        </p>
+      </label>
+    )}
+    </>
+  );
+}
+
+/**
+ * S1 (§20 D1; Brad's ruling 2): "Classify as…" for an account already created — the create form's classification fields
+ * and the existing route, POST /api/institutions/:id/industry, unchanged. On the tenant's own account it is classified
+ * only to carry its own value case.
+ */
+export function ClassifyAccount({ institutionId, onDone }: { institutionId: string; onDone: () => void }) {
+  const { actor } = useActor();
+  const [open, setOpen] = useState(false);
+  const [industrySlug, setIndustrySlug] = useState('');
+  const [classificationNote, setClassificationNote] = useState('');
+  const [industries, setIndustries] = useState<IndustryListItem[] | null>(null);
+  const [industriesError, setIndustriesError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!actor || !open) return;
+    let cancelled = false;
+    fetchIndustries().then((r) => {
+      if (cancelled) return;
+      if (r.status === 'ok') setIndustries(r.industries); else setIndustriesError(r.message);
+    });
+    return () => { cancelled = true; };
+  }, [actor, open]);
+  if (!open) {
+    return <button type="button" onClick={() => setOpen(true)} data-testid="classify-open"
+      className={'border border-silver px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[.1em] text-ink-45 hover:border-ink hover:text-ink ' + FOCUS_RING}>Classify as…</button>;
+  }
+  const chosen = (industries ?? []).find((i) => i.slug === industrySlug);
+  return (
+    <div className="mt-2 border-t border-rule-soft pt-2" data-testid="classify-account">
+      <GovernedForm<{ industry_name: string }>
+        path={`/api/institutions/${institutionId}/industry`} provenanceLabel="Provenance — how this account's industry was determined"
+        provenance={<ClassifyFields industries={industries} industriesError={industriesError} industrySlug={industrySlug}
+          setIndustrySlug={setIndustrySlug} classificationNote={classificationNote} setClassificationNote={setClassificationNote} />}
+        fields={null}
+        canSubmit={industrySlug !== '' && classificationNote.trim() !== ''}
+        unmet={[...(industrySlug === '' ? ['choose an industry'] : []), ...(classificationNote.trim() === '' ? ['say why'] : [])]}
+        confirm={<span data-testid="confirm-text">Classify this account ({institutionId.slice(0, 8)}) as {chosen?.name ?? industrySlug} ({industrySlug}), because: &ldquo;{classificationNote.trim()}&rdquo;. Final: a wrong classification is corrected by superseding the account.</span>}
+        buildBody={() => ({ industry_slug: industrySlug, classification_note: classificationNote })}
+        submitLabel="Classify" onSuccess={() => { setOpen(false); onDone(); }} renderSuccess={() => <>Classified.</>} />
+    </div>
   );
 }

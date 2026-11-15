@@ -16,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -125,6 +126,7 @@ EVB() { printf '{"kind":"%s","provenance":"Fixture CR disclosures, page 21 (not 
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB vendor_publication 'A vendor claim offered as the actual' actual)" 422 "W6: a vendor publication as the actual: refused by the database" "vendor-published evidence may not support a measured actual"
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB public_filing 'TRIR FY25 0 (fixture)' baseline)" 201 "W6: the baseline evidence, before any run"
 expect POST "/api/value-outcomes/$OUT/evidence" "$(EVB vendor_publication 'Vendor claim: 75% reduction, no period (fixture)' impact_basis)" 201 "W6: the vendor claim as impact_basis"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: an outside-in hypothesis from published material.","source_fixture":"walk_api_outside_in"}' 201 "W7: produce the run"
 RUN="$(rj b.value_run_id)"
 expect POST "/api/value-runs/$RUN/lock" '{"lock_reason":"Verification: first locked."}' 200 "W8: lock it"
@@ -188,7 +190,7 @@ CHROME_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 walk() {  # MODE INST
   set +e  # pipefail would end the script on a failed walk before its code is read
-  node scripts/lib/outside_in_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$2" "$S_EMAIL" "$X_EMAIL" "$PW" "$S_NAME" 2>&1 | tee "$W/walk.$1.log"; local rc=${PIPESTATUS[0]}; set -e
+  HYP_BASE="$BASE" node scripts/lib/outside_in_walk.mjs "$1" "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$VERIFY_DB" "$2" "$S_EMAIL" "$X_EMAIL" "$PW" "$S_NAME" 2>&1 | tee "$W/walk.$1.log"; local rc=${PIPESTATUS[0]}; set -e
   PASS=$((PASS + $(grep -c '^  PASS' "$W/walk.$1.log" || true))); FAIL=$((FAIL + $(grep -c '^  FAIL' "$W/walk.$1.log" || true)))
   [ "$rc" = "0" ] || bad "the $1 walk exited $rc — a crash is a failure (see $W/walk.$1.log)"
 }

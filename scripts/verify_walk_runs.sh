@@ -16,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -113,15 +114,6 @@ expect POST "/api/institutions/$INST/value-outcomes" "{\"engagement_name\":\"Q4l
 OUT="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"; MET="$(rj b.business_metric_id)"
 expect POST "/api/business-metrics/$MET/pack-basis" "{\"industry_measure_id\":\"$E\",\"basis_note\":\"Verification: the same rate.\"}" 201 "W5"
 expect POST "/api/value-outcomes/$OUT/evidence" '{"kind":"public_filing","provenance":"Fixture CR disclosures, page 21 (not a source)","summary":"Q4l AI baseline (fixture)","supports":"baseline","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":true,"simulated":false,"research_query":"q","research_tool":"t"}' 201 "W6: AI-sourced baseline evidence, unverified"
-expect POST "/api/engagements/$ENG/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run one, before the citation is opened.","source_fixture":"q4l_run_1"}' 201 "W7: run 1"
-R1="$(rj b.value_run_id)"
-expect POST "/api/value-runs/$R1/lock" '{"lock_reason":"Verification: locked before the opening (as on Scotts)."}' 200 "W8: run 1 locked"
-expect GET "/api/institutions/$INST/walk" "" 200 "the walk read"
-# Single-quoted: inline, bash brace-expands the {...,...} body.
-RUN1_SEALED='(()=>{const s=b.engagements[0].runs[0].sealed_evidence[0];return [b.engagements[0].runs.length,s.supports,s.ai_sourced,s.citation_resolved,s.source_verified,s.basis].join("|")})()'
-[ "$(rj "$RUN1_SEALED")" = "1|baseline|true|false|false|assumed" ] \
-  && ok "  ...each run carries what it SEALED, from its payload: run 1 — AI-sourced, citation not opened, unverified, assumed" || bad "  ...runs: $(rj "JSON.stringify(b.engagements.map(e=>e.runs))" | head -c 600)"
-
 step "4. The pages, in a browser"
 (cd client && LVRF_API_PROXY="$BASE" npx vite --port "$VITE_PORT" --strictPort > "$W/vite.log" 2>&1) &
 VITE_PID=$!
@@ -148,6 +140,18 @@ expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\"
   && ok "  ...and recorded in refusals (source route), so the attempt is visible on the box" || bad "  ...refusals: $(q "$REFQ") (from $R0): $(q "SELECT message FROM refusals ORDER BY refused_at DESC, id DESC LIMIT 1")"
 expect POST "/api/industry-measures/$E/levers" '{"name":"Q4l lever","mechanism":"Crews trained to recognise hazards stop unsafe tasks earlier.","leading_indicator":"Near-miss reports","citation":"Verification citation, not a source."}' 201 "(the steward adds a lever on the entry)"
 walk main after-lever
+# S1 (§20, R5-3.1a): run 1 is produced once the hypothesis is stated (through the page, above); the helper finds it.
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
+expect POST "/api/engagements/$ENG/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run one, before the citation is opened.","source_fixture":"q4l_run_1"}' 201 "W7: run 1"
+R1="$(rj b.value_run_id)"
+expect POST "/api/value-runs/$R1/lock" '{"lock_reason":"Verification: locked before the opening (as on Scotts)."}' 200 "W8: run 1 locked"
+expect GET "/api/institutions/$INST/walk" "" 200 "the walk read"
+# Single-quoted: inline, bash brace-expands the {...,...} body.
+RUN1_SEALED='(()=>{const s=b.engagements[0].runs[0].sealed_evidence[0];return [b.engagements[0].runs.length,s.supports,s.ai_sourced,s.citation_resolved,s.source_verified,s.basis].join("|")})()'
+[ "$(rj "$RUN1_SEALED")" = "1|baseline|true|false|false|assumed" ] \
+  && ok "  ...each run carries what it SEALED, from its payload: run 1 — AI-sourced, citation not opened, unverified, assumed" || bad "  ...runs: $(rj "JSON.stringify(b.engagements.map(e=>e.runs))" | head -c 600)"
+
+walk main runs
 expect GET "/api/institutions/$INST/walk" "" 200 "the walk read, after the browser"
 RUNS_SEALED='(()=>{const r=b.engagements[0].runs;return [r.length,r.every(x=>x.locked_at!==null),r[0].sealed_evidence[0].citation_resolved,r[1].sealed_evidence[0].citation_resolved,r[1].sealed_evidence[0].source_verified,r[1].sealed_evidence[0].basis].join("|")})()'
 [ "$(rj "$RUNS_SEALED")" = "2|true|false|true|true|published" ] \
@@ -172,6 +176,7 @@ PY
 edit "$FORM" "      {actor && !blockedLocally && !canSubmit && !submitting && result?.status !== 'ok' && (" "      {false && (" 
 sleep 5; walk break-unmet; restore "$FORM"
 # B2 — W8 back to first-run-only: a later open run cannot be locked from the walk.
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" '{"banner_title":"OUTSIDE-IN HYPOTHESIS","note":"Verification: run three, for the B2 break.","source_fixture":"q4l_run_3"}' 201 "(run 3, open)"
 edit "$WALKCARD" "          {openRun && (s8 === 'next' || (lockedRun && !eng?.retired)) && (" "          {s8 === 'next' && openRun && ("
 sleep 5; walk break-lock; restore "$WALKCARD"
@@ -191,8 +196,9 @@ step "6. Q4m: a retired reference engagement on the POV (Scotts' W9 is held for 
 LEV="$(q "SELECT id FROM value_levers WHERE name = 'Q4l lever' AND deleted_at IS NULL")"
 R3="$(q "SELECT id FROM value_runs WHERE engagement_id = '$ENG' AND locked_at IS NULL")"
 expect POST "/api/value-runs/$R3/lock" '{"lock_reason":"Verification: run three locked before the retirement."}' 200 "(run 3 locked: three locked runs)"
-# §16: the hypothesis is stated after run 3 is locked; stated before, it would change the case run 3 sealed, and refuse the lock.
-expect POST "/api/institutions/$INST/hypotheses" "{\"value_outcome_id\":\"$OUT\",\"value_lever_id\":\"$LEV\",\"statement\":\"Q4m: hazard recognition reduces recordable injuries at this account.\",\"falsifier_reference\":\"baseline\",\"falsifier_due\":\"2027-09-30\",\"falsifier_conditions\":\"on the same denominator\"}" 201 "(an open hypothesis)"
+# S1 (§20, R5-3.1a): the open hypothesis is the one run 3 sealed, stated before it (the helper, step 5); before S1 one
+# was stated here, after run 3 was locked. Still exactly one open hypothesis, and the retirement keeps it.
+[ "$(q "SELECT count(*) FROM value_hypotheses WHERE value_outcome_id = '$OUT' AND deleted_at IS NULL AND superseded_by_id IS NULL")" = "1" ] && ok "(one open hypothesis: the one run 3 sealed)" || bad "(open hypotheses: $(q "SELECT count(*) FROM value_hypotheses WHERE value_outcome_id = '$OUT' AND deleted_at IS NULL AND superseded_by_id IS NULL"))"
 expect POST "/api/engagements/$ENG/retire" '{"retirement_reason":"Verification: a reference example, retired so the cohort does not count it."}' 200 "W9: the reference engagement retired"
 expect GET "/api/institutions/$INST/pov" "" 200 "the POV read, after the retirement"
 [ "$(rj "[b.engagements[0].retired, b.engagements[0].locked_runs.map(r=>r.run_number).join(','), b.outcomes[0].engagement_retired, b.hypotheses.filter(h=>!h.withdrawn_at&&!h.superseded_by_id).length].join('|')")" = "true|1,2,3|true|1" ] \

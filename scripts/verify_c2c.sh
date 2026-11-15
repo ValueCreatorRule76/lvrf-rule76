@@ -24,6 +24,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -101,8 +102,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "209" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 209 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 link_of() { q "SELECT coalesce(string_agg(supports || ':' || CASE WHEN withdrawn_at IS NULL THEN 'current' ELSE 'withdrawn' END, ',' ORDER BY withdrawn_at NULLS LAST), '') FROM value_outcome_evidence WHERE value_outcome_id = '$1' AND evidence_id = '$2'"; }
 seals() { q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -116,7 +117,7 @@ dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "209" ] && ok "209 triggers (B4 section 34: +5) (B3 section 33: +18) (with C3 and C3b)" || bad "triggers: $(trig)"
+[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) (with C3 and C3b)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -145,8 +146,10 @@ EV_OWN="$(rj b.evidence_id)"
 TENANT_FILING="Tenant Q1 FY2027 quarterly DRR 105 percent (fixture, about the tenant)"
 expect POST "/api/value-outcomes/$O/evidence" "$(EVB "$TENANT_FILING" impact_basis 'Fixture tenant filing (not a source)' 'Quarterly DRR 105 percent.')" 201 "  ...a filing about the tenant, as its impact basis (as Curia run 21 seals Skillsoft's DRR filing)"
 EV_T="$(rj b.evidence_id)"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note 'Verification: run 1.' source_fixture c2c)" 201 "  ...run 1"
 R1="$(rj b.value_run_id)"; expect POST "/api/value-runs/$R1/lock" "$(J lock_reason 'Verification: run 1 sealed.')" 200 "  ...locked"
+state_hypothesis "$ENG" || bad "S1: no hypothesis stated on $ENG"
 expect POST "/api/engagements/$ENG/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note 'Verification: run 2.' source_fixture c2c)" 201 "  ...run 2"
 R2="$(rj b.value_run_id)"; expect POST "/api/value-runs/$R2/lock" "$(J lock_reason 'Verification: run 2 sealed.')" 200 "  ...locked"
 expect POST "/api/engagements/$ENG/retire" "$(J retirement_reason 'Verification: the reference engagement retired, as Curia'"'"'s was.')" 200 "  ...the reference engagement retired"

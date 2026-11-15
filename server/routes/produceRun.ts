@@ -16,7 +16,7 @@ import { computeFindings, type Finding } from '../spine/findingsModel.js';
 import { runDriftChecks } from '../spine/driftChecks.js';
 import { sha256Hex } from '../spine/hash.js';
 import { emitHeartbeat } from '../spine/emitHeartbeat.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 
@@ -83,6 +83,15 @@ function optionalNullableString(
     throw new ValidationError(`${path}.${field} must be a string or null`);
   }
   return v;
+}
+
+/**
+ * S1 (§20): the refusal when an outcome has no current hypothesis. The database's sentence
+ * (value_runs_hypothesis_current) says the same; this one also names the metric and the control to use.
+ */
+export function noHypothesisMessage(metricName: string, outcomeId: string): string {
+  return `${metricName} (outcome ${outcomeId.slice(0, 8)}) has no current hypothesis, and a run seals the hypothesis it tests. ` +
+    'State a hypothesis… on this outcome first, then produce the run. Runs already sealed are unchanged.';
 }
 
 function toNumber(v: string | null): number | null {
@@ -227,6 +236,25 @@ export function produceRunRouter(pool: Pool): Router {
         throw new Error(
           `value outcome ${vo.id} references a soft-deleted capability or business metric`,
         );
+      }
+
+      // S1 (3.1; LVRF_PLAN §20, R5-3.1a): a run seals the hypothesis it tests, so none is produced while the outcome
+      // has no current one (not withdrawn, not superseded). The database refuses the same at INSERT
+      // (value_runs_hypothesis_current, hardening.sql section 35); this answers first, in words, before anything is read
+      // or written for the seal. Runs already sealed are never touched.
+      const { rows: [{ current: hypothesesCurrent }] } = await client.query<{ current: number }>(
+        `SELECT count(*)::int AS current FROM value_hypotheses
+          WHERE value_outcome_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+        [vo.id],
+      );
+      if (hypothesesCurrent === 0) {
+        const message = noHypothesisMessage(bm.name, vo.id);
+        await recordRouteRefusal(pool, req, {
+          endpoint: 'POST /api/engagements/:engagementId/produce-run', subjectTable: 'value_runs', subjectId: null,
+          tenantId: engagement.tenant_id, institutionId: engagement.institution_id, attemptedPayload: req.body, valueOutcomeId: vo.id,
+        }, message);
+        res.status(409).json({ message });
+        return;
       }
 
       // DEFECT-002's fix, reproduced: read evidence back from the database,

@@ -55,6 +55,8 @@ export interface WalkState {
       withdrawn_links: { evidence_id: string; supports: string; summary: string; withdrawn_by: string; withdrawn_on: string; reason: string }[];
       /** C2c: how many locked runs sealed this outcome. */
       sealed_run_count: number;
+      /** S1 (§20): the outcome's current hypotheses; W7 produces only with one (R5-3.1a). */
+      current_hypotheses: number;
       /** C3b: a steward's finding that a figure has no source on record. */
       figure_findings?: { field: string; value: string; finding_text: string; recorded_by: string; recorded_on: string }[];
     }[];

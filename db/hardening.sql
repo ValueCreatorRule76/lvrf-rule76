@@ -4072,6 +4072,38 @@ CREATE TRIGGER value_runs_case_current
   BEFORE UPDATE ON value_runs
   FOR EACH ROW EXECUTE FUNCTION lvrf_run_case_current();
 
+-- 35. S1 (3.1; LVRF_PLAN §20, R5-3.1a, approved by Brad 15 Nov 2026) — a hypothesis is sealed with every run.
+-- ------------------------------------------------------------------
+--   value_runs_hypothesis_current (I): a run is not inserted while the outcome it seals (payload.valueOutcomeId)
+--     has no current hypothesis: one not withdrawn (deleted_at) and not superseded (superseded_by_id), the same
+--     reading lvrf_case_chain()'s solutioning uses. produce-run refuses first (409, the same sentence); this is the
+--     database's half, so no writer, route or fixture can seal a run without one.
+--   INSERT only: runs already sealed are never read, changed or re-run by this (R5-3.1a). A run naming no outcome,
+--     or one that is not an id, is refused too, so a missing key cannot pass the rule (no NULL hole).
+--   A post hoc hypothesis (O2-D3) satisfies the rule; where it shows, it is still marked post hoc.
+CREATE OR REPLACE FUNCTION lvrf_run_hypothesis_current() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  o uuid;
+BEGIN
+  IF coalesce(NEW.payload->>'valueOutcomeId', '') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' THEN
+    RAISE EXCEPTION 'LVRF: value_runs: a run names the outcome it seals; this one names none, so no hypothesis can be found for it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_runs_hypothesis_current';
+  END IF;
+  o := (NEW.payload->>'valueOutcomeId')::uuid;
+  IF NOT EXISTS (SELECT 1 FROM value_hypotheses h
+                  WHERE h.value_outcome_id = o AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: value_runs: outcome % has no current hypothesis; a run seals the hypothesis it tests. State a hypothesis on this outcome first, then produce the run.', left(o::text, 8)
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_runs_hypothesis_current';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS value_runs_hypothesis_current ON value_runs;
+CREATE TRIGGER value_runs_hypothesis_current
+  BEFORE INSERT ON value_runs
+  FOR EACH ROW EXECUTE FUNCTION lvrf_run_hypothesis_current();
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4184,7 +4216,7 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 209 distinct triggers (204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
+--   Total: 210 distinct triggers (209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
@@ -4208,9 +4240,9 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 209.
+-- TRUNCATE in section 14 fail. Total stays 210.
 --
--- Expect 328 rows here (320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
+-- Expect 329 rows here (328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
 -- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
 -- (7 each), and record_documents guard I+U and act_present I+U. 287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,

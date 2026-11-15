@@ -41,6 +41,84 @@ const INPUT_CLASS = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px
 const HELP_CLASS = 'm-0 mt-1 text-[11px] text-ink-45';
 
 
+/**
+ * W3 (the capability's claim on a pack entry) and W5 (the metric's pack basis): the walk's own forms and routes,
+ * exported unchanged so the tenant's own account, which has no walk (L33), offers the same acts (S1, §20 D1; Brad's
+ * ruling 2, 15 Nov 2026).
+ */
+export function ClaimForm({ capabilities, pack, primary = false, onDone }: {
+  capabilities: WalkState['capabilities']; pack: WalkState['pack']; primary?: boolean; onDone: () => void;
+}) {
+  const w = { capabilities, pack };
+  const [p3, setP3] = useState({ capability_id: '', industry_measure_id: '', claim: '' });
+  const chosen = pack.find((m) => m.id === p3.industry_measure_id);
+  return (
+    <GovernedForm<{ id: string }>
+      path={`/api/capabilities/${p3.capability_id}/industry-measures`} provenanceLabel="What this records"
+      provenance={<p className="m-0 text-[12.5px] text-ink">That this capability plausibly moves this pack entry: the mechanism, in your words. Final: a claim is not amended.</p>}
+      fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {field('Capability', <select className={INPUT_CLASS} value={p3.capability_id} onChange={(e) => setP3({ ...p3, capability_id: e.target.value })}>
+          <option value="">— choose —</option>{w.capabilities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>)}
+        {field('Pack entry', <select className={INPUT_CLASS} value={p3.industry_measure_id} onChange={(e) => setP3({ ...p3, industry_measure_id: e.target.value })}>
+          <option value="">— choose —</option>{w.pack.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>)}
+        {chosen && (
+          <div className="sm:col-span-2" data-testid="claim-confounders">
+            <p className="m-0 text-[12px] text-ink-45">{chosen.definition} <span className="font-mono">({chosen.unit} · {chosen.direction})</span></p>
+            <div className="mt-2 border-l-2 border-gold pl-3">
+              <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-gold-ink">What moves this that is NOT capability</span>
+              <p className="m-0 mt-1 text-[12.5px] text-ink-45">{chosen.confounders}</p>
+            </div>
+          </div>
+        )}
+        {field('Claim (the mechanism)', <textarea rows={3} className={INPUT_CLASS} value={p3.claim} onChange={(e) => setP3({ ...p3, claim: e.target.value })} />, undefined, true)}
+      </div>}
+      canSubmit={!!p3.capability_id && !!p3.industry_measure_id && p3.claim.trim() !== ''}
+      buildBody={() => ({ industry_measure_id: p3.industry_measure_id, claim: p3.claim })}
+      primary={primary} submitLabel="Record the claim" onSuccess={() => { setP3({ capability_id: '', industry_measure_id: '', claim: '' }); onDone(); }} renderSuccess={() => <>Claimed.</>} />
+  );
+}
+
+export function PackBasisForm({ metric, claimed, primary = false, onDone }: {
+  metric: { id: string }; claimed: { industry_measure_id: string; measure_name: string }[]; primary?: boolean; onDone: () => void;
+}) {
+  const claimedForBasis = claimed;
+  const [p5, setP5] = useState({ industry_measure_id: '', basis_note: '' });
+  return (
+    <GovernedForm<{ metric_id: string }>
+      path={`/api/business-metrics/${metric.id}/pack-basis`} provenanceLabel="What this records"
+      provenance={<p className="m-0 text-[12.5px] text-ink">That this account's metric is an instance of the pack entry its capability claims. Before this, check the units match. Final: a basis is not amended.</p>}
+      fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {field('Pack entry (claimed by this capability)', <select className={INPUT_CLASS} value={p5.industry_measure_id} onChange={(e) => setP5({ ...p5, industry_measure_id: e.target.value })}>
+          <option value="">— choose —</option>{claimedForBasis.map((c) => <option key={c.industry_measure_id} value={c.industry_measure_id}>{c.measure_name}</option>)}</select>)}
+        {field('Basis note', <textarea rows={2} className={INPUT_CLASS} value={p5.basis_note} onChange={(e) => setP5({ ...p5, basis_note: e.target.value })} />, undefined, true)}
+      </div>}
+      canSubmit={!!p5.industry_measure_id && p5.basis_note.trim() !== ''}
+      buildBody={() => ({ industry_measure_id: p5.industry_measure_id, basis_note: p5.basis_note })}
+      primary={primary} submitLabel="Set the basis" onSuccess={() => { setP5({ industry_measure_id: '', basis_note: '' }); onDone(); }} renderSuccess={() => <>Set.</>} />
+  );
+}
+
+/**
+ * S1 (§20; Brad's ruling 1, 15 Nov 2026): W7 with no current hypothesis on the outcome. The workspace's step 3 is where
+ * one is stated; this opens that step and takes the reader there.
+ */
+function NeedsHypothesis({ inWorkspace }: { inWorkspace: boolean }) {
+  const go = () => {
+    const st = document.querySelector<HTMLElement>('[data-testid=ws-step-3]');
+    if (!st) return;
+    if (st.dataset.open === 'false') st.querySelector<HTMLButtonElement>('[data-step-toggle]')?.click();
+    st.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  return (
+    <p className="m-0 mb-2 border-l-2 border-gold pl-2 text-[12.5px] text-ink" data-testid="w7-needs-hypothesis">
+      A run seals the hypothesis it tests, and this outcome has no current one, so no run can be produced yet.{' '}
+      {inWorkspace
+        ? <button type="button" onClick={go} className={'font-semibold text-gold-ink underline ' + FOCUS_RING} data-testid="w7-to-hypothesis">State a hypothesis… in step 3</button>
+        : <>State one under “State a hypothesis…” on this account first.</>}
+    </p>
+  );
+}
+
 /** Render here, or into the workspace step that owns this part (one instance, one state). */
 const place = (target: Element | null | undefined, node: ReactNode) => (target ? createPortal(node, target) : node);
 
@@ -175,8 +253,10 @@ const field = (label: string, el: ReactNode, help?: string, wide = false) => (
 
 export type { WalkStatus };
 
-export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, primaryFor }: {
+export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, primaryFor, hypothesesKey }: {
   institutionId: string; onChanged: () => void;
+  /** S1: changes when the account's hypotheses change (the workspace's step 3), so W7 reads them again. */
+  hypothesesKey?: string;
   /** UX-1: called with what the walk knows, each time it loads. */
   onStatus?: (s: WalkStatus) => void;
   /** UX-1: W7–W8 render into the "Run and lock" step, W9 into "Account detail". */
@@ -194,16 +274,14 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
       .catch((e) => ({ error: e instanceof Error ? e.message : 'network error' }))
       .then((v) => { if (!cancelled) setW(v); });
     return () => { cancelled = true; };
-  }, [institutionId, tick]);
+  }, [institutionId, tick, hypothesesKey]);
   const reload = () => { setTick((t) => t + 1); onChanged(); };
 
   // Form state, one object per step.
   const [p1, setP1] = useState({ full_name: '', email: '', title: '' });
   const [pa, setPa] = useState({ person_id: '', title: 'External analyst of record — not an employee. Asserting from published material.' });
   const [p2, setP2] = useState({ offering_key: '', capability_name: '', owner_person_id: '', basis: '' });
-  const [p3, setP3] = useState({ capability_id: '', industry_measure_id: '', claim: '' });
   const [p4, setP4] = useState({ engagement_name: '', owner: '', metric_name: '', unit: '', direction: '', source_system: '', capability_name: '', baseline_value: '', baseline_measured_at: '' });
-  const [p5, setP5] = useState({ industry_measure_id: '', basis_note: '' });
   const [p7, setP7] = useState({ banner_title: 'OUTSIDE-IN HYPOTHESIS', note: '', source_fixture: '' });
   const [p9, setP9] = useState({ retirement_reason: '' });
   useEffect(() => { if (w && !('error' in w)) onStatus?.(walkStatus(w)); }, [w]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -222,8 +300,8 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
     ...w.persons.map((p) => ({ id: p.id, label: p.full_name })),
   ];
   const analystId = pa.person_id || actor?.id || '';
-  const chosen = w.pack.find((m) => m.id === p3.industry_measure_id);
   const claimedForBasis = claims.filter((c) => outcome && c.capability_name === outcome.capability_name);
+  const needsHypothesis = Boolean(outcome) && outcome!.current_hypotheses === 0;
 
   return (
     <Card n="W" title="Outside-in walk" badge={<Badge tone="neutral">{w.institution.industry_name ?? 'Unclassified'}</Badge>}>
@@ -291,30 +369,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
         <Step id="W3" title="The capability's claim on a pack entry" state={s3}
           waitsFor={s2 !== 'done' ? 'W2, a capability' : `a pack: classify the account into an industry with entries`} testId="w3">
           {claims.length > 0 && <p className="m-0 mb-2 text-[12.5px] text-ink">{claims.map((c) => `${c.capability_name} → ${c.measure_name}`).join('; ')} <span className="text-ink-45">(a claim is not amended)</span></p>}
-          {s3 === 'next' && (
-            <GovernedForm<{ id: string }>
-              path={`/api/capabilities/${p3.capability_id}/industry-measures`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">That this capability plausibly moves this pack entry: the mechanism, in your words. Final: a claim is not amended.</p>}
-              fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {field('Capability', <select className={INPUT_CLASS} value={p3.capability_id} onChange={(e) => setP3({ ...p3, capability_id: e.target.value })}>
-                  <option value="">— choose —</option>{w.capabilities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>)}
-                {field('Pack entry', <select className={INPUT_CLASS} value={p3.industry_measure_id} onChange={(e) => setP3({ ...p3, industry_measure_id: e.target.value })}>
-                  <option value="">— choose —</option>{w.pack.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>)}
-                {chosen && (
-                  <div className="sm:col-span-2" data-testid="claim-confounders">
-                    <p className="m-0 text-[12px] text-ink-45">{chosen.definition} <span className="font-mono">({chosen.unit} · {chosen.direction})</span></p>
-                    <div className="mt-2 border-l-2 border-gold pl-3">
-                      <span className="block text-[9.5px] font-semibold uppercase tracking-[.13em] text-gold-ink">What moves this that is NOT capability</span>
-                      <p className="m-0 mt-1 text-[12.5px] text-ink-45">{chosen.confounders}</p>
-                    </div>
-                  </div>
-                )}
-                {field('Claim (the mechanism)', <textarea rows={3} className={INPUT_CLASS} value={p3.claim} onChange={(e) => setP3({ ...p3, claim: e.target.value })} />, undefined, true)}
-              </div>}
-              canSubmit={!!p3.capability_id && !!p3.industry_measure_id && p3.claim.trim() !== ''}
-              buildBody={() => ({ industry_measure_id: p3.industry_measure_id, claim: p3.claim })}
-              primary={pr('w3', s3)} submitLabel="Record the claim" onSuccess={reload} renderSuccess={() => <>Claimed.</>} />
-          )}
+          {s3 === 'next' && <ClaimForm capabilities={w.capabilities} pack={w.pack} primary={pr('w3', s3)} onDone={reload} />}
         </Step>
 
         <Step id="W4" title="The value outcome, with its published baseline" state={s4} waitsFor="W3, a claim" testId="w4">
@@ -358,19 +413,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
         <Step id="W5" title="The metric's pack basis" state={s5} waitsFor="W4, an outcome and its metric" testId="w5">
           {outcome?.metric.industry_measure_id && <p className="m-0 mb-2 text-[12.5px] text-ink">{outcome.metric.name} → {w.pack.find((m) => m.id === outcome.metric.industry_measure_id)?.name ?? outcome.metric.industry_measure_id} <span className="text-ink-45">(a basis is not amended)</span></p>}
-          {s5 === 'next' && outcome && (
-            <GovernedForm<{ metric_id: string }>
-              path={`/api/business-metrics/${outcome.metric.id}/pack-basis`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">That this account's metric is an instance of the pack entry its capability claims. Before this, check the units match. Final: a basis is not amended.</p>}
-              fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {field('Pack entry (claimed by this capability)', <select className={INPUT_CLASS} value={p5.industry_measure_id} onChange={(e) => setP5({ ...p5, industry_measure_id: e.target.value })}>
-                  <option value="">— choose —</option>{claimedForBasis.map((c) => <option key={c.industry_measure_id} value={c.industry_measure_id}>{c.measure_name}</option>)}</select>)}
-                {field('Basis note', <textarea rows={2} className={INPUT_CLASS} value={p5.basis_note} onChange={(e) => setP5({ ...p5, basis_note: e.target.value })} />, undefined, true)}
-              </div>}
-              canSubmit={!!p5.industry_measure_id && p5.basis_note.trim() !== ''}
-              buildBody={() => ({ industry_measure_id: p5.industry_measure_id, basis_note: p5.basis_note })}
-              primary={pr('w5', s5)} submitLabel="Set the basis" onSuccess={reload} renderSuccess={() => <>Set.</>} />
-          )}
+          {s5 === 'next' && outcome && <PackBasisForm metric={outcome.metric} claimed={claimedForBasis} primary={pr('w5', s5)} onDone={reload} />}
         </Step>
 
         <Step id="W6" title="Evidence: the baseline, and any vendor claim" state={s6} waitsFor="W5, the pack basis" testId="w6">
@@ -424,9 +467,12 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
               Run {openRun.run_number} produced, not locked yet: lock it in W8.
             </p>
           )}
-          {eng && !eng.retired && eng.runs.length > 0 && !openRun && <NewRun engId={eng.id} next={eng.runs.length + 1} banner={p7.banner_title} onDone={reload} />}
+          {/* S1 (§20; Brad's ruling 1): a run seals the hypothesis it tests. With none current, W7 says so and points to
+              the hypothesis step, instead of offering a submit that would be refused. */}
+          {eng && !eng.retired && needsHypothesis && (s7 === 'next' || !openRun) && <NeedsHypothesis inWorkspace={Boolean(targets?.run)} />}
+          {eng && !eng.retired && eng.runs.length > 0 && !openRun && !needsHypothesis && <NewRun engId={eng.id} next={eng.runs.length + 1} banner={p7.banner_title} onDone={reload} />}
           {eng && eng.retired && eng.runs.length > 0 && <p className="m-0 text-[11.5px] text-ink-45">The engagement is retired: no new run.</p>}
-          {s7 === 'next' && eng && (
+          {s7 === 'next' && eng && !needsHypothesis && (
             <GovernedForm<{ value_run_id: string }>
               path={`/api/engagements/${eng.id}/produce-run`} provenanceLabel="What this records"
               provenance={<p className="m-0 text-[12.5px] text-ink">A run: the outcome, its evidence and its confidence, snapshotted. Not locked until W8.</p>}
