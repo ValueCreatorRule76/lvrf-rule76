@@ -128,6 +128,30 @@ cut line applied first.
   contradiction) (Q13); 15's reference sections generated from the system; the rest of 3 (Q7: parents and
   affiliates, L4, L9, the entity mismatch rate) and of 4 (Q8). Item 12 and the draft's test go with the first
   2027 engagement; D9 stays open for a `claimed` run on a real engagement.
+- **Brad's rulings for 3.1 (15 Nov 2026):**
+  - **One Rule76 family with CVAF.** LVRF's design, colours and UX are Rule76-compliant and read as the same family as
+    CVAF. The reference is CVAF's `docs/RULE76_DESIGN_SYSTEM.md` (read from `cvaf-rule76`, nothing copied into CVAF).
+    Tokens stay cited from `CLAUDE.md`, never restated; any value where CVAF's system and `CLAUDE.md` disagree is named
+    for Brad, not resolved silently. The read-only UI conformance audit (CVAF pattern 3, above) is the first step.
+  - **A hypothesis is sealed with every run.** Proposed reading, to confirm: producing a run is refused while its
+    outcome has no current hypothesis, in the route and in the database; runs already sealed keep what they sealed and
+    are never changed. The tenant's own account needs a hypothesis path first (L33: it has no workspace today).
+- **Raised 14–15 Nov 2026 (Brad's review of the Skillsoft case and the navigation), for ruling:**
+  - **Links to the value case and both lenses** on every run page, in the Runs list, and on the tenant's own account.
+    Today the only links sit in a customer account's workspace. Small; no ruling needed beyond scheduling.
+  - **The War Room and account focus:** enter the War Room, choose an account, and keep that focus through the
+    workflow, as CVAF does. **Reverses** the design's navigation decision (`LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md` §4:
+    accounts as the front door, flat object-keyed routes, no stage sequence). Brad to rule; mock-ups before code, as
+    UX-1.
+  - **In-app AI research with Rule76's API key,** on CVAF's design (`cvaf-rule76/ops/ai-drafting.md`, rulings P1–P4:
+    the key is Rule76 Consulting LLC's, on the box only; the model named with its retention disclosed; each account
+    cleared with a reason before its data is sent; spend capped, with an audit row before and after each call). The
+    server would run the generated research prompt that a person pastes today; parse, the entity check and the
+    per-field accept are unchanged. **Reverses** `CLAUDE.md`'s research seam (D1: no code calls a research tool) and
+    Brad's 5 Nov ruling (offline only). Brad to rule. An API key is billed apart from a Claude subscription.
+  - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
+    (P8, above).
+  - **Copy:** an ask on a percentage measure says "one point", not "one unit" (the Skillsoft CFO print, 15 Nov 2026).
 
 - The full Pack Contract (design §5.2): import, deltas, validation, certification,
   activation, inheritance, the projection drift check, the pack driving every stage
