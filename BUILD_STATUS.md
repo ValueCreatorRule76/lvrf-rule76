@@ -14588,15 +14588,38 @@ or copied:
   - Unverified, not opened, not AI-sourced, not simulated.
   - **As drafted:** the provenance (naming `eed11e02` and `6f8d5cb3`), the citation (the EDGAR URL), the quote
     (byte-identical to `6f8d5cb3`'s) and how it was read (naming `6f8d5cb3`).
-- **Not as drafted: "What it states" holds only the last 340 of the 556 characters.** It begins `2027 release, 9 Sep
+- **Not as drafted: "What it states" holds only the last 340 of the 557 characters.** It begins `2027 release, 9 Sep
   2026): “Dollar retention rate …` and ends as drafted.
-  - The 216 missing characters are the correction sentence, "Skillsoft's DRR is its own measure, not this entry's
+  - The 217 missing characters are the correction sentence, "Skillsoft's DRR is its own measure, not this entry's
     cohort ARR rate.", and the start of the next sentence, including `6f8d5cb3`.
   - The audit row's `new_row` equals the stored text, so the API received it so.
   - No code shortens it: the form sets no `maxLength`, and the route only trims.
-  - The row still points to the original and the source through its provenance and how-read. **For Brad's ruling.**
+  - The row still points to the original and the source through its provenance and how-read. **Ruled by Brad:
+    superseded** (below). (Corrected here: the first report said 556 and 216; it is 557 and 217.)
 - **Unchanged:** acts **227** (recording a source writes none); no refusal; 1 audit row (the insert, with its actor).
   `eed11e02` is as recorded, and `e7edeaae` → `2bd87345`.
 - **Run 3's hash** is still `fb2917d1…c0c372c`; `check_run_hashes` 27/27; all 27 runs byte-identical to the Gate C read.
 
-**Gate C clean but for act 4's note, ruled above; Brad's correcting observation `c56a3d33` recorded with its summary cut short, for his ruling.** Prod was only read.
+**Brad supersedes `c56a3d33` (21:12:17 UTC, `POST /api/evidence/:id/supersede` 201, session). Post-act check,
+read-only:**
+
+- **The successor, found from the database: `673861eb`** (`673861eb-3cb2-4100-9126-5d860ba8d758`) on Skillsoft's 01c.
+  - Observation, `quote` form, about Skillsoft, captured by Brad.
+  - Unverified, not opened, not AI-sourced, not simulated; current.
+  - **"What it states" is byte-identical to the draft** (557 characters). It opens with the correction sentence, names
+    `eed11e02` and `6f8d5cb3`, and quotes the definition.
+  - The quote is byte-identical to `6f8d5cb3`'s. The provenance, citation and how-read are as drafted.
+- **`c56a3d33`** stands on record with `superseded_by_id` = `673861eb`, its text unchanged. It had no links, so none
+  moved.
+- **Acts 227 → 228:** one `supersede`, Brad's, subject `evidence` `c56a3d33`, result `evidence` `673861eb`.
+  - **Its reason is not the drafted one.** It holds the how-read text (`Exhibit 99.1 of the 8-K filed 9 Sep 2026
+    (accession 0001437749-26-029980), Key Performance Metric section, first bullet, first sentence, as quoted on
+    evidence 6f8d5cb3.`), not "The summary was recorded cut short: …".
+  - The route accepted it (at least 12 characters). An act is final. Recorded as a departure.
+- **Audit and refusals:** 3 audit rows, none without an actor: the insert, the `superseded_by_id` update and the act.
+  No refusal.
+- **Unchanged:** `eed11e02` as recorded; `e7edeaae` → `2bd87345`.
+- **Run 3's hash** is still `fb2917d1…c0c372c`; `check_run_hashes` 27/27.
+
+**S1 closed.** Gate C was clean but for act 4's note. That note stands as recorded, and `673861eb` carries the
+corrected basis note; the correction path goes to 3.1. Prod was only read.
