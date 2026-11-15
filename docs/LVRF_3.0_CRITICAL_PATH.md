@@ -133,25 +133,40 @@ cut line applied first.
     CVAF. The reference is CVAF's `docs/RULE76_DESIGN_SYSTEM.md` (read from `cvaf-rule76`, nothing copied into CVAF).
     Tokens stay cited from `CLAUDE.md`, never restated; any value where CVAF's system and `CLAUDE.md` disagree is named
     for Brad, not resolved silently. The read-only UI conformance audit (CVAF pattern 3, above) is the first step.
-  - **A hypothesis is sealed with every run.** Proposed reading, to confirm: producing a run is refused while its
-    outcome has no current hypothesis, in the route and in the database; runs already sealed keep what they sealed and
-    are never changed. The tenant's own account needs a hypothesis path first (L33: it has no workspace today).
-- **Raised 14–15 Nov 2026 (Brad's review of the Skillsoft case and the navigation), for ruling:**
+  - **A hypothesis is sealed with every run.** **Confirmed as read (Brad, 15 Nov 2026):** producing a run is refused
+    while its outcome has no current hypothesis, in the route and in the database; runs already sealed keep what they
+    sealed, are never changed, and no re-run is forced; the next run on any outcome needs one. The tenant's own account
+    gets a hypothesis path first (L33: it has no workspace today).
+- **Raised 14–15 Nov 2026 (Brad's review of the Skillsoft case and the navigation). Ruled by Brad, 15 Nov 2026: all
+  approved as recommended, with the conditions below; the order is under "3.1 build order".**
   - **Links to the value case and both lenses** on every run page, in the Runs list, and on the tenant's own account.
-    Today the only links sit in a customer account's workspace. Small; no ruling needed beyond scheduling.
+    Today the only links sit in a customer account's workspace. **Approved.**
   - **The War Room and account focus:** enter the War Room, choose an account, and keep that focus through the
     workflow, as CVAF does. **Reverses** the design's navigation decision (`LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md` §4:
-    accounts as the front door, flat object-keyed routes, no stage sequence). Brad to rule; mock-ups before code, as
-    UX-1.
+    accounts as the front door, flat object-keyed routes, no stage sequence). **Approved in this shape:** the flat,
+    shareable routes stay underneath; an account frame on top carries the chosen account through every page (header,
+    runs, case, POV, research) until it is left. The War Room never sums or averages money across accounts (CVAF's
+    lesson, design §4.3). Mock-ups before code, as UX-1.
   - **In-app AI research with Rule76's API key,** on CVAF's design (`cvaf-rule76/ops/ai-drafting.md`, rulings P1–P4:
     the key is Rule76 Consulting LLC's, on the box only; the model named with its retention disclosed; each account
     cleared with a reason before its data is sent; spend capped, with an audit row before and after each call). The
     server would run the generated research prompt that a person pastes today; parse, the entity check and the
     per-field accept are unchanged. **Reverses** `CLAUDE.md`'s research seam (D1: no code calls a research tool) and
-    Brad's 5 Nov ruling (offline only). Brad to rule. An API key is billed apart from a Claude subscription.
+    Brad's 5 Nov ruling (offline only). **Approved for research only** (the drafting assistant stays deferred, Q9/P10).
+    **Key and model (Brad):** Rule76 Consulting LLC's key, on the box only; the strongest model generally available,
+    with its retention (at least 30 days) disclosed on the page and in each account's clearance; Anthropic's retention
+    pages re-read when the slice is built. **Guardrails:** every result arrives `ai_sourced`, basis assumed until a
+    person opens its citation and accepts it field by field (D2 rule 2, rules 4 and 5); the call carries published,
+    outside-in material only and is refused if the generated prompt would carry a customer-side row. **Open:** the
+    monthly spend cap. `CLAUDE.md`'s research seam is amended when the slice passes Gate C (the OWN-1-D3 precedent).
+    An API key is billed apart from a Claude subscription.
   - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
-    (P8, above).
-  - **Copy:** an ask on a percentage measure says "one point", not "one unit" (the Skillsoft CFO print, 15 Nov 2026).
+    (P8, above). **Approved:** adding, changing or retiring an offering is a steward act with its own act row.
+  - **Copy:** an ask on a percentage measure says "one point", not "one unit" (the Skillsoft CFO print, 15 Nov 2026). **Approved.**
+- **3.1 build order (Brad, 15 Nov 2026).** Before the pilot starts on 4 Jan 2027: the case links and the copy fix; the
+  hypothesis rule with the tenant's hypothesis path; in-app AI research; the printed case and POV brought into the CVAF
+  family. During the pilot: the account frame, then the War Room, once mock-ups are approved. After: the solution
+  catalog page, `/people`, and the rest of the design-family audit.
 
 - The full Pack Contract (design §5.2): import, deltas, validation, certification,
   activation, inheritance, the projection drift check, the pack driving every stage
