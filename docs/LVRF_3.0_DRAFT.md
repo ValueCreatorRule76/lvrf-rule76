@@ -1,4 +1,75 @@
-## LVRF 3.0 — DRAFT, not ratified — 11 October 2026 (revision 3)
+## LVRF 3.0 — RATIFIED 15 November 2026 (revision 4)
+
+**Status: RATIFIED by Brad Piver, 15 November 2026 (UTC), against the scope shipped through `cd38210`**
+(B1–B4 and the B4 findings lens; `docs/LVRF_3.0_CRITICAL_PATH.md`). "Ready" is the critical path's: ready to
+**run an engagement**, rendering a value case that honestly refuses until the customer's baseline, a committed
+target, an attested rate, a measured actual and a verifier are in. Deferred work is recorded as **3.1** in the
+critical path. Revision 3's text follows unchanged below, as the record of what was planned; where it and this
+section disagree, this section holds.
+
+**Brad's four rulings (15 Nov 2026), on `docs/proposals/LVRF_3.0_RATIFICATION_DRAFT.md`:**
+
+1. **Ratified with Q1 open.** The Rule76 doctrine source (Provenance, Truth and Governance) is still not
+   excavated in the Cathedral. The disciplines table stays a **working statement, not a citation**, and Q1 is
+   carried to 3.1.
+2. **`record_documents` stays provisional.** Q7's condition ("restate it if one [record] does [leave Skillsoft]")
+   is met by M21. Restated: provisional until the Repository Constitution ratifies, and **shared outside
+   Skillsoft only through the D-M21 act** ("Shared for review as an outside-in hypothesis": both banners print;
+   the act names who, with whom, when, the run and its hash; it never changes verification). No schema change.
+3. **Ratified against the critical path's "ready to run an engagement".** The draft's test ("a Skillsoft user
+   Brad has authorized, not Brad, takes an account from a name to a researched baseline") **has not been met and
+   is not claimed as passed.** It is carried, with 1.2's oldest open test, as the **acceptance test of the first
+   2027 engagement**.
+4. **D9 closed for outside-in runs:** the OUTSIDE-IN and UNVERIFIED banners state that the run is a hypothesis.
+   A `claimed` run on a real engagement keeps the question open into 3.1.
+
+### What shipped: the critical path's scope
+
+| # | Work | Batch | Closed |
+|---|---|---|---|
+| 1 | L52 and L50 closed; the hold on customer-side role grants lifted | B1 | Gate C clean at `bd5cb7c`, 5 Nov |
+| 2 | Short ids in every evidence picker and list; "Withdraw this link…" on card 01c | B2 | Gate C clean at `bdf9971`, 5 Nov |
+| 3 | ~~Pack ratify and demote~~ | — | **moved to 3.1** (4 Nov) |
+| 4 | The case snapshot (§16, payload v4) | B2 | Gate C clean at `bdf9971`, 5 Nov |
+| 5 | P6, the value case: the CFO lens (≥ 55) and its refusal page, cost of delay under ruling (b), roadmap, solutioning, "what it takes to raise confidence", the confidence curve, print with banners and the full hash, the D-M21 steward act "Shared for review as an outside-in hypothesis" | B3 | Gate C clean at `9c93671`, 5 Nov |
+| 6 | §14: commit, measure and verify in the client, with the attribution method and measure class fixed at commit; steward safety with it; the card 05 addendum | B4 | deployed at `5b834f2`, Gate C clean 6 Nov |
+| 6a | The B4 findings lens: misstated-finding errata (41 on 25 runs, Brad's batch), the CFO print request naming its lens policy, the withheld-claim line on the CFO refusal page, absence no longer sealed as synthetic | B4 lens | deployed at `cd38210`, Gate C clean 15 Nov; post-act dump TOC 908 |
+
+**Cut to 3.1 by the cut line (4 Nov):** the War Room, the CHRO lens, link corrections in the
+supersession batch.
+
+### The roster (revision 3), item by item
+
+| Item | Disposition | Where |
+|---|---|---|
+| **A1** access grant is a record | **Shipped** | Q2, 11 Oct (`da00660`, `7c7e90e`) |
+| **A2** Brad-only acts, one shared check | **Shipped** | Q3, 11 Oct (`9560bfd`); steward-only routes since, each added to the guard's list |
+| **B3** entity pinned | **Shipped, minimum** (legal name and identifier; parse refuses a different entity) | Q4h, 12 Oct (`92ae23b`). **3.1:** parents and affiliates, L4, L9, the entity mismatch rate (Q7) |
+| **B4** disclosure regime | **Shipped, minimum** (recorded with evidence; the prompt reads it) | Q4h. **3.1:** the gap register computing *structurally unobtainable* (Q8) |
+| **B5** one trust vocabulary, derived | **Shipped** (D2 mapping) | O1, 12 Oct (`1db189b`) |
+| **B6** account research intake | **Shipped** | Q4h, 12 Oct; P2 adds `research_imports` (0041) |
+| **B7** total vs addressable | **3.1** | Q11 |
+| **B8** sources as entities | **3.1** | Q11 |
+| **B9** one definition behind every pack prompt | **Shipped** (recon found drift; fixed) | Q4b, 12 Oct (`0ee288d`) |
+| **B10** a run renders from itself | **Shipped**: the run seals the fact ids and values it used (O1); the whole case (B2, §16) | O1; B2 |
+| **B11** research reliability, measured | **3.1** | Q12 |
+| **B12** a human-derived oracle | **Carried to the first real engagement** (D13 stays open for it) | Q12 |
+| **C13** correction and re-checking | **Shipped**: an opening is what verifies (L41, `930c8f7`); parse refusals on record (L8). **3.1:** the `website` path (L9, with Q7) | |
+| **C14** staleness and contradiction | **3.1** (needs a new model version) | Q13 |
+| **C15** documentation and the PDF | **PDF shipped** as a browser print (O-D5; B3), which settles D10: no WeasyPrint. **3.1:** reference sections generated from the system | Q13 |
+| **D16** pack ratification | **3.1** (N = 2 institutions' systems of record, not lowered) | critical path, 4 Nov |
+| **D17** the earned pack | **Band D**, on its trigger | — |
+| **D18** portfolio learning | **Band D**, on its trigger | — |
+
+**The 3.1 list** is the critical path's *3.1* section as it stands at `92821ee`, plus Q7, Q8, Q11,
+B11, C14 and C15's generated documentation above. The 4.0 list (the Realization Flywheel) is
+unchanged.
+
+---
+
+*Revision 3, as adopted 11 October 2026:*
+
+### LVRF 3.0 — DRAFT, not ratified — 11 October 2026 (revision 3)
 
 **Status: adopted as the working plan, not ratified.** *[rev 3: decided by Brad
 Piver, 11 October 2026; was "proposed". Q1, the doctrine source, stays open, so the
@@ -177,6 +248,9 @@ Each row says whether LVRF already holds the lesson or 3.0 must build it.
 > - each fact names the legal entity it is about;
 > - where a fact could not be sourced, the record says why, and nothing was filled
 >   in.
+
+*[rev 4, Brad, 15 Nov 2026: **not met at ratification and not claimed as passed.** 3.0 is ratified against the
+critical path's "ready to run an engagement"; this test is the acceptance test of the first 2027 engagement.]*
 
 If research still depends on the author typing facts by hand, or a researched fact
 cannot answer *who opened this, and what is it about*, the system is in 2.0
@@ -567,7 +641,8 @@ named. These are the ones found on 11 October:
 
 ## Open before ratification
 
-1. **Rule76 doctrine.** Provenance, Truth and Governance are not excavated in the
+1. *[rev 4: **carried open to 3.1** (Brad, 15 Nov 2026); 3.0 ratified with it open, the table a working
+   statement.]* **Rule76 doctrine.** Provenance, Truth and Governance are not excavated in the
    Cathedral (Governance Doctrine Index; Governed Truth Register). Does a source
    for them exist outside the repos, such as the Rule76 Canon manuscript or the
    *Intelligent Commercial OS* canon CVAF cites, that should be excavated before or
@@ -593,7 +668,8 @@ named. These are the ones found on 11 October:
 6. ~~**Does account research need an amendment?**~~ **DECIDED by Brad Piver,
    11 October 2026 (plan D11): no amendment** for the entity record (product
    schema) or the vocabulary (derived; no new stored class). *[rev 3]*
-7. **`record_documents` stays provisional** until the Repository Constitution
+7. *[rev 4: **restated** (Brad, 15 Nov 2026): M21 shares records outside Skillsoft, so the condition is met.
+   Provisional, shared outside Skillsoft only through the D-M21 act.]* **`record_documents` stays provisional** until the Repository Constitution
    ratifies. That is acceptable while no record leaves Skillsoft. Restate it if one
    does.
 8. **Where does research run: LVRF's own pipeline, or Compass OS?** *[rev 3: added.
@@ -604,7 +680,7 @@ named. These are the ones found on 11 October:
    research runs in **LVRF's own pipeline now, behind a declared seam** — one module
    boundary for research intake — and **migrates to Compass OS once Compass exists
    as code.** `CLAUDE.md` names the research-intake module as a Compass seam. *[rev 3]*
-9. **The first real account for item 6, with an independent hand-built baseline
+9. *[rev 4: **carried** to the first 2027 engagement, with item 12 and the draft's test.]* **The first real account for item 6, with an independent hand-built baseline
    (item 12).** *[rev 3: added; plan D13.]* **Narrowed by Brad, 12 October 2026:**
    D13 governs the first **real** engagement and item 12's independent hand-built
    baseline. It **no longer blocks building item 6** (Q4h), which is tested first on

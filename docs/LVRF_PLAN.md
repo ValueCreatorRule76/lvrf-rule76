@@ -180,6 +180,7 @@ on institution routes (P3).
 | O2-D3 | **Hindsight is marked.** A hypothesis created after its due date, or after its outcome already had a measured actual, is **post hoc**, computed by the database. The page says "written after the result", and a post hoc hypothesis never counts as survived | Brad Piver, 12 Oct 2026 |
 | O2-D4 | **The falsifier's shape is confirmed:** "no better than the reference (recorded baseline or committed target) by the due date", plus conditions with no digits. **The measure's direction (lower or higher is better) comes only from the pack entry row** and is shown on the page; a hypothesis cannot set it. The digit refusal explains itself: "numbers belong in recorded values, not falsifier conditions" | Brad Piver, 12 Oct 2026 |
 | R1 (refined) | **A company's formal annual disclosure report is `public_filing`** (10-K, annual report, CR, sustainability or ESG report); **looser company material is `observation`** (press releases, web pages, blog posts, job postings, marketing). The basis follows from D2 unchanged: published, or inferred with a source reference (§4k) | Brad Piver, 12 Oct 2026 |
+| R4-3.0 | **3.0 ratified (revision 4)** against the scope shipped through `cd38210`, on the critical path's "ready to run an engagement". Q1 (doctrine source) carried open to 3.1; `record_documents` provisional, shared outside Skillsoft only through the D-M21 act; the draft's test is the acceptance test of the first 2027 engagement, not claimed as passed; D9 closed for outside-in runs by the banners, open for a `claimed` run on a real engagement; D10 settled by O-D5 (no WeasyPrint) | Brad Piver, 15 Nov 2026 |
 
 ### Open: blocks the next item (Band A)
 
@@ -189,9 +190,9 @@ None. D3–D6 were decided on 11 October 2026 (above).
 
 | # | Decision | Options | Blocks |
 |---|---|---|---|
-| D9 | Must a run locked at `claimed` state that it is a hypothesis? (L18) | require the statement; or low confidence suffices | nothing urgent |
-| D10 | WeasyPrint on the VPS, or rendering stays on the Mac | — | 3.0 item 15 |
-| D11 (rest) | 3.0 draft Q1 (Rule76 doctrine source) and Q7 (`record_documents` provisional). Q5 (AMENDMENT-004 drift) is fixed by the hygiene batch's L21; Q6 decided (no amendment) | see the draft | ratification only |
+| D9 | Must a run locked at `claimed` state that it is a hypothesis? (L18) **Closed for outside-in runs (R4-3.0, 15 Nov 2026); open for a `claimed` run on a real engagement.** | require the statement; or low confidence suffices | nothing urgent |
+| D10 | WeasyPrint on the VPS, or rendering stays on the Mac **Settled by O-D5 (browser print; R4-3.0, 15 Nov 2026).** | — | 3.0 item 15 |
+| D11 (rest) | 3.0 draft Q1 (Rule76 doctrine source) and Q7 (`record_documents` provisional). Q5 (AMENDMENT-004 drift) is fixed by the hygiene batch's L21; Q6 decided (no amendment) **Ruled at ratification (R4-3.0, 15 Nov 2026): Q1 carried open; Q7 restated.** | see the draft | ratification only |
 | D12 | DB-level tenant backstop: trigger or RLS (L15) | — | L15 |
 | **D13** | **The first REAL engagement, and 3.0 item 12** (the independent hand-built baseline compared field by field with research) | **Narrowed by Brad, 12 Oct 2026: D13 no longer blocks building item 6** (Q4h). It governs only the first real engagement researched under item 6, and item 12's comparison | **Open** for the real engagement; not blocking Q4h |
 

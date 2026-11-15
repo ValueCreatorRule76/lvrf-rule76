@@ -46,7 +46,7 @@ recorded as **3.1**.
 | 4 | **The case snapshot** (§16, payload v4, sealing each pack entry with a hash of its fields) | 2 days | **B2**, closed 5 Nov (Gate C clean at `bdf9971`) |
 | 5 | **P6: the value case** — `lens_policies` (the CFO lens, ≥ 55), `/runs/:id/case` with the CFO refusal page; outcomes by lever with basis and attribution; **cost of delay** under ruling (b) (committed target × client-stated, customer-side-attested monetization rate × 6/12; refuses with every reason); **roadmap milestones**; **recommended solutioning** (only offerings linked to the lever, not excluded); "what it takes to raise confidence"; the confidence curve (sealed scores, breaks, erratum marks); **print** with banners and the full hash on every page; the steward act **"Shared for review as an outside-in hypothesis"** (D-M21); proposed entries labeled, with a line that no pack is certified; `monetization_rates` and `policy_values` in its migration, D = 6 months set by the steward (P6 rulings, 4 Nov; LVRF_PLAN §19) | 5 days (plan approved 5 Nov; LVRF_PLAN §19) | **B3**, **closed 5 Nov** (Gate C clean at `9c93671`; planned for 11 Nov) |
 | 6 | **§14: commit, measure and verify in the interface**, with the **attribution method and the measure class fixed at commit** (cost of delay refuses a `compliance_assurance` class; P6 ruling 2, 4 Nov) (design §3.2, core only: the method enum and its rules; comparison populations are 3.1). M21 needs none of it: an outside-in account has no commitment, actual or verifier, and the refusal page lists them as asks. **It takes ratify's freed day** | about 3¾ days (plan approved 5 Nov; LVRF_PLAN §14), steward safety with it | **B4**, built Fri 6 – Tue 10 Nov; Gate B **Thu 12 Nov**, buffer Wed 11 |
-| 7 | Consolidated Gate C, Brad's acts, **3.0 ratified** about **15 Nov** (B2 and B3 each closed early, 5 Nov) (`LVRF_3.0_DRAFT.md` updated to what shipped; the 3.1 list recorded) | with B4 | — |
+| 7 | ~~Consolidated Gate C, Brad's acts, **3.0 ratified** about **15 Nov**~~ **DONE: 3.0 ratified by Brad, 15 Nov 2026** (revision 4 of `LVRF_3.0_DRAFT.md`, against `cd38210`; B4 lens Gate C clean 15 Nov) (B2 and B3 each closed early, 5 Nov) (`LVRF_3.0_DRAFT.md` updated to what shipped; the 3.1 list recorded) | with B4 | — |
 
 **The cut line, applied (4 Nov):** P6 cannot be through Gate A by day 9, so the **War Room** and the **CHRO lens** move
 to 3.1. The **CFO lens, its refusal page and cost of delay stay.** **Link corrections in the supersession batch** also
@@ -122,6 +122,12 @@ cut line applied first.
 ---
 
 ## 3.1 (deferred, recorded so nothing is lost)
+
+- **From the 3.0 ratification (Brad, 15 Nov 2026):** Q1, the Rule76 doctrine source; roster items 7 (total vs
+  addressable) and 8 (sources as entities) (Q11); 11 (research reliability) (Q12); 14 (staleness and
+  contradiction) (Q13); 15's reference sections generated from the system; the rest of 3 (Q7: parents and
+  affiliates, L4, L9, the entity mismatch rate) and of 4 (Q8). Item 12 and the draft's test go with the first
+  2027 engagement; D9 stays open for a `claimed` run on a real engagement.
 
 - The full Pack Contract (design §5.2): import, deltas, validation, certification,
   activation, inheritance, the projection drift check, the pack driving every stage
