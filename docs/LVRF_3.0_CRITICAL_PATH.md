@@ -157,8 +157,10 @@ cut line applied first.
     with its retention (at least 30 days) disclosed on the page and in each account's clearance; Anthropic's retention
     pages re-read when the slice is built. **Guardrails:** every result arrives `ai_sourced`, basis assumed until a
     person opens its citation and accepts it field by field (D2 rule 2, rules 4 and 5); the call carries published,
-    outside-in material only and is refused if the generated prompt would carry a customer-side row. **Open:** the
-    monthly spend cap. `CLAUDE.md`'s research seam is amended when the slice passes Gate C (the OWN-1-D3 precedent).
+    outside-in material only and is refused if the generated prompt would carry a customer-side row. **Spend (Brad,
+    15 Nov 2026, option 1):** Rule76 Consulting LLC's Console organisation, its own LVRF workspace with a workspace
+    spend limit equal to Brad's Claude Pro fee a month, prepaid credits, auto-reload off, so calls stop at the limit.
+    Claude Pro itself carries no API usage. `CLAUDE.md`'s research seam is amended when the slice passes Gate C (the OWN-1-D3 precedent).
     An API key is billed apart from a Claude subscription.
   - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
     (P8, above). **Approved:** adding, changing or retiring an offering is a steward act with its own act row.
