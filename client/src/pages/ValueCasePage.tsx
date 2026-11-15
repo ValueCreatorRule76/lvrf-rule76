@@ -39,7 +39,7 @@ interface CostOfDelay {
 interface Solution { hypothesis_id: string; lever: string; lever_current: boolean; offerings: { offering: string; basis: string; evidence_class: string | null }[] }
 interface Milestone { id: string; title: string; due_on: string; owner: string | null; planned_by: string | null; stage: string | null; status: string; slipped: boolean }
 interface Outcome {
-  value_outcome_id: string | null; metric: string; unit: string | null; one: string; direction: string | null; baseline: number | null; target: number | null; actual: number | null;
+  value_outcome_id: string | null; metric: string; unit: string | null; rate_unit_word: string; direction: string | null; baseline: number | null; target: number | null; actual: number | null;
   realization: string | null; claimed_currency_impact: number | null; currency: string | null; committer: string | null; verifier: string | null;
   committer_customer_side: boolean | null; committer_side_reason: string | null;
   sources: { baseline: Source | null; actual: Source | null; impact_basis: Source | null; target_commitment: Source | null }; floor: string | null;

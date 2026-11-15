@@ -124,9 +124,9 @@ export function valueCaseRouter(pool: Pool): Router {
       const outcomeFloor = [baseline?.basis ?? null, ...(p.actualValue !== null && p.actualValue !== undefined ? [actual?.basis ?? null] : [])]
         .sort((a, b) => rank(a) - rank(b))[0] ?? null;
       const outcomes = floorFirst([{
-        // S1 (§20, D2): `one` is the step a rate is asked per ("point" for a percentage unit), from oneStep(), so the page
+        // S1 (§20, D2): `rate_unit_word` is the step a rate is asked per ("point" for a percentage unit), from oneStep(), so the page
         // does not restate the rule.
-        value_outcome_id: p.valueOutcomeId ?? null, metric, unit, one: oneStep(unit), direction: p.businessMetric?.direction ?? null,
+        value_outcome_id: p.valueOutcomeId ?? null, metric, unit, rate_unit_word: oneStep(unit), direction: p.businessMetric?.direction ?? null,
         baseline: p.baselineValue ?? null, target: p.targetValue ?? null, actual: p.actualValue ?? null, realization: p.realization ?? null,
         claimed_currency_impact: p.claimedCurrencyImpact ?? null, realized_currency_impact: p.realizedCurrencyImpact ?? null, currency: p.currencyCode ?? null,
         committer: p.people?.committer?.name ?? null, committer_customer_side: p.people?.committer?.customer_side ?? null,

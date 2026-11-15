@@ -76,6 +76,18 @@ async function act(scopeExpr, text, label) {
   }
   return said ?? '';
 }
+// Under load the form re-renders after its fields are set; wait for the button to be there and enabled before acting
+// (a fixed sleep raced at the final regression, 15 Nov 2026), so a missing or disabled button is still a failure.
+const enabledButton = (scopeExpr, text) => `(()=>{const root=${scopeExpr}||document;const el=[...root.querySelectorAll('button')].find(e=>e.textContent.trim()===${JSON.stringify(text)}||e.textContent.includes(${JSON.stringify(text)}));return !!el&&!el.disabled})()`;
+// After Page.reload the old document can still answer a wait, so a click may land on a page about to be replaced.
+// Open a form by clicking until its own field is there (raced at the final regression, 15 Nov 2026).
+async function openForm(scopeExpr, buttonText, readyExpr, label) {
+  for (let i = 0; i < 25; i++) {
+    if (await ev(readyExpr)) return true;
+    await click0(scopeExpr, buttonText); await sleep(400);
+  }
+  const r = await ev(readyExpr); if (!r) bad(`${label}: "${buttonText}" did not open its form`); return r;
+}
 const card = (title) => `([...document.querySelectorAll('section')].find(s=>s.querySelector('h3')?.textContent.includes(${JSON.stringify(title)})))`;
 const tickCaveats = (scopeExpr) => ev(`(()=>{const root=${scopeExpr};const cb=root&&root.querySelector('input[type=checkbox]');if(!cb)return false;if(!cb.checked)cb.click();return cb.checked})()`);
 const pendingEntry = (name) => `([...(${card('Pending review')}||document).querySelectorAll('h4')].find(h=>h.textContent===${JSON.stringify(name)})?.parentElement)`;
@@ -154,8 +166,11 @@ if (MODE === 'links') {
   await setField(f, 'Name', E.IND_NAME); await setField(f, 'Slug', E.SLUG); await setField(f, 'Why it is added', E.IND_REASON);
   await sleep(200);
   await act(f, 'Add the industry', 'add the industry');
-  check(await waitFor(`${bodyHas(E.IND_NAME)}`), `the industry "${E.IND_NAME}" is on the packs page`);
-  check(psql(`SELECT count(*) FROM industries WHERE slug = '${E.SLUG}'`) === '1', '  ...and in the database');
+  // The confirmation quotes the name, so the body holds it before the POST lands: wait for the list's own link to the
+  // new pack (rendered only from the re-read list), then for the row (raced at the final regression, 15 Nov 2026).
+  check(await waitFor(`!!document.querySelector('a[href="/packs/${E.SLUG}"]')`), `the industry "${E.IND_NAME}" is on the packs page, linked to its pack`);
+  let indRows = '0'; for (let i = 0; i < 50 && indRows !== '1'; i++) { indRows = psql(`SELECT count(*) FROM industries WHERE slug = '${E.SLUG}'`); if (indRows !== '1') await sleep(200); }
+  check(indRows === '1', '  ...and in the database', `${indRows} rows`);
   await shot('s1_d1_1_industry_added_1280');
   // 2. Generate, run (a fixture response, here), parse and accept the DRR entry.
   check(await open(`/packs/${E.SLUG}`, bodyHas('Generate research prompt')), 'the new pack page offers "Generate research prompt"');
@@ -186,7 +201,10 @@ if (MODE === 'links') {
   await setField(lf, 'Leading indicator', E.LEVER_IND); await setField(lf, 'Citation', E.LEVER_CIT);
   await sleep(200);
   await act(lf, 'Propose the lever', 'propose the lever');
-  check(await waitFor(bodyHas(E.LEVER_NAME)), `the lever "${E.LEVER_NAME}" is on the pack entry`);
+  // The confirmation quotes the name, so wait for the mechanism, which only the re-read lever list shows, then the row.
+  check(await waitFor(bodyHas(E.LEVER_MECH)), `the lever "${E.LEVER_NAME}" is on the pack entry, with its mechanism`);
+  let levRows = '0'; for (let i = 0; i < 50 && levRows !== '1'; i++) { levRows = psql(`SELECT count(*) FROM value_levers WHERE name = '${E.LEVER_NAME}' AND deleted_at IS NULL`); if (levRows !== '1') await sleep(200); }
+  check(levRows === '1', '  ...and in the database', `${levRows} rows`);
   await shot('s1_d1_3_lever_proposed_1280');
 } else if (MODE === 'tenantchain') {
   const chain = `document.querySelector('[data-testid=tenant-chain]')`;
@@ -254,9 +272,8 @@ if (MODE === 'links') {
   await shot('s1_d1_4_run_refused_1280');
   await send('Page.reload'); await waitFor(`!!${blk}`, 20000);
   // State the hypothesis (the workspace's form and route).
-  await click0(blk, 'State a hypothesis…');
-  await sleep(300);
   const hf = `(${blk}).querySelector('[data-testid=state-hypothesis]')`;
+  await openForm(blk, 'State a hypothesis…', `!!(${blk}) && !!${hf}`, 'state a hypothesis');
   await setField(hf, 'Outcome (capability and metric)', E.OUTCOME); await sleep(200);
   await setField(hf, 'Lever', E.LEVER_ID); await setField(hf, 'Statement', E.STATEMENT);
   await setField(hf, 'Measured against', 'baseline'); await setField(hf, 'Due', E.DUE); await setField(hf, 'Conditions (words only)', E.CONDITIONS);
@@ -268,12 +285,14 @@ if (MODE === 'links') {
   await shot('s1_d1_6_hypothesis_stated_1280');
   // Produce and lock the run.
   await send('Page.reload'); await waitFor(`!!${runs}`, 20000);
-  await click0(runs, 'Produce a new run…'); await sleep(300);
+  await openForm(runs, 'Produce a new run…', `!!(${runs}) && [...(${runs}).querySelectorAll('label')].some(l=>l.textContent.includes('Run source label'))`, 'produce a new run');
   await setField(runs, 'Banner', E.BANNER); await setField(runs, 'Note (required)', E.RUN_NOTE); await setField(runs, 'Run source label (required)', E.RUN_SOURCE);
   await sleep(200);
+  await waitFor(enabledButton(runs, `Produce run ${E.NEXT}`), 10000);
   await act(runs, `Produce run ${E.NEXT}`, 'produce the run');
   check(await waitFor(`!!(${runs}).querySelector('[data-testid=lock-run]')`, 20000), `  ...run ${E.NEXT} produced, not locked yet`);
   await setField(`(${runs}).querySelector('[data-testid=lock-run]')`, 'Lock reason', E.LOCK_REASON); await sleep(200);
+  await waitFor(enabledButton(`(${runs}).querySelector('[data-testid=lock-run]')`, `Lock run ${E.NEXT}`), 10000);
   await act(`(${runs}).querySelector('[data-testid=lock-run]')`, `Lock run ${E.NEXT}`, 'lock the run');
   check(await waitFor(`[...(${runs}).querySelectorAll('[data-testid=engagement-run]')].some(li=>li.dataset.locked==='true'&&li.textContent.includes('Run ${E.NEXT}'))`, 20000), `  ...run ${E.NEXT} locked`);
   await shot('s1_d1_7_run_locked_1280');

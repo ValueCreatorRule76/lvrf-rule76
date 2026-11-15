@@ -15,7 +15,7 @@ interface CaseRef {
   account: { id: string; name: string };
   lens: 'cfo' | 'general';
   banners: { outside_in: boolean; unverified: boolean } | null;
-  outcomes: { value_outcome_id: string | null; metric: string; unit: string | null; one: string }[];
+  outcomes: { value_outcome_id: string | null; metric: string; unit: string | null; rate_unit_word: string }[];
 }
 interface EvidenceRow { id: string; summary: string; kind: string; about: string | null; superseded_by_id: string | null; basis: string | null }
 
@@ -53,9 +53,9 @@ function RecordRate({ vc, onDone }: { vc: CaseRef; onDone: () => void }) {
     <div className="mt-2 border-t border-rule-soft pt-2" data-testid="record-rate">
       <GovernedForm<{ monetization_rate_id: string }>
         path={`/api/value-outcomes/${o.value_outcome_id}/monetization-rates`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">What one {o.one} of {o.metric} is worth to {vc.account.name} per year, as the client states it, resting on evidence recorded on and about this account. Cost of delay uses it only when that evidence is client-stated or from a system of record, attested by a customer-side person. <strong>This case does not change</strong>; the next run reads it.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">What one {o.rate_unit_word} of {o.metric} is worth to {vc.account.name} per year, as the client states it, resting on evidence recorded on and about this account. Cost of delay uses it only when that evidence is client-stated or from a system of record, attested by a customer-side person. <strong>This case does not change</strong>; the next run reads it.</p>}
         fields={<>
-          <label className="block"><span className={L}>Rate, per {o.one} per year</span><input className={I} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} data-testid="rate-value" /></label>
+          <label className="block"><span className={L}>Rate, per {o.rate_unit_word} per year</span><input className={I} inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} data-testid="rate-value" /></label>
           <label className="mt-2 block"><span className={L}>Currency</span><input className={I} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} data-testid="rate-currency" /></label>
           <label className="mt-2 block"><span className={L}>What it prices</span>
             <select className={I} value={kind} onChange={(e) => setKind(e.target.value)} data-testid="rate-kind"><option value="">Choose…</option><option value="performance">performance (value per unit of improvement)</option><option value="exposure">exposure (the cost of risk, for example a penalty per finding)</option></select></label>
@@ -67,7 +67,7 @@ function RecordRate({ vc, onDone }: { vc: CaseRef; onDone: () => void }) {
             </select></label>
           <label className="mt-2 block"><span className={L}>Why (needed when it corrects a rate)</span><textarea rows={2} className={I} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="rate-reason" /></label>
         </>}
-        confirm={<span data-testid="confirm-text">Record {currency} {n} per {o.one} of {o.metric} per year ({kind}), resting on <ShortId id={evidenceId} /> “{picked?.summary.slice(0, 80) ?? ''}”.</span>}
+        confirm={<span data-testid="confirm-text">Record {currency} {n} per {o.rate_unit_word} of {o.metric} per year ({kind}), resting on <ShortId id={evidenceId} /> “{picked?.summary.slice(0, 80) ?? ''}”.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ rate: n, currency, per_unit: o.unit ?? '', rate_kind: kind, how_read: howRead.trim(), evidence_id: evidenceId, ...(reason.trim() ? { reason: reason.trim() } : {}) })}
         submitLabel="Record the rate" onSuccess={onDone} renderSuccess={() => <>Recorded. The next run reads it.</>} />

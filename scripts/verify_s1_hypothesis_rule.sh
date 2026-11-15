@@ -256,13 +256,13 @@ WANT="one point of Dollar Retention Rate (trailing twelve months)"
 expect GET "/api/value-runs/$R2_SK/case" "" 200 "Skillsoft run 2's case (%, no_rate among its sealed reasons)"
 [ "$(rj "b.asks.find(a=>a.code==='no_rate').need")" = "What one point of Dollar Retention Rate (trailing twelve months) is worth to Skillsoft per year, stated by Skillsoft." ] && ok "  ...its ask reads \"What one point of Dollar Retention Rate (trailing twelve months) is worth to Skillsoft per year\"" || bad "  ...ask: $(rj "JSON.stringify(b.asks.find(a=>a.code==='no_rate'))")"
 [ "$(rj "b.asks.find(a=>a.code==='no_rate').question")" = "What is one point of Dollar Retention Rate (trailing twelve months) worth to Skillsoft each year, and who in finance would stand behind that figure?" ] && ok "  ...and its question, \"What is one point of …\"" || bad "  ...question"
-[ "$(rj "b.outcomes[0].one")" = "point" ] && ok "  ...the case carries the step (\"point\") for the page" || bad "  ...one: $(rj "b.outcomes[0].one")"
+[ "$(rj "b.outcomes[0].rate_unit_word")" = "point" ] && ok "  ...the case carries the step (\"point\") for the page" || bad "  ...rate_unit_word: $(rj "b.outcomes[0].rate_unit_word")"
 RUN="$R2_SK" EXPECT="$WANT" TAG=pct walk ask
 U_SCO="$(q "SELECT payload->'businessMetric'->>'unit' FROM value_runs WHERE id = '$R_SCO'")"
 expect GET "/api/value-runs/$R_SCO/case" "" 200 "Scotts' run ba5b5109 (unit \"$U_SCO\", not a percentage)"
-[ "$(rj "b.outcomes[0].one")" = "$U_SCO" ] && ok "  ...a non-percentage unit's step is the unit itself (D2: \"one $U_SCO\")" || bad "  ...non-% step: $(rj "b.outcomes[0].one")"
+[ "$(rj "b.outcomes[0].rate_unit_word")" = "$U_SCO" ] && ok "  ...a non-percentage unit's step is the unit itself (D2: \"one $U_SCO\")" || bad "  ...non-% step: $(rj "b.outcomes[0].rate_unit_word")"
 expect GET "/api/value-runs/$R_A/case" "" 200 "Curia's run under its hypothesis (unit \"$U_CUR\")"
-[ "$(rj "b.outcomes[0].one")" = "point" ] && ok "  ...a % unit's step is \"point\"" || bad "  ...Curia step: $(rj "b.outcomes[0].one")"
+[ "$(rj "b.outcomes[0].rate_unit_word")" = "point" ] && ok "  ...a % unit's step is \"point\"" || bad "  ...Curia step: $(rj "b.outcomes[0].rate_unit_word")"
 edit "$ASKS" "  if (/^(%|percent\\b|percentage\\b)/i.test(u)) return 'point';" "  if (/^(%|percent\\b|percentage\\b)/i.test(u)) return 'unit';"
 start_server
 expect GET "/api/value-runs/$R2_SK/case" "" 200 "H6: the percentage rule broken"
@@ -288,8 +288,12 @@ export QUERY='Dollar retention rate as a renewal measure for learning-platform v
 export DRR_NAME='Enterprise net (dollar) retention rate' METRIC_SK='Dollar Retention Rate (trailing twelve months)'
 export DRR_JSON="$(cat scripts/fixtures/s1_drr_entry_prod.json)"
 export ACCEPT_NOTE='Rehearsal: accepted for the tenant path (Gate A, not a source).'
-export LEVER_NAME='Value-based renewal execution' LEVER_MECH='Account teams who evidence realized value at renewal retain and expand more recurring revenue.'
-export LEVER_IND='Renewals entered with a verified value case' LEVER_CIT='Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened)'
+# The lever, claim and basis texts are the drafts in BUILD_STATUS's S1 act session (Brad, 15 Nov 2026): each clause is
+# what evidence 9a36e675 states (98% LTM DRR, one point lower than a year earlier) or is marked untested.
+export LEVER_NAME='Value-based renewal execution'
+export LEVER_MECH="Untested: that value-based renewal execution raises Skillsoft's dollar retention rate, which its Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point lower than a year earlier."
+export LEVER_IND='Share of Skillsoft renewals entered with a verified value case (not yet measured)'
+export LEVER_CIT='Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened): “LTM DRR of 98%, one percentage point lower than the year ago period.”'
 TENANT_INST="$SK" walk tenant1
 IND="$(q "SELECT id FROM industries WHERE slug = '$SLUG'")"; ENTRY="$(q "SELECT id FROM industry_measures WHERE industry_id = '$IND' AND name = '$DRR_NAME' AND deleted_at IS NULL")"
 LEVER="$(q "SELECT id FROM value_levers WHERE industry_measure_id = '$ENTRY' AND deleted_at IS NULL")"
@@ -300,10 +304,12 @@ CAP_SK="$(q "SELECT capability_id FROM value_outcomes WHERE id = '$O_SK'")"; BM_
 A_ROUTE0="$(q "SELECT count(*) FROM governance_acts")"
 export CLASSIFY_NOTE='Rehearsal: classified only to carry its own value case; its renewal measure rests on this pack (S1, D1).'
 export CAP_ID="$CAP_SK" ENTRY_ID="$ENTRY" OUTCOME="$O_SK"
-export CLAIM='Rehearsal: value-based renewal execution moves dollar retention.' BASIS_NOTE="Rehearsal: Skillsoft's LTM DRR is a variant of this measure: renewals, upgrades, churn and downgrades over the beginning renewable base, not cohort ARR (8-K Ex. 99.1)."
+export CLAIM="Claimed, not yet tested: that value-based renewal execution raises Skillsoft's dollar retention rate (98% LTM at Q1 FY2027). The hypothesis on this account's renewal outcome tests it."
+export BASIS_NOTE="Skillsoft reports LTM DRR (8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026), not this entry's cohort ARR rate. Its own definition is not yet recorded as evidence on this account. Its basis is stated; it is not compared across vendors."
 TENANT_INST="$SK" walk tenantchain
+SQ="'"; CLAIM_SQL="${CLAIM//$SQ/$SQ$SQ}"
 [ "$(q "SELECT industry_id = '$IND' FROM institutions WHERE id = '$SK'")" = "t" ] && ok "Skillsoft classified to ${IND_NAME}, by the page's \"Classify as…\"" || bad "classification"
-[ "$(q "SELECT count(*) FROM capability_industry_measures WHERE capability_id = '$CAP_SK' AND industry_measure_id = '$ENTRY' AND claimed_by_person_id = '$S' AND claim = '$CLAIM'")" = "1" ] && ok "  ...the capability's claim on the DRR entry, by the steward, with its claim as typed" || bad "  ...claim"
+[ "$(q "SELECT count(*) FROM capability_industry_measures WHERE capability_id = '$CAP_SK' AND industry_measure_id = '$ENTRY' AND claimed_by_person_id = '$S' AND claim = '$CLAIM_SQL'")" = "1" ] && ok "  ...the capability's claim on the DRR entry, by the steward, with its claim as typed" || bad "  ...claim"
 [ "$(q "SELECT industry_measure_id = '$ENTRY' FROM business_metrics WHERE id = '$BM_SK'")" = "t" ] && ok "  ...the metric's pack basis on the DRR entry" || bad "  ...basis"
 export ENG="$E_SK" OUTCOME="$O_SK" LEVER_ID="$LEVER" NEXT=3 DUE="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 365, 'YYYY-MM-DD')")"
 export STATEMENT='Value-based renewal execution holds Skillsoft dollar retention above its published baseline.'
@@ -328,6 +334,20 @@ if [ -s "$PDF" ]; then
   printf '%s' "$PT" | grep -qE '2\.5 ?M|5\.4 ?M|dollar-per-point|one point of net retention' && bad "  ...the print carries the entry's dollar-per-point figures" || ok "  ...the print carries neither \$2.5M nor \$5.4M, nor the why-it-pays sentence"
   for L in '' '?lens=cfo'; do expect GET "/api/value-runs/$R3/case$L" "" 200 "  ...the case read${L:+ under the CFO lens}"; grep -qE '2\.5M|5\.4M' "$W/r.json" && bad "  ...it carries the figures" || ok "  ...and carries neither figure"; done
   [ "$(q "SELECT payload::text ~ '2\.5M|5\.4M' FROM value_runs WHERE id = '$R3'")" = "f" ] && ok "  ...run 3's seal carries neither (the chain seals the entry's fields, why-it-pays only inside its fingerprint)" || bad "  ...the seal carries them"
+  # The lever's mechanism and leading indicator print on the case's "Value hypotheses" section (ValueCasePage:
+  # "Through: … Watch first: …"). A case the CFO lens refuses does not print that section (run 3's does not), so the
+  # case read carries them under both lenses as drafted, and any "Through:" line printed reads as drafted.
+  PTS="$(printf '%s' "$PT" | tr -s ' ')"
+  if printf '%s' "$PTS" | grep -qF "Through: "; then
+    printf '%s' "$PTS" | grep -qF "Through: $LEVER_NAME. Untested: that value-based renewal execution raises" \
+      && printf '%s' "$PTS" | grep -qF "Watch first: Share of Skillsoft renewals entered with a verified value case (not yet measured)" \
+      && ok "  ...the print carries the lever as drafted: its mechanism marked \"Untested:\", its indicator \"(not yet measured)\"" \
+      || bad "  ...lever line: $(printf '%s' "$PTS" | grep -oE 'Through: .{0,240}' | head -1)"
+  else ok "  ...the CFO print, a refused case, carries no lever line (its \"Value hypotheses\" section is not printed)"; fi
+  for L in '' '?lens=cfo'; do expect GET "/api/value-runs/$R3/case$L" "" 200 "  ...the case read${L:+ under the CFO lens}, for the lever"
+    [ "$(rj "b.hypotheses.filter(h=>h.lever && h.lever.mechanism===process.env.LEVER_MECH && h.lever.leading_indicator===process.env.LEVER_IND).length")" = "1" ] \
+      && ok "  ...it carries the lever's mechanism and indicator as drafted (\"Untested: …\", \"(not yet measured)\")" || bad "  ...lever in the case read: $(rj "JSON.stringify(b.hypotheses.map(h=>h.lever))" | head -c 300)"; done
+  [ "$(q "SELECT payload::text LIKE '%Untested: that value-based renewal execution raises%' FROM value_runs WHERE id = '$R3'")" = "t" ] && ok "  ...run 3's seal carries the mechanism as drafted" || bad "  ...the seal lacks the mechanism"
   pdftotext "$PDF" - | tr '\n' ' ' | grep -qF "one point of Dollar Retention Rate" && ok "  ...and its asks read \"one point of Dollar Retention Rate\"" || echo "  info  the printed case asks no rate (run 3's cost of delay names no no_rate)"
 else bad "no PDF printed"; fi
 
