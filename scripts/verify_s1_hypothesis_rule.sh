@@ -289,9 +289,27 @@ export DRR_NAME='Enterprise net (dollar) retention rate' METRIC_SK='Dollar Reten
 export DRR_JSON="$(cat scripts/fixtures/s1_drr_entry_prod.json)"
 export ACCEPT_NOTE='Rehearsal: accepted for the tenant path (Gate A, not a source).'
 # The lever, claim and basis texts are the drafts in BUILD_STATUS's S1 act session (Brad, 15 Nov 2026): each clause is
-# what evidence 9a36e675 states (98% LTM DRR, one point lower than a year earlier) or is marked untested.
+# what evidence 9a36e675 states (98% LTM DRR, one point lower than a year earlier) or is marked untested. The mechanism
+# is Brad's final text (15 Nov 2026).
 export LEVER_NAME='Value-based renewal execution'
-export LEVER_MECH="Untested: that value-based renewal execution raises Skillsoft's dollar retention rate, which its Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point lower than a year earlier."
+export LEVER_MECH="Value-based renewal execution, not yet tested at Skillsoft: the hypothesis is that it raises dollar retention, which the Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point lower than a year earlier."
+# Before the lever (Brad, 15 Nov 2026): the Q2 FY2027 release recorded on card 01c and opened, Yes. The quote is the
+# filing's Key Performance Metric definition, checked character for character against EDGAR's copy of ex_982157.htm
+# (accession 0001437749-26-029980, SHA-256 22067cff…, 15 Nov 2026): 39 words, within the 40-word limit.
+export Q2_SUMMARY='Skillsoft defines dollar retention rate (DRR) as subscription renewals, upgrades, churn and downgrades in a period over the beginning total renewable base of existing customers.'
+export Q2_PROVENANCE='Skillsoft 8-K Ex. 99.1, Q2 FY2027 release, 9 Sep 2026 (SEC EDGAR)'
+export Q2_REFERENCE='https://www.sec.gov/Archives/edgar/data/1774675/000143774926029980/ex_982157.htm'
+export Q2_QUOTE='Dollar retention rate (“DRR”) - For existing customers at the beginning of a given period, DRR represents subscription renewals, upgrades, churn and downgrades in such period divided by the beginning total renewable base of such customers for such period.'
+export Q2_HOW_READ='Exhibit 99.1 of the 8-K filed 9 Sep 2026 (accession 0001437749-26-029980), Key Performance Metric section, first bullet, first sentence. The release states no DRR figure.'
+T_D1="$(q "SELECT clock_timestamp()")"
+TENANT_INST="$SK" walk q2source
+SQ="'"
+Q2EV="$(q "SELECT id FROM evidence WHERE institution_id = '$SK' AND summary = '${Q2_SUMMARY//$SQ/$SQ$SQ}' AND deleted_at IS NULL AND superseded_by_id IS NULL")"
+[ -n "$Q2EV" ] && ok "the Q2 FY2027 release recorded on card 01c, through the page (${Q2EV:0:8})" || { bad "the Q2 row"; exit 1; }
+[ "$(q "SELECT kind = 'public_filing' AND about_institution_id = '$SK' AND evidence_form = 'quote' AND quote_text = '${Q2_QUOTE//$SQ/$SQ$SQ}' AND provenance = '$Q2_PROVENANCE' AND source_reference = '$Q2_REFERENCE' AND captured_by_person_id = '$S' AND NOT simulated FROM evidence WHERE id = '$Q2EV'")" = "t" ] \
+  && ok "  ...a public filing about Skillsoft, quoting the definition verbatim, by the steward, not simulated" || bad "  ...Q2 row fields: $(q "SELECT kind, evidence_form, about_institution_id, left(quote_text, 60) FROM evidence WHERE id = '$Q2EV'")"
+[ "$(q "SELECT citation_resolved AND source_verified AND citation_resolved_by_person_id = '$S' FROM evidence WHERE id = '$Q2EV'")" = "t" ] && ok "  ...opened, Yes: source-verified, by the steward" || bad "  ...Q2 opening"
+[ "$(q "SELECT count(*) FROM governance_acts WHERE act = 'open_citation' AND subject_id = '$Q2EV'")" = "1" ] && ok "  ...one open_citation act on it" || bad "  ...open_citation act"
 export LEVER_IND='Share of Skillsoft renewals entered with a verified value case (not yet measured)'
 export LEVER_CIT='Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened): “LTM DRR of 98%, one percentage point lower than the year ago period.”'
 TENANT_INST="$SK" walk tenant1
@@ -305,12 +323,14 @@ A_ROUTE0="$(q "SELECT count(*) FROM governance_acts")"
 export CLASSIFY_NOTE='Rehearsal: classified only to carry its own value case; its renewal measure rests on this pack (S1, D1).'
 export CAP_ID="$CAP_SK" ENTRY_ID="$ENTRY" OUTCOME="$O_SK"
 export CLAIM="Claimed, not yet tested: that value-based renewal execution raises Skillsoft's dollar retention rate (98% LTM at Q1 FY2027). The hypothesis on this account's renewal outcome tests it."
-export BASIS_NOTE="Skillsoft reports LTM DRR (8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026), not this entry's cohort ARR rate. Its own definition is not yet recorded as evidence on this account. Its basis is stated; it is not compared across vendors."
+export BASIS_NOTE="Skillsoft's DRR is its own measure, not this entry's cohort ARR rate. Its definition, from evidence ${Q2EV:0:8} (8-K Ex. 99.1, Q2 FY2027 release, 9 Sep 2026): “${Q2_QUOTE}” Its basis is stated; it is not compared across vendors."
 TENANT_INST="$SK" walk tenantchain
-SQ="'"; CLAIM_SQL="${CLAIM//$SQ/$SQ$SQ}"
+CLAIM_SQL="${CLAIM//$SQ/$SQ$SQ}"
 [ "$(q "SELECT industry_id = '$IND' FROM institutions WHERE id = '$SK'")" = "t" ] && ok "Skillsoft classified to ${IND_NAME}, by the page's \"Classify as…\"" || bad "classification"
 [ "$(q "SELECT count(*) FROM capability_industry_measures WHERE capability_id = '$CAP_SK' AND industry_measure_id = '$ENTRY' AND claimed_by_person_id = '$S' AND claim = '$CLAIM_SQL'")" = "1" ] && ok "  ...the capability's claim on the DRR entry, by the steward, with its claim as typed" || bad "  ...claim"
 [ "$(q "SELECT industry_measure_id = '$ENTRY' FROM business_metrics WHERE id = '$BM_SK'")" = "t" ] && ok "  ...the metric's pack basis on the DRR entry" || bad "  ...basis"
+[ "$(q "SELECT count(*) FROM evidence WHERE institution_id = '$SK' AND summary = '${BASIS_NOTE//$SQ/$SQ$SQ}' AND provenance LIKE 'Asserted at pack basis by %'")" = "1" ] \
+  && ok "  ...its basis note stored as typed, quoting the Q2 row's definition and naming it (${Q2EV:0:8})" || bad "  ...basis note not stored as typed"
 export ENG="$E_SK" OUTCOME="$O_SK" LEVER_ID="$LEVER" NEXT=3 DUE="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 365, 'YYYY-MM-DD')")"
 export STATEMENT='Value-based renewal execution holds Skillsoft dollar retention above its published baseline.'
 export CONDITIONS='on the trailing twelve months, as Skillsoft reports it'
@@ -339,17 +359,23 @@ if [ -s "$PDF" ]; then
   # case read carries them under both lenses as drafted, and any "Through:" line printed reads as drafted.
   PTS="$(printf '%s' "$PT" | tr -s ' ')"
   if printf '%s' "$PTS" | grep -qF "Through: "; then
-    printf '%s' "$PTS" | grep -qF "Through: $LEVER_NAME. Untested: that value-based renewal execution raises" \
+    printf '%s' "$PTS" | grep -qF "Through: $LEVER_NAME. $LEVER_NAME, not yet tested at Skillsoft: the hypothesis is that it raises" \
       && printf '%s' "$PTS" | grep -qF "Watch first: Share of Skillsoft renewals entered with a verified value case (not yet measured)" \
-      && ok "  ...the print carries the lever as drafted: its mechanism marked \"Untested:\", its indicator \"(not yet measured)\"" \
+      && ok "  ...the print carries the lever as drafted: \"not yet tested\", its indicator \"(not yet measured)\"" \
       || bad "  ...lever line: $(printf '%s' "$PTS" | grep -oE 'Through: .{0,240}' | head -1)"
   else ok "  ...the CFO print, a refused case, carries no lever line (its \"Value hypotheses\" section is not printed)"; fi
   for L in '' '?lens=cfo'; do expect GET "/api/value-runs/$R3/case$L" "" 200 "  ...the case read${L:+ under the CFO lens}, for the lever"
     [ "$(rj "b.hypotheses.filter(h=>h.lever && h.lever.mechanism===process.env.LEVER_MECH && h.lever.leading_indicator===process.env.LEVER_IND).length")" = "1" ] \
-      && ok "  ...it carries the lever's mechanism and indicator as drafted (\"Untested: …\", \"(not yet measured)\")" || bad "  ...lever in the case read: $(rj "JSON.stringify(b.hypotheses.map(h=>h.lever))" | head -c 300)"; done
-  [ "$(q "SELECT payload::text LIKE '%Untested: that value-based renewal execution raises%' FROM value_runs WHERE id = '$R3'")" = "t" ] && ok "  ...run 3's seal carries the mechanism as drafted" || bad "  ...the seal lacks the mechanism"
+      && ok "  ...it carries the lever's mechanism and indicator as drafted (\"not yet tested\", \"(not yet measured)\")" || bad "  ...lever in the case read: $(rj "JSON.stringify(b.hypotheses.map(h=>h.lever))" | head -c 300)"; done
+  [ "$(q "SELECT payload::text LIKE '%not yet tested at Skillsoft: the hypothesis is that it raises dollar retention%' FROM value_runs WHERE id = '$R3'")" = "t" ] && ok "  ...run 3's seal carries the mechanism as drafted" || bad "  ...the seal lacks the mechanism"
   pdftotext "$PDF" - | tr '\n' ' ' | grep -qF "one point of Dollar Retention Rate" && ok "  ...and its asks read \"one point of Dollar Retention Rate\"" || echo "  info  the printed case asks no rate (run 3's cost of delay names no no_rate)"
 else bad "no PDF printed"; fi
+# The acts the D1 path writes, measured (for Gate C's count on prod). The rehearsal's own setup (the industry, the prompt,
+# the import, the accept: done on prod already) is set aside; what is left is what Brad's act session writes after R1–R3.
+D1_ACTS="$(q "SELECT string_agg(act::text || ':' || subject_table, ' ' ORDER BY at, id) FROM governance_acts WHERE at > '$T_D1' AND subject_table NOT IN ('industries', 'research_prompts', 'research_imports', 'research_results', 'industry_measures')")"
+echo "  info  acts written by the D1 path after the setup: $D1_ACTS"
+[ "$D1_ACTS" = "open_citation:evidence ratify:value_levers lock:value_runs" ] \
+  && ok "  ...exactly three: the opening of the Q2 row, the lever, run 3's lock (recording a source, classify, the claim, the basis, the hypothesis and producing write none)" || bad "  ...D1 acts: $D1_ACTS"
 
 # H8 — the pack-basis badge (D1): the tenant's own metric now rests on the DRR entry, so it reads "Pack basis".
 TENANT_INST="$SK" METRIC="$METRIC_SK" walk badge

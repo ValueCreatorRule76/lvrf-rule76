@@ -14203,11 +14203,23 @@ LVRF_PLAN §20, approved by Brad 15 Nov 2026 with D1–D4 as recommended; R5-3.1
       answer the wait, so the click landed on a page being replaced. The hypothesis and produce forms now open by
       clicking until the form's own field is there, and fail by name if it never is.
     - Run 4: clean, as above.
+    - **Run 5, on the final code (Brad's final mechanism, E1/E2 through the page, the basis note quoting E1's row):
+      49 of 50 exit 0, 4,690 checks passed, 1 failed; `s1_hypothesis_rule` 207/0.** The one failure is outside S1:
+      `verify_run_page`'s break B10 (C1b) read the printed header while the browser still served the unbroken page
+      (its read shows `banner-reference` clipped, the pre-break state, after a fixed `sleep 3`). No file under
+      `client`, `server` or `db` changed since run 4, where it passed (as in runs 1–3). Re-run alone on the same code:
+      273/0, B10 caught (`banner-reference` 5 lines, unclipped). Every file's SHA matched after both; no clone left.
+      Named for 3.1 beside the vite pid leak: the C1b breaks wait a fixed time for the edit to reach the page.
+  - **Since run 4 (Brad, 15 Nov 2026, before Gate B):** the rehearsal records the Q2 FY2027 release on card 01c and
+    opens it, Yes, through the page (E1, E2; the quote checked against EDGAR's copy); types Brad's final mechanism and
+    reads its line on the default lens exactly as composed, screen and print; types the basis note quoting E1's row;
+    and measures the acts the D1 path writes (`open_citation`, `ratify`, `lock`). Scripts only: no application file
+    changed, so the bundle is unchanged.
   - **Also changed before it:** the case read's `outcomes[].one` renamed `rate_unit_word` (server, both pages, the
     script); the rehearsal types the redrafted lever, claim and basis note below, and checks that the case read under
     both lenses and run 3's seal carry the mechanism and indicator as drafted, and that a CFO print carrying a
     "Through:" line reads as drafted (run 3's refused CFO print carries none).
-- **`verify_s1_hypothesis_rule.sh` (new), 191/0.** Each break is caught, each with a positive control:
+- **`verify_s1_hypothesis_rule.sh` (new), 207/0.** Each break is caught, each with a positive control:
   - H1, the route check removed: the trigger refuses (422, its own sentence, the refusal recorded with its constraint).
   - H2, the trigger dropped: the route refuses (409), and a SQL insert lands. Restored, the insert is refused.
   - H3, a withdrawn hypothesis counted as current (both halves): a run lands. Restored, refused.
@@ -14303,16 +14315,23 @@ routes the page uses, all by Brad Piver:
   `2bd87345`). It asserts the stored text holds $2.5M and $5.4M (the control). Run 3's print, its case read under both
   lenses, and its seal carry neither.
 
-#### Gate B (not run; Brad's)
+#### Gate B, final form (not run; Brad's)
 
-1. **Merge** `s1-hypothesis-rule` into main and push (Brad's call).
-2. **On the box, back up before hardening** (rule 8):
+Every step is Brad's paste; nothing here was run on the box. Stop at any step whose expectation is not met.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s1-hypothesis-rule && git push && git log --oneline -1
+   ```
+   Expect the merge to fast-forward (main is `59a72f2`, the branch's base) and the last line to name the branch's head.
+2. **On the box, pull, then back up before hardening** (rule 8):
    ```
    cd /srv/lvrf && git pull --ff-only && git log --oneline -1
    F=~/lvrf-pre-s1-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
    pg_restore -l "$F" | grep -vc '^;'
    ```
-   The last line **expects 908.** Stop if it differs.
+   Expect the same head as step 1, and the last line **908** (the box's own post-B4-lens dump; tonight's rows add no
+   entry). Stop if it differs.
 3. **Migrate (nothing to apply; journal 51), then ownership, then hardening (section 35):**
    ```
    cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
@@ -14321,24 +14340,32 @@ routes the page uses, all by Brad Piver:
    sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
    ```
    Expect the migrate to apply nothing, `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **210** triggers.
-4. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle `index-_8iD1UlG.js` / `index-BpSO_jig.css`,
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-s1-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **910**: 908 plus `lvrf_run_hypothesis_current` and `value_runs_hypothesis_current`.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-_8iD1UlG.js`** / `index-BpSO_jig.css`,
    steps 5b, 5c and 5d passed, health 200 and fail-closed.
 
-**Brad's act session (rule 10: the steward's, through the page), from tonight's state.** Already done: the industry
-`1f4b59f0`, the prompt `3ed981a1`, and **the DRR entry `2bd87345`, accepted.** That entry is the one the lever names and
-the claim and the pack basis rest on. Each text below is a draft for Brad to type or change; ids the act creates are
-named when the page shows them.
+**Brad's act session (rule 10: the steward's, through the page), after Gate B, from tonight's state.** Already done:
+the industry `1f4b59f0`, the prompt `3ed981a1`, and **the DRR entry `2bd87345`, accepted.** Each text below is a draft
+for Brad to type or change; an id an act creates is named when the page shows it. Ten acts, in this order; six of them
+write a governance act.
 
-**R1–R3, before the lever (Brad, 15 Nov 2026): retire the three entries accepted with note A.** Each is Packs →
-Learning platforms → the entry → "Retire this entry…" → the reason → "Retire" → the confirmation → confirm. Read
-read-only on prod tonight: none carries a lever, a claim or a pack basis, so the route's 409s (a current claim or
-basis resting on it) do not apply, and no act has landed since 06:53:17. Retirement is final; each entry returns only
-by a new accepted research result. Its accept, note A included, stays on the record (`industryMeasureRetire.ts`
-touches no research result).
-- **The reason, the same for all three** (the form's floor is 12 characters): `Accepted with the review note written
-  for Enterprise net (dollar) retention rate, which describes that measure, not this one, so this entry's accept
-  records no review of its own definition or source. Retired so no entry stands on a review that does not describe
-  it; it may return by a new accepted research result.`
+**Proven through the page in Gate A:** E1, E2, the lever, classify, the claim, the basis, the hypothesis, produce, lock
+and the prints, all in `verify_s1_hypothesis_rule` (§8, as the steward by session; none by route). R1–R3 use the pack
+page's "Retire this entry…", proven through the page by the steward in `verify_pack_entry_retire` (`walk retire`), not
+in this rehearsal, whose pack holds only the DRR entry.
+
+**R1–R3: retire the three entries accepted with note A.** Each is Packs → Learning platforms → the entry → "Retire this
+entry…" → the reason → "Retire" → the confirmation → confirm. Read read-only on prod tonight: none carries a lever, a
+claim or a pack basis, so the route's 409s do not apply, and no act has landed since 06:53:17. Retirement is final; an
+entry returns only by a new accepted research result. Its accept, note A included, stays on the record.
+- **The reason, the same for all three:** `Accepted with the review note written for Enterprise net (dollar) retention
+  rate, which describes that measure, not this one, so this entry's accept records no review of its own definition or
+  source. Retired so no entry stands on a review that does not describe it; it may return by a new accepted research
+  result.`
 - **R1, the confirmation as the page prints it:** `Retire Active Members (paid tutoring/learning memberships)
   (0795acc2) from this pack, with this reason: “Accepted with the review note … research result.”. Final: it returns
   only by a new accepted research result.`
@@ -14346,107 +14373,107 @@ touches no research result).
   new accepted research result.`
 - **R3:** `Retire Course development cycle time (dd1d688b) from this pack, with this reason: “…”. Final: it returns
   only by a new accepted research result.`
-- After R3 the pack shows one current entry (`2bd87345`) and these three under "Retired"; the five pending results are
-  unchanged.
 
-**What `9a36e675` states, read in full on prod tonight (read-only).** Provenance `Skillsoft 8-K Ex. 99.1, Q1 FY2027
-release, 9 Jun 2026 (SEC EDGAR)`; a quote, `LTM DRR(2) of 98%, one percentage point lower than the year ago period.`;
-how read `Page 1 of the 8-K Ex. 99.1 release, Fiscal 2027 First Quarter Business Highlights, third bullet; DRR is
-dollar retention rate.`; opened 5 Nov 2026, source-verified, confidence high. **It does not quote the DRR definition:**
-footnote (2) is not in the row. The renewable-base definition is in the Q2 FY2027 release, which has no evidence row.
-So the row supports exactly three things: Skillsoft reports an LTM DRR; it was 98% at Q1 FY2027; that was one point
-lower than a year earlier. Nothing causal, and no definition.
+**E1: record the Q2 FY2027 release on Skillsoft's card 01c.** Skillsoft (`9c1f41f3`) → 01c "The account's evidence" →
+"Record a source…". **Brad opens the filing and reads the quote in it before typing it.** The quote below was checked
+character for character against EDGAR's copy (accession `0001437749-26-029980`, `ex_982157.htm`, filed 9 Sep 2026,
+SHA-256 `22067cffe343db4f…`, fetched 15 Nov 2026): the "Key Performance Metric" section, first bullet, first sentence,
+39 words (the form allows 40). **The release states no DRR figure**: its text has no DRR percentage and no image; the
+95% quarterly and 98% LTM figures reported for Q2 come from the earnings call, not this filing.
+- What it is about `Skillsoft (this account)`. Kind `Public filing`.
+- What it states `Skillsoft defines dollar retention rate (DRR) as subscription renewals, upgrades, churn and downgrades
+  in a period over the beginning total renewable base of existing customers.`
+- Where it came from `Skillsoft 8-K Ex. 99.1, Q2 FY2027 release, 9 Sep 2026 (SEC EDGAR)`
+- Citation `https://www.sec.gov/Archives/edgar/data/1774675/000143774926029980/ex_982157.htm`
+- What it rests on `Quote`. Quote `Dollar retention rate (“DRR”) - For existing customers at the beginning of a given
+  period, DRR represents subscription renewals, upgrades, churn and downgrades in such period divided by the beginning
+  total renewable base of such customers for such period.`
+- How it was read `Exhibit 99.1 of the 8-K filed 9 Sep 2026 (accession 0001437749-26-029980), Key Performance Metric
+  section, first bullet, first sentence. The release states no DRR figure.`
+- "Record the source". No confirmation step: the row is born unverified. It shows on 01c with its short id
+  (`{E1}` below).
+
+**E2: open it, Yes.** On the new row → "Open the source…" → "Does the source say what this evidence states?" `Yes —
+the source is verified` → "Record the opening". **Confirmation, as the page prints it:** `Record that you opened {E1},
+“Skillsoft defines dollar retention rate (DRR) as subscription renewals, upgrades”: the source says what it states, so
+it reads source-verified. An opening is final.`
+
+**What `9a36e675` states** (read in full on prod tonight, read-only): `LTM DRR(2) of 98%, one percentage point lower than
+the year ago period.`, Q1 FY2027 release, opened 5 Nov 2026. It does not quote the definition (E1's row does). It states
+nothing causal.
 
 **Where the lever prints.** The case's "Value hypotheses" section renders `Through: {name}. {mechanism} Watch first:
-{leading indicator}.` under each hypothesis (`ValueCasePage.tsx`), and run 3 seals both texts. On the rehearsal's run
-3 the CFO lens refuses the case, so its CFO print shows only the hypothesis statement, not that section; the case
-under the default lens, and any CFO print once the refusal clears, does print it. The citation prints only on the
-pack page.
+{indicator}.` under each hypothesis, and run 3 seals both texts. Run 3's CFO print is a refused case and omits that
+section; the default lens prints it. The citation prints only on the pack page.
 
 1. **The lever.** Packs → Learning platforms → "Enterprise net (dollar) retention rate" → "Add a lever…".
-   - **Flagged in the earlier draft, against `9a36e675`:**
-     - Mechanism `Account teams who evidence realized value at renewal retain and expand more recurring revenue.`:
-       **not supported.** It asserts a cause, and the row states a level and a one-point fall. It would print on the case
-       as a fact.
-     - Leading indicator `Renewals entered with a verified value case`: **not supported as "what moves first".** No row
-       says it leads DRR, and no figure for it exists. It is what the engagement chooses to watch.
-     - Lever name and citation: supported (a label, and the row's own provenance).
-   - **Redrafted, each clause supported by the row or marked untested:**
-     - Lever name `Value-based renewal execution`.
-     - Mechanism `Untested: that value-based renewal execution raises Skillsoft's dollar retention rate, which its Q1
-       FY2027 release reports as an LTM DRR of 98%, one percentage point lower than a year earlier.` (one sentence; the
-       form needs at least 12 characters). It prints as `Through: Value-based renewal execution. Untested: that … a
-       year earlier. Watch first: …`.
-     - Leading indicator `Share of Skillsoft renewals entered with a verified value case (not yet measured)`.
-     - Citation `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened): “LTM
-       DRR of 98%, one percentage point lower than the year ago period.”`
-   - **Confirmation, as the page prints it:** `Propose the lever “Value-based renewal execution” on Enterprise net
-     (dollar) retention rate (2bd87345), citing: “Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR),
-     evidence 9a36e675 (opened): “LTM DRR of 98%, one percentage point lower than the year ago period.””. A steward's
-     proposal reads ratified.`
-   - **Two other drafts below rest on the same row and are flagged too** (neither prints on the case): act 3's claim
-     sentence asserted a cause, and is redrafted as untested; act 4's basis note quoted the renewable-base definition
-     with only "8-K Ex. 99.1" as source, which is the Q2 release no row records, and is redrafted to say so.
-2. **Classify Skillsoft.** Skillsoft (`9c1f41f3`) → card 04b "What its value case rests on" → "Classify as…".
-   - Classify as `Learning platforms`.
-   - Why `Classified only to carry its own value case; its renewal measure rests on this pack (S1, D1).`
+   - Lever name `Value-based renewal execution`.
+   - Mechanism (Brad's final text) `Value-based renewal execution, not yet tested at Skillsoft: the hypothesis is that it
+     raises dollar retention, which the Q1 FY2027 release reports as an LTM DRR of 98%, one percentage point lower than
+     a year earlier.`
+   - Leading indicator `Share of Skillsoft renewals entered with a verified value case (not yet measured)`.
+   - Citation `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026 (SEC EDGAR), evidence 9a36e675 (opened): “LTM DRR
+     of 98%, one percentage point lower than the year ago period.”`
+   - **Confirmation:** `Propose the lever “Value-based renewal execution” on Enterprise net (dollar) retention rate
+     (2bd87345), citing: “Skillsoft 8-K Ex. 99.1, … the year ago period.””. A steward's proposal reads ratified.`
+   - **How it renders on run 3's case, default lens** (rehearsed; screen `s1_d1_9_case_default_lever_1280`, print
+     `s1_d1_case_default.pdf`): `Through: Value-based renewal execution. Value-based renewal execution, not yet tested
+     at Skillsoft: the hypothesis is that it raises dollar retention, which the Q1 FY2027 release reports as an LTM DRR
+     of 98%, one percentage point lower than a year earlier. Watch first: Share of Skillsoft renewals entered with a
+     verified value case (not yet measured).` Exactly as composed, no doubled stop or space; **the lever's name reads
+     twice in a row**, because the line already opens "Through: {name}." Every clause is supported by `9a36e675` or
+     marked not yet tested.
+2. **Classify Skillsoft.** Skillsoft → card 04b "What its value case rests on" → "Classify as…".
+   - Classify as `Learning platforms`. Why `Classified only to carry its own value case; its renewal measure rests on
+     this pack (S1, D1).`
    - **Confirmation:** `Classify this account (9c1f41f3) as Learning platforms (learning-platforms), because: “…”.
      Final: a wrong classification is corrected by superseding the account.`
-3. **The capability's claim.** The same card, "The capability's claim on a pack entry".
-   - Capability `Value-based renewal execution` (`aa5e3977`).
-   - Pack entry `Enterprise net (dollar) retention rate` (`2bd87345`); the entry's confounders show first.
-   - Claim `Claimed, not yet tested: that value-based renewal execution raises Skillsoft's dollar retention rate (98%
-     LTM at Q1 FY2027). The hypothesis on this account's renewal outcome tests it.` (The earlier draft, "renewals
-     entered with a verified value case are kept and expanded more often", asserted a cause no row supports.)
-   - "Record the claim" (no confirmation step: the walk's W3 form).
-4. **The metric's pack basis.** The same card: `Dollar Retention Rate (trailing twelve months)` (metric `e7edeaae`)
-   → `Enterprise net (dollar) retention rate`.
-   - Basis note `Skillsoft reports LTM DRR (8-K Ex. 99.1, Q1 FY2027 release, 9 Jun 2026), not this entry's cohort ARR
-     rate. Its own definition is not yet recorded as evidence on this account. Its basis is stated; it is not compared
-     across vendors.` (The earlier draft quoted the renewable-base definition, which only the Q2 FY2027 release
-     carries, and no row records that release. If Brad records and opens it on card 01c first, the definition can be
-     quoted here, citing that row.)
-   - "Set the basis". The badge then reads "Pack basis".
+3. **The capability's claim.** The same card. Capability `Value-based renewal execution` (`aa5e3977`); pack entry
+   `Enterprise net (dollar) retention rate` (`2bd87345`). Claim `Claimed, not yet tested: that value-based renewal
+   execution raises Skillsoft's dollar retention rate (98% LTM at Q1 FY2027). The hypothesis on this account's renewal
+   outcome tests it.` "Record the claim" (no confirmation step).
+4. **The metric's pack basis.** The same card: `Dollar Retention Rate (trailing twelve months)` (`e7edeaae`) →
+   `Enterprise net (dollar) retention rate`. Basis note, quoting E1's row: `Skillsoft's DRR is its own measure, not this
+   entry's cohort ARR rate. Its definition, from evidence {E1} (8-K Ex. 99.1, Q2 FY2027 release, 9 Sep 2026): “Dollar
+   retention rate (“DRR”) - For existing customers at the beginning of a given period, DRR represents subscription
+   renewals, upgrades, churn and downgrades in such period divided by the beginning total renewable base of such
+   customers for such period.” Its basis is stated; it is not compared across vendors.` "Set the basis"; the badge then
+   reads "Pack basis". The note is stored as an observation row on 01c; it does not print on the case.
 5. **The hypothesis.** Card 05 → "Customer Zero — Value-Based Renewal Capability" (`e1e2e370`) → "State a hypothesis…".
-   - Outcome `f23ee6a8`; lever, the one from act 1.
-   - Statement `Value-based renewal execution holds Skillsoft dollar retention above its published baseline.`
-   - Measured against: its recorded baseline (98 %, recorded 30 Apr 2026).
-   - Due: Brad's choice; a date after the release that reports LTM DRR at 30 Apr 2027.
-   - Conditions `on the trailing twelve months, as Skillsoft reports it`.
-   - "State the hypothesis". The preview reads `… at or below its baseline of 98 % (recorded 30 Apr 2026) by {due},
-     provided that: on the trailing twelve months, as Skillsoft reports it.`
-6. **Produce run 3** on card 05.
-   - Banner `OUTSIDE-IN HYPOTHESIS`.
-   - Note `Skillsoft's own case with its hypothesis: the published DRR baseline of 98%, no committed target, no measured
-     actual.`
-   - Run source label `Skillsoft 8-K Ex. 99.1, Q1 FY2027 release (9 Jun 2026)`.
-   - "Produce run 3".
+   Outcome `f23ee6a8`; the lever from act 1. Statement `Value-based renewal execution holds Skillsoft dollar retention
+   above its published baseline.` Measured against its recorded baseline (98 %, recorded 30 Apr 2026). Due: Brad's
+   choice, after the release that reports LTM DRR at 30 Apr 2027. Conditions `on the trailing twelve months, as
+   Skillsoft reports it`. The preview reads `… at or below its baseline of 98 % (recorded 30 Apr 2026) by {due},
+   provided that: on the trailing twelve months, as Skillsoft reports it.`
+6. **Produce run 3** on card 05. Banner `OUTSIDE-IN HYPOTHESIS`. Note `Skillsoft's own case with its hypothesis: the
+   published DRR baseline of 98%, no committed target, no measured actual.` Run source label `Skillsoft 8-K Ex. 99.1,
+   Q1 FY2027 release (9 Jun 2026)`. "Produce run 3".
 7. **Lock run 3:** `Skillsoft's own case with the hypothesis it tests, locked as the record its value case and its print
    are read from.` → "Lock run 3".
-8. **Print the case under the CFO lens:** run 3's page header → "under the CFO lens" → print.
+8. **Print the case** under the CFO lens (run 3's header → "under the CFO lens") and under the default lens.
 
-Left as they are: the five pending results (for Brad's ruling), and note A on the three retired entries' accepts
-(a review decision is final; the L54 "Correct the reviewer's note" act, 3.1, is the path to correcting it).
+Left as they are: the five pending results (for Brad's ruling), and note A on the three retired entries' accepts (a
+review decision is final; L54's "Correct the reviewer's note", 3.1, is the path).
 
 **Gate C (read-only, after the acts), and the stage-10 check on run 3's print.**
-- 51 migrations; drift none; 131 CHECKs, each with a plain sentence; **210** triggers; ownership clean.
-- `0795acc2`, `e15c4a21` and `dd1d688b` retired, each by Brad with R1–R3's reason (`status` retired, `deleted_at`,
-  `retired_by_person_id`, `retirement_reason` set together); their accepted results unchanged; `2bd87345` the only
-  current entry in Learning platforms.
-- One lever on `2bd87345`, Brad's, citing `9a36e675`, its mechanism beginning "Untested:". Skillsoft classified
-  `learning-platforms`, with one claim (`aa5e3977` → `2bd87345`) and its metric on `2bd87345`.
+- 51 migrations; drift none; 131 CHECKs, each with a plain sentence; **210** triggers; ownership clean; TOC 910.
+- `0795acc2`, `e15c4a21`, `dd1d688b` retired by Brad with R1–R3's reason; their accepted results unchanged;
+  `2bd87345` the only current entry in Learning platforms.
+- E1's row: `public_filing`, about Skillsoft, `quote` form, the quote exactly as above, captured and opened by Brad,
+  source-verified, not simulated; one `open_citation` act on it.
+- One lever on `2bd87345`, Brad's, with the mechanism above. Skillsoft classified `learning-platforms`; one claim
+  (`aa5e3977` → `2bd87345`); its metric on `2bd87345`, the basis note naming E1's short id.
 - One current hypothesis on `f23ee6a8`, Brad's: reference `baseline`, value 98, not post hoc.
-- Run 3 locked, sealing that hypothesis and `pack_entry.id = 2bd87345`. `check_run_hashes` 27/27, and the 26 earlier
-  runs byte-identical to the 14 Nov snapshot.
-- Acts: +9 from tonight's 221, so 230: three retirements, then lever, classify, claim, pack basis, hypothesis and
-  run 3's lock (producing writes none). No refusal except any Brad met, and no actorless audit row.
-- **Stage 10 on run 3's print,** every page:
-  - The disclosure banner and run 3's `payload_hash` on every page.
-  - "one point of Dollar Retention Rate" where the rate is asked.
-  - **Not printed: the entry's why-it-pays, or its dollar-per-point figures `$2.5M` and `$5.4M`** (the research's own
-    arithmetic, note B). Gate A shows the case does not render that text at all; check the printed PDF's text for
-    "2.5M", "5.4M" and "one point of net retention".
-  - No short id or row code except the hash.
+- Run 3 locked, sealing that hypothesis and `pack_entry.id = 2bd87345`. `check_run_hashes` 27/27; the 26 earlier runs
+  byte-identical to the 14 Nov snapshot.
+- **Acts: +6 from tonight's 221, so 227:** three `withdraw` on `industry_measures` (R1–R3), `open_citation` (E2),
+  `ratify` (the lever), `lock` (run 3). Recording a source, classify, the claim, the basis, the hypothesis and producing
+  write none: measured in the rehearsal (`open_citation:evidence ratify:value_levers lock:value_runs` after its setup)
+  and, for R1–R3, read from `industryMeasureRetire.ts`. No refusal except any Brad met; no actorless audit row.
+- **Stage 10 on run 3's prints,** every page: the disclosure banner and run 3's `payload_hash`; "one point of Dollar
+  Retention Rate" where the rate is asked; **not printed: the entry's why-it-pays or its `$2.5M` / `$5.4M` figures**
+  (check the PDFs' text for "2.5M", "5.4M" and "one point of net retention"); no short id or row code except the hash;
+  on the default-lens print, the lever line as above.
 
 **Leaked vite servers, stopped (Brad's approval, 15 Nov 2026).** A `pgrep` dry run listed 20 servers, 40 processes
 (each `npm exec vite --port 51xx–52xx` and its `node …/client/node_modules/.bin/vite` child), all from this repo.

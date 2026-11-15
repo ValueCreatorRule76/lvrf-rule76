@@ -309,6 +309,49 @@ if (MODE === 'links') {
   const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
   writeFileSync(`${SHOTS}/s1_d1_case_cfo.pdf`, Buffer.from(pdf.result.data, 'base64'));
   console.log(`  pdf   ${SHOTS}/s1_d1_case_cfo.pdf`);
+  // The default lens (Brad, 15 Nov 2026): the lever's line under the hypothesis, as the page renders it after "Through:".
+  check(await open(`/runs/${run}/case`, `!!document.querySelector('[data-testid=case-hypothesis]')`, 20000), 'the case under the default lens shows its hypothesis');
+  await sleep(500);
+  const line = await ev(`(()=>{const h=document.querySelector('[data-testid=case-hypothesis]');const p=h&&[...h.querySelectorAll('p')].find(x=>x.textContent.startsWith('Through: '));return p?p.textContent:null})()`);
+  console.log(`  line  ${line}`);
+  const want = `Through: ${E.LEVER_NAME}. ${E.LEVER_MECH} Watch first: ${E.LEVER_IND}.`;
+  check(line === want, '  ...its lever line reads exactly: Through: {name}. {mechanism} Watch first: {indicator}.', line ?? 'no line');
+  check(line !== null && !/\.\./.test(line) && !/ {2}/.test(line), '  ...with no doubled stop and no doubled space', line ?? 'no line');
+  await ev(`document.querySelector('[data-testid=case-hypothesis]').scrollIntoView({block:'center'})`); await sleep(300);
+  await shot('s1_d1_9_case_default_lever_1280');
+  const pdf2 = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+  writeFileSync(`${SHOTS}/s1_d1_case_default.pdf`, Buffer.from(pdf2.result.data, 'base64'));
+  console.log(`  pdf   ${SHOTS}/s1_d1_case_default.pdf`);
+} else if (MODE === 'q2source') {
+  // Brad, 15 Nov 2026: before the lever, record the Q2 FY2027 release on the account's card 01c, then open it, Yes.
+  const card = `document.querySelector('[data-testid=account-evidence]')`;
+  check(await open(`/accounts/${E.TENANT_INST}`, `!!${card}`, 20000), "the tenant's own account: card 01c, the account's evidence");
+  const f = `${card}.querySelector('[data-testid=record-source]')`;
+  await openForm(card, 'Record a source…', `!!${f} && ${f}.querySelectorAll('[data-testid=about-choice] option').length > 2`, 'record a source');
+  await setField(f, 'What it is about', 'account');
+  await setField(f, 'Kind', 'public_filing');
+  await setField(f, 'What it states', E.Q2_SUMMARY);
+  await setField(f, 'Where it came from', E.Q2_PROVENANCE);
+  await setField(f, 'Citation, export ID or URL', E.Q2_REFERENCE);
+  await setField(f, 'What it rests on', 'quote'); await sleep(300);
+  await setField(f, 'Quote', E.Q2_QUOTE);
+  await setField(f, 'How it was read', E.Q2_HOW_READ); await sleep(300);
+  await shot('s1_d1_q1_record_source_1280');
+  await waitFor(enabledButton(f, 'Record the source'), 10000);
+  const said1 = await act(f, 'Record the source', 'record the source');
+  check(said1 === '', '  ...recording a source asks no confirmation (the row is born unverified)', said1 ?? 'not sent');
+  const row = `[...document.querySelectorAll('[data-testid=account-evidence-row]')].find(r=>r.textContent.includes(${JSON.stringify(E.Q2_SUMMARY.slice(0, 60))}))`;
+  check(await waitFor(`!!${row}`, 20000), '  ...it is on card 01c');
+  check((await ev(`${row}.textContent`)).includes('Not source-verified'), '  ...unverified until it is opened');
+  const o = `${row}.querySelector('[data-testid=open-source]')`;
+  await openForm(row, 'Open the source…', `!!${o}`, 'open the source');
+  await setField(o, 'Does the source say what this evidence states?', 'true'); await sleep(300);
+  await shot('s1_d1_q2_open_source_1280');
+  await waitFor(enabledButton(o, 'Record the opening'), 10000);
+  const said2 = await act(o, 'Record the opening', 'open the source');
+  check(/^Record that you opened [0-9a-f]{8}, “/.test(said2 ?? '') && (said2 ?? '').endsWith('the source says what it states, so it reads source-verified. An opening is final.'), '  ...its confirmation names the row by its short id and says Yes', said2 ?? 'none');
+  check(await waitFor(`(${row}).textContent.includes('Source-verified') || (${row}).textContent.includes('SOURCE-VERIFIED')`, 20000), '  ...source-verified now, through the page');
+  await shot('s1_d1_q3_source_opened_1280');
 }
 ws.close();
 process.exit(0);
