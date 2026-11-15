@@ -4386,3 +4386,71 @@ is ratified about 16 Nov; M21 unchanged. Otherwise it is first in 3.1, after the
 - destructive acts (for example "Retire this entry") in a separate, marked zone;
 - every confirmation names the item and its short id (for example "Accept CAIDI with this note: …");
 - no dead ends: where a control cannot render, it says where to go.
+## 20. 3.1 slice S1: a hypothesis sealed with every run; links to the value case; "one point" (planned 15 Nov 2026; **approved by Brad, 15 Nov 2026, with D1–D4 as recommended**)
+
+Rulings it builds: R5-3.1a (a hypothesis sealed with every run, confirmed 15 Nov 2026) and R5-3.1e (the case links,
+the copy fix), in the 3.1 build order's first group (before the pilot starts on 4 Jan 2027). Value spine: `model`
+(the hypothesis is the model a run seals) and `return` (the value case).
+
+### What the code holds today (read 15 Nov 2026, `642685a`)
+
+- **A hypothesis needs a lever, and a lever needs a pack entry the outcome claims.** `value_hypotheses.value_lever_id`
+  is NOT NULL; `value_levers.industry_measure_id` is NOT NULL; "State a hypothesis…" offers only current levers on the
+  pack entries the account's outcomes' metrics claim (`valueHypotheses.ts`, the levers query).
+- **Skillsoft has no industry** (BUILD_STATUS: "Skillsoft (no industry, 1 engagement)"), so its outcome `f23ee6a8`
+  (Dollar Retention Rate, trailing twelve months) claims no pack entry and **no lever exists for it to name**. The
+  tenant's own account also has no workspace (L33), so no hypothesis form.
+- **Producing a run does not look for a hypothesis.** `produceRun.ts` seals whatever hypotheses stand in the case
+  chain (§16), including none. `value_runs` carries `payload->>'valueOutcomeId'` (read by `lvrf_run_outcome_at_sealing`).
+- **21 of the 50 verify scripts produce runs**, most on fixture outcomes with no hypothesis.
+- **The case is linked only from a customer account's workspace** (`Workbench.tsx`, "The value case" and "under the
+  CFO lens"). `RunPage`, `RunsIndexPage` and the tenant's own account have no link.
+- **"one unit of {metric}"** is in `server/lib/caseQuestions.ts` (the rate ask and question) and
+  `client/src/components/valueCase/CaseInputs.tsx`. The asks are composed when the case renders, not sealed.
+
+### What it builds
+
+1. **The rule, in the route and the database.** Producing a run is refused while the outcome it would seal has no
+   current hypothesis (not retired, not superseded): `produceRun.ts` answers 409 with a plain sentence naming the
+   outcome and "State a hypothesis…"; a `BEFORE INSERT` trigger on `value_runs` refuses the same from
+   `NEW.payload->>'valueOutcomeId'`, with its plain sentence registered. **Runs already sealed are never touched**;
+   nothing re-runs. A post hoc hypothesis (O2-D3) satisfies the rule and is still marked post hoc where it shows.
+   One new trigger; no migration unless D3 below asks for a column.
+2. **The tenant's own account gets a hypothesis path (decision D1).** Recommended: through the existing machinery, no
+   schema change. Skillsoft is classified to a new industry for learning-platform vendors; its pack gains a Dollar
+   Retention Rate measure through the generated research prompt and per-field accept; a steward's lever on it, citing
+   an opened evidence row; the outcome's metric claims that entry; then "State a hypothesis…" on the tenant's account
+   page (the same form and route as the workspace's, on the card where card 05's run controls already sit). Each of
+   these is Brad's act (rule 10), in the slice's act session.
+3. **Links to the value case, both lenses,** on `RunPage` (header), each row of `RunsIndexPage`, and the tenant's own
+   account's run list: "Value case · under the CFO lens", the Workbench's own markup reused.
+4. **"one point"**: the rate ask and question, and `CaseInputs`, read "one point of {metric}" when the metric's unit is
+   a percentage, otherwise "one {unit} of {metric}" (decision D2). Every sealed run's case renders the new words; the
+   equivalence pass names these as allowed differences.
+
+### Decisions (approved by Brad, 15 Nov 2026: D1–D4 as recommended)
+
+| # | Question | Recommended |
+|---|---|---|
+| D1 | How the tenant's own account gets a hypothesis | **Option A:** a learning-platform industry, a DRR pack entry by the research flow, a steward's lever, the outcome claims it; no schema change. Option B, a hypothesis with no lever on the tenant's own account, weakens the chain the case prints and needs a migration |
+| D2 | The unit rule for the asks | **Percentage units read "one point"; every other unit reads "one {unit}"** |
+| D3 | Must the run seal the hypothesis it was produced under by id, or is the case chain's current set enough? | **The case chain's set is enough** (§16 already seals every current hypothesis with its hash); no column |
+| D4 | Fixtures: a shared helper that states a hypothesis before each produce, or each script by hand | **A shared helper** in `scripts/lib/`, so 21 scripts change by one line each and a fixture can never seal a run without one |
+
+### Gate A (planned)
+
+- Full regression, every verify script on clones of the 14 Nov copy (L39: fixtures built on the clone).
+- **Breaks:** H1 the route check removed (the trigger still refuses); H2 the trigger removed (the route still refuses);
+  H3 a retired hypothesis counted as current; H4 a superseded one counted; H5 the case link dropped from `RunPage`;
+  H6 a percentage metric's ask reading "unit". Each with a positive control.
+- **Every sealed run byte-identical** after the trigger installs; `check_run_hashes` all; drift none; CHECK and trigger
+  counts stated; equivalence against the deployed `cd38210`, the ask wording as the named difference.
+- The tenant's path rehearsed on the clone end to end (D1), with the screens.
+
+### Gate B and the act session (planned)
+
+Deploy with its backup and expected TOC; then Brad's acts through the page: add the industry; generate, run, parse and
+accept the DRR entry; propose the lever with its opened citation; classify Skillsoft and claim the entry; state the
+hypothesis on `f23ee6a8` (falsifier referenced to the published 98% baseline); produce and lock run 3; print the case
+under the CFO lens. Every field's text and short id in the Gate B note. Gate C read-only, then the stage-10 check on the
+new print.
