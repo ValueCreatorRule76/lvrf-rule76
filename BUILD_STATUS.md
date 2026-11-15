@@ -14128,7 +14128,7 @@ reason as written.
 - **`record_documents`:** 6, none since the deploy. The 6 Nov CFO print request keeps `lens_policy_id` NULL (never
   backfilled); no row carries one yet.
 - **Since the deploy:** no refusal; 82 audit rows, none without an actor.
-- **Post-act dump:** pending Brad's paste (`sudo -u postgres` asks for a password over ssh). It is expected to read
-  **908**: 905 + 3 for 0050's FK, function and partial index; errata are rows, not TOC entries.
+- **Post-act dump:** `~/lvrf-post-b4lens-20261115T032612Z.dump` (archive created 03:26:23 UTC, `chmod 600`), taken by
+  Brad, **TOC 908** as expected: 905 + 3 for 0050's FK, function and partial index; errata are rows, not TOC entries.
 
 **B4 findings lens closed: Gate C clean.** `lvrf_rehearse0050` can go.
