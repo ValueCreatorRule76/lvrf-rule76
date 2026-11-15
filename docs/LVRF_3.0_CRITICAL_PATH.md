@@ -232,6 +232,17 @@ cut line applied first.
   this shape: it sets `superseded_by_id` on the original and moves its links. Until it exists, a further observation on
   01c carries the corrected note (Brad's act, 15 Nov 2026).
 
+- **From S1's act session (Brad, 15 Nov 2026): steward forms that write to prod confirm every field in full, and a
+  field may not repeat another.**
+  - "Record a source…", "Supersede…" and the pack basis each show a confirmation before recording, with each field's
+    full text: no slice, no ellipsis.
+  - The route refuses a value identical to another field's in the same request, such as a supersede reason that
+    matches "How it was read".
+  - **The cause: three paste departures on prod, 15 Nov 2026.**
+    - `eed11e02`: the pack-basis note holds the claim's text.
+    - `c56a3d33`: "What it states" holds only the last 340 of its 557 characters.
+    - The `supersede` act that made `673861eb`: its reason holds the how-read text.
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the
