@@ -4455,7 +4455,7 @@ hypothesis on `f23ee6a8` (falsifier referenced to the published 98% baseline); p
 under the CFO lens. Every field's text and short id in the Gate B note. Gate C read-only, then the stage-10 check on the
 new print.
 
-## 21. 3.1 slice S2: in-app AI research (planned 18 Nov 2026; **for Brad's approval**)
+## 21. 3.1 slice S2: in-app AI research (planned 18 Nov 2026; **approved by Brad, 18 Nov 2026, with D1–D10 as recommended and the conditions in §21.0**)
 
 Ruling it builds: R5-3.1, in-app AI research with Rule76's API key (`docs/LVRF_3.0_CRITICAL_PATH.md`, "Raised 14–15
 Nov 2026", approved for research only; spend option 1, 15 Nov 2026), in the 3.1 build order's first group. Value spine:
@@ -4465,6 +4465,37 @@ Nov 2026", approved for research only; spend option 1, 15 Nov 2026), in the 3.1 
 **A conflict, named: `CLAUDE.md`'s research seam (D1) says "No code calls a research tool — a person runs the
 prompt."** S2 reverses that by Brad's ruling. Under the OWN-1-D3 precedent, `CLAUDE.md` is amended only after S2's
 Gate C passes (step 8 below). Until then, S2's code is the departure, and this section records it.
+
+### 0. Brad's rulings (18 Nov 2026)
+
+Approved with D1–D10 as recommended, and these conditions:
+
+- **D1: Claude Opus 5.5.** A new ruling, replacing the 15 Nov "strongest model generally available". Brad's reason:
+  Opus 5.5's results already pass review (35 of 43), it costs half as much, and its retention is lighter (Fable 5.2 has
+  no zero-retention option). Switching later stays a setting plus a new clearance for each account.
+- **D2: the separate system user,** not the root-only env file alone. No `brad` process, and no Claude session, may ever
+  be able to read the key. **What that takes, as built:**
+  - **The research process** runs as its own system user, `lvrf-research`, under its own unit
+    (`ops/lvrf-research.service`). It is the only process that holds the key, from `/etc/lvrf-research.env` (root, 600,
+    read by systemd).
+  - **The API reaches it over a unix socket,** `/run/lvrf-research/sock`, in a group that `brad` is in. The process
+    builds every request itself from its own fixed settings, and accepts only a prompt and a call id. So a `brad`
+    process can ask for a research call, which the Console's limit caps, but cannot obtain the key.
+  - **Its code is not writable by `brad`.** It runs one bundled file installed root-owned at
+    `/opt/lvrf-research/sidecar.mjs`. If it ran code from `/srv/lvrf`, which `brad` owns, a `brad` process could change
+    it to print the key.
+  - **It refuses to start** in production if its own user owns `/srv/lvrf`, or if its code file is writable by anyone
+    but root.
+  - **Named:** root can read anything, and Brad's interactive `sudo`, with its password, is root. A Claude session's
+    `sudo -n` fails (no password), and Gate B checks that read-only.
+- **D5 as recommended.** S2's act session adds Brad's acts sourcing or retiring Skillsoft's two unsourced "system" facts
+  before any Skillsoft call, with each act's text drafted.
+- **D8: an exact version,** with `npm audit` run and reported; never `npm audit fix --force`.
+- **The cap:** the workspace limit stays equal to Brad's Pro fee, **$20 a month**. After Brad's first test calls, the
+  actual cost per call is reported against §21.3's estimates, so the cap can be revisited before 4 Jan 2027.
+- **The disclosure states 30 days,** the longer reading.
+- **Built to Gate A on clones of the prod copy, against the local stand-in only.** No real API call before Brad's act
+  session.
 
 ### 1. What the code holds today (read 18 Nov 2026, `0653630`; sizes from the 14 Nov prod copy)
 

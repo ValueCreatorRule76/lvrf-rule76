@@ -161,6 +161,20 @@ cut line applied first.
     15 Nov 2026, option 1):** Rule76 Consulting LLC's Console organisation, its own LVRF workspace with a workspace
     spend limit equal to Brad's Claude Pro fee a month, prepaid credits, auto-reload off, so calls stop at the limit.
     Claude Pro itself carries no API usage. `CLAUDE.md`'s research seam is amended when the slice passes Gate C (the OWN-1-D3 precedent).
+    **S2 rulings (Brad, 18 Nov 2026; LVRF_PLAN §21, approved with D1–D10 as recommended):**
+    - **The model is Claude Opus 5.5 (`claude-opus-5-5`). This ruling replaces "the strongest model generally available"
+      above (15 Nov).** Brad's reason: Opus 5.5's results already pass review (35 of the 43 on record), it costs half as
+      much, and its retention is lighter (Fable 5.2 is a Covered Model with no zero-retention option). Switching later
+      stays a setting plus a new clearance for each account.
+    - **The key is held by a separate system user** running the research process, and is not readable by `brad`: no
+      `brad` process and no Claude session may ever be able to read it.
+    - **The disclosure states 30 days,** the longer of Anthropic's two readings.
+    - **Spend:** the LVRF workspace's limit stays equal to Brad's Claude Pro fee, **$20 a month**. After Brad's first test
+      calls, the actual cost per call is reported against §21.3's estimates, so the cap can be revisited before 4 Jan
+      2027.
+    - **D5 holds for Skillsoft:** before any Skillsoft call, Brad sources or retires its two unsourced "system" facts
+      (S2's act session).
+    - **The SDK is pinned to an exact version;** `npm audit` is run and reported, never `npm audit fix --force`.
     An API key is billed apart from a Claude subscription.
   - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
     (P8, above). **Approved:** adding, changing or retiring an offering is a steward act with its own act row.
