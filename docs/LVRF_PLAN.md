@@ -4454,3 +4454,446 @@ accept the DRR entry; propose the lever with its opened citation; classify Skill
 hypothesis on `f23ee6a8` (falsifier referenced to the published 98% baseline); produce and lock run 3; print the case
 under the CFO lens. Every field's text and short id in the Gate B note. Gate C read-only, then the stage-10 check on the
 new print.
+
+## 21. 3.1 slice S2: in-app AI research (planned 18 Nov 2026; **for Brad's approval**)
+
+Ruling it builds: R5-3.1, in-app AI research with Rule76's API key (`docs/LVRF_3.0_CRITICAL_PATH.md`, "Raised 14–15
+Nov 2026", approved for research only; spend option 1, 15 Nov 2026), in the 3.1 build order's first group. Value spine:
+`baseline` and `attach` (the published facts and pack entries a case is built from). CVAF's `ops/ai-drafting.md`
+(P1–P4) was read, read only; nothing is copied into CVAF and no CVAF client data is used.
+
+**A conflict, named: `CLAUDE.md`'s research seam (D1) says "No code calls a research tool — a person runs the
+prompt."** S2 reverses that by Brad's ruling. Under the OWN-1-D3 precedent, `CLAUDE.md` is amended only after S2's
+Gate C passes (step 8 below). Until then, S2's code is the departure, and this section records it.
+
+### 1. What the code holds today (read 18 Nov 2026, `0653630`; sizes from the 14 Nov prod copy)
+
+- **The generated prompt.** `server/research/contracts.ts` holds one contract per result kind (industry measure v3+,
+  institution fact), read by the prompt builder, the parser and the accept mapping.
+  - `POST /api/industries/:industryId/research-prompts` (`industryResearch.ts`) builds the pack prompt from live rows:
+    the industry, the current entries and the exclusions.
+  - `POST /api/institutions/:institutionId/research-prompts` (`accountResearch.ts`) builds the account prompt: the
+    account's name and website, the pinned entity, the disclosure regime, the current `institution_facts` (each as
+    `kind: value (as of …)`) and the accepted not-found reasons.
+  - Each prompt is stored in `research_prompts`, immutable, with its SHA-256 and its contract and template versions.
+  - The four prompts on record are 2,423–3,166 characters (about 700–900 tokens).
+- **Parse.** A person pastes the answer into the parse route. It is kept in `research_imports` exactly as pasted, with
+  its SHA-256: the one import on record is 27,205 bytes.
+  - It is refused whole on any issue, with each issue named and recorded in `refusals` (source `parser`).
+  - It must name the prompt it answers, of the same contract version.
+  - Each field becomes a `research_results` row (`raw_response` is the one object for that field).
+- **The entity check.** Account research runs in two phases. The entity is pinned first: one legal entity with one
+  exact identifier, resting on a quote. Every fact must then be about that entity; an answer about another entity is
+  refused whole.
+- **The per-field accept.**
+  - A person accepts or rejects each field: authorized for account facts (H2), the steward for pack entries.
+  - Accepting a found field requires the person to say they opened its citation (H1). The evidence row is written
+    `citation_resolved` by that person, through the one writer (`institutionFactWriter.ts` for facts).
+- **`ai_sourced`.**
+  - It is read from the answer's envelope, with `research_query`, `query_as_executed` and `research_tool`, and carried
+    to the evidence row at accept.
+  - AI-sourced evidence is born unverified. It is verified only when its citation is opened (AMENDMENT-005;
+    `evidence_ai_verify_requires_resolution`), and the origin is permanent: a successor carries it.
+  - The 35 results on record name the tool as the model in a chat. The most common is "Claude Opus 5.5 (Anthropic),
+    using the WebSearch tool" (13); every one used web search, and most also used page fetch.
+- **No code calls a model.** `researchPrompt.ts`'s header: "nothing in this system calls a model". There is no
+  Anthropic dependency in `package.json`.
+- **The API's environment** is `/srv/lvrf/.env` (`ops/lvrf-api.service`, `EnvironmentFile=`), owned by `brad`. The
+  deploy script and the read-only checks `grep` it for `DATABASE_URL`.
+
+### 2. The server call
+
+**One module calls Anthropic: `server/research/apiCall.ts`.** It is the only importer of the SDK; a lint rule and a
+Gate A grep refuse any other. The SDK is `@anthropic-ai/sdk`, pinned to an exact version (D8).
+
+**The flow,** on the account's Research step or the pack's research page ("Research with Claude…", beside "Copy the
+prompt"):
+
+1. The person generates the prompt, as today. The button acts on that `research_prompts` row only; nothing is
+   regenerated.
+2. **Refused before anything is sent**, each answered in a plain sentence, recorded in `refusals` (source `route`),
+   with no `research_calls` row:
+   - **the key is absent**, or the switch is off (`LVRF_AI_RESEARCH=off`): 503, "In-app research is not set up on
+     this server; copy the prompt and run it yourself.";
+   - **the subject is not cleared, or is cleared for a model kept for less time** than the configured one: 403. A
+     subject is the account, or the industry for pack research (D3);
+   - **the prompt carries a customer-side row** (D5): 409, naming each row (its kind, short id and why it is
+     customer-side);
+   - **the month's spend would pass the limit** (D4): 429, with the month's recorded spend and the limit;
+   - **today's limit for this subject is reached** (D10): 429;
+   - **a call for this prompt is already running or has answered**: 409. One call per prompt; a new call needs a new
+     prompt;
+   - **the prompt is not current**: another tenant's (404), of a superseded contract version, or for an entity since
+     superseded (409).
+3. **The audit row before the call.** One `research_calls` row of kind `sent` is inserted and committed before the
+   request leaves. It records:
+   - the prompt's id and SHA-256;
+   - the model, the API version and the tools with their caps;
+   - the clearance it relies on;
+   - the person;
+   - the request's SHA-256.
+
+   That row is the record that the prompt left the box. Its insert writes an `audit_log` row with the actor.
+4. **The request,** streamed to `https://api.anthropic.com/v1/messages` with these fields and no others:
+   - `model`;
+   - `max_tokens` 32,000;
+   - `output_config.effort` `high`;
+   - `messages`: one user turn, which is **the prompt text exactly as stored**, byte for byte;
+   - `tools`: `web_search_20260209` (`max_uses` 10) and `web_fetch_20260209` (`max_uses` 6, `max_content_tokens`
+     20,000, `blocked_domains` `["lvrf-rule76.com"]`).
+
+   It carries no system prompt, no `metadata`, no person's name or email and no other row. There is no `fallbacks`:
+   the model that receives the prompt must be the model the subject was cleared for (D9). `pause_turn` is continued
+   with the same request (the documented server-tool pattern), up to 3 times. The whole call has a 15-minute timeout.
+5. **The audit row after the call,** whatever happened: one `research_calls` row of kind `result`, naming the `sent`
+   row. It records:
+   - the outcome: `imported`, `unparseable`, `refused` (`stop_reason` `refusal`), `truncated` (`max_tokens`),
+     `failed` (an HTTP or stream error, its type and status, never its headers) or `timeout`;
+   - Anthropic's request id;
+   - the usage: input, cache write, cache read and output tokens, and web search requests;
+   - the cost, computed from a price table in code with the date it was read;
+   - on `imported`, the `research_imports` id.
+
+   A `sent` row with no `result` row, after a restart, reads "interrupted: no answer recorded". Nothing is retried
+   automatically.
+6. **Import, through the same path as a paste.** The final text is the answer's text blocks, joined in order; the
+   search and fetch blocks are not part of the answer.
+   - It goes to the same parse function the paste route uses, extracted inside `industryResearch.ts` and
+     `accountResearch.ts` and exported, so those two files stay the only writers of `research_imports` and
+     `research_results`.
+   - The import is attributed to the person who started the call.
+   - Every parse rule holds, plus two for an answer from the API:
+     - the envelope's `ai_sourced` must be `true`;
+     - its `research_tool` is recorded as the server states it: "{model} via the Claude API, with web search and web
+       fetch, call {short id}". The model's own claim is kept in the raw answer.
+   - A parse refusal is recorded as today, and the call's result row reads `unparseable`.
+7. **Review is unchanged.** Every field is accepted or rejected by a person, with its citation opened (rule 4,
+   AMENDMENT-005). Nothing found by the call reaches a fact or a pack entry until then.
+
+**The key.** It is Rule76 Consulting LLC's, in its Console organisation's LVRF workspace, and it lives on the box only,
+in `/etc/lvrf-research.env` (root, 600). systemd reads that file as a second `EnvironmentFile=` before it starts the
+API as `brad` (D2). It is never in `/srv/lvrf/.env`, the Mac, the repo, a browser, a log, an audit row, a refusal, a
+response or a `research_calls` row.
+- The server logs one line at start: `[ai-research] on: {model}, {limit} per subject per day, ${cap} a month` or
+  `[ai-research] off: no key`, and never the key.
+- The deploy refuses to proceed if:
+  - `ANTHROPIC_API_KEY` is in `/srv/lvrf/.env`;
+  - `ANTHROPIC_BASE_URL` is set anywhere in production (production talks to `api.anthropic.com` only);
+  - the env file is not root 600.
+- The verify scripts refuse to run if the Mac's `.env` files hold `ANTHROPIC_API_KEY`.
+
+**Outside-in material only.** What leaves the box is the stored prompt, and nothing else. The prompt is built only from
+the rows listed in §21.1, and D5 refuses one that carries a customer-side row. Web search and web fetch reach only
+public pages, and `lvrf-rule76.com` is blocked.
+
+**Each subject is cleared, with a reason, before its data is sent** (D3).
+- `research_clearances` is insert-only and holds a clearance or a withdrawal. Each records:
+  - the subject (an account or an industry);
+  - the model and its retention class;
+  - **the disclosure text exactly as shown, with its SHA-256**;
+  - the reason;
+  - the person.
+- A withdrawal is a new row naming the clearance; nothing is edited.
+- A clearance covers only a model kept for no longer than the one it names (CVAF P3): moving from Opus 5.5 to Fable 5.2
+  needs a new clearance.
+- Each clearance and withdrawal writes a governance act (new acts `clear` and `withdraw_clearance`).
+
+**Calls stop at the spend limit** (D4).
+- The Console's monthly limit on the LVRF workspace is the hard stop.
+- Prepaid credits with auto-reload off are a second one.
+- LVRF's own ledger, the sum of the month's recorded call costs, refuses a call before it is sent when the month's
+  spend plus one capped call would pass `LVRF_RESEARCH_MONTHLY_USD`. So a call is never cut off mid-way by the Console.
+- A call the Console stops anyway is recorded `failed`, with Anthropic's error type.
+
+**Web search is needed.** The answers this system accepts cite filings and publications dated after a model's training
+cutoff (June 2026 for both models): Skillsoft's Q2 FY2027 release is dated 9 Sep 2026. And every accepted field's
+citation must be opened by a person, so it must exist. Without search, the call would recall rather than read, which is
+the fabrication `CLAUDE.md` names as the worst failure.
+- **Search costs $10 per 1,000 searches ($0.01 each)**, plus the result content as input tokens.
+- **Web fetch has no charge of its own**: only the fetched content's tokens.
+- The code execution behind their dynamic filtering is free when used with them.
+- At the caps above (10 searches), search adds at most $0.10 a call. Content tokens are the larger cost, and they are in
+  the estimates below.
+
+### 3. The model (D1, for Brad)
+
+**Read 18 Nov 2026:** platform.claude.com/docs/en/about-claude/pricing,
+platform.claude.com/docs/en/models/overview, platform.claude.com/docs/en/manage-claude/api-and-data-retention,
+support.claude.com/en/articles/15425695 (Covered Models), privacy.claude.com/en/articles/7996866 (commercial
+retention), platform.claude.com/docs/en/manage-claude/workspaces (spend limits) and claude.com/pricing (Claude Pro).
+
+| | Claude Fable 5.2 (`claude-fable-5-2`) | Claude Opus 5.5 (`claude-opus-5-5`) |
+|---|---|---|
+| Price per MTok | $8 input, $40 output; cache read $0.20 | $4 input, $20 output; cache read $0.20 |
+| Anthropic's guidance | "for demanding reasoning and long-horizon agentic work, or when your evals on Claude Opus 5.5 at higher effort still fall short" | "If you're unsure which model to use, start with Claude Opus 5.5" |
+| Retention | **A Covered Model** (designated 9 Nov 2026). "Prompts and model completions are retained for at least 30 days and then automatically deleted", for safety monitoring by automated systems. ZDR not available | Standard commercial terms: "we automatically delete inputs and outputs on our backend within 30 days of receipt or generation", up to 2 years if flagged under the Usage Policy |
+| Training | "Retained data is never used for model training without your express permission" (both) | the same |
+| Default effort | `high` | `medium` (S2 sets `high` explicitly) |
+| Record | none of the 35 results on record | 30 of the 35 results on record name Opus 5.5 or Claude in the app; all accepted fields were reviewed by a person |
+
+**A wording to name.** The retention page also says "Conversation content (your prompts and Claude's outputs) is not
+retained by default". The commercial privacy page says inputs and outputs are deleted "within 30 days". S2 discloses the
+longer reading, 30 days, for Opus 5.5.
+
+**Estimated cost per call.** One prompt is one Messages request; its search and fetch content counts as input. These are
+estimates, not measurements: the first calls at the act session measure them (`usage` on the result row, against the
+Console).
+
+| Per call | Input tokens | Output tokens (thinking and JSON) | Searches | Opus 5.5 | Fable 5.2 |
+|---|---|---|---|---|---|
+| Light (a pinned entity, few sources) | 80,000 | 8,000 | 5 | **$0.53** | **$1.01** |
+| Typical (the answers on record: 2–27 KB of JSON, 5–12 sources) | 200,000 | 16,000 | 10 | **$1.22** | **$2.34** |
+| At the caps (32,000 output, 10 searches, 6 fetches of 20,000) | 500,000 | 32,000 | 10 | **$2.70** | **$5.38** |
+
+The input figures assume each round of search re-reads the conversation uncached. Cache reads ($0.20/MTok on both)
+would lower them, so these lean high.
+
+**Calls a month under a limit equal to Claude Pro** ($20 billed monthly, or $17 a month billed annually; before tax):
+
+| Limit | Opus 5.5: typical (light–capped) | Fable 5.2: typical (light–capped) |
+|---|---|---|
+| $20 | **16** (37–7) | **8** (19–3) |
+| $17 | **13** (32–6) | **7** (16–3) |
+
+An account takes two calls (the entity, then the facts), and a pack one. So at $20 that is about 8 accounts a month on
+Opus 5.5, or 4 on Fable 5.2.
+
+**Recommended: Opus 5.5.**
+- It costs half as much, so twice the calls fit under the same limit.
+- Anthropic's own guidance starts there.
+- The research on record was done with it and passed review.
+- It is not a Covered Model, so nothing is held for a safety-review window.
+- A person reviews every field, which is the quality gate whichever model runs.
+
+**This departs from the 15 Nov wording ("the strongest model generally available"),** which reads as Fable 5.2. Brad
+rules. Moving to Fable 5.2 later is a setting (`LVRF_RESEARCH_MODEL`) and a new clearance for each subject (§21.2).
+
+### 4. The retention disclosure, word for word
+
+The page shows the text for the configured model before the clearance is recorded. The clearance stores the text shown
+and its SHA-256. `{model}`, `{subject}` and `{date}` are filled from the configuration and the row.
+
+**For Opus 5.5:**
+
+> Research with Claude sends this {account's | industry's} research prompt, exactly as generated and nothing else, to
+> Anthropic's API, where Claude Opus 5.5 (claude-opus-5-5) runs it with web search and web fetch. Under Anthropic's
+> commercial terms, the prompt and the answer are deleted from Anthropic's systems within 30 days, or kept up to 2 years
+> if flagged under Anthropic's Usage Policy. They are not used to train models without Rule76's permission. The sites
+> Claude searches and fetches may keep their own records of those requests. A prompt that would carry anything from
+> {subject}'s side, rather than what it publishes, is refused and not sent. Anthropic's terms read on {date}; they are
+> re-read before a new account is cleared.
+
+**For Fable 5.2** (the second sentence's retention clause differs):
+
+> Research with Claude sends this {account's | industry's} research prompt, exactly as generated and nothing else, to
+> Anthropic's API, where Claude Fable 5.2 (claude-fable-5-2) runs it with web search and web fetch. Claude Fable 5.2 is
+> one of Anthropic's Covered Models: Anthropic keeps the prompt and the answer for at least 30 days for safety
+> monitoring, where automated systems review them, and then deletes them; zero data retention is not available for it.
+> They are not used to train models without Rule76's permission. The sites Claude searches and fetches may keep their
+> own records of those requests. A prompt that would carry anything from {subject}'s side, rather than what it
+> publishes, is refused and not sent. Anthropic's terms read on {date}; they are re-read before a new account is
+> cleared.
+
+The same text sits on the Research step above "Research with Claude…" whenever the subject is cleared, so the person
+sending sees what the clearance said.
+
+### 5. The 3.1 steward-form item, applied to S2's forms
+
+S2 adds three forms and touches none of the existing ones (the parse and accept forms are unchanged):
+- "Clear for research with Claude…";
+- "Withdraw the clearance…";
+- "Research with Claude…".
+
+For each:
+- **A confirmation with each field's full text before recording,** with no slice and no ellipsis.
+  - The clearance's confirmation shows: the subject's name and short id, the model, the disclosure in full, and the
+    reason in full.
+  - The withdrawal's shows: the clearance's date and reason in full, and the withdrawal's reason in full.
+  - "Research with Claude…" shows:
+    - the prompt's short id and SHA-256;
+    - the subject;
+    - the model;
+    - the clearance it relies on;
+    - the caps;
+    - this month's recorded spend and the limit;
+    - "This sends the prompt shown above to Anthropic and cannot be called back."
+- **The route refuses a value identical to another field's in the same request.** Two cases:
+  - the clearance's reason against the subject's name or the disclosure;
+  - a withdrawal's reason against the clearance's own reason. A withdrawal must say something of its own.
+
+  The refusal is a plain sentence, recorded in `refusals`.
+- **Reasons:** at least 12 characters, as elsewhere. Every new CHECK is definite under NULL (`IS NOT NULL` or
+  `coalesce`), with a NULL-input refusal among the breaks.
+
+### 6. What Brad does himself, outside the code
+
+**Before Gate B, in the Claude Console** (Rule76 Consulting LLC's organisation):
+1. Create the workspace **LVRF**. Spend limits can't be set on the Default Workspace.
+2. **Settings → Spend limits → Workspace limits → LVRF → Monthly spend limit:** the Claude Pro fee. Add an email
+   notification at half of it.
+3. **Billing:** prepaid credits, **auto-reload off**.
+4. **Data retention:** leave the organisation's standard retention as it is. For Opus 5.5, nothing to change. For
+   Fable 5.2, the workspace must have standard (30-day) retention, or its requests are refused with a 400.
+5. **Web search:** check that the organisation allows it. An administrator can disable it, and then every call fails.
+6. **Create an API key in the LVRF workspace,** named `lvrf-srv1862778`. It is shown once. It goes from the Console
+   page straight into step 7's silent prompt: not a note, a file, a chat (this session included) or a terminal's output.
+
+**The key's path to the box.** The Console shows the key in the browser where it is created, so it reaches the Mac's
+screen and, if copied, its clipboard. That cannot be avoided, short of creating it on another device. It is never
+written to the Mac. On the box, in Brad's own ssh terminal (not a Claude session), as `brad`:
+
+```
+sudo test -e /etc/lvrf-research.env && sudo grep -c '^ANTHROPIC_API_KEY=' /etc/lvrf-research.env || echo 0   # 0
+grep -c '^ANTHROPIC_API_KEY=' /srv/lvrf/.env                                                                    # 0
+read -rs -p 'Anthropic key: ' K; echo
+[ ${#K} -gt 40 ] && printf 'ANTHROPIC_API_KEY=%s\n' "$K" | sudo sh -c 'umask 077 && cat > /etc/lvrf-research.env' \
+  && echo "key written" || echo "NO KEY: nothing written"
+unset K
+sudo stat -c '%a %U:%G' /etc/lvrf-research.env                                                                  # 600 root:root
+```
+
+Then, on the Mac: `pbcopy < /dev/null` clears the clipboard.
+- `read -s` keeps the key off the screen and out of the shell's history.
+- `printf` is a shell builtin, so the key is never a process argument.
+- The paste reaches the box over ssh, encrypted.
+
+**A smoke test with no client data,** before any prompt is sent: one request, "Reply with the word OK", through
+`scripts/ai_research_smoke.ts`. The key goes to it on stdin from the root-only file, and the test prints the model, the
+request id and the answer, never the key.
+
+**Then turn it on:** `sudo systemctl restart lvrf-api`, and check:
+- the start line reads `[ai-research] on: …`;
+- `journalctl -u lvrf-api --since "-5 min" | grep -c ANTHROPIC_API_KEY` prints 0;
+- `| grep -c 'sk-ant'` prints 0.
+
+**The dollar limit is recorded at Gate B:**
+- the amount Brad set in the Console;
+- whether it is the monthly ($20) or annual ($17) Pro figure;
+- the prepaid credit bought, and auto-reload off;
+- `LVRF_RESEARCH_MONTHLY_USD` set to the same amount.
+
+### 7. Decisions, Gate A, Gate B and the act session, Gate C
+
+**Decisions for Brad:**
+
+| # | Question | Recommended |
+|---|---|---|
+| D1 | The model | **Opus 5.5** (§21.3). Fable 5.2 doubles the cost per call and is a Covered Model |
+| D2 | Where the key lives | **`/etc/lvrf-research.env`, root 600, as systemd's second `EnvironmentFile=`** (CVAF's pattern). **Named:** the API runs as `brad`, so any process running as `brad`, including a read-only ssh session, could read the key from `/proc/<pid>/environ`. A read-only check over ssh never reads that file or that path, and every check of the key counts lines and never prints them. The stronger option, a separate system user for a small research process that alone holds the key, costs about a day more |
+| D3 | What is cleared, and who clears it | **Each account, and each industry for pack research, cleared by the steward** with a reason and a governance act. Sending data out is a decision about it, not an act of recording; it is model-bound by retention, and withdrawn by a new row |
+| D4 | How calls stop | **The Console's workspace limit and prepaid credits (the hard stops), and LVRF's ledger** refusing a call before it is sent when the month's spend plus one capped call would pass `LVRF_RESEARCH_MONTHLY_USD` |
+| D5 | What counts as a customer-side row | **A prompt may carry a row only if it is outside-in:** its evidence cites a source (`source_reference`), rests on a quote or a locator, is not `attestation`, `system_export` or `assessment_result`, is not simulated, and is linked to no value outcome. Any other row refuses the call, named. One rule for every account, the tenant's own included. **Named:** on the 14 Nov copy, Skillsoft's two `system` facts ("Skillsoft records value realization in LVRF", statements by Brad, no source) would refuse a Skillsoft call while they stand; the three Scotts facts from a job posting pass |
+| D6 | Scope | **Both prompt kinds:** account research and pack research, through the one module |
+| D7 | How the page waits | **An in-process job:** the route answers 202 with the call's id and the page follows its `research_calls` rows. A call takes minutes |
+| D8 | The client | **`@anthropic-ai/sdk`, pinned to an exact version** (the official SDK; streaming and `finalMessage`). A new dependency; `npm audit` read, never `--force` |
+| D9 | Refusal fallbacks | **None.** A fallback would send the prompt to a model the subject was not cleared for. A refusal is recorded `refused`, and the person can still copy the prompt and run it themselves |
+| D10 | Caps | **10 searches, 6 fetches of at most 20,000 tokens, 32,000 output tokens, effort `high`, 15 minutes, 3 calls per subject per UTC day**, all settings |
+
+**Gate A (planned).**
+- **No real model in Gate A.** Every call goes to a local stand-in (`scripts/lib/fakeAnthropic.mjs`, through
+  `ANTHROPIC_BASE_URL`, which only a non-production server accepts), with a placeholder key. The stand-in records each
+  request it receives.
+- Full regression, every verify script in one run, on clones of the prod copy, with the act rehearsals through the
+  page.
+- **Breaks, each with a positive control:**
+  - **S2-1, a customer-side row in the prompt:**
+    - an account fact resting on a `system_export` row is refused 409 and named;
+    - the stand-in receives 0 requests, and there is no `sent` row;
+    - **control:** the same account with that fact superseded by an outside-in one sends 1 request.
+  - **S2-2, an uncleared account:**
+    - 403, 0 requests;
+    - **control:** the steward clears it through the page, and it sends.
+  - **S2-3, cleared for a shorter-kept model:**
+    - cleared for Opus 5.5, configured for Fable 5.2: 403;
+    - **control:** a new clearance naming Fable 5.2 sends.
+  - **S2-3b, a withdrawn clearance:** 403. **Control:** cleared again, it sends.
+  - **S2-4a, LVRF's spend limit reached:**
+    - the month's recorded cost plus one capped call over the limit: 429, 0 requests;
+    - **control:** under the limit, it sends.
+  - **S2-4b, the Console's limit reached:**
+    - the stand-in answers with Anthropic's spend-limit error;
+    - the result row reads `failed` with the error type, nothing is parsed and no import is written;
+    - **control:** the stand-in answers normally, and the import is parsed.
+  - **S2-5, the key absent:**
+    - 503, the page says research with Claude is not set up, and copying the prompt still works;
+    - **control:** with the placeholder key, it sends.
+  - **S2-6, the key nowhere it should not be:**
+    - after the full run, the placeholder key's text appears 0 times in the journal, in `research_calls`, `audit_log`,
+      `refusals`, any response body, `client/dist` and the repo;
+    - **control:** the stand-in saw it in the `x-api-key` header on each request.
+  - **S2-7, production with `ANTHROPIC_BASE_URL`:** the server refuses to start, and the deploy refuses.
+    **Control:** without it, it starts.
+  - **S2-8, the request is exactly the prompt:**
+    - the stand-in's received user turn equals `research_prompts.prompt_text` byte for byte, and its SHA-256 the
+      stored `prompt_sha256`;
+    - the request carries no fields beyond those listed in §21.2;
+    - **break:** a server that appends a line to the prompt fails the check.
+  - **S2-9, the audit rows:**
+    - every call has its `sent` row before the stand-in sees the request, and its `result` row after;
+    - a stream cut short reads `failed`, and the 15-minute timeout (shortened in the test) reads `timeout`;
+    - `refusal`, `max_tokens` and an unparseable answer each read as their outcome, with nothing parsed;
+    - **control:** a good answer reads `imported`, with its import id.
+  - **S2-10, append-only:**
+    - `UPDATE`, `DELETE` and `TRUNCATE` on `research_calls` and `research_clearances` are refused as `lvrf_app`;
+    - neither table is in `db/ownership.sql`'s update list.
+  - **S2-11, a second call for the same prompt:** 409. **Control:** a new prompt sends.
+  - **S2-12, the envelope says `ai_sourced: false`:** refused at parse. **Control:** `true` passes.
+  - **S2-13, the forms (§21.5):**
+    - a clearance reason identical to the subject's name, and a withdrawal reason identical to the clearance's, are
+      each refused;
+    - each confirmation shows every field in full, checked against the typed text, with no `…`;
+    - **controls:** distinct reasons are recorded.
+  - **S2-14, NULL inputs:** each new CHECK refuses its NULL case.
+  - **S2-15, another tenant's prompt or subject:** 404.
+  - **S2-16, the module boundary:** a second file importing the SDK fails the lint rule and the grep.
+- Equivalence against the deployed main on every GET: no difference except the new research fields.
+- Build and lint are clean, and drift is none. CHECK and trigger counts are stated, and the TOC after the migration is
+  measured on a clone.
+
+**Gate B (planned).**
+1. Fast-forward merge and push.
+2. On the box, a backup, with the TOC measured from the latest dump and expected as Gate A states.
+3. The migration (`research_calls`, `research_clearances`, the two acts, their CHECKs). Then `db/ownership.sql`, then
+   `db/hardening.sql`, with the trigger count Gate A states and 0 ERROR lines; then the TOC after.
+4. Deploy **with no key**, so the feature is off. Expect `[ai-research] off: no key`, the bundle Gate A names, steps 5b
+   to 5d, health 200, and the Research step's button saying it is not set up.
+5. Brad's steps from §21.6: the Console, the key, the smoke test, the restart and the checks. **The dollar limit is
+   recorded here.**
+
+**The act session (rule 10: Brad's, through the page).**
+1. Choose the first subject: an account due for research, or a pack.
+2. Clear it, with its reason (where the client's agreement allows this, for an account).
+3. Generate its prompt; "Research with Claude…"; confirm.
+4. When it answers, review each field as today, opening each citation.
+5. **The first calls' measured cost goes in BUILD_STATUS** against §21.3's estimate and the Console's usage page.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone).**
+- Migrations, drift, CHECKs with sentences, triggers, ownership and TOC as Gate B left them.
+- **Calls:**
+  - each `sent` row has one `result` row;
+  - each `imported` result names an import whose SHA-256 is recorded;
+  - each call relies on a current clearance for its model;
+  - the recorded cost totals no more than the Console's for the same days;
+  - no call while uncleared or over the limit.
+- **Clearances:** each is Brad's, with its disclosure's SHA-256 matching the text in code for that model, and one `clear`
+  act each.
+- **The key:**
+  - `grep -c` for `ANTHROPIC_API_KEY` and for `sk-ant` in the journal since the deploy: 0;
+  - `/etc/lvrf-research.env` is `600 root:root` (`stat` only);
+  - `/srv/lvrf/.env` has no key line (`grep -c`: 0).
+- **Accepted fields:** every field accepted from a call is `ai_sourced`, with its citation opened by the person who
+  accepted it.
+- No refusal but the ones Brad met, and no audit row without an actor. Every sealed run is byte-identical, and
+  `check_run_hashes` matches all of them.
+
+### 8. `CLAUDE.md`, after Gate C only
+
+When Gate C passes, and not before (OWN-1-D3), `CLAUDE.md`'s research seam is amended, in one docs commit:
+- **"No code calls a research tool — a person runs the prompt"** becomes: one module, `server/research/apiCall.ts`,
+  sends a stored prompt to Anthropic's API on a person's request, for a subject the steward has cleared, within the spend
+  limit; everything after the answer is the person's, as before.
+- The module list adds `apiCall.ts`, `research_calls` and `research_clearances`, written only by `apiCall.ts`.
+- The key rule is added: on the box only, `/etc/lvrf-research.env`, root 600.
+
+Nothing else in the seam changes: a prompt is generated from live rows, a new result names its prompt, and accept is
+per field by a person.
