@@ -4494,8 +4494,8 @@ Gate C passes (step 8 below). Until then, S2's code is the departure, and this s
     to the evidence row at accept.
   - AI-sourced evidence is born unverified. It is verified only when its citation is opened (AMENDMENT-005;
     `evidence_ai_verify_requires_resolution`), and the origin is permanent: a successor carries it.
-  - The 35 results on record name the tool as the model in a chat. The most common is "Claude Opus 5.5 (Anthropic),
-    using the WebSearch tool" (13); every one used web search, and most also used page fetch.
+  - The 43 results on record (35 pack, 8 account) name the tool as the model in a chat: 35 Claude Opus 5.5, 4 Claude
+    Sonnet 5, 4 "Claude Cowork". 39 of them name web search.
 - **No code calls a model.** `researchPrompt.ts`'s header: "nothing in this system calls a model". There is no
   Anthropic dependency in `package.json`.
 - **The API's environment** is `/srv/lvrf/.env` (`ops/lvrf-api.service`, `EnvironmentFile=`), owned by `brad`. The
@@ -4629,7 +4629,7 @@ retention), platform.claude.com/docs/en/manage-claude/workspaces (spend limits) 
 | Retention | **A Covered Model** (designated 9 Nov 2026). "Prompts and model completions are retained for at least 30 days and then automatically deleted", for safety monitoring by automated systems. ZDR not available | Standard commercial terms: "we automatically delete inputs and outputs on our backend within 30 days of receipt or generation", up to 2 years if flagged under the Usage Policy |
 | Training | "Retained data is never used for model training without your express permission" (both) | the same |
 | Default effort | `high` | `medium` (S2 sets `high` explicitly) |
-| Record | none of the 35 results on record | 30 of the 35 results on record name Opus 5.5 or Claude in the app; all accepted fields were reviewed by a person |
+| Record | none of the 43 results on record | 35 of the 43 results on record name Opus 5.5; every accepted field was reviewed by a person |
 
 **A wording to name.** The retention page also says "Conversation content (your prompts and Claude's outputs) is not
 retained by default". The commercial privacy page says inputs and outputs are deleted "within 30 days". S2 discloses the
@@ -4642,8 +4642,8 @@ Console).
 | Per call | Input tokens | Output tokens (thinking and JSON) | Searches | Opus 5.5 | Fable 5.2 |
 |---|---|---|---|---|---|
 | Light (a pinned entity, few sources) | 80,000 | 8,000 | 5 | **$0.53** | **$1.01** |
-| Typical (the answers on record: 2–27 KB of JSON, 5–12 sources) | 200,000 | 16,000 | 10 | **$1.22** | **$2.34** |
-| At the caps (32,000 output, 10 searches, 6 fetches of 20,000) | 500,000 | 32,000 | 10 | **$2.70** | **$5.38** |
+| Typical (the answers on record are 1–27 KB of JSON) | 200,000 | 16,000 | 10 | **$1.22** | **$2.34** |
+| At the caps (32,000 output, 10 searches, 6 fetches of 20,000) | 500,000 | 32,000 | 10 | **$2.74** | **$5.38** |
 
 The input figures assume each round of search re-reads the conversation uncached. Cache reads ($0.20/MTok on both)
 would lower them, so these lean high.
