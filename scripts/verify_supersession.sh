@@ -106,8 +106,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "210" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 210 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "220" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 220 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 appq() { PGOPTIONS="-c default_transaction_read_only=off" psql "$VERIFY_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
@@ -127,7 +127,7 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
+[ "$(trig)" = "220" ] && ok "220 triggers (S2 section 36: +10) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: L50 and L52 add none; B1 adds two for industries" || bad "triggers: $(trig)"
 
 step "3. Fixtures and the server"
 TS="$(date +%s)"
@@ -505,7 +505,7 @@ expect POST "/api/industries/$UT/research-prompts" '{}' 201 "  ...and a pack res
 
 step "11. What held"
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 51 migrations" && ok "drift: none" || bad "drift: $DRIFT3"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 52 migrations" && ok "drift: none" || bad "drift: $DRIFT3"
 HASH1="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 RUNS1="$(q "SELECT count(*) FROM value_runs")"
 printf '%s' "$HASH1" | grep -qE "^$RUNS1 runs: recompute matches $RUNS1, differs 0; embedded payloadHash matches $RUNS1, differs 0" && ok "check_run_hashes: $HASH1" || bad "hashes: $HASH1"

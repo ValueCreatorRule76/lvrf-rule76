@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 #
-# LVRF production deploy. Run as brad, NOT under sudo. The single
-# `sudo systemctl restart lvrf-api` call below is the only sudo in
-# this script.
+# LVRF production deploy. Run as brad, NOT under sudo. Its sudo calls are
+# `sudo systemctl restart lvrf-api` and, once ops/lvrf-research.service is
+# installed (S2, LVRF_PLAN §21, D2), installing the research process's one
+# bundled file root-owned at /opt/lvrf-research/sidecar.mjs and restarting it.
+#
+# Step 5e (S2) refuses to restart if Anthropic's key or ANTHROPIC_BASE_URL is
+# in /srv/lvrf/.env: the key lives in /etc/lvrf-research.env (root, 600), read
+# by systemd for the research process alone, and production talks to
+# api.anthropic.com only.
 #
 # Usage: ./scripts/lvrf-deploy.sh [run-id]
 #   run-id  id of a run used to smoke-test GET /api/runs/:id
@@ -106,6 +112,7 @@ fi
 # 3. Server build.
 npm ci || die "npm ci (server) failed"
 npm run build || die "npm run build (server) failed"
+npm run build:research || die "npm run build:research (the research process's bundle) failed"
 
 # 4. Client build — the step that was missing.
 (
@@ -156,6 +163,28 @@ npx tsx scripts/drift_report.ts \
 DATABASE_URL="${DATABASE_URL:-$(grep '^DATABASE_URL=' .env | cut -d= -f2-)}" npx tsx scripts/check_ownership.ts \
   || die "OWN-1: the ownership check failed (see above); not restarting. Run db/ownership.sql and db/hardening.sql as postgres first."
 
+# 5e. S2 (§21, D2): Anthropic's key never in the app's environment, and no
+#     stand-in in production. Counts only; the file's lines are never printed.
+[ "$(grep -c '^ANTHROPIC_API_KEY=' .env || true)" = "0" ] \
+  || die "S2: ANTHROPIC_API_KEY is in /srv/lvrf/.env; it belongs in /etc/lvrf-research.env (root, 600) only. Not restarting."
+[ "$(grep -c '^ANTHROPIC_BASE_URL=' .env || true)" = "0" ] \
+  || die "S2: ANTHROPIC_BASE_URL is in /srv/lvrf/.env; production talks to api.anthropic.com only. Not restarting."
+log "S2: no Anthropic key or base URL in /srv/lvrf/.env"
+
+# 6a. The research process (S2), when its unit is installed: its one file,
+#     root-owned and writable by no one else, then a restart. Before the unit
+#     is installed (Gate B's first deploy), research with Claude stays absent.
+if [ -f /etc/systemd/system/lvrf-research.service ]; then
+  sudo install -o root -g root -m 644 dist/research-sidecar.mjs /opt/lvrf-research/sidecar.mjs \
+    || die "could not install the research process's file to /opt/lvrf-research"
+  sudo systemctl restart lvrf-research || die "systemctl restart lvrf-research failed"
+  sleep 1
+  [ "$(systemctl is-active lvrf-research || true)" = "active" ] || die "lvrf-research is not active after restart"
+  log "lvrf-research is active ($(stat -c '%U:%G %a' /opt/lvrf-research/sidecar.mjs))"
+else
+  log "lvrf-research.service is not installed: research with Claude stays absent"
+fi
+
 # 6. Restart the service and confirm it came up.
 sudo systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed"
 sleep 2
@@ -171,6 +200,7 @@ HEALTH_BODY="$(curl -s -w '\n%{http_code}' "http://127.0.0.1:3001/api/health")"
 HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1)"
 ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4)"
 ACTOR_HEADER="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"actor_header":"[a-z]+"' | cut -d'"' -f4)"
+AI_RESEARCH="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"ai_research":"[a-z]+"' | cut -d'"' -f4)"
 API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
 STAFF_ID="$(psql -X -At "$DB_URL" -c "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")" \
   || die "could not read a vendor-staff id for the header check"
@@ -180,6 +210,7 @@ VHOST_STATUS="$(curl -sIk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:44
 
 log "GET http://127.0.0.1:3001/api/health -> ${HEALTH_STATUS} (expect 200), origin_check=${ORIGIN_MODE:-<none>} (expect configured)"
 log "health actor_header=${ACTOR_HEADER:-<none>} (expect off)"
+log "health ai_research=${AI_RESEARCH:-<none>} (on, off with no key, or absent before lvrf-research is installed)"
 log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} with no session -> ${API_STATUS} (expect 401: up and fail-closed)"
 log "GET http://127.0.0.1:3001/api/runs/${RUN_ID} with X-Actor-Person-Id (vendor staff), no session -> ${HEADER_STATUS} (expect 401: the header does not act)"
 log "GET https://${DOMAIN}/ -> ${VHOST_STATUS} (expect 401, basic_auth)"

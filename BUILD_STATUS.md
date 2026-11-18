@@ -14623,3 +14623,285 @@ read-only:**
 
 **S1 closed.** Gate C was clean but for act 4's note. That note stands as recorded, and `673861eb` carries the
 corrected basis note; the correction path goes to 3.1. Prod was only read.
+
+### S2: research with Claude — Gate A, 18 Nov 2026 (UTC)
+
+Plan: LVRF_PLAN §21, approved by Brad 18 Nov 2026 with D1–D10 as recommended and §21.0's conditions. Branch
+`s2-ai-research`. **No real API call was made.** Every call in Gate A went to the local stand-in
+(`scripts/lib/fakeAnthropic.mjs`) with a placeholder key. Outside production, the research process refuses to start
+with a key and no stand-in.
+
+#### What was built
+
+- **Migration `0051_s2_ai_research`:**
+  - `research_clearances` and `research_calls`, both insert-only;
+  - `research_imports.call_id` (one import per call);
+  - two new acts, `clear` and `withdraw_clearance`;
+  - 15 CHECKs, each definite under NULL and each with a plain sentence (146 in all).
+- **`db/hardening.sql` section 36:**
+  - guards on clearances (the steward's alone, recorded as the person; a withdrawal must say something of its own)
+    and on calls (the prompt's SHA-256; a current clearance for the same model; a result answering its sent row);
+  - `_immutable`, `_audit` and `_no_delete` on both tables;
+  - `research_imports_call_matches`;
+  - `research_clearances` added to the act-present loop and the governed-row list, and both tables to the
+    no-UPDATE list.
+  - **220 triggers** (+10), 342 `information_schema` rows (+13).
+- **`db/ownership.sql`:** both tables are INSERT and SELECT only for `lvrf_app`.
+- **The research process (D2):**
+  - code: `server/research/sidecar/main.ts`, bundled by `npm run build:research` to one file,
+    `dist/research-sidecar.mjs`, and installed root-owned at `/opt/lvrf-research/sidecar.mjs` by the deploy;
+  - it runs as its own system user, `lvrf-research` (`ops/lvrf-research.service`, sandboxed), with the key from
+    `/etc/lvrf-research.env` (root, 600) through systemd;
+  - it removes the key from its own environment at start;
+  - it listens on `/run/lvrf-research/sock` (directory 0750, socket 0660, group `lvrf-research`, which `brad` joins);
+  - it builds every request itself from `server/research/aiSettings.ts`: the stored prompt as the one user turn,
+    `claude-opus-5-5`, effort high, 32,000 output tokens, web search (10) and web fetch (6 of 20,000 tokens),
+    `lvrf-rule76.com` blocked; no system prompt, no metadata, no fallbacks, no retries;
+  - it continues `pause_turn` at most 3 times;
+  - it logs an error's type and status, never its message or a header.
+  - **It refuses to start** in production with `ANTHROPIC_BASE_URL`, as the owner of `/srv/lvrf`, or from a code file
+    not root-owned or writable by others; outside production, with a key and no stand-in.
+  - `POST /smoke` sends one fixed sentence with no tools, at most once a minute (§21.6).
+  - The only importer of `@anthropic-ai/sdk`, pinned to **1.6.0** (released 5 Nov 2026; 1.10.0, released 17 Nov, was
+    not taken).
+- **The API (`server/research/aiResearch.ts`, mounted at `/api/research-ai`):**
+  - status, a subject's view, the clearance and its withdrawal (the steward's, each with its act), the call
+    (authorized, 202, a background job) and the call's view;
+  - every refusal before sending is in §21.2's order and recorded in `refusals`;
+  - the `sent` row is committed in its own transaction before the prompt leaves;
+  - a call running when the API restarts reads "interrupted: no answer recorded" and is not retried;
+  - the month's ledger counts an unanswered call at its cap;
+  - `/api/health` carries `ai_research` (on, off or absent).
+- **Import, through the same parse routes as a paste,** with `{ call_id }` (`server/research/callAnswer.ts`, which only
+  reads). Both routes stay the only writers of `research_imports` and `research_results`. The extra rules: `ai_sourced`
+  must be true; the prompt must be the call's; `research_tool` is recorded as the server states it ("Claude Opus 5.5
+  (claude-opus-5-5) via the Claude API, with web search and web fetch, call {id}").
+- **"Prompt current"** is checked by composing the prompt again, from live rows, under its own id
+  (`composeAccountPrompt` and `composeIndustryPrompt`, extracted from the generate routes unchanged): equal text, or
+  409.
+- **D5, as ruled:** a row is outside-in when it cites a source, rests on a quote or locator, is not an attestation,
+  system export or assessment result, is not simulated, and has no live link to an outcome. A fact or the regime that
+  fails is left out of the prompt. The page lists each one left out (its short id and why). A call is refused only if a
+  row it carries fails.
+- **The page** has "Research with Claude" (A3b on an account, R2b on a pack), with three forms, each confirming every
+  field in full (the 3.1 steward-form item): "Clear this for research with Claude", "Withdraw the clearance" and
+  "Research with Claude". Then "Import the answer", which also confirms. The two research pages' headers no longer say
+  "No code here calls a research tool."
+- **The deploy (`scripts/lvrf-deploy.sh`):**
+  - builds the bundle;
+  - step 5e refuses a key or base URL in `/srv/lvrf/.env`;
+  - step 6a installs the file root-owned and restarts `lvrf-research` once its unit is installed;
+  - step 7 logs `ai_research`.
+- **The verify scripts** refuse to run if the Mac's `.env` files or the shell hold `ANTHROPIC_API_KEY`.
+
+#### Departures from §21 as planned, named for Brad
+
+1. **A clearance covers its own model only.** §21.2 said a clearance covers "a model kept no longer than the one it
+   names"; as built it covers exactly its model and retention class. That is stricter, and matches the ruling that a
+   switch is "a setting plus a new clearance per account".
+2. **The import is the person's act.** §21.2 step 6 read as automatic. As built, the person clicks "Import the answer",
+   so the import's actor is the person who imports, through the existing parse route.
+
+#### Gate A's two findings, and Brad's ruling (18 Nov 2026)
+
+**The findings.**
+1. **D5 as first ruled refused every row recorded before evidence forms (24 Oct).** All 8 of Scotts's current rows are
+   `legacy`.
+2. **Skillsoft has one current unsourced "system" fact, not two.** It is `f1e2385e`, "LVRF (value realization
+   records)", evidence `f41102bc`, read on prod read-only; `c966ef3b` is already superseded. No route retires a fact.
+
+**The ruling.**
+- A row that fails D5 is left out of the prompt and never sent, and the research page lists each one left out, with
+  its short id and why.
+- The call is refused only if a row that fails D5 would still be in the prompt (a Gate A break, with its positive
+  control).
+- No supersession of Scotts' rows, and no act on `f1e2385e`, is needed for S2.
+- "A route to retire a fact" goes to the 3.1 list (`docs/LVRF_3.0_CRITICAL_PATH.md`).
+
+**As built.**
+- One test, `server/research/outsideIn.ts`.
+- `composeAccountPrompt` leaves out each fact, and the disclosure regime, that fails it. The prompt names only the
+  left-out kinds ("LEFT OUT (n): …"), never a value, and says the regime is "on record, but left out of this prompt".
+- The account prompt template goes from v2 to v3. The paste path shares the composer, so its prompts leave out the same
+  rows.
+- The call tests again every row the prompt carries. Only the pinned entity can fail there, because a facts-phase prompt
+  names the entity it asks about.
+- **Scotts:** its entity is `legacy`, so a Scotts facts prompt is refused, naming the entity, until the entity is
+  corrected by supersession.
+- **Curia and Skillsoft** have no pinned entity, so their next prompt carries no row and can be sent. So can a pack.
+
+#### `npm audit` (D8; reported, nothing fixed, never `--force`)
+
+6 findings before the SDK and 6 after: the SDK adds none.
+- `body-parser` 2.0.0–2.3.0: **high**, `npm audit fix` (not `--force`) available.
+- `qs` 6.7.0–6.16.0: moderate, `npm audit fix` available.
+- `esbuild` ≤0.24.2 through `drizzle-kit`'s `@esbuild-kit` (dev only, 4 entries): moderate, available only through
+  `--force`, which is never run.
+
+#### Gate A
+
+- **Full regression, every verify script in one run, on the final code** (51 scripts):
+  - 49 passed, and every file was byte-identical after the run.
+  - **The 2 that failed** were assertions on prompt text that the ruling changed, and now pass on their own:
+    - `verify_account_research`: its typed fixture fact, citing no source, is now left out, so it reads "ALREADY RECORDED
+      (2)"; updated to assert the left-out kind and that none of its value is in the text. 160/0.
+    - `verify_evidence_form`: the template is now v3. 99/0.
+  - **Two earlier full runs:**
+    - the first ended 44/51, and its 7 failures were fixed: the counts in 2 scripts, the route lister and the new
+      routes' classes and tenant cases, a reader missing the withdrawn-link filter, and the short id in four
+      confirmations;
+    - the second was stopped at 9/9 passing when Brad's ruling changed the code, with every file byte-identical.
+
+- `verify_s2_ai_research` **187/0**, every break with its positive control:
+  - **S2-1:** a system-export fact is left out. The page lists it, the stored prompt and what reached the stand-in
+    hold none of its value, and the call is sent.
+  - **S2-1b:** with the composer's filter removed, the prompt carries the row and the call is refused, naming it, with
+    0 requests; restored, it sends.
+  - **S2-1c:** Scotts's entity, which cannot be left out, refuses its facts prompt (named, 0 requests). Its regime and
+    six facts are left out, and the prompt says so.
+  - **S2-2:** uncleared, 403 and 0 requests; cleared through the page, it sends.
+  - **S2-3:** the process on Fable 5.2 with an Opus clearance, 403; cleared for Fable 5.2 (whose disclosure is the
+    Covered Model text), it sends, priced at $1.39.
+  - **S2-3b:** withdrawn, 403, and the database refuses a sent row too; cleared again, it sends.
+  - **S2-4a:** the month's spend plus one capped call over the limit, 429 with 0 requests; within it, it sends. The
+    day's limit also refuses (429).
+  - **S2-4b:** Anthropic's spend-limit error recorded `failed`, `invalid_request_error`, HTTP 400, cost 0; nothing to
+    import; the logs carry the type, not the message.
+  - **S2-5:** no process, no key, switched off, no limit: each 503, recorded, 0 requests; the page says why, and the
+    paste path still works. With the key: on.
+  - **S2-6:** the placeholder key appears 0 times in the logs, response bodies, `audit_log`, `research_calls`,
+    `research_clearances`, `refusals`, `governance_acts`, the builds and the repo. The stand-in saw it in the
+    `authorization` header.
+  - **S2-7:** production with a base URL refuses to start; so does running as the app directory's owner, and running
+    from a non-root file. Outside production with the stand-in, it starts.
+  - **S2-8:** the request's keys are exactly `model`, `max_tokens`, `output_config`, `messages`, `tools` and `stream`;
+    the user turn's SHA-256 equals `prompt_sha256`. A process appending one line is caught; restored, it matches.
+  - **S2-9:** answered (cost $0.73 from the usage), refused, truncated, empty, cut short, a timeout, `pause_turn` then
+    answered (2 requests), and interrupted on an API restart.
+  - **S2-10:** UPDATE, DELETE and TRUNCATE are refused as `lvrf_app`.
+  - **S2-11:** a second call on a prompt, 409 with nothing sent.
+  - **S2-12:** `ai_sourced` false is refused at import; true imports.
+  - **S2-13:** a reason equal to the subject's name, and a withdrawal repeating the clearance's reason, are each
+    refused by the route and by the database; each confirmation shows every field in full.
+  - **S2-14:** each new CHECK refuses its NULL case; a cost of 0 lands.
+  - **S2-15:** another tenant's account, and an unknown prompt, are 404.
+  - **S2-16:** only the research process imports the SDK; a second importer is caught.
+- **Acts:** `clear` and `withdraw_clearance`, each the steward's; a call writes none. No audit row on the new tables
+  lacks an actor. Every recorded cost is its usage at the 18 Nov prices.
+- **Through the page, by session, as the steward:** clear (the disclosure and the reason in full), send (the prompt,
+  its SHA-256, the model, "cannot be called back"), import, and withdraw. Screens `s2_*` at 1280 and 390.
+- **TOC:** +39 measured on clones of the prod copy (main's hardening, against 0051 with section 36): 2 tables, their
+  data, ACLs and primary keys, 11 foreign keys, 7 indexes, 3 functions and 10 triggers. **Prod: 910 before, 949
+  after.**
+- Build and lint are clean (the one warning is `ActorContext.tsx`'s, as before). Bundle: `index-ByVQurqv.js` / `index-DkZrfoBg.css`.
+- **Equivalence against the deployed `2306ab3`** (`scripts/equivalence_gets.sh`, the 14 Nov snapshot): 213 GETs, **213 identical**, 0 differing. The three new GET routes are named as added, not compared.
+
+#### Gate B (not run; Brad's pastes)
+
+Every step is Brad's paste. Stop at any step whose expectation is not met.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s2-ai-research && git push && git log --oneline -1
+   ```
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s2-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the same head, and **910** (S1's post-hardening TOC; rows since add no entry).
+3. **Migrate (0051), then ownership, then hardening (section 36):**
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_s2.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_s2.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+   ```
+   Expect 0051 applied (52 migrations), `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **220** triggers.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-s2-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **949**, which is 910 plus the 39 measured on the clones.
+5. **The research process's user, group and unit,** once, with no key yet (D2):
+   ```
+   sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin lvrf-research
+   sudo usermod -aG lvrf-research brad
+   sudo install -d -o root -g root -m 755 /opt/lvrf-research
+   sudo install -o root -g root -m 644 /srv/lvrf/ops/lvrf-research.service /etc/systemd/system/lvrf-research.service
+   sudo systemctl daemon-reload && sudo systemctl enable lvrf-research
+   grep -c '^LVRF_RESEARCH_MONTHLY_USD=' /srv/lvrf/.env || printf 'LVRF_RESEARCH_MONTHLY_USD=20\n' >> /srv/lvrf/.env
+   grep -c '^ANTHROPIC_' /srv/lvrf/.env
+   ```
+   Expect the last line to be **0**. `LVRF_RESEARCH_MONTHLY_USD=20` is Brad's ruling: his Pro fee, $20 a month.
+   **Then log out of the box and back in**, so this ssh session is in the group `lvrf-research` (the socket checks in
+   steps 7 and 8 need it). The deploy's restart gives the API the group.
+6. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - "S2: no Anthropic key or base URL in /srv/lvrf/.env";
+   - "lvrf-research is active (root:root 644)";
+   - the bundle `index-ByVQurqv.js` / `index-DkZrfoBg.css`;
+   - steps 5b–5d passed;
+   - health 200 and fail-closed;
+   - `health ai_research=off` (the process is up, with no key).
+7. **Read-only checks of D2** (Brad's paste, as `brad`; each prints a refusal or a count, never the key):
+   ```
+   stat -c '%U:%G %a' /opt/lvrf-research/sidecar.mjs /run/lvrf-research /run/lvrf-research/sock   # root:root 644, lvrf-research:lvrf-research 750, lvrf-research:lvrf-research 660
+   ps -o user= -p "$(systemctl show -p MainPID --value lvrf-research)"                           # lvrf-research
+   cat /proc/"$(systemctl show -p MainPID --value lvrf-research)"/environ > /dev/null; echo "brad reading its environment: exit $?"   # Permission denied, exit 1
+   curl -s --unix-socket /run/lvrf-research/sock http://x/status; echo                         # {"configured":false,"model":"claude-opus-5-5",...}
+   ```
+8. **Brad's own steps from §21.6:** the Console (the LVRF workspace, the $20 limit, prepaid credits with auto-reload
+   off, the key), and the key to the box. The path is the same, `/etc/lvrf-research.env`: root 600, never in a Claude
+   session. Then:
+   ```
+   sudo stat -c '%a %U:%G' /etc/lvrf-research.env                       # 600 root:root
+   cat /etc/lvrf-research.env > /dev/null; echo "brad reading the key file: exit $?"   # Permission denied, exit 1
+   sudo systemctl restart lvrf-research
+   curl -s --unix-socket /run/lvrf-research/sock -X POST http://x/smoke; echo   # {"model":"claude-opus-5-5","answer":"OK",...}: the first real call, no client data
+   curl -s http://127.0.0.1:3001/api/health; echo                            # ... "ai_research":"on"
+   journalctl -u lvrf-research -u lvrf-api --since "-10 min" --no-pager | grep -c 'sk-ant\|ANTHROPIC_API_KEY'   # 0
+   ```
+   **The dollar limit is recorded here:** the amount set in the Console, whether it is the monthly ($20) or the annual
+   ($17) Pro figure, the prepaid credit bought, auto-reload off, and `LVRF_RESEARCH_MONTHLY_USD`.
+
+#### Brad's act session (rule 10: the steward's, through the page)
+
+**Proven through the page in Gate A** (`verify_s2_ai_research`, by session, as the steward): clear, send, import and
+withdraw.
+
+1. **No act on `f1e2385e` and no supersession of Scotts' rows** (Brad's ruling).
+2. **Choose the first subject.**
+   - Curia and Skillsoft have no pinned entity, so their next prompt carries no row and can be sent.
+   - Scotts's facts prompt is refused: its entity was recorded before evidence forms and cannot be left out.
+   - A pack's prompt carries no account rows.
+3. **Clear it:** the subject's page → A3b (or R2b on a pack) "Research with Claude" → "Why it may be researched with
+   Claude" → the reason (for an account: where the client's agreement allows this) → "Clear this for research with
+   Claude" → read the disclosure and the reason in the confirmation → Confirm.
+4. **Generate its prompt** (A2 or R1), then "Research with Claude" → read the confirmation (the prompt, its SHA-256, the
+   model, the caps, the month's spend) → Confirm. The call answers on the page in minutes.
+5. **"Import the answer"** → Confirm. Then review each field as today, opening each citation.
+6. **The first calls' cost** goes in BUILD_STATUS, against §21.3's estimate and the Console's usage page, so Brad can
+   revisit the $20 cap before 4 Jan 2027.
+
+#### Gate C (read-only, after the acts)
+
+- 52 migrations, drift none, 146 CHECKs with sentences, 220 triggers, ownership clean, TOC 949.
+- **D2:**
+  - the process runs as `lvrf-research`;
+  - `/etc/lvrf-research.env` is `600 root:root` (`stat` only);
+  - `/opt/lvrf-research/sidecar.mjs` is `644 root:root`;
+  - `brad` cannot read the key file or the process's environment (exit 1);
+  - a Claude session's `sudo -n true` fails;
+  - no `ANTHROPIC_` line in `/srv/lvrf/.env`.
+- **Calls:** each `sent` row has one `result` row (or reads interrupted); each `imported` result names an import whose
+  SHA-256 is the answer's; each call relies on a current clearance for its model; the recorded cost totals no more than
+  the Console's for the same days.
+- **Clearances:** each is Brad's, with its disclosure's SHA-256 matching the text in code for the model, and one `clear`
+  act each.
+- **The key:** `grep -c` for `sk-ant` and `ANTHROPIC_API_KEY` in the journal since the deploy is 0.
+- **Accepted fields:** every field accepted from a call is `ai_sourced`, its citation opened by the person who accepted
+  it.
+- No refusal but the ones Brad met, and no audit row without an actor. Every sealed run is byte-identical, and
+  `check_run_hashes` matches all of them.
+- **Then** `CLAUDE.md`'s research seam is amended (§21.8), in a docs commit.

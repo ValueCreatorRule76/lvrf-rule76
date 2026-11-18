@@ -188,7 +188,9 @@ BEGIN
     -- B3 (§19, 0048): insert-only, so INSERT and never UPDATE.
     'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones',
     -- B4 (§14, 0049): insert-only.
-    'outcome_withdrawals']
+    'outcome_withdrawals',
+    -- S2 (§21, 0051): insert-only.
+    'research_clearances', 'research_calls']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT INSERT ON public.%I TO lvrf_app', t);

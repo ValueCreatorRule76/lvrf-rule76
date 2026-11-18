@@ -347,7 +347,7 @@ export function buildIndustryMeasurePrompt(contract: ResearchContract, inputs: I
  * stating what it lacks (P1-D5).
  */
 export const INSTITUTION_FACT_CONTRACT_VERSION = 2;
-export const INSTITUTION_PROMPT_TEMPLATE_VERSION = 2; // 2: quote / locator / how_read (P1)
+export const INSTITUTION_PROMPT_TEMPLATE_VERSION = 3; // 2: quote / locator / how_read (P1); 3: rows not outside-in left out, by kind (S2, Brad 18 Nov 2026)
 export const QUOTE_MAX_WORDS = 40;
 export const HOW_READ_MIN = 24;
 export const LOCATOR_SCALES = ['units', 'thousands', 'millions', 'billions', 'percent'] as const;
@@ -581,6 +581,13 @@ export interface AccountPromptInputs {
   facts: { kind: string; value: string; as_of: string }[];
   /** Prior not-found results, with their reasons. */
   notFound: { kind: string; reason: string; reviewed_at: string }[];
+  /**
+   * S2 (D5 as ruled, 18 Nov 2026): the kinds of the rows on record left out of this prompt because they are not
+   * outside-in (server/research/outsideIn.ts). Their values are never in the text; only that a row of this kind is on
+   * record and was left out. `regimeLeftOut`: the disclosure regime is on record and left out.
+   */
+  leftOut?: string[];
+  regimeLeftOut?: boolean;
 }
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -640,7 +647,7 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
     lines.push(
       `ENTITY (pinned): ${id(entity!)}.`,
       'Every fact you return must be about THIS entity. Return "entity" exactly as pinned; a response about any other entity is refused whole.',
-      `DISCLOSURE REGIME: ${regime ? `${regime.value} (as of ${regime.as_of})` : 'not recorded'}.`,
+      `DISCLOSURE REGIME: ${regime ? `${regime.value} (as of ${regime.as_of})` : inputs.regimeLeftOut ? 'on record, but left out of this prompt: it does not rest on a published source' : 'not recorded'}.`,
       ...(regime?.value === 'private'
         ? ['A private company publishes little. For revenue and headcount, a not_found with its reason ("private; no statutory filing discloses it") is the EXPECTED answer — do not estimate.']
         : []),
@@ -651,6 +658,10 @@ export function buildAccountPrompt(inputs: AccountPromptInputs): string {
       `PREVIOUSLY NOT FOUND (${notFound.length}), with the reason given:`,
       ...(notFound.length ? notFound.map((n) => `- ${n.kind}: ${n.reason}`) : ['- (none)']),
       '',
+      ...(inputs.leftOut && inputs.leftOut.length
+        ? [`LEFT OUT (${inputs.leftOut.length}): rows on record that do not rest on a published source, so they are not in this prompt. Research each kind afresh from what the company itself publishes:`,
+          ...[...inputs.leftOut].sort(cmp).map((k) => `- ${k}`), '']
+        : []),
       'FOR EACH OF: revenue, headcount, stated_priority (one per priority), system (one per named system) — return facts, or a not_found with its reason:',
       '- value: a number for revenue and headcount (0 is a value); text for stated_priority and system.',
       '- unit: the ISO currency code for revenue (e.g. "USD"); "people" for headcount; null otherwise.',

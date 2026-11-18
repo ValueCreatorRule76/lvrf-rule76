@@ -61,6 +61,26 @@ const note = (s) => `${s} — ${MARK}`;
 // kind 'special': its own check, run where noted.
 
 const CASES = [
+  // ---- S2 (§21): research with Claude
+  // The month's spend is the actor's tenant's alone (a sum, no ids): nothing of A's to find in B's answer.
+  { route: 'GET /api/research-ai/status', kind: 'special' },
+  { route: 'GET /api/research-ai/subjects/:kind/:id', kind: 'id', path: `/api/research-ai/subjects/institution/${E.INST_A}`,
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  // Tenant in the WHERE: another tenant's call is simply not found, nothing to log.
+  { route: 'GET /api/research-ai/calls/:id', kind: 'id', path: `/api/research-ai/calls/${E.CALL_A}`,
+    notFound: [404, `research call ${E.CALL_A} not found`], target: null },
+  { route: 'POST /api/research-ai/institutions/:institutionId/clearances', kind: 'id', path: `/api/research-ai/institutions/${E.INST_A}/clearances`,
+    body: { reason: note('Verification: P3 tenant scope checks.'), disclosure_sha256: 'x' },
+    notFound: [404, `institution ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'POST /api/research-ai/industries/:industryId/clearances', kind: 'id', path: `/api/research-ai/industries/${E.IND_A}/clearances`,
+    body: { reason: note('Verification: P3 tenant scope checks.'), disclosure_sha256: 'x' },
+    notFound: [404, `industry ${E.IND_A} not found`], target: ['industries', E.IND_A] },
+  { route: 'POST /api/research-ai/clearances/:id/withdraw', kind: 'id', path: `/api/research-ai/clearances/${E.CLR_A}/withdraw`,
+    body: { reason: note('Verification: P3 tenant scope checks.') },
+    notFound: [404, `clearance ${E.CLR_A} not found`], target: ['research_clearances', E.CLR_A] },
+  { route: 'POST /api/research-ai/prompts/:promptId/calls', kind: 'id', path: `/api/research-ai/prompts/${E.PROMPT_A}/calls`,
+    body: {},
+    notFound: [404, `research prompt ${E.PROMPT_A} not found`], target: ['research_prompts', E.PROMPT_A] },
   // ---- reads
   { route: 'GET /api/business-metrics/:metricId/research-prompt', kind: 'id',
     path: `/api/business-metrics/${E.METRIC_A_SELF}/research-prompt`,

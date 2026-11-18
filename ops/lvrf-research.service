@@ -1,0 +1,56 @@
+# S2 (3.1; LVRF_PLAN §21, D2 ruled by Brad 18 Nov 2026) — the research process: the only holder of Anthropic's key.
+#
+# Runs as its own system user, lvrf-research, from ONE root-owned file (/opt/lvrf-research/sidecar.mjs, installed by
+# scripts/lvrf-deploy.sh). The key is in /etc/lvrf-research.env (root, 600), read by systemd before it drops to the
+# user; the process removes it from its own environment at start. No brad process can read it: not the file (root,
+# 600), not this process's /proc environ (another uid), and not by changing its code (root-owned).
+#
+# The API (lvrf-api, User=brad) reaches it over /run/lvrf-research/sock: the directory is lvrf-research's, mode 0750,
+# the socket 0660; brad is in the group lvrf-research, which can connect and nothing more.
+#
+# Install (Brad's Gate B paste, once): see LVRF_PLAN §21.6 and BUILD_STATUS's S2 Gate B note.
+[Unit]
+Description=LVRF research process (S2: holds Anthropic's key)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lvrf-research
+Group=lvrf-research
+# The leading "-": with no key file, the process starts and reports "off: no key".
+EnvironmentFile=-/etc/lvrf-research.env
+Environment=NODE_ENV=production
+Environment=LVRF_RESEARCH_SOCKET=/run/lvrf-research/sock
+Environment=LVRF_APP_DIR=/srv/lvrf
+ExecStart=/usr/bin/node /opt/lvrf-research/sidecar.mjs
+RuntimeDirectory=lvrf-research
+RuntimeDirectoryMode=0750
+UMask=0007
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectProc=invisible
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

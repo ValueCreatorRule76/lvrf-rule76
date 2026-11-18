@@ -4497,6 +4497,21 @@ Approved with D1–D10 as recommended, and these conditions:
 - **Built to Gate A on clones of the prod copy, against the local stand-in only.** No real API call before Brad's act
   session.
 
+**Ruling on Gate A's two findings (Brad, 18 Nov 2026):**
+- **A row that fails D5 is left out of the prompt, and never sent.** The research page lists each row left out, with
+  its short id and why. The call is refused only if a row that fails D5 would still be in the prompt, which a Gate A
+  break proves, with a positive control.
+  - **As built:**
+    - `composeAccountPrompt` leaves out a fact or the disclosure regime that fails D5. The prompt names only the left-out
+      kinds ("LEFT OUT (n)…"), never a value, and says the regime is "on record, but left out".
+    - The account prompt's template goes from v2 to v3. The paste path shares the composer, so it leaves out the same
+      rows.
+    - The call tests again every row the prompt carries. The pinned entity cannot be left out of a facts-phase prompt,
+      which names it, so an entity that fails D5 refuses the call. That is Scotts today: its entity was recorded before
+      evidence forms.
+- **No supersession of Scotts' rows, and no act on `f1e2385e`, is needed for S2.**
+- **"A route to retire a fact" goes to the 3.1 list.**
+
 ### 1. What the code holds today (read 18 Nov 2026, `0653630`; sizes from the 14 Nov prod copy)
 
 - **The generated prompt.** `server/research/contracts.ts` holds one contract per result kind (industry measure v3+,

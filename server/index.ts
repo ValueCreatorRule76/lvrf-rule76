@@ -23,6 +23,7 @@ import { snapshotsRouter } from './routes/snapshots.js';
 import { industryMeasureRetireRouter } from './routes/industryMeasureRetire.js';
 import { accountResearchRouter, accountResearchReviewRouter } from './routes/accountResearch.js';
 import { outsideInWalkRouter } from './routes/outsideInWalk.js';
+import { aiResearchRouter } from './research/aiResearch.js';
 import { valueLeverRouter, leverOfferingRouter, leverOfferingRetireRouter } from './routes/valueLevers.js';
 import { hypothesisInstitutionRouter, valueHypothesisRouter, referenceExampleRouter } from './routes/valueHypotheses.js';
 import { analystOfRecordRouter, accountPersonLinkRouter } from './routes/accountPersonLinks.js';
@@ -163,6 +164,8 @@ app.use('/api/value-runs', valueCaseRouter(pool));
 app.use('/api/value-outcomes', outcomeWithdrawalsRouter(pool));
 app.use('/api/institutions', outcomeSpineRouter(pool));
 app.use('/api/industries', industryResearchRouter(pool));
+// S2 (3.1; LVRF_PLAN §21): research with Claude. The key is held by the research process, never here (D2).
+app.use('/api/research-ai', aiResearchRouter(pool));
 app.use('/api/industries', industryPackRouter(pool));
 app.use('/api/industries', industryExclusionsRouter(pool));
 app.use('/api/research-results', researchResultsReviewRouter(pool));

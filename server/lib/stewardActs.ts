@@ -36,6 +36,12 @@ export const MUTATING_ROUTE_CLASS: Record<string, 'steward' | 'authorized'> = {
   'POST /api/research-results/:id/reject': 'steward',
   'POST /api/industries/:industryId/exclusions': 'steward',
   'POST /api/industries': 'steward',
+  // S2 (§21, D3): clearing an account or a pack for research with Claude, and withdrawing it, are the steward's;
+  // sending a cleared subject's prompt is authorized.
+  'POST /api/research-ai/institutions/:institutionId/clearances': 'steward',
+  'POST /api/research-ai/industries/:industryId/clearances': 'steward',
+  'POST /api/research-ai/clearances/:id/withdraw': 'steward',
+  'POST /api/research-ai/prompts/:promptId/calls': 'authorized',
   'POST /api/industry-measures/:id/retire': 'steward',
   'POST /api/industry-measures/:id/levers': 'steward',
   'POST /api/value-levers/:id/offerings': 'steward',
@@ -117,6 +123,9 @@ const ACT_NAME: Record<string, string> = {
   'POST /api/research-results/:id/accept': 'Accepting a pack entry',
   'POST /api/research-results/:id/reject': 'Rejecting a research result',
   'POST /api/industries': 'Adding an industry',
+  'POST /api/research-ai/institutions/:institutionId/clearances': 'Clearing an account for research with Claude',
+  'POST /api/research-ai/industries/:industryId/clearances': 'Clearing an industry for research with Claude',
+  'POST /api/research-ai/clearances/:id/withdraw': 'Withdrawing a clearance for research with Claude',
   'POST /api/industries/:industryId/exclusions': 'Excluding a measure from a pack',
   'POST /api/engagements/:id/retire': 'Retiring an engagement',
   'POST /api/industry-measures/:id/retire': 'Retiring a pack entry',

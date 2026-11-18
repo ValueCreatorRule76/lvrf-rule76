@@ -36,7 +36,8 @@ const index = readFileSync(join(root, 'server/index.ts'), 'utf8');
 
 // factory name -> route file, from the imports
 const fileOf = new Map();
-for (const m of index.matchAll(/^import \{([^}]+)\} from '\.\/routes\/([A-Za-z]+)\.js';$/gm)) {
+// S2 (§21): routers live in server/routes/, and the research module's in server/research/ (the research seam).
+for (const m of index.matchAll(/^import \{([^}]+)\} from '\.\/((?:routes|research)\/[A-Za-z]+)\.js';$/gm)) {
   for (const name of m[1].split(',').map((s) => s.trim()).filter(Boolean)) fileOf.set(name, m[2]);
 }
 
@@ -59,9 +60,9 @@ for (const line of index.split('\n').map((l) => l.trim()).filter((l) => l.starts
   const file = fileOf.get(factory);
   if (!file) fail(`no import found for ${factory}`);
   factoriesSeen.add(factory);
-  const src = readFileSync(join(root, 'server/routes', `${file}.ts`), 'utf8');
+  const src = readFileSync(join(root, 'server', `${file}.ts`), 'utf8');
   const start = src.indexOf(`export function ${factory}(`);
-  if (start === -1) fail(`export function ${factory} not found in server/routes/${file}.ts`);
+  if (start === -1) fail(`export function ${factory} not found in server/${file}.ts`);
   const next = src.indexOf('\nexport function ', start + 1);
   const body = src.slice(start, next === -1 ? undefined : next);
   for (const bad of body.matchAll(/router\.(use|all|route)\(/g)) fail(`router.${bad[1]}() in ${factory}: not readable by this guard`);

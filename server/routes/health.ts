@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Pool } from 'pg';
 import type { ActorHeaderMode } from '../lib/actorHeader.js';
 import type { OriginCheck } from '../lib/origin.js';
+import { aiResearchHealth } from '../research/aiResearch.js';
 
 /**
  * Unauthenticated (mounted before requireActor). Reports `origin_check` so
@@ -15,7 +16,8 @@ export function healthRouter(pool: Pool, originMode: OriginCheck['mode'], actorH
   router.get('/', async (_req, res) => {
     try {
       await pool.query('SELECT 1');
-      res.json({ status: 'ok', db: 'connected', origin_check: originMode, actor_header: actorHeader });
+      // S2 (§21): whether research with Claude is on; the deploy reports it. Never the key.
+      res.json({ status: 'ok', db: 'connected', origin_check: originMode, actor_header: actorHeader, ai_research: await aiResearchHealth() });
     } catch (err) {
       res.status(503).json({
         status: 'error',

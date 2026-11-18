@@ -12,6 +12,7 @@ import {
 } from '../api/accountResearch';
 import { Card, Badge } from './workbench/Card';
 import { GovernedAction } from './GovernedAction';
+import { AiResearchCard } from './AiResearchCard';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
 
 /**
@@ -493,8 +494,9 @@ export function AccountResearch({ institutionId, onFactsChanged, onStatus, prima
         {!onStatus && <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Research</span>}
         <p className="m-0 mt-1 max-w-[85ch] text-[12.5px] leading-relaxed text-ink-45">
           Baseline facts about this account, from what it publishes: the entity first, then revenue, headcount, stated
-          priorities and systems. Never a measured outcome — that comes from the customer's own system of record. No code
-          here calls a research tool.
+          priorities and systems. Never a measured outcome — that comes from the customer's own system of record. A person
+          runs the prompt, or, once the steward clears the account, the server runs it with Claude; either way every
+          result is reviewed by a person.
         </p>
       </header>
       {!state ? <p className="text-ink-45">loading</p> : state.status !== 'ok' ? <p className="text-critical">{state.message}</p> : (
@@ -503,6 +505,9 @@ export function AccountResearch({ institutionId, onFactsChanged, onStatus, prima
           {/* Keyed to the entity: a correction clears a prompt shown for the old one. */}
           <GenerateCard key={state.research.entity?.id ?? 'unpinned'} institutionId={institutionId} phase={state.research.phase_now} onGenerated={reload} primary={primary} />
           <PromptsCard prompts={state.research.prompts} versionNow={state.research.contract_version_now} />
+          {/* S2 (§21): the server runs a stored prompt, for a cleared account; the answer is parsed and reviewed as below. */}
+          <AiResearchCard kind="institution" id={institutionId} n="A3b" parsePath={`/api/institutions/${institutionId}/research-results`}
+            onImported={() => { setLastDecision(null); reload(); }} />
           <div id="account-parse-card"><ParseCard institutionId={institutionId} onParsed={() => { setLastDecision(null); reload(); }} /></div>
           <div id="account-pending-card">
             <PendingCard pending={state.research.pending} lastDecision={lastDecision}

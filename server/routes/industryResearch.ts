@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
 import { handleGovernanceError } from '../lib/refusal.js';
 import { readImportText, ImportTextError, type ImportText } from '../research/importText.js';
+import { readCallAnswer, callAnswerIssues, type CallAnswer } from '../research/callAnswer.js';
 import { actorTenantId, isOtherTenant } from '../lib/tenantScope.js';
 import { requireSteward } from '../lib/stewardActs.js';
 import {
@@ -179,6 +180,30 @@ async function recordPackParseRefusal(pool: Pool, req: Request, tenantId: string
   }
 }
 
+/**
+ * The pack prompt for `promptId`, composed from live rows: the current entries, as GET /api/industries/:slug/pack
+ * shows them, and the exclusions. The generate route stores it; S2's research call composes it again under the same
+ * id to check a stored prompt is still current (an equal text carries exactly today's rows).
+ */
+export async function composeIndustryPrompt(client: PoolClient | Pool, industry: { id: string; name: string; slug: string },
+  promptId: string): Promise<{ text: string; entries: { id: string; name: string; addressable: boolean }[]; exclusions: { id: string; name: string; reason: string }[] }> {
+  const { rows: entries } = await client.query<{ id: string; name: string; addressable: boolean }>(
+    `SELECT id, name, addressable FROM industry_measures
+      WHERE industry_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
+      ORDER BY name COLLATE "C", id`,
+    [industry.id],
+  );
+  const { rows: exclusions } = await client.query<{ id: string; name: string; reason: string }>(
+    `SELECT id, name, reason FROM industry_measure_exclusions
+      WHERE industry_id = $1 ORDER BY name COLLATE "C", id`,
+    [industry.id],
+  );
+  const text = buildIndustryMeasurePrompt(INDUSTRY_MEASURE_CONTRACT, {
+    promptId, industry: { name: industry.name, slug: industry.slug }, entries, exclusions,
+  });
+  return { text, entries, exclusions };
+}
+
 export function industryResearchRouter(pool: Pool): Router {
   const router = Router();
 
@@ -281,8 +306,11 @@ export function industryResearchRouter(pool: Pool): Router {
 
       // P2 (P2-D5): the pasted text, parsed here; the import stores exactly this text.
       let imported: ImportText;
+      // S2 (§21.2, step 6): { call_id } imports a research call's answer through this same path; otherwise a paste.
+      let viaCall: CallAnswer | null = null;
       try {
-        imported = readImportText(req.body);
+        viaCall = await readCallAnswer(client, req.body, industry.tenant_id);
+        imported = viaCall ? viaCall.imported : readImportText(req.body);
       } catch (e) {
         if (e instanceof ImportTextError) { parserPayload = e.parserPayload; throw new ValidationError(e.issues); }
         throw e;
@@ -359,6 +387,7 @@ export function industryResearchRouter(pool: Pool): Router {
           .filter((m): m is ParsedMeasure => m !== null);
       }
 
+      if (viaCall) issues.push(...callAnswerIssues(viaCall, body));
       if (issues.length > 0) {
         throw new ValidationError(issues);
       }
@@ -372,9 +401,9 @@ export function industryResearchRouter(pool: Pool): Router {
       // line has written anything.
       // P2: the import first — the whole text, hashed — then each result naming it, then the act.
       const { rows: [importRow] } = await client.query<{ id: string }>(
-        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [industry.tenant_id, promptId as string, imported.text, imported.sha256, imported.bytes, actorPersonId],
+        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id, call_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [industry.tenant_id, promptId as string, imported.text, imported.sha256, imported.bytes, actorPersonId, viaCall?.callId ?? null],
       );
       const results: { id: string; field_name: string }[] = [];
       for (const measure of parsedMeasures) {
@@ -387,7 +416,7 @@ export function industryResearchRouter(pool: Pool): Router {
            RETURNING id, field_name`,
           [
             industry.tenant_id, industryId, measure.name, measure.raw,
-            researchQuery!, queryAsExecuted!, researchTool!, actorPersonId,
+            researchQuery!, queryAsExecuted!, viaCall?.researchTool ?? researchTool!, actorPersonId,
             promptId as string, INDUSTRY_MEASURE_CONTRACT.version, importRow.id,
           ],
         );
@@ -455,23 +484,8 @@ export function industryResearchRouter(pool: Pool): Router {
       }
       refusalTenantId = industry.tenant_id;
 
-      // Current entries: the pack as GET /api/industries/:slug/pack shows it.
-      const { rows: entries } = await client.query<{ id: string; name: string; addressable: boolean }>(
-        `SELECT id, name, addressable FROM industry_measures
-          WHERE industry_id = $1 AND deleted_at IS NULL AND superseded_by_id IS NULL
-          ORDER BY name COLLATE "C", id`,
-        [industryId],
-      );
-      const { rows: exclusions } = await client.query<{ id: string; name: string; reason: string }>(
-        `SELECT id, name, reason FROM industry_measure_exclusions
-          WHERE industry_id = $1 ORDER BY name COLLATE "C", id`,
-        [industryId],
-      );
-
       const promptId = randomUUID();
-      const text = buildIndustryMeasurePrompt(INDUSTRY_MEASURE_CONTRACT, {
-        promptId, industry: { name: industry.name, slug: industry.slug }, entries, exclusions,
-      });
+      const { text, entries, exclusions } = await composeIndustryPrompt(client, industry, promptId);
       const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
       // research_prompts_sha256_is_the_text (CHECK) recomputes the hash in
       // Postgres; a disagreement is refused there, not trusted here.

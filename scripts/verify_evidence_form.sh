@@ -89,7 +89,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (0039_evidenc
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 TRIG="$(q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal")"
 # The clone is migrated and hardened with this checkout's files: 141 since C1 (section 26's six).
-[ "$TRIG" = "210" ] && ok "210 triggers (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
+[ "$TRIG" = "220" ] && ok "220 triggers (S2 section 36: +10) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 129 + section 25's six + 26's six + 27's twenty-six)" || bad "triggers: $TRIG"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none after 0039 ($DRIFT)" || bad "drift: $DRIFT"
 
@@ -184,7 +184,7 @@ expect POST /api/account-inputs "{\"institution\":{\"name\":\"Form research acco
 INST_R="$(rj b.institution_id)"
 expect POST "/api/institutions/$INST_R/research-prompts" '{}' 201 "the entity-phase prompt (contract v2)"
 P1="$(rj b.prompt_id)"; rj b.prompt > "$W/p1.txt"
-grep -qF 'institution_fact contract v2 · template v2' "$W/p1.txt" && grep -qF 'how_read' "$W/p1.txt" && ok "  ...the prompt names contract v2 and asks for a quote and how_read" || bad "  ...prompt text"
+grep -qF 'institution_fact contract v2 · template v3' "$W/p1.txt" && grep -qF 'how_read' "$W/p1.txt" && ok "  ...the prompt names contract v2 and asks for a quote and how_read" || bad "  ...prompt text"
 envb() { printf '{"prompt_id":"%s","institution":"Form research","research_query":"q","query_as_executed":"qe","research_tool":"Verification tool","ai_sourced":true,%s}' "$1" "$2"; }
 ENT='{"legal_name":"Form Fixture Filer Inc.","identifier_type":"sec_cik","identifier":"0000999001","registry_jurisdiction":null,"source_kind":"public_filing","citation":"EDGAR company record (fixture, not a source)","caveats":[]'
 REG='{"value":"public_filer","basis":"Files a 10-K.","as_of":"2024-09-30","source_kind":"public_filing","citation":"EDGAR filing index (fixture)","caveats":[]'

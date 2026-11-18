@@ -21,11 +21,19 @@ export type GovernanceAct =
   | 'import' | 'validate' | 'approve' | 'certify' | 'activate' | 'supersede' | 'verify' | 'attest'
   | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit'
   | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about' | 'add_industry'
-  | 'record_rate' | 'plan' | 'share';
+  | 'record_rate' | 'plan' | 'share'
+  // S2 (§21): the steward clears a subject for research with Claude, or withdraws it.
+  | 'clear' | 'withdraw_clearance';
 
 export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'create-only'>> = {
   // Research: the import, and the review of each result.
   'POST /api/institutions/:institutionId/research-results': ['import'],
+  // S2 (§21): research with Claude. A clearance and its withdrawal are the steward's acts; a call records itself in
+  // research_calls (its `sent` row before the prompt leaves, its `result` after) and makes no governed transition.
+  'POST /api/research-ai/institutions/:institutionId/clearances': ['clear'],
+  'POST /api/research-ai/industries/:industryId/clearances': ['clear'],
+  'POST /api/research-ai/clearances/:id/withdraw': ['withdraw_clearance'],
+  'POST /api/research-ai/prompts/:promptId/calls': 'create-only',
   'POST /api/industries/:industryId/research-results': ['import'],
   'POST /api/account-research-results/:id/accept': ['accept'],
   'POST /api/account-research-results/:id/reject': ['reject'],

@@ -212,8 +212,9 @@ expect GET "/api/institutions/$INST/research" "" 200 "GET research after review"
   && ok "  ...facts phase; the entity, the regime, the not-found, nothing pending" || bad "  ...$(head -c 300 "$W/r.json")"
 expect POST "/api/institutions/$INST/research-prompts" '{}' 201 "the next facts prompt"
 rj b.prompt > "$W/p3.txt"
-grep -qF "ALREADY RECORDED (3)" "$W/p3.txt" && grep -qF -- "- revenue: 0 USD (as of 2024-09-30)" "$W/p3.txt" && grep -qF "PREVIOUSLY NOT FOUND (1)" "$W/p3.txt" && grep -qF -- "- system: Not disclosed in filings (fixture)." "$W/p3.txt" \
-  && ok "  ...lists what is recorded (H4: still asks for every kind) and what was not found, with the reason" || bad "  ...$(grep -A3 'ALREADY' "$W/p3.txt" | head -4)"
+grep -qF "ALREADY RECORDED (2)" "$W/p3.txt" && grep -qF -- "- revenue: 0 USD (as of 2024-09-30)" "$W/p3.txt" && grep -qF "PREVIOUSLY NOT FOUND (1)" "$W/p3.txt" && grep -qF -- "- system: Not disclosed in filings (fixture)." "$W/p3.txt" \
+  && grep -qF "LEFT OUT (1): rows on record that do not rest on a published source" "$W/p3.txt" && grep -qx -- "- system" "$W/p3.txt" && ! grep -qF "A typed system (fixture)" "$W/p3.txt" \
+  && ok "  ...lists what is recorded (H4: still asks for every kind) and what was not found, with the reason; the typed system fact, citing no source, left out by kind with none of its value (S2, D5 as ruled)" || bad "  ...$(grep -A3 'ALREADY' "$W/p3.txt" | head -4)"
 P3="$(rj b.prompt_id)"
 
 step "6. No hop left short; correcting the entity; tenancy; the steward's route"

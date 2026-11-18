@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { recordAct } from '../lib/governanceAct.js';
 import { readImportText, ImportTextError, type ImportText } from '../research/importText.js';
+import { readCallAnswer, callAnswerIssues, type CallAnswer } from '../research/callAnswer.js';
 import { Router, type Request } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { isUuid } from './params.js';
@@ -14,6 +15,7 @@ import {
   type GateMode, type ResearchedEntity, type ResearchedFact, type ResearchedRegime,
 } from '../research/contracts.js';
 import { respondServerError } from '../lib/serverError.js';
+import { notOutsideInRows, type NotOutsideIn } from '../research/outsideIn.js';
 
 /**
  * Q4h — account research intake (3.0 item 6), with the minimum of items 3
@@ -113,6 +115,46 @@ async function currentEntity(client: PoolClient | Pool, institutionId: string): 
     [institutionId],
   );
   return e ?? null;
+}
+
+/**
+ * The account prompt for `promptId`, composed from live rows. The generate route stores it; S2's research call
+ * (server/research/aiResearch.ts) composes it again under the same id to check a stored prompt is still current:
+ * the text is a pure function of these rows, so an equal text means the prompt carries exactly today's rows.
+ */
+export async function composeAccountPrompt(client: PoolClient | Pool, institution: { id: string; name: string; website: string | null },
+  promptId: string): Promise<{ text: string; phase: 'entity' | 'facts'; entity: PinnedEntity | null;
+    carried: string[]; leftOut: NotOutsideIn[] }> {
+  const entity = await currentEntity(client, institution.id);
+  const regimeOnRecord = await currentRegime(client, institution.id);
+  const { rows: allFacts } = await client.query<{ id: string; kind: string; value: string; as_of: string }>(
+    `SELECT id, kind::text, coalesce(value_text, value_numeric::text || coalesce(' ' || unit, '')) AS value, as_of::text
+       FROM institution_facts
+      WHERE institution_id = $1 AND kind <> 'disclosure_regime' AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+    [institution.id],
+  );
+  const { rows: notFound } = await client.query<{ kind: string; reason: string; reviewed_at: string }>(
+    `SELECT field_name AS kind, not_found_reason AS reason, reviewed_at::text FROM research_results
+      WHERE institution_id = $1 AND result_kind = 'institution_fact' AND review_state = 'accepted' AND found = false`,
+    [institution.id],
+  );
+  // S2 (D5 as ruled by Brad, 18 Nov 2026): a fact or the regime that is not outside-in is LEFT OUT, by kind; the
+  // entity cannot be (the facts prompt names it), so it is carried and a call refuses it (aiResearch.ts). An
+  // entity-phase prompt carries no row at all.
+  const notOut = entity ? await notOutsideInRows(client, institution.id) : [];
+  const failing = new Set(notOut.filter((r) => r.what !== 'entity').map((r) => r.id));
+  const facts = allFacts.filter((f) => !failing.has(f.id));
+  const regime = regimeOnRecord && !failing.has(regimeOnRecord.id) ? regimeOnRecord : null;
+  const leftOut = notOut.filter((r) => r.what !== 'entity');
+  const text = buildAccountPrompt({
+    promptId,
+    institution: { name: institution.name, website: institution.website },
+    entity, regime, facts: facts.map(({ kind, value, as_of }) => ({ kind, value, as_of })), notFound,
+    leftOut: leftOut.filter((r) => r.what === 'fact').map((r) => r.label),
+    regimeLeftOut: Boolean(regimeOnRecord) && !regime,
+  });
+  const carried = entity ? [entity.id, ...(regime ? [regime.id] : []), ...facts.map((f) => f.id)] : [];
+  return { text, phase: entity ? 'facts' : 'entity', entity, carried, leftOut };
 }
 
 async function currentRegime(client: PoolClient | Pool, institutionId: string): Promise<{ id: string; value: string; as_of: string } | null> {
@@ -262,27 +304,9 @@ export function accountResearchRouter(pool: Pool): Router {
         return;
       }
       refusalTenantId = institution.tenant_id;
-      const entity = await currentEntity(client, institutionId);
-      const regime = await currentRegime(client, institutionId);
-      const { rows: facts } = await client.query<{ kind: string; value: string; as_of: string }>(
-        `SELECT kind::text, coalesce(value_text, value_numeric::text || coalesce(' ' || unit, '')) AS value, as_of::text
-           FROM institution_facts
-          WHERE institution_id = $1 AND kind <> 'disclosure_regime' AND deleted_at IS NULL AND superseded_by_id IS NULL`,
-        [institutionId],
-      );
-      const { rows: notFound } = await client.query<{ kind: string; reason: string; reviewed_at: string }>(
-        `SELECT field_name AS kind, not_found_reason AS reason, reviewed_at::text FROM research_results
-          WHERE institution_id = $1 AND result_kind = 'institution_fact' AND review_state = 'accepted' AND found = false`,
-        [institutionId],
-      );
       const promptId = randomUUID();
-      const text = buildAccountPrompt({
-        promptId,
-        institution: { name: institution.name, website: institution.website },
-        entity, regime, facts, notFound,
-      });
+      const { text, phase, entity } = await composeAccountPrompt(client, institution, promptId);
       const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
-      const phase = entity ? 'facts' : 'entity';
       await client.query(
         `INSERT INTO research_prompts (
            id, tenant_id, institution_id, result_kind, phase, entity_id, contract_version, template_version,
@@ -328,8 +352,11 @@ export function accountResearchRouter(pool: Pool): Router {
 
       // P2 (P2-D5): the pasted text, parsed here; the import stores exactly this text.
       let imported: ImportText;
+      // S2 (§21.2, step 6): { call_id } imports a research call's answer through this same path; otherwise a paste.
+      let viaCall: CallAnswer | null = null;
       try {
-        imported = readImportText(req.body);
+        viaCall = await readCallAnswer(client, req.body, institution.tenant_id);
+        imported = viaCall ? viaCall.imported : readImportText(req.body);
       } catch (e) {
         if (e instanceof ImportTextError) { parserPayload = e.parserPayload; throw new ValidationError(e.issues); }
         throw e;
@@ -417,14 +444,15 @@ export function accountResearchRouter(pool: Pool): Router {
       }
       for (const n of notFound) if (n) rows.push({ subject: 'not_found', fieldName: n.kind, found: false, reason: n.reason, item: n });
       if (issues.length === 0 && rows.length === 0) issues.push('the response carries nothing to record: no entity, regime, fact or not_found.');
+      if (viaCall) issues.push(...callAnswerIssues(viaCall, body));
 
       if (issues.length > 0) throw new ValidationError(issues);
 
       // P2: the import first — the whole text, hashed — then each result naming it, then the act.
       const { rows: [importRow] } = await client.query<{ id: string }>(
-        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [institution.tenant_id, promptId, imported.text, imported.sha256, imported.bytes, actorPersonId],
+        `INSERT INTO research_imports (tenant_id, prompt_id, raw_text, raw_sha256, byte_length, imported_by_person_id, call_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [institution.tenant_id, promptId, imported.text, imported.sha256, imported.bytes, actorPersonId, viaCall?.callId ?? null],
       );
       const results: { id: string; field_name: string; found: boolean }[] = [];
       for (const r of rows) {
@@ -436,7 +464,7 @@ export function accountResearchRouter(pool: Pool): Router {
            RETURNING id, field_name, found`,
           [institution.tenant_id, institutionId, r.fieldName, r.found, r.reason,
             { subject: r.subject, item: r.item, ai_sourced: aiSourced },
-            researchQuery!, queryAsExecuted!, researchTool!, actorPersonId, promptId, INSTITUTION_FACT_CONTRACT_VERSION, importRow.id],
+            researchQuery!, queryAsExecuted!, viaCall?.researchTool ?? researchTool!, actorPersonId, promptId, INSTITUTION_FACT_CONTRACT_VERSION, importRow.id],
         );
         results.push(inserted);
       }

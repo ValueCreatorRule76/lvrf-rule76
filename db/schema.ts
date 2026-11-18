@@ -191,6 +191,9 @@ export const governanceAct = pgEnum('governance_act', [
   // B3 (P6; LVRF_PLAN §19, approved 5 Nov 2026): a client's monetization rate recorded; a roadmap milestone planned
   // (or its date, status or owner superseded); a run shared for review as an outside-in hypothesis (D-M21).
   'record_rate', 'plan', 'share',
+  // S2 (3.1; LVRF_PLAN §21, approved by Brad 18 Nov 2026): the steward clears an account or an industry for research
+  // with Claude, or withdraws that clearance (research_clearances).
+  'clear', 'withdraw_clearance',
 ]);
 
 /* ================================================================== */
@@ -2948,10 +2951,107 @@ export const researchImports = pgTable('research_imports', {
   byteLength: integer('byte_length').notNull(),
   importedByPersonId: uuid('imported_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
   importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * S2 (0051): the research call whose answer this is, or NULL for a pasted answer. When set, the text is exactly the
+   * call's recorded answer (hardening section 36, research_imports_call_matches), so the import names the bytes that
+   * came back from the API. One import per call.
+   */
+  callId: uuid('call_id').references((): AnyPgColumn => researchCalls.id, { onDelete: 'restrict' }),
 }, (t) => [
   index('research_imports_prompt_idx').on(t.promptId),
+  uniqueIndex('research_imports_one_per_call').on(t.callId),
   check('research_imports_sha256_is_the_text', sql`${t.rawSha256} = encode(sha256(convert_to(${t.rawText}, 'UTF8')), 'hex')`),
   check('research_imports_size', sql`${t.byteLength} = octet_length(${t.rawText}) AND ${t.byteLength} BETWEEN 1 AND 524288`),
+]);
+
+/**
+ * S2 (3.1; LVRF_PLAN §21, approved by Brad 18 Nov 2026; 0051). The steward's clearance of one subject (an account, or an
+ * industry for pack research) for research with Claude, or the withdrawal of a clearance. Insert-only: a withdrawal is
+ * a new row naming the clearance, never an edit. A clearance names the model and its retention class and keeps the
+ * disclosure exactly as shown, with its SHA-256. It covers a call only to a model kept no longer than the one it names
+ * (`covered` covers `standard`; not the reverse). Each row has its governance act ('clear' or 'withdraw_clearance').
+ */
+export const researchClearances = pgTable('research_clearances', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  kind: text('kind').notNull(),
+  institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
+  industryId: uuid('industry_id').references(() => industries.id, { onDelete: 'restrict' }),
+  model: text('model').notNull(),
+  retentionClass: text('retention_class').notNull(),
+  disclosureText: text('disclosure_text'),
+  disclosureSha256: text('disclosure_sha256'),
+  withdrawsClearanceId: uuid('withdraws_clearance_id').references((): AnyPgColumn => researchClearances.id, { onDelete: 'restrict' }),
+  reason: text('reason').notNull(),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('research_clearances_institution_idx').on(t.institutionId),
+  index('research_clearances_industry_idx').on(t.industryId),
+  uniqueIndex('research_clearances_one_withdrawal').on(t.withdrawsClearanceId),
+  check('research_clearances_kind_known', sql`${t.kind} IN ('clearance', 'withdrawal')`),
+  check('research_clearances_one_subject', sql`num_nonnulls(${t.institutionId}, ${t.industryId}) = 1`),
+  check('research_clearances_model_named', sql`char_length(btrim(${t.model})) >= 3`),
+  check('research_clearances_retention_known', sql`${t.retentionClass} IN ('standard', 'covered')`),
+  check('research_clearances_disclosure_kept',
+    sql`(${t.kind} = 'clearance' AND ${t.disclosureText} IS NOT NULL AND char_length(btrim(${t.disclosureText})) >= 100
+         AND ${t.disclosureSha256} IS NOT NULL AND ${t.disclosureSha256} = encode(sha256(convert_to(${t.disclosureText}, 'UTF8')), 'hex'))
+        OR (${t.kind} = 'withdrawal' AND ${t.disclosureText} IS NULL AND ${t.disclosureSha256} IS NULL)`),
+  check('research_clearances_withdrawal_names', sql`(${t.kind} = 'withdrawal') = (${t.withdrawsClearanceId} IS NOT NULL)`),
+  check('research_clearances_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
+]);
+
+/**
+ * S2 (0051). One research call to Anthropic's API, as two rows: `sent`, inserted and committed before the request
+ * leaves the box (the record that the prompt left), and `result`, after, whatever happened. Insert-only. The prompt is
+ * sent exactly as stored (its SHA-256 here equals research_prompts.prompt_sha256); one call per prompt. The answer's
+ * text and SHA-256 are kept; the import that parses it names this call (research_imports.call_id). A `sent` row with no
+ * `result` reads "interrupted: no answer recorded". The cost is computed from the usage at the prices in code, and zero
+ * is data. Written only by server/research/aiResearch.ts.
+ */
+export const researchCalls = pgTable('research_calls', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  kind: text('kind').notNull(),
+  promptId: uuid('prompt_id').notNull().references(() => researchPrompts.id, { onDelete: 'restrict' }),
+  promptSha256: text('prompt_sha256').notNull(),
+  sentCallId: uuid('sent_call_id').references((): AnyPgColumn => researchCalls.id, { onDelete: 'restrict' }),
+  clearanceId: uuid('clearance_id').references(() => researchClearances.id, { onDelete: 'restrict' }),
+  model: text('model').notNull(),
+  retentionClass: text('retention_class').notNull(),
+  settings: jsonb('settings'),
+  outcome: text('outcome'),
+  answerText: text('answer_text'),
+  answerSha256: text('answer_sha256'),
+  requestId: text('request_id'),
+  stopReason: text('stop_reason'),
+  errorType: text('error_type'),
+  httpStatus: integer('http_status'),
+  usage: jsonb('usage'),
+  costUsd: numeric('cost_usd'),
+  personId: uuid('person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('research_calls_prompt_idx').on(t.promptId),
+  uniqueIndex('research_calls_one_sent_per_prompt').on(t.promptId).where(sql`${t.kind} = 'sent'`),
+  uniqueIndex('research_calls_one_result_per_call').on(t.sentCallId),
+  check('research_calls_kind_known', sql`${t.kind} IN ('sent', 'result')`),
+  check('research_calls_prompt_sha256_shape', sql`${t.promptSha256} ~ '^[0-9a-f]{64}$'`),
+  check('research_calls_model_named', sql`char_length(btrim(${t.model})) >= 3`),
+  check('research_calls_retention_known', sql`${t.retentionClass} IN ('standard', 'covered')`),
+  check('research_calls_sent_complete',
+    sql`${t.kind} <> 'sent' OR (${t.clearanceId} IS NOT NULL AND ${t.settings} IS NOT NULL AND jsonb_typeof(${t.settings}) = 'object'
+        AND ${t.sentCallId} IS NULL AND ${t.outcome} IS NULL AND ${t.usage} IS NULL AND ${t.costUsd} IS NULL)`),
+  check('research_calls_result_complete',
+    sql`${t.kind} <> 'result' OR (${t.sentCallId} IS NOT NULL AND ${t.outcome} IS NOT NULL
+        AND ${t.outcome} IN ('answered', 'refused', 'truncated', 'failed', 'timeout')
+        AND ${t.costUsd} IS NOT NULL AND ${t.costUsd} >= 0 AND ${t.clearanceId} IS NULL AND ${t.settings} IS NULL)`),
+  check('research_calls_answer_kept',
+    sql`coalesce(${t.outcome} = 'answered', false) = (${t.answerText} IS NOT NULL)
+        AND (${t.answerText} IS NULL) = (${t.answerSha256} IS NULL)
+        AND (${t.answerText} IS NULL OR (${t.answerSha256} = encode(sha256(convert_to(${t.answerText}, 'UTF8')), 'hex')
+             AND octet_length(${t.answerText}) BETWEEN 1 AND 524288))`),
+  check('research_calls_error_named', sql`coalesce(${t.outcome} IN ('failed', 'timeout'), false) = (${t.errorType} IS NOT NULL)`),
 ]);
 
 /**

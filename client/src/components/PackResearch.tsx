@@ -10,6 +10,7 @@ import {
 import { Card, Badge } from './workbench/Card';
 import { GovernedAction } from './GovernedAction';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
+import { AiResearchCard } from './AiResearchCard';
 
 /**
  * Q4c1 — the pack's research loop, on the pack page (LVRF_PLAN §4b).
@@ -674,7 +675,8 @@ export function PackResearch({
         <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Research</span>
         <p className="m-0 mt-1 max-w-[85ch] text-[12.5px] leading-relaxed text-ink-45">
           How this pack gets entries: a prompt generated from the pack, run by a person in their research
-          tool, parsed here, and judged by the steward. No code here calls a research tool.
+          tool or, once the steward clears the industry, by the server with Claude; parsed here, and judged by the
+          steward.
         </p>
       </header>
 
@@ -686,6 +688,9 @@ export function PackResearch({
         <>
           <GenerateCard industryId={industry.id} onGenerated={reload} />
           <PromptsCard prompts={research.research.prompts} versionNow={research.research.contract_version_now} />
+          {/* S2 (§21): the server runs a stored prompt, for a cleared industry; the answer is parsed and judged as below. */}
+          <AiResearchCard kind="industry" id={industry.id} n="R2b" parsePath={`/api/industries/${industry.id}/research-results`}
+            onImported={() => { setLastDecision(null); reload(); }} />
           <div id="parse-card">
           <ParseCard
             industryId={industry.id}

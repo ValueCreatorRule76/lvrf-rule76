@@ -175,6 +175,10 @@ cut line applied first.
     - **D5 holds for Skillsoft:** before any Skillsoft call, Brad sources or retires its two unsourced "system" facts
       (S2's act session).
     - **The SDK is pinned to an exact version;** `npm audit` is run and reported, never `npm audit fix --force`.
+    - **On Gate A's findings (Brad, 18 Nov 2026):** a row that fails D5 is left out of the prompt and never sent, and the
+      research page lists each one left out, with its short id and why. A call is refused only if such a row would still
+      be in the prompt (only the pinned entity can be). No supersession of Scotts' rows and no act on `f1e2385e` is
+      needed for S2.
     An API key is billed apart from a Claude subscription.
   - **Admin:** a page for the Skillsoft solution catalog (offerings are loaded by a script today), with `/people`
     (P8, above). **Approved:** adding, changing or retiring an offering is a steward act with its own act row.
@@ -256,6 +260,12 @@ cut line applied first.
     - `eed11e02`: the pack-basis note holds the claim's text.
     - `c56a3d33`: "What it states" holds only the last 340 of its 557 characters.
     - The `supersede` act that made `673861eb`: its reason holds the how-read text.
+
+- **A route to retire a fact (Brad, 18 Nov 2026, from S2's Gate A).** Today an account fact can only be superseded, by a
+  new fact of the same kind with its own evidence. Nothing retires one that should not stand, such as Skillsoft's
+  unsourced "system" fact `f1e2385e` ("LVRF (value realization records)", evidence `f41102bc`, recorded before evidence
+  forms). Retiring means `deleted_at` and a reason, with a `withdraw` act, never a delete (rule 2), and it is the
+  steward's act through the page (rule 10).
 
 ## 4.0 (recorded so nothing is lost)
 

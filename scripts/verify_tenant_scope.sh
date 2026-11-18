@@ -223,7 +223,16 @@ q "SELECT set_config('lvrf.actor_person_id', '$STAFF_A', true); INSERT INTO road
 [ "$(q "SELECT count(*) FROM roadmap_milestones WHERE id = '$MS_A'")" = "1" ] && ok "MS_A: a milestone of A, with its act" || { bad "MS_A"; exit 1; }
 [ "$(q "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled <> 'O'")" = "0" ] && ok "no trigger is disabled on the clone" || bad "a disabled trigger"
 
+# S2 (§21): tenant A's research-ai rows, for its cases: a pack prompt, the steward's clearance of that pack (with its
+# act) and one sent call. SQL on the clone, as A's steward, in one transaction each (the act-present trigger holds).
+PIND_A="$IND_A"
+PROMPT_A="$(q "INSERT INTO research_prompts (tenant_id, industry_id, result_kind, contract_version, template_version, prompt_text, prompt_sha256, listed_measure_ids, listed_exclusion_ids, generated_by_person_id) VALUES ('$TENANT_A', '$IND_A', 'industry_measure', 4, 1, 'P3 fixture prompt (S2)', encode(sha256(convert_to('P3 fixture prompt (S2)', 'UTF8')), 'hex'), '{}', '{}', '$STEW_A') RETURNING id" | head -1)"
+CLR_A="$(printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nWITH k AS (INSERT INTO research_clearances (tenant_id, kind, industry_id, model, retention_class, disclosure_text, disclosure_sha256, reason, person_id) VALUES ('%s', 'clearance', '%s', 'claude-opus-5-5', 'standard', repeat('d', 120), encode(sha256(convert_to(repeat('d', 120), 'UTF8')), 'hex'), 'Verification fixture clearance (P3).', '%s') RETURNING id), a AS (INSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, actor_person_id, route) SELECT '%s', 'clear', 'research_clearances', id, '%s', 'POST /api/research-ai/industries/:industryId/clearances' FROM k) SELECT id FROM k;\nCOMMIT;\n" "$STEW_A" "$TENANT_A" "$PIND_A" "$STEW_A" "$TENANT_A" "$STEW_A" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | tail -1)"
+CALL_A="$(printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nINSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, clearance_id, model, retention_class, settings, person_id) SELECT tenant_id, 'sent', id, prompt_sha256, '%s', 'claude-opus-5-5', 'standard', '{}'::jsonb, '%s' FROM research_prompts WHERE id = '%s' RETURNING id;\nCOMMIT;\n" "$STEW_A" "$CLR_A" "$STEW_A" "$PROMPT_A" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | tail -1)"
+[ -n "$PROMPT_A" ] && [ -n "$CLR_A" ] && [ -n "$CALL_A" ] && ok "S2: A's pack prompt ${PROMPT_A:0:8}, its clearance ${CLR_A:0:8} and a sent call ${CALL_A:0:8}" || bad "S2 fixtures: '$PROMPT_A' '$CLR_A' '$CALL_A'"
+
 step "5. The cases"
+export PROMPT_A CLR_A CALL_A
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
 export MS_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A GRANT_A

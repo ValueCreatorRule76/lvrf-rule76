@@ -1954,7 +1954,9 @@ LANGUAGE sql STABLE AS $$
   SELECT format('lvrf_app holds UPDATE on %s', t)
     FROM unnest(ARRAY['audit_log', 'heartbeat_events', 'refusals', 'figure_checks', 'run_errata', 'governance_acts', 'research_imports', 'system_exercise_marks', 'figure_findings',
                       -- B3 (section 33): insert-only at the role, not only by their guards.
-                      'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'outcome_withdrawals']) t
+                      'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'outcome_withdrawals',
+                      -- S2 (section 36): insert-only.
+                      'research_clearances', 'research_calls']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -2439,7 +2441,9 @@ BEGIN
                'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
                'industry_measure_exclusions', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings', 'industries',
                -- B3 (§19, section 33)
-               'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals') THEN
+               'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals',
+               -- S2 (§21, section 36)
+               'research_clearances') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2612,6 +2616,8 @@ BEGIN
       WHEN 'monetization_rates' THEN what := 'a monetization rate recorded';
       WHEN 'roadmap_milestones' THEN what := 'a milestone planned';
       WHEN 'outcome_withdrawals' THEN what := 'a ' || (n->>'kind') || ' withdrawn';
+      -- S2 (section 36): a clearance for research with Claude, or its withdrawal.
+      WHEN 'research_clearances' THEN what := CASE n->>'kind' WHEN 'clearance' THEN 'a clearance for research with Claude' ELSE 'a clearance withdrawn' END;
       WHEN 'record_documents' THEN
         IF n->>'kind' = 'share_for_review' THEN what := 'a share for review'; END IF;
       WHEN 'value_outcome_evidence' THEN
@@ -2651,7 +2657,8 @@ BEGIN
     'industry_measures', 'value_levers', 'lever_offerings', 'reference_example_markers', 'value_hypotheses',
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
     'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings',
-    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals']
+    'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals',
+    'research_clearances']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -4104,6 +4111,152 @@ CREATE TRIGGER value_runs_hypothesis_current
   BEFORE INSERT ON value_runs
   FOR EACH ROW EXECUTE FUNCTION lvrf_run_hypothesis_current();
 
+-- 36. S2 (3.1; LVRF_PLAN §21, approved by Brad 18 Nov 2026) — research with Claude: clearances and calls (0051).
+-- ------------------------------------------------------------------
+--   research_clearances_guard (I): the tenant's steward alone clears a subject (an account, or an industry for pack
+--     research) or withdraws a clearance, recorded as the person who performs it (rule 10). The subject is current and
+--     the tenant's. A withdrawal names a current clearance of the same subject, model and tenant, and says something of
+--     its own (its reason is not the clearance's); a clearance's reason is not the subject's name (the 3.1 steward-form
+--     item, Brad 15 Nov 2026). _immutable (U), _audit (I+U), _no_delete (D); _act_present from section 27's loop.
+--   research_calls_guard (I): a call row is recorded as the person who performs it. Its prompt is the tenant's and its
+--     SHA-256 is the prompt's. A `sent` row relies on a clearance of the prompt's subject, for the same model, not
+--     withdrawn. A `result` row answers its `sent` row (same prompt, tenant, model, person). _immutable, _audit,
+--     _no_delete.
+--   research_imports_call_matches (I): an import naming a call is exactly that call's answered text, for its prompt.
+--
+-- CONSEQUENCE: 210 -> 220 (research_clearances five, research_calls four, research_imports one).
+CREATE OR REPLACE FUNCTION lvrf_research_clearance_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  c research_clearances%ROWTYPE;
+  subject_name text;
+BEGIN
+  IF NOT lvrf_is_steward(NEW.tenant_id) THEN
+    RAISE EXCEPTION 'LVRF: research_clearances: only the tenant''s steward clears an account or an industry for research with Claude, or withdraws a clearance.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+  END IF;
+  IF NEW.person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: research_clearances: a clearance is recorded as the person who performs it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+  END IF;
+  IF NEW.institution_id IS NOT NULL THEN
+    SELECT i.name INTO subject_name FROM institutions i
+     WHERE i.id = NEW.institution_id AND i.tenant_id = NEW.tenant_id AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL;
+  ELSE
+    SELECT d.name INTO subject_name FROM industries d WHERE d.id = NEW.industry_id AND d.tenant_id = NEW.tenant_id;
+  END IF;
+  IF subject_name IS NULL THEN
+    RAISE EXCEPTION 'LVRF: research_clearances: the account or industry is not a current one of this tenant.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+  END IF;
+  IF NEW.kind = 'clearance' THEN
+    IF lower(btrim(NEW.reason)) = lower(btrim(subject_name)) THEN
+      RAISE EXCEPTION 'LVRF: research_clearances: the reason is the subject''s name; say why it may be researched with Claude.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+    END IF;
+  ELSE
+    SELECT * INTO c FROM research_clearances WHERE id = NEW.withdraws_clearance_id;
+    IF NOT FOUND OR c.kind <> 'clearance' OR c.tenant_id <> NEW.tenant_id
+       OR c.institution_id IS DISTINCT FROM NEW.institution_id OR c.industry_id IS DISTINCT FROM NEW.industry_id
+       OR c.model <> NEW.model OR c.retention_class <> NEW.retention_class THEN
+      RAISE EXCEPTION 'LVRF: research_clearances: a withdrawal names a clearance of the same subject and model.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+    END IF;
+    IF lower(btrim(NEW.reason)) = lower(btrim(c.reason)) THEN
+      RAISE EXCEPTION 'LVRF: research_clearances: the withdrawal''s reason repeats the clearance''s; say why it is withdrawn.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_clearances_guard ON research_clearances;
+CREATE TRIGGER research_clearances_guard BEFORE INSERT ON research_clearances
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_clearance_guard();
+DROP TRIGGER IF EXISTS research_clearances_immutable ON research_clearances;
+CREATE TRIGGER research_clearances_immutable BEFORE UPDATE ON research_clearances
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+DROP TRIGGER IF EXISTS research_clearances_audit ON research_clearances;
+CREATE TRIGGER research_clearances_audit AFTER INSERT OR UPDATE ON research_clearances
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS research_clearances_no_delete ON research_clearances;
+CREATE TRIGGER research_clearances_no_delete BEFORE DELETE ON research_clearances
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A research clearance is on the record; it is withdrawn by a new row, never deleted.');
+
+CREATE OR REPLACE FUNCTION lvrf_research_call_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  p research_prompts%ROWTYPE;
+  c research_clearances%ROWTYPE;
+  s research_calls%ROWTYPE;
+BEGIN
+  IF NEW.person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: research_calls: a research call is recorded as the person who started it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+  END IF;
+  SELECT * INTO p FROM research_prompts WHERE id = NEW.prompt_id;
+  IF NOT FOUND OR p.tenant_id <> NEW.tenant_id OR p.prompt_sha256 <> NEW.prompt_sha256 THEN
+    RAISE EXCEPTION 'LVRF: research_calls: the call names a prompt of this tenant, with that prompt''s SHA-256.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+  END IF;
+  IF NEW.kind = 'sent' THEN
+    SELECT * INTO c FROM research_clearances WHERE id = NEW.clearance_id;
+    IF NOT FOUND OR c.kind <> 'clearance' OR c.tenant_id <> NEW.tenant_id
+       OR c.institution_id IS DISTINCT FROM p.institution_id OR c.industry_id IS DISTINCT FROM p.industry_id THEN
+      RAISE EXCEPTION 'LVRF: research_calls: a call relies on a clearance of its prompt''s account or industry.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+    END IF;
+    IF c.model <> NEW.model OR c.retention_class <> NEW.retention_class THEN
+      RAISE EXCEPTION 'LVRF: research_calls: the clearance is for %, not %; clear the subject again for this model.', c.model, NEW.model
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+    END IF;
+    IF EXISTS (SELECT 1 FROM research_clearances w WHERE w.withdraws_clearance_id = c.id) THEN
+      RAISE EXCEPTION 'LVRF: research_calls: the clearance was withdrawn; nothing is sent.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+    END IF;
+  ELSE
+    SELECT * INTO s FROM research_calls WHERE id = NEW.sent_call_id;
+    IF NOT FOUND OR s.kind <> 'sent' OR s.prompt_id <> NEW.prompt_id OR s.tenant_id <> NEW.tenant_id
+       OR s.model <> NEW.model OR s.retention_class <> NEW.retention_class OR s.person_id <> NEW.person_id THEN
+      RAISE EXCEPTION 'LVRF: research_calls: a result answers a sent call of the same prompt, model and person.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_calls_guard ON research_calls;
+CREATE TRIGGER research_calls_guard BEFORE INSERT ON research_calls
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_call_guard();
+DROP TRIGGER IF EXISTS research_calls_immutable ON research_calls;
+CREATE TRIGGER research_calls_immutable BEFORE UPDATE ON research_calls
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+DROP TRIGGER IF EXISTS research_calls_audit ON research_calls;
+CREATE TRIGGER research_calls_audit AFTER INSERT OR UPDATE ON research_calls
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS research_calls_no_delete ON research_calls;
+CREATE TRIGGER research_calls_no_delete BEFORE DELETE ON research_calls
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A research call is the record that a prompt left the box. It cannot be deleted.');
+
+CREATE OR REPLACE FUNCTION lvrf_research_import_call_matches() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  r research_calls%ROWTYPE;
+BEGIN
+  IF NEW.call_id IS NULL THEN RETURN NEW; END IF;
+  SELECT * INTO r FROM research_calls WHERE id = NEW.call_id;
+  IF NOT FOUND OR r.kind <> 'result' OR r.outcome IS DISTINCT FROM 'answered' OR r.tenant_id <> NEW.tenant_id
+     OR r.prompt_id <> NEW.prompt_id OR r.answer_sha256 IS DISTINCT FROM NEW.raw_sha256 THEN
+    RAISE EXCEPTION 'LVRF: research_imports: an import naming a call is exactly that call''s answer, for its prompt.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_imports_call_matches';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_imports_call_matches ON research_imports;
+CREATE TRIGGER research_imports_call_matches BEFORE INSERT ON research_imports
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_import_call_matches();
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4216,7 +4369,8 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 210 distinct triggers (209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
+--   Total: 220 distinct triggers (210 before section 36: research_clearances' five, research_calls' four and
+--   research_imports_call_matches, +10; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
@@ -4240,7 +4394,7 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 210.
+-- TRUNCATE in section 14 fail. Total stays 220.
 --
 -- Expect 329 rows here (328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
 -- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
