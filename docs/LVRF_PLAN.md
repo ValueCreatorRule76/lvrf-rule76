@@ -4497,6 +4497,48 @@ Approved with D1–D10 as recommended, and these conditions:
 - **Built to Gate A on clones of the prod copy, against the local stand-in only.** No real API call before Brad's act
   session.
 
+**The socket (Brad's question, 18 Nov 2026), and his rulings with it:**
+- **The question.** `brad` was to join the socket's group, so any `brad` process could reach the research process
+  without going through the API. Did that process itself enforce the clearance, the spend check, the per-account daily
+  cap and the audit rows? **As first built, it did not:** it took a prompt's text and its SHA-256 from the request and
+  sent it. **Fixed.**
+- **As built now:**
+  - The socket takes `{ call_id }` alone.
+  - The research process connects to Postgres as its own role, `lvrf_research`, by peer authentication (no password),
+    with SELECT on the four research tables it reads and INSERT on the three it writes. The ownership check fails on any
+    other privilege.
+  - It reads the `sent` row and the prompt's text from the database, never from the request. It refuses, recording why
+    in `research_process_refusals`, unless:
+    - the call was recorded as sent, for its model;
+    - the clearance is current for the prompt's account (or industry) and model;
+    - the prompt's SHA-256 matches;
+    - the account is within the daily cap and the month within the spend limit, both from its own root-owned
+      `/etc/lvrf-research.env`.
+  - It claims the call once, ever (`research_call_claims`), sends it, and writes the `result` row itself.
+  - The API reads the limits from the process's status, so there is one limit, and `brad` cannot raise it.
+- **Who needs the group: only the API process** (`SupplementaryGroups=lvrf_research` in `ops/lvrf-api.service`); the
+  user `brad` does not join it. The OS user is renamed `lvrf_research`, matching its role.
+- **Named:**
+  - The API runs as `brad`, so a `brad` process could change the API's code and restart it with the group. The
+    process's own checks are therefore the barrier, not the socket's permissions.
+  - Two checks stay the API's alone: that the prompt is current, and D5. A `brad` process with `lvrf_app`'s database
+    URL could insert a prompt of its own and a `sent` row for a cleared subject, which the process would send, within
+    the caps. Closing that would mean the process composing the prompt itself, which needs it to read the accounts'
+    facts and evidence.
+- **Brad's ruling on the two residuals (18 Nov 2026): accepted as recorded residual risk, not fixed in S2.** His
+  reason: anything that can act as `brad` can already read the database and send its contents anywhere without the
+  key. The research process's own checks protect the key and the spend, which is D2's purpose, and S2-1 and S2-1b cover
+  the published-rows rule against the API's own bugs. To revisit when LVRF first holds confidential customer-side data:
+  the process building its own prompt from a root-owned copy of the composer (3.1 list).
+- **Rulings:**
+  - No full rerun of S2's first Gate A. 49 of 51 ran on the final product code, and the other 2 changed only their
+    assertions and passed on their own.
+  - The three departures are approved: the per-model clearance, the import as a person's act, and the paste path
+    leaving out the same rows.
+  - `npm audit fix` (plain) for `body-parser` and `qs` is a separate small change after S2's Gate C, with its own
+    regression, never `--force` (3.1 list).
+  - The correction of Scotts' entity can wait; it is not a pilot account.
+
 **Ruling on Gate A's two findings (Brad, 18 Nov 2026):**
 - **A row that fails D5 is left out of the prompt, and never sent.** The research page lists each row left out, with
   its short id and why. The call is refused only if a row that fails D5 would still be in the prompt, which a Gate A
@@ -4792,7 +4834,7 @@ written to the Mac. On the box, in Brad's own ssh terminal (not a Claude session
 sudo test -e /etc/lvrf-research.env && sudo grep -c '^ANTHROPIC_API_KEY=' /etc/lvrf-research.env || echo 0   # 0
 grep -c '^ANTHROPIC_API_KEY=' /srv/lvrf/.env                                                                    # 0
 read -rs -p 'Anthropic key: ' K; echo
-[ ${#K} -gt 40 ] && printf 'ANTHROPIC_API_KEY=%s\n' "$K" | sudo sh -c 'umask 077 && cat > /etc/lvrf-research.env' \
+[ ${#K} -gt 40 ] && printf 'ANTHROPIC_API_KEY=%s\n' "$K" | sudo sh -c 'umask 077 && cat >> /etc/lvrf-research.env' \
   && echo "key written" || echo "NO KEY: nothing written"
 unset K
 sudo stat -c '%a %U:%G' /etc/lvrf-research.env                                                                  # 600 root:root

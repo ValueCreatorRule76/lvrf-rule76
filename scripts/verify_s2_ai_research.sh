@@ -29,6 +29,7 @@ CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 VERIFY_DB=lvrf_verifys2
 VERIFY_URL="${LOCAL_URL%/*}/${VERIFY_DB}"
+RESEARCH_URL="postgresql://lvrf_research@localhost:5432/${VERIFY_DB}"   # the research process's own role (peer on the box)
 PORT=3321; VITE_PORT=5321; CDP_PORT=9421; FAKE_PORT=3329
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s2.XXXXXX")"
@@ -89,13 +90,14 @@ fake_last() { tail -1 "$W/fake.log"; }
 start_fake() { stop_port "$FAKE_PORT"; (node scripts/lib/fakeAnthropic.mjs "$FAKE_PORT" "$W/fake.log" > "$W/fake.out" 2>&1 < /dev/null &); for _ in $(seq 1 40); do curl -s -o /dev/null "http://127.0.0.1:$FAKE_PORT/__count" && return 0; sleep 0.25; done; bad "the stand-in did not start"; exit 1; }
 start_sidecar() {  # [ENV=VALUE ...] — with the placeholder key and the stand-in unless overridden
   stop_sidecar
-  (env LVRF_RESEARCH_SOCKET="$SOCK" ANTHROPIC_API_KEY="$PLACEHOLDER" ANTHROPIC_BASE_URL="http://127.0.0.1:$FAKE_PORT" LVRF_RESEARCH_TIMEOUT_MS=6000 "$@" \
+  (env LVRF_RESEARCH_SOCKET="$SOCK" ANTHROPIC_API_KEY="$PLACEHOLDER" ANTHROPIC_BASE_URL="http://127.0.0.1:$FAKE_PORT" LVRF_RESEARCH_TIMEOUT_MS=6000 \
+    LVRF_RESEARCH_DATABASE_URL="$RESEARCH_URL" LVRF_RESEARCH_MONTHLY_USD=500 LVRF_RESEARCH_DAILY_LIMIT=50 "$@" \
     node dist/research-sidecar.mjs "$MARK" >> "$W/sidecar.log" 2>&1 < /dev/null &)
   for _ in $(seq 1 40); do [ -S "$SOCK" ] && curl -s -o /dev/null --unix-socket "$SOCK" http://x/status && return 0; sleep 0.25; done
 }
 start_server() {  # [ENV=VALUE ...]
   stop_port "$PORT"
-  (env LVRF_RESEARCH_SOCKET="$SOCK" LVRF_RESEARCH_MONTHLY_USD=500 LVRF_RESEARCH_DAILY_LIMIT=50 LVRF_RESEARCH_TIMEOUT_MS=6000 \
+  (env LVRF_RESEARCH_SOCKET="$SOCK" LVRF_RESEARCH_TIMEOUT_MS=6000 \
     LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" "$@" \
     npx tsx server/index.ts >> "$W/server.log" 2>&1 < /dev/null &)
   for _ in $(seq 1 60); do curl -s -o /dev/null "$BASE/api/health" && return 0; sleep 0.5; done
@@ -142,28 +144,44 @@ N_RUNS0="$(q "SELECT count(*) FROM value_runs")"
 RUNS0="$(runs_md5)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated: 0051_s2_ai_research" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "220" ] && ok "220 triggers by pg_trigger (S2 section 36: +10)" || bad "triggers: $(trig)"
+[ "$(trig)" = "226" ] && ok "226 triggers by pg_trigger (S2 section 36: +16)" || bad "triggers: $(trig)"
 for t in research_clearances_guard research_clearances_immutable research_clearances_audit research_clearances_no_delete research_clearances_act_present \
-         research_calls_guard research_calls_immutable research_calls_audit research_calls_no_delete research_imports_call_matches; do
+         research_calls_guard research_calls_immutable research_calls_audit research_calls_no_delete research_imports_call_matches \
+         research_call_claims_guard research_call_claims_immutable research_call_claims_audit research_call_claims_no_delete \
+         research_process_refusals_immutable research_process_refusals_no_delete; do
   [ "$(q "SELECT count(*) FROM hardening_manifest WHERE trigger_name = '$t'")" = "1" ] || bad "  ...$t not in the manifest"
-done; ok "  ...the ten new triggers, each in the hardening manifest"
+done; ok "  ...the sixteen new triggers, each in the hardening manifest"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the $N_RUNS0 sealed runs byte-identical after 0051 and section 36" || bad "a sealed run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 52 migrations, newest 0051_s2_ai_research" && ok "drift: $DRIFT" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^146 CHECKs in the database: 146 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S2: +15)" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^149 CHECKs in the database: 149 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S2: +18)" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1; }
 H0="$(HASHES)"; printf '%s' "$H0" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes, all: $H0" || bad "hashes: $H0"
 # S2-10: insert-only at the role.
-for t in research_clearances research_calls; do
-  for op in "UPDATE $t SET reason = reason" "DELETE FROM $t" "TRUNCATE $t"; do
-    [ "$t" = research_calls ] && op="${op/reason = reason/model = model}"
+for t in research_clearances research_calls research_call_claims research_process_refusals; do
+  for op in "UPDATE $t SET id = id" "DELETE FROM $t" "TRUNCATE $t"; do
     OUT="$(psql -X -At "$VERIFY_URL" -c "$op" 2>&1 || true)"
     printf '%s' "$OUT" | grep -q "permission denied" || bad "S2-10: lvrf_app: $op -> $OUT"
   done
-done; ok "S2-10: UPDATE, DELETE and TRUNCATE on research_clearances and research_calls refused as lvrf_app (permission denied)"
+done; ok "S2-10: UPDATE, DELETE and TRUNCATE on research_clearances, research_calls, research_call_claims and research_process_refusals refused as lvrf_app (permission denied)"
+for t in research_calls research_call_claims research_process_refusals research_clearances; do
+  for op in "UPDATE $t SET id = id" "DELETE FROM $t" "TRUNCATE $t"; do
+    OUT="$(psql -X -At "$RESEARCH_URL" -c "$op" 2>&1 || true)"
+    printf '%s' "$OUT" | grep -q "permission denied" || bad "S2-10: lvrf_research: $op -> $OUT"
+  done
+done; ok "  ...and as lvrf_research, the research process's role"
+[ "$(psql -X -At "$VERIFY_URL" -c "SELECT has_table_privilege('lvrf_app','research_call_claims','INSERT') OR has_table_privilege('lvrf_app','research_process_refusals','INSERT')")" = "f" ] \
+  && ok "  ...lvrf_app cannot claim a call or write a process refusal: only the research process can" || bad "  ...lvrf_app privileges on the process's tables"
+[ "$(psql -X -At "$RESEARCH_URL" -c "SELECT has_table_privilege('research_calls','INSERT') AND has_table_privilege('research_call_claims','INSERT') AND has_table_privilege('research_process_refusals','INSERT') AND NOT has_table_privilege('governance_acts','INSERT') AND NOT has_table_privilege('refusals','INSERT') AND NOT has_table_privilege('research_prompts','INSERT') AND NOT has_table_privilege('evidence','SELECT') AND NOT has_table_privilege('persons','SELECT')")" = "t" ] \
+  && ok "  ...lvrf_research: INSERT on its three tables only; no acts, no refusals, no prompts, and it cannot read evidence or persons" || bad "  ...lvrf_research privileges"
+q "GRANT UPDATE ON research_calls TO lvrf_research" > /dev/null
+OWNB="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -3 | tr '\n' ' ' || true)"
+printf '%s' "$OWNB" | grep -q "lvrf_research holds UPDATE on public.research_calls" && ok "  ...break: lvrf_research given UPDATE on research_calls is named by the ownership check (deploy step 5d)" || bad "  ...ownership break: $OWNB"
+q "REVOKE UPDATE ON research_calls FROM lvrf_research" > /dev/null
+printf '%s' "$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)" | grep -q "lvrf_app owns nothing" && ok "  ...control: revoked, the check is clean" || bad "  ...ownership control"
 [ "$(psql -X -At "$VERIFY_URL" -c "SELECT has_table_privilege('lvrf_app','research_calls','INSERT') AND has_table_privilege('lvrf_app','research_clearances','INSERT') AND NOT has_table_privilege('lvrf_app','research_calls','UPDATE') AND NOT has_table_privilege('lvrf_app','research_clearances','UPDATE')")" = "t" ] \
   && ok "  ...control: lvrf_app holds INSERT and SELECT on both, and no UPDATE" || bad "  ...privileges"
 # S2-14: every new CHECK refuses its NULL case (triggers off, so the CHECK alone answers).
@@ -189,6 +207,9 @@ nullcase "an answer with no SHA-256" research_calls_answer_kept "$CALLS VALUES (
 nullcase "a failed result naming no error" research_calls_error_named "$CALLS VALUES ('$TEN', 'result', '$PR', '$PRSHA', gen_random_uuid(), NULL, 'claude-opus-5-5', 'standard', NULL, 'failed', NULL, NULL, NULL, 0, '$S')"
 nullcase "a call with a malformed prompt SHA-256" research_calls_prompt_sha256_shape "$CALLS VALUES ('$TEN', 'sent', '$PR', 'x', NULL, gen_random_uuid(), 'claude-opus-5-5', 'standard', '{}'::jsonb, NULL, NULL, NULL, NULL, NULL, '$S')"
 nullcase "a result whose cost is negative" research_calls_result_complete "$CALLS VALUES ('$TEN', 'result', '$PR', '$PRSHA', gen_random_uuid(), NULL, 'claude-opus-5-5', 'standard', NULL, 'refused', NULL, NULL, NULL, -0.01, '$S')"
+nullcase "a process refusal with an unknown code" research_process_refusals_code_known "INSERT INTO research_process_refusals (code, reason, payload) VALUES ('x', 'A reason long enough.', '{}'::jsonb)"
+nullcase "a process refusal whose payload is not an object" research_process_refusals_payload_object "INSERT INTO research_process_refusals (code, reason, payload) VALUES ('not_sent', 'A reason long enough.', '[]'::jsonb)"
+nullcase "a process refusal with a short reason" research_process_refusals_reason_stated "INSERT INTO research_process_refusals (code, reason, payload) VALUES ('not_sent', 'short', '{}'::jsonb)"
 nullcase "a call to a model kept by an unknown class" research_calls_retention_known "$CALLS VALUES ('$TEN', 'sent', '$PR', '$PRSHA', NULL, gen_random_uuid(), 'claude-opus-5-5', 'forever', '{}'::jsonb, NULL, NULL, NULL, NULL, NULL, '$S')"
 # Zero is data: a cost of 0 is accepted by its CHECK (with the triggers off, as above).
 OUT="$(printf "BEGIN;\nSET LOCAL session_replication_role = replica;\n%s;\nSELECT 'LANDED';\nROLLBACK;\n" "$CALLS VALUES ('$TEN', 'result', '$PR', '$PRSHA', gen_random_uuid(), NULL, 'claude-opus-5-5', 'standard', NULL, 'refused', NULL, NULL, NULL, 0, '$S')" | psql -X -q -At -d "$VERIFY_DB" 2>&1 || true)"
@@ -229,11 +250,11 @@ req GET /api/health; [ "$(rj b.ai_research)" = "off" ] && ok "  ...health reads 
 start_sidecar
 start_server LVRF_AI_RESEARCH=off
 expect POST "/api/research-ai/prompts/$P_E1/calls" '{}' 503 "switched off (LVRF_AI_RESEARCH=off): refused" "switched off on this server"
-start_server LVRF_RESEARCH_MONTHLY_USD=
-expect POST "/api/research-ai/prompts/$P_E1/calls" '{}' 503 "no monthly limit set: refused" "monthly spend limit for research with Claude is not set"
+start_server; start_sidecar LVRF_RESEARCH_MONTHLY_USD=
+expect POST "/api/research-ai/prompts/$P_E1/calls" '{}' 503 "no monthly limit set: refused" "The research process has no monthly spend limit set"
 [ "$(fake_count)" = "0" ] && [ "$(calls_n)" = "0" ] && ok "  ...the stand-in received 0 requests, and no research_calls row exists" || bad "  ...requests $(fake_count), calls $(calls_n)"
 [ "$(( $(refusals_n) - R0 ))" = "4" ] && ok "  ...each refusal recorded (4, source route)" || bad "  ...refusals: $(( $(refusals_n) - R0 ))"
-start_server
+start_sidecar; start_server
 req GET /api/health; [ "$(rj b.ai_research)" = "on" ] && ok "S2-5 control: with the placeholder key and a limit, health reads ai_research \"on\"" || bad "  ...health: $(cat "$W/r.json")"
 
 step "5. Clearing the account (the steward's), and calls before it (S2-2, S2-13, S2-15)"
@@ -372,22 +393,27 @@ P_A="$(newprompt_ind)"; fake_next "$(answer answer "$(measure "$P_A" false)")"; 
 expect POST "/api/industries/$IND/research-results" "{\"call_id\":\"$RA\"}" 422 "S2-12 break: an answer saying ai_sourced false: refused at parse" "body.ai_sourced must be true"
 P_B="$(newprompt_ind)"; fake_next "$(answer answer "$(measure "$P_B")")"; call_on "$P_B"; wait_call "$CALL" > /dev/null; req GET "/api/research-ai/calls/$CALL"; RB="$(rj b.result.id)"
 expect POST "/api/industries/$IND/research-results" "{\"call_id\":\"$RB\"}" 201 "S2-12 control: ai_sourced true: imported"
-# Interrupted: a call still running when the API restarts reads "interrupted"; nothing is retried.
-P_I="$(newprompt_ind)"; fake_next "$(answer slow "$(measure "$P_I")" 4000)"; call_on "$P_I"; CI="$CALL"
+# The research process writes the result itself: an API restart part-way loses nothing.
+P_I="$(newprompt_ind)"; fake_next "$(answer slow "$(measure "$P_I")" 3000)"; call_on "$P_I"; CI="$CALL"
 start_server
-sleep 6; req GET "/api/research-ai/calls/$CI"
-[ "$(rj b.state)" = "interrupted" ] && ok "a call running when the API restarts reads \"interrupted: no answer recorded\"; nothing retried" || bad "interrupted: $(rj b.state)"
-[ "$(q "SELECT count(*) FROM research_calls WHERE sent_call_id = '$CI'")" = "0" ] && ok "  ...its sent row stands with no result" || bad "  ...a result was written"
+sleep 5; req GET "/api/research-ai/calls/$CI"
+[ "$(rj b.state)" = "answered" ] && ok "a call running when the API restarts still gets its result: the research process writes it" || bad "after an API restart: $(rj b.state)"
+# The research process stopped part-way: the API records it failed; the claim stands, so the call is never sent again.
+P_K="$(newprompt_ind)"; fake_next "$(answer slow "$(measure "$P_K")" 4000)"; call_on "$P_K"; CK="$CALL"
+sleep 1; pkill -9 -f "research-sidecar.mjs $MARK" || true; sleep 0.5; start_sidecar   # a hard stop: an ordinary one lets the call finish
+sleep 2; req GET "/api/research-ai/calls/$CK"
+[ "$(rj b.state)|$(rj b.result.error_type)" = "failed|research_process_unreachable" ] && ok "the research process stopped part-way: the API records the call failed (research_process_unreachable)" || bad "process stopped: $(rj b.state) $(rj b.result.error_type)"
+[ "$(q "SELECT count(*) FROM research_call_claims WHERE sent_call_id = '$CK'")" = "1" ] && ok "  ...its claim stands" || bad "  ...claim"
 
 step "9. Spend (S2-4a), the day's limit, the model's clearance (S2-3), a withdrawn clearance (S2-3b)"
 SPENT="$(q "SELECT sum(cost_usd) FROM research_calls WHERE kind = 'result'")"
-start_server LVRF_RESEARCH_MONTHLY_USD=8
+start_sidecar LVRF_RESEARCH_MONTHLY_USD=5
 P_S="$(newprompt_ind)"; N0="$(fake_count)"
-expect POST "/api/research-ai/prompts/$P_S/calls" '{}' 429 "S2-4a break: spent \$$SPENT, 1 interrupted, a limit of \$8: one more capped call (\$2.74) would pass it: refused" "would pass the \$8.00 limit"
-[ "$(fake_count)" = "$N0" ] && ok "  ...nothing sent (the interrupted call counted at its cap)" || bad "  ...sent"
-start_server LVRF_RESEARCH_MONTHLY_USD=500 LVRF_RESEARCH_DAILY_LIMIT=1
-expect POST "/api/research-ai/prompts/$P_S/calls" '{}' 429 "the day's limit for the pack (set to 1): refused" "the limit is 1 a day"
-start_server
+expect POST "/api/research-ai/prompts/$P_S/calls" '{}' 429 "S2-4a break: spent \$$SPENT, the research process's limit \$5: one more capped call (\$2.74) would pass it: refused" "would pass the \$5.00 limit"
+[ "$(fake_count)" = "$N0" ] && ok "  ...nothing sent (the limit is the research process's own, read by the API from its status)" || bad "  ...sent"
+start_sidecar LVRF_RESEARCH_DAILY_LIMIT=1
+expect POST "/api/research-ai/prompts/$P_S/calls" '{}' 429 "the day's limit for the pack (the process's, set to 1): refused" "the limit is 1 a day"
+start_sidecar
 fake_next "$(answer answer "$(measure "$P_S")")"
 call_on "$P_S"; [ "$CODE" = 202 ] && [ "$(wait_call "$CALL")" = answered ] && ok "S2-4a control: within the limit and the day's, it sends" || bad "S2-4a control: $CODE $(said)"
 start_sidecar LVRF_RESEARCH_MODEL=claude-fable-5-2
@@ -437,10 +463,10 @@ step "11. S2-7: the research process in production"
 NODE_ENV=production LVRF_RESEARCH_SOCKET="$SOCKDIR/p.sock" ANTHROPIC_BASE_URL=http://127.0.0.1:1 ANTHROPIC_API_KEY="$PLACEHOLDER" node dist/research-sidecar.mjs > "$W/p1.out" 2>&1 && bad "S2-7: started with a base URL in production" \
   || { grep -q "ANTHROPIC_BASE_URL is set; production talks to api.anthropic.com only." "$W/p1.out" && ok "S2-7 break: production with ANTHROPIC_BASE_URL refuses to start" || bad "S2-7: $(cat "$W/p1.out")"; }
 NODE_ENV=production LVRF_RESEARCH_SOCKET="$SOCKDIR/p.sock" LVRF_APP_DIR="$PWD" node dist/research-sidecar.mjs > "$W/p2.out" 2>&1 && bad "D2: started as the app directory's owner" \
-  || { grep -q "runs as the owner of $PWD; it must run as its own user (lvrf-research)" "$W/p2.out" && ok "D2 break: in production, running as the owner of the app directory refuses to start" || bad "D2: $(cat "$W/p2.out")"; }
+  || { grep -q "runs as the owner of $PWD; it must run as its own user (lvrf_research)" "$W/p2.out" && ok "D2 break: in production, running as the owner of the app directory refuses to start" || bad "D2: $(cat "$W/p2.out")"; }
 NODE_ENV=production LVRF_RESEARCH_SOCKET="$SOCKDIR/p.sock" LVRF_APP_DIR=/usr node dist/research-sidecar.mjs > "$W/p3.out" 2>&1 && bad "D2: started from a file not root's" \
   || { grep -q "must be owned by root and writable by no one else" "$W/p3.out" && ok "D2 break: in production, a code file not root-owned (writable by its owner) refuses to start" || bad "D2: $(cat "$W/p3.out")"; }
-LVRF_RESEARCH_SOCKET="$SOCKDIR/p.sock" ANTHROPIC_API_KEY="$PLACEHOLDER" node dist/research-sidecar.mjs > "$W/p4.out" 2>&1 && bad "a key with no stand-in started outside production" \
+LVRF_RESEARCH_SOCKET="$SOCKDIR/p.sock" LVRF_RESEARCH_DATABASE_URL="$RESEARCH_URL" ANTHROPIC_API_KEY="$PLACEHOLDER" node dist/research-sidecar.mjs > "$W/p4.out" 2>&1 && bad "a key with no stand-in started outside production" \
   || { grep -q "outside production, a key needs ANTHROPIC_BASE_URL" "$W/p4.out" && ok "outside production, a key with no stand-in refuses to start: nothing here can reach Anthropic" || bad "$(cat "$W/p4.out")"; }
 grep -q "\[ai-research\] on: claude-opus-5-5" "$W/sidecar.log" && ok "S2-7 control: outside production, with the stand-in, it starts (\"[ai-research] on: claude-opus-5-5 …\")" || bad "S2-7 control"
 curl -s --unix-socket "$SOCK" -X POST http://x/smoke > "$W/smoke.json"; fake_next "$(answer answer OK)"
@@ -448,15 +474,74 @@ curl -s --unix-socket "$SOCK" -X POST http://x/smoke > "$W/smoke2.json"
 node -e "const a=require('$W/smoke.json'),b=require('$W/smoke2.json');process.exit((a.model||a.refused)&&b.refused==='once_a_minute'?0:1)" && ok "the smoke request (§21.6) answers, at most once a minute" || bad "smoke: $(cat "$W/smoke.json") $(cat "$W/smoke2.json")"
 fake_last | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const b=JSON.parse(s).body;process.exit(b.messages[0].content==="Reply with the word OK."&&!b.tools?0:1)})' && ok "  ...a fixed sentence, no tools, no client data" || bad "  ...smoke request"
 
+step "11b. S2-17: straight to the socket (Brad's question, 18 Nov 2026): the research process enforces, itself"
+sock() { CODE="$(curl -s -o "$W/s.json" -w '%{http_code}' --unix-socket "$SOCK" -X POST http://x/call -H 'content-type: application/json' -d "$1")"; }
+sj() { node -e "const b=require('$W/s.json'); console.log($1)"; }
+pref() { q "SELECT count(*) FROM research_process_refusals"; }
+# A sent row recorded through lvrf_app, its guard on (as the API would), for a new pack prompt: bypassing only the API's
+# own checks, so the process alone decides.
+sent_row() {  # PROMPT CLEARANCE [MODEL]
+  printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nINSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, clearance_id, model, retention_class, settings, person_id) SELECT tenant_id, 'sent', id, prompt_sha256, '%s', '%s', 'standard', '{}'::jsonb, '%s' FROM research_prompts WHERE id = '%s' RETURNING id;\nCOMMIT;\n" \
+    "$S" "$2" "${3:-claude-opus-5-5}" "$S" "$1" | psql -X -q -At -v ON_ERROR_STOP=1 "$VERIFY_URL" | grep -E '^[0-9a-f-]{36}$' | tail -1
+}
+KP="$(q "SELECT k.id FROM research_clearances k WHERE k.industry_id = '$IND' AND k.kind = 'clearance' AND k.model = 'claude-opus-5-5' AND NOT EXISTS (SELECT 1 FROM research_clearances w WHERE w.withdraws_clearance_id = k.id) ORDER BY k.at DESC LIMIT 1")"
+N0="$(fake_count)"; R0="$(pref)"
+sock '{"call_id":"00000000-0000-4000-8000-000000000001","prompt_text":"anything at all"}'
+[ "$CODE|$(sj b.refused)" = "400|bad_request" ] && ok "a request carrying its own prompt text: refused (400 bad_request); the process takes { call_id } alone and reads the prompt itself" || bad "text request: $CODE $(cat "$W/s.json")"
+sock '{"call_id":"00000000-0000-4000-8000-000000000002"}'
+[ "$CODE|$(sj b.refused)" = "404|not_sent" ] && ok "a call the API never recorded as sent: refused (404 not_sent)" || bad "unknown call: $CODE $(cat "$W/s.json")"
+expect POST /api/account-inputs "{\"institution\":{\"name\":\"Uncleared Co $TS\"}}" 201 "an account that is never cleared"
+INST2="$(rj b.institution_id)"
+req POST "/api/institutions/$INST2/research-prompts" '{}'; P2="$(rj b.prompt_id)"
+# The break Brad named: a sent row for the uncleared account. The database's guard refuses it (so the API cannot), so
+# it is put in with the triggers off, naming the pack's clearance: what a request straight to the socket would rely on.
+CU="$(printf "BEGIN;\nSET LOCAL session_replication_role = replica;\nINSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, clearance_id, model, retention_class, settings, person_id) SELECT tenant_id, 'sent', id, prompt_sha256, '%s', 'claude-opus-5-5', 'standard', '{}'::jsonb, '%s' FROM research_prompts WHERE id = '%s' RETURNING id;\nCOMMIT;\n" "$KP" "$S" "$P2" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | tail -1)"
+OUT="$(sent_row "$P2" "$KP" 2>&1 || true)"; printf '%s' "$OUT" | grep -q "relies on a clearance of its prompt's account or industry" && ok "  ...(through lvrf_app the database's guard refuses that sent row: the account is not the clearance's)" || bad "  ...the guard: $OUT"
+sock "{\"call_id\":\"$CU\"}"
+[ "$CODE|$(sj b.refused)" = "403|not_cleared" ] && ok "S2-17 break: straight to the socket, a call for an uncleared account: refused (403 not_cleared)" || bad "S2-17: $CODE $(cat "$W/s.json")"
+[ "$(q "SELECT code || '|' || tenant_id || '|' || prompt_id || '|' || requested_call_id FROM research_process_refusals ORDER BY refused_at DESC LIMIT 1")" = "not_cleared|$TEN|$P2|$CU" ] \
+  && ok "  ...its refusal written by the process: not_cleared, naming the tenant, the prompt and the call" || bad "  ...refusal row: $(q "SELECT code, tenant_id, prompt_id FROM research_process_refusals ORDER BY refused_at DESC LIMIT 1")"
+[ "$(fake_count)" = "$N0" ] && [ "$(q "SELECT count(*) FROM research_call_claims WHERE sent_call_id = '$CU'")|$(q "SELECT count(*) FROM research_calls WHERE sent_call_id = '$CU'")" = "0|0" ] \
+  && ok "  ...nothing sent: 0 requests, no claim, no result" || bad "  ...sent: requests $(( $(fake_count) - N0 ))"
+[ "$(( $(pref) - R0 ))" = "3" ] && ok "  ...three refusals recorded by the process (the text request, the unknown call, the uncleared account)" || bad "  ...process refusals: $(( $(pref) - R0 ))"
+P_D="$(newprompt_ind)"; CD="$(sent_row "$P_D" "$KP")"
+fake_next "$(answer answer "$(measure "$P_D")")"
+sock "{\"call_id\":\"$CD\"}"
+[ "$CODE|$(sj b.outcome)" = "200|answered" ] && [ "$(( $(fake_count) - N0 ))" = "1" ] && ok "S2-17 control: a call recorded as sent, for a cleared pack, straight to the socket: sent (1 request) and answered" || bad "S2-17 control: $CODE $(cat "$W/s.json")"
+[ "$(q "SELECT count(*) FROM research_call_claims c JOIN audit_log a ON a.table_name = 'research_call_claims' AND a.record_id = c.id::text WHERE c.sent_call_id = '$CD' AND a.actor_person_id = '$S'")|$(q "SELECT count(*) FROM research_calls r JOIN audit_log a ON a.table_name = 'research_calls' AND a.record_id = r.id::text WHERE r.sent_call_id = '$CD' AND r.person_id = '$S' AND a.actor_person_id = '$S' AND r.cost_usd > 0")" = "1|1" ] \
+  && ok "  ...the process's claim before, and its result row after, each with its audit row naming the person who started it" || bad "  ...claim/result rows"
+N1="$(fake_count)"
+sock "{\"call_id\":\"$CD\"}"
+[ "$CODE|$(sj b.refused)" = "409|already_claimed" ] && ok "the same call again: refused (409 already_claimed)" || bad "again: $CODE $(cat "$W/s.json")"
+stop_sidecar; start_sidecar
+sock "{\"call_id\":\"$CD\"}"
+[ "$CODE|$(sj b.refused)|$(fake_count)" = "409|already_claimed|$N1" ] && ok "  ...and after the process restarts: the claim is on record, so it is never sent twice" || bad "  ...after restart: $CODE $(cat "$W/s.json")"
+start_sidecar LVRF_RESEARCH_MONTHLY_USD=1
+P_E="$(newprompt_ind)"; CE="$(sent_row "$P_E" "$KP")"
+sock "{\"call_id\":\"$CE\"}"
+[ "$CODE|$(sj b.refused)|$(fake_count)" = "429|spend|$N1" ] && ok "S2-17: past the process's own monthly limit (\$1): refused (429 spend), nothing sent" || bad "spend: $CODE $(cat "$W/s.json")"
+start_sidecar LVRF_RESEARCH_DAILY_LIMIT=1
+P_G="$(newprompt_ind)"; CG="$(sent_row "$P_G" "$KP")"
+sock "{\"call_id\":\"$CG\"}"
+[ "$CODE|$(sj b.refused)|$(fake_count)" = "429|daily_cap|$N1" ] && ok "S2-17: past the process's own daily cap (1): refused (429 daily_cap), nothing sent" || bad "daily: $CODE $(cat "$W/s.json")"
+start_sidecar LVRF_RESEARCH_MODEL=claude-fable-5-2
+P_H="$(newprompt_ind)"; CH="$(sent_row "$P_H" "$KP")"
+sock "{\"call_id\":\"$CH\"}"
+[ "$CODE|$(sj b.refused)|$(fake_count)" = "409|wrong_model|$N1" ] && ok "S2-17: a call for another model than the process runs: refused (409 wrong_model), nothing sent" || bad "model: $CODE $(cat "$W/s.json")"
+start_sidecar
+[ "$(q "SELECT string_agg(code, ' ' ORDER BY refused_at) FROM research_process_refusals")" = "bad_request not_sent not_cleared already_claimed already_claimed spend daily_cap wrong_model" ] \
+  && ok "every socket refusal on record, in order, written by the process" || bad "process refusals: $(q "SELECT string_agg(code, ' ' ORDER BY refused_at) FROM research_process_refusals")"
+[ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'research_process_refusals'")" = "0" ] && ok "  ...a socket request has no person, so its refusal names none and writes no audit row (no actorless row)" || bad "  ...audit rows on process refusals"
+
 step "12. S2-6: the key nowhere it should not be; the record"
 LEAKS=0
 for f in "$W/server.log" "$W/sidecar.log" "$W/vite.log" "$W/walk.out" "$W"/resp.*.json; do [ -f "$f" ] && grep -qF "$PLACEHOLDER" "$f" && { LEAKS=$((LEAKS+1)); echo "  leak in $f"; }; done
-[ "$(q "SELECT count(*) FROM (SELECT new_row::text t FROM audit_log UNION ALL SELECT coalesce(old_row::text,'') FROM audit_log UNION ALL SELECT r::text FROM research_calls r UNION ALL SELECT r::text FROM research_clearances r UNION ALL SELECT f::text FROM refusals f UNION ALL SELECT g::text FROM governance_acts g) x WHERE t LIKE '%PLACEHOLDER%'")" = "0" ] || LEAKS=$((LEAKS+1))
+[ "$(q "SELECT count(*) FROM (SELECT new_row::text t FROM audit_log UNION ALL SELECT coalesce(old_row::text,'') FROM audit_log UNION ALL SELECT r::text FROM research_calls r UNION ALL SELECT r::text FROM research_clearances r UNION ALL SELECT r::text FROM research_process_refusals r UNION ALL SELECT f::text FROM refusals f UNION ALL SELECT g::text FROM governance_acts g) x WHERE t LIKE '%PLACEHOLDER%'")" = "0" ] || LEAKS=$((LEAKS+1))
 grep -rqF "PLACEHOLDER-s2-gate-a-$TS" client/dist dist/server 2>/dev/null && LEAKS=$((LEAKS+1))
 git grep -qF "PLACEHOLDER-s2-gate-a-$TS" && LEAKS=$((LEAKS+1))
 [ "$LEAKS" = "0" ] && ok "S2-6: the placeholder key appears 0 times: the API's, the process's and vite's logs, every response body, audit_log, research_calls, research_clearances, refusals, governance_acts, the builds and the repo" || bad "S2-6: $LEAKS leak(s)"
-[ "$(q "SELECT count(*) FROM audit_log WHERE table_name IN ('research_calls', 'research_clearances', 'research_imports') AND actor_person_id IS NULL")" = "0" ] && ok "no audit row on the new tables without an actor" || bad "actorless audit rows"
-[ "$(q "SELECT count(*) FROM research_calls s WHERE s.kind = 'sent' AND s.at > '$T0' AND NOT EXISTS (SELECT 1 FROM research_calls r WHERE r.sent_call_id = s.id)")" = "1" ] && ok "every sent call has its one result, but the one interrupted" || bad "sent without result: $(q "SELECT count(*) FROM research_calls s WHERE kind='sent' AND NOT EXISTS (SELECT 1 FROM research_calls r WHERE r.sent_call_id = s.id)")"
+[ "$(q "SELECT count(*) FROM audit_log WHERE table_name IN ('research_calls', 'research_clearances', 'research_imports', 'research_call_claims') AND actor_person_id IS NULL")" = "0" ] && ok "no audit row on the new tables without an actor" || bad "actorless audit rows"
+[ "$(q "SELECT string_agg(s.id::text, ' ' ORDER BY s.at) FROM research_calls s WHERE s.kind = 'sent' AND s.at > '$T0' AND NOT EXISTS (SELECT 1 FROM research_calls r WHERE r.sent_call_id = s.id)")" = "$CU $CE $CG $CH" ] && ok "every sent call has its one result, but the four the process refused at the socket (none sent)" || bad "sent without result: $(q "SELECT count(*) FROM research_calls s WHERE kind='sent' AND NOT EXISTS (SELECT 1 FROM research_calls r WHERE r.sent_call_id = s.id)")"
 ACTS="$(q "SELECT string_agg(act::text, ' ' ORDER BY at, id) FROM governance_acts WHERE at > '$T0' AND act IN ('clear', 'withdraw_clearance')")"
 [ "$ACTS" = "clear clear clear clear withdraw_clearance clear withdraw_clearance" ] && ok "acts: clear (the account), clear (Scotts), clear (the pack), clear (the pack, Fable 5.2), withdraw_clearance (the pack), clear (the pack), withdraw_clearance (the account); a call writes none" || bad "acts: $ACTS"
 [ "$(q "SELECT count(*) FROM governance_acts WHERE at > '$T0' AND (subject_table = 'research_calls' OR result_table = 'research_calls')")" = "0" ] && ok "  ...no act on research_calls (create-only, ROUTE_ACTS)" || bad "  ...acts on calls"
@@ -466,7 +551,7 @@ ACTS="$(q "SELECT string_agg(act::text, ' ' ORDER BY at, id) FROM governance_act
 step "13. Every sealed run as it was; hashes"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the copy's $N_RUNS0 sealed runs byte-identical at the end" || bad "a sealed run changed"
 H1F="$(HASHES)"; printf '%s' "$H1F" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes, all: $H1F" || bad "hashes: $H1F"
-[ "$(trig)" = "220" ] && ok "220 triggers at the end" || bad "triggers: $(trig)"
+[ "$(trig)" = "226" ] && ok "226 triggers at the end" || bad "triggers: $(trig)"
 
 echo
 echo "==> $PASS passed, $FAIL failed"

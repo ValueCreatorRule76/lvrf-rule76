@@ -3055,6 +3055,43 @@ export const researchCalls = pgTable('research_calls', {
 ]);
 
 /**
+ * S2 (0051; Brad's socket question, 18 Nov 2026). The research process's claim on one sent call, inserted and committed
+ * by that process (database role lvrf_research) before it sends the prompt: one claim per call, ever, so no call is
+ * sent twice, a restart included. Insert-only. Its audit row carries the person who started the call.
+ */
+export const researchCallClaims = pgTable('research_call_claims', {
+  id: id(),
+  sentCallId: uuid('sent_call_id').notNull().references(() => researchCalls.id, { onDelete: 'restrict' }),
+  claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('research_call_claims_once').on(t.sentCallId),
+]);
+
+/**
+ * S2 (0051; Brad's socket question, 18 Nov 2026). A request the research process refused before anything was sent:
+ * a call not recorded as sent by the API, not cleared for its account and model, over the day's cap or the month's
+ * spend, already claimed, or malformed. Written by that process alone (lvrf_research); insert-only. A request on the
+ * socket has no signed-in person, so it names none (refusals requires one, and naming any would attribute the request
+ * falsely); the tenant and the prompt when the request named a call that exists.
+ */
+export const researchProcessRefusals = pgTable('research_process_refusals', {
+  id: id(),
+  requestedCallId: text('requested_call_id'),
+  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
+  promptId: uuid('prompt_id').references(() => researchPrompts.id, { onDelete: 'restrict' }),
+  code: text('code').notNull(),
+  reason: text('reason').notNull(),
+  payload: jsonb('payload').notNull(),
+  refusedAt: timestamp('refused_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('research_process_refusals_at_idx').on(t.refusedAt),
+  check('research_process_refusals_code_known',
+    sql`${t.code} IN ('bad_request', 'not_sent', 'not_cleared', 'wrong_model', 'prompt_mismatch', 'daily_cap', 'spend', 'no_limit', 'already_claimed', 'busy')`),
+  check('research_process_refusals_reason_stated', sql`char_length(btrim(${t.reason})) >= 12`),
+  check('research_process_refusals_payload_object', sql`jsonb_typeof(${t.payload}) = 'object'`),
+]);
+
+/**
  * P2 (LVRF_PLAN §10; design §2.4, P2-D3/D4): one row per governance act,
  * append-only, written by the route in the same transaction as the change it
  * governs. A deferred constraint trigger on each governed table refuses, at

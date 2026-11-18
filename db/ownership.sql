@@ -61,6 +61,16 @@ BEGIN
     CREATE ROLE lvrf_migrate LOGIN;
   END IF;
 END $$;
+-- S2 (LVRF_PLAN §21, D2; Brad's socket question, 18 Nov 2026): the research process's own role. It logs in by peer
+-- authentication only, as the OS user lvrf_research (no password, so no second secret), and holds only the grants
+-- below; lvrf_ownership_violations() fails on any other.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lvrf_research') THEN
+    CREATE ROLE lvrf_research LOGIN;
+  END IF;
+END $$;
+ALTER ROLE lvrf_research LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
 ALTER ROLE lvrf_owner NOLOGIN;
 -- LOGIN explicitly: db/ownership_rollback.sql sets lvrf_migrate NOLOGIN, and
 -- re-running this file after a rollback must give it back. Its password is
@@ -189,7 +199,7 @@ BEGIN
     'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones',
     -- B4 (§14, 0049): insert-only.
     'outcome_withdrawals',
-    -- S2 (§21, 0051): insert-only.
+    -- S2 (§21, 0051): insert-only. research_call_claims and research_process_refusals are written by lvrf_research only.
     'research_clearances', 'research_calls']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
@@ -206,6 +216,21 @@ BEGIN
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT UPDATE ON public.%I TO lvrf_app', t);
     END IF;
+  END LOOP;
+END $$;
+-- S2: lvrf_research, exactly its grants (and nothing from the default privileges, which name lvrf_app only).
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM lvrf_research;
+REVOKE ALL ON ALL TABLES IN SCHEMA drizzle FROM lvrf_research;
+SELECT format('GRANT CONNECT ON DATABASE %I TO lvrf_research', current_database()) \gexec
+GRANT USAGE ON SCHEMA public TO lvrf_research;
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['research_prompts', 'research_calls', 'research_clearances', 'research_call_claims'] LOOP
+    IF to_regclass(format('public.%I', t)) IS NOT NULL THEN EXECUTE format('GRANT SELECT ON public.%I TO lvrf_research', t); END IF;
+  END LOOP;
+  FOREACH t IN ARRAY ARRAY['research_calls', 'research_call_claims', 'research_process_refusals'] LOOP
+    IF to_regclass(format('public.%I', t)) IS NOT NULL THEN EXECUTE format('GRANT INSERT ON public.%I TO lvrf_research', t); END IF;
   END LOOP;
 END $$;
 -- drizzle's own table may not exist before the first migration.

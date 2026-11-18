@@ -1,5 +1,5 @@
 {
-  "id": "513ea21d-960b-4068-ad32-7b2b4eba3486",
+  "id": "e80106a3-e930-429c-936d-41893a72593e",
   "prevId": "aa9e2258-fd6a-4355-a61c-b88feb75caea",
   "version": "7",
   "dialect": "postgresql",
@@ -7201,6 +7201,69 @@
       },
       "isRLSEnabled": false
     },
+    "public.research_call_claims": {
+      "name": "research_call_claims",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "sent_call_id": {
+          "name": "sent_call_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "research_call_claims_once": {
+          "name": "research_call_claims_once",
+          "columns": [
+            {
+              "expression": "sent_call_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "research_call_claims_sent_call_id_research_calls_id_fk": {
+          "name": "research_call_claims_sent_call_id_research_calls_id_fk",
+          "tableFrom": "research_call_claims",
+          "tableTo": "research_calls",
+          "columnsFrom": [
+            "sent_call_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.research_calls": {
       "name": "research_calls",
       "schema": "",
@@ -7880,6 +7943,125 @@
         "research_imports_size": {
           "name": "research_imports_size",
           "value": "\"research_imports\".\"byte_length\" = octet_length(\"research_imports\".\"raw_text\") AND \"research_imports\".\"byte_length\" BETWEEN 1 AND 524288"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.research_process_refusals": {
+      "name": "research_process_refusals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "requested_call_id": {
+          "name": "requested_call_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prompt_id": {
+          "name": "prompt_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refused_at": {
+          "name": "refused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "research_process_refusals_at_idx": {
+          "name": "research_process_refusals_at_idx",
+          "columns": [
+            {
+              "expression": "refused_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "research_process_refusals_tenant_id_tenants_id_fk": {
+          "name": "research_process_refusals_tenant_id_tenants_id_fk",
+          "tableFrom": "research_process_refusals",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "research_process_refusals_prompt_id_research_prompts_id_fk": {
+          "name": "research_process_refusals_prompt_id_research_prompts_id_fk",
+          "tableFrom": "research_process_refusals",
+          "tableTo": "research_prompts",
+          "columnsFrom": [
+            "prompt_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "research_process_refusals_code_known": {
+          "name": "research_process_refusals_code_known",
+          "value": "\"research_process_refusals\".\"code\" IN ('bad_request', 'not_sent', 'not_cleared', 'wrong_model', 'prompt_mismatch', 'daily_cap', 'spend', 'no_limit', 'already_claimed', 'busy')"
+        },
+        "research_process_refusals_reason_stated": {
+          "name": "research_process_refusals_reason_stated",
+          "value": "char_length(btrim(\"research_process_refusals\".\"reason\")) >= 12"
+        },
+        "research_process_refusals_payload_object": {
+          "name": "research_process_refusals_payload_object",
+          "value": "jsonb_typeof(\"research_process_refusals\".\"payload\") = 'object'"
         }
       },
       "isRLSEnabled": false

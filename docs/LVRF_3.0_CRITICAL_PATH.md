@@ -267,6 +267,15 @@ cut line applied first.
   forms). Retiring means `deleted_at` and a reason, with a `withdraw` act, never a delete (rule 2), and it is the
   steward's act through the page (rule 10).
 
+- **`npm audit fix` for `body-parser` (high) and `qs` (moderate)** (Brad, 18 Nov 2026), after S2's Gate C: a separate
+  small change, the plain `npm audit fix` only, never `--force`, with its own full regression. The four moderate
+  findings in the dev tooling (`esbuild` through `drizzle-kit`) are fixable only with `--force`, so they stay.
+
+- **Revisit S2's two residual risks when LVRF first holds confidential customer-side data** (Brad, 18 Nov 2026).
+  The two: a `brad` process changing the API's code, and one using the API's database login to insert a prompt and a
+  `sent` row for a cleared account. The fix then: the research process builds its own prompt from a root-owned copy of
+  the composer, so "the prompt is current" and the published-rows rule (D5) are its checks too, not the API's alone.
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the

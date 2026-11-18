@@ -1956,7 +1956,7 @@ LANGUAGE sql STABLE AS $$
                       -- B3 (section 33): insert-only at the role, not only by their guards.
                       'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'outcome_withdrawals',
                       -- S2 (section 36): insert-only.
-                      'research_clearances', 'research_calls']) t
+                      'research_clearances', 'research_calls', 'research_call_claims', 'research_process_refusals']) t
    WHERE to_regclass(format('public.%I', t)) IS NOT NULL AND has_table_privilege('lvrf_app', format('public.%I', t), 'UPDATE')
   UNION ALL
   SELECT format('lvrf_app holds CREATE on schema %s', s)
@@ -1971,6 +1971,24 @@ LANGUAGE sql STABLE AS $$
   UNION ALL
   SELECT format('trigger %s on %s is disabled (tgenabled = %s)', tg.tgname, tg.tgrelid::regclass, tg.tgenabled)
     FROM pg_trigger tg WHERE NOT tg.tgisinternal AND tg.tgenabled <> 'O'
+  UNION ALL
+  -- S2 (section 36): the research process's role (lvrf_research) holds exactly its grants, owns nothing, and is a
+  -- member of no LVRF role. SELECT on the four research tables it reads; INSERT on the three it writes.
+  SELECT format('lvrf_research holds %s on %I.%I', priv, n.nspname, c.relname)
+    FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+   CROSS JOIN unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'TRIGGER', 'REFERENCES']) priv
+   WHERE r.rolname = 'lvrf_research' AND n.nspname IN ('public', 'drizzle') AND c.relkind IN ('r', 'p')
+     AND has_table_privilege(r.oid, c.oid, priv)
+     AND NOT ((priv = 'SELECT' AND c.relname IN ('research_prompts', 'research_calls', 'research_clearances', 'research_call_claims'))
+           OR (priv = 'INSERT' AND c.relname IN ('research_calls', 'research_call_claims', 'research_process_refusals')))
+  UNION ALL
+  SELECT format('lvrf_research owns %I.%I', n.nspname, c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace JOIN pg_roles r ON r.oid = c.relowner
+   WHERE r.rolname = 'lvrf_research'
+  UNION ALL
+  SELECT format('lvrf_research is a member of %s', m.roleid::regrole)
+    FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member
+   WHERE r.rolname = 'lvrf_research' AND m.roleid IN ('lvrf_owner'::regrole, 'lvrf_migrate'::regrole, 'lvrf_app'::regrole)
 $$;
 
 DO $$
@@ -4123,8 +4141,14 @@ CREATE TRIGGER value_runs_hypothesis_current
 --     withdrawn. A `result` row answers its `sent` row (same prompt, tenant, model, person). _immutable, _audit,
 --     _no_delete.
 --   research_imports_call_matches (I): an import naming a call is exactly that call's answered text, for its prompt.
+--   research_call_claims_guard (I) (Brad's socket question, 18 Nov 2026): the research process (role lvrf_research)
+--     claims a call before sending it: a `sent` row, with no result yet, claimed as the person who started it; one
+--     claim per call (research_call_claims_once), so nothing is sent twice. _immutable, _audit, _no_delete.
+--   research_process_refusals: what that process refused before sending; _immutable and _no_delete. No _audit: a
+--     socket request has no person, so its row names none (the row is itself the record).
 --
--- CONSEQUENCE: 210 -> 220 (research_clearances five, research_calls four, research_imports one).
+-- CONSEQUENCE: 210 -> 226 (research_clearances five, research_calls four, research_imports one, research_call_claims
+--   four, research_process_refusals two).
 CREATE OR REPLACE FUNCTION lvrf_research_clearance_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -4257,6 +4281,46 @@ DROP TRIGGER IF EXISTS research_imports_call_matches ON research_imports;
 CREATE TRIGGER research_imports_call_matches BEFORE INSERT ON research_imports
   FOR EACH ROW EXECUTE FUNCTION lvrf_research_import_call_matches();
 
+CREATE OR REPLACE FUNCTION lvrf_research_call_claim_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  s research_calls%ROWTYPE;
+BEGIN
+  SELECT * INTO s FROM research_calls WHERE id = NEW.sent_call_id;
+  IF NOT FOUND OR s.kind <> 'sent' THEN
+    RAISE EXCEPTION 'LVRF: research_call_claims: a claim names a call the API recorded as sent.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_call_claims_guard';
+  END IF;
+  IF lvrf_current_actor() IS DISTINCT FROM s.person_id THEN
+    RAISE EXCEPTION 'LVRF: research_call_claims: a call is claimed as the person who started it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_call_claims_guard';
+  END IF;
+  IF EXISTS (SELECT 1 FROM research_calls r WHERE r.sent_call_id = s.id) THEN
+    RAISE EXCEPTION 'LVRF: research_call_claims: call % already has its result; nothing more is sent.', left(s.id::text, 8)
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'research_call_claims_guard';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS research_call_claims_guard ON research_call_claims;
+CREATE TRIGGER research_call_claims_guard BEFORE INSERT ON research_call_claims
+  FOR EACH ROW EXECUTE FUNCTION lvrf_research_call_claim_guard();
+DROP TRIGGER IF EXISTS research_call_claims_immutable ON research_call_claims;
+CREATE TRIGGER research_call_claims_immutable BEFORE UPDATE ON research_call_claims
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+DROP TRIGGER IF EXISTS research_call_claims_audit ON research_call_claims;
+CREATE TRIGGER research_call_claims_audit AFTER INSERT OR UPDATE ON research_call_claims
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS research_call_claims_no_delete ON research_call_claims;
+CREATE TRIGGER research_call_claims_no_delete BEFORE DELETE ON research_call_claims
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A claim is the record that the research process sent a call. It cannot be deleted.');
+DROP TRIGGER IF EXISTS research_process_refusals_immutable ON research_process_refusals;
+CREATE TRIGGER research_process_refusals_immutable BEFORE UPDATE ON research_process_refusals
+  FOR EACH ROW EXECUTE FUNCTION lvrf_governance_act_is_final();
+DROP TRIGGER IF EXISTS research_process_refusals_no_delete ON research_process_refusals;
+CREATE TRIGGER research_process_refusals_no_delete BEFORE DELETE ON research_process_refusals
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A refusal by the research process is on the record. It cannot be deleted.');
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4369,8 +4433,8 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 220 distinct triggers (210 before section 36: research_clearances' five, research_calls' four and
---   research_imports_call_matches, +10; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
+--   Total: 226 distinct triggers (210 before section 36: research_clearances' five, research_calls' four,
+--   research_imports_call_matches, research_call_claims' four and research_process_refusals' two, +16; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
 --   _audit, _touch, _no_delete, _supersession_sane. 0027 took it 82 -> 84.
@@ -4394,7 +4458,7 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 220.
+-- TRUNCATE in section 14 fail. Total stays 226.
 --
 -- Expect 329 rows here (328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
 -- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U

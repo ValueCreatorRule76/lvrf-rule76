@@ -168,6 +168,7 @@ const AUDIT_EXEMPT: Record<string, string> = {
   person_credentials: 'holds password hashes; audit_log is permanent, so hashes stay out of it (0027)',
   sessions: 'holds session-token hashes, and is high-volume; the row is the record (0027)',
   refusals: 'the row IS the record of the refused attempt; an audit row would duplicate it (section 8)',
+  research_process_refusals: 'the row IS the record of what the research process refused; a socket request has no person, so an audit row would be actorless (S2, section 36)',
 };
 
 async function checkD3(client: PoolClient): Promise<Finding[]> {

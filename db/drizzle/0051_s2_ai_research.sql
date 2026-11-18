@@ -1,5 +1,11 @@
 ALTER TYPE "public"."governance_act" ADD VALUE 'clear';--> statement-breakpoint
 ALTER TYPE "public"."governance_act" ADD VALUE 'withdraw_clearance';--> statement-breakpoint
+CREATE TABLE "research_call_claims" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"sent_call_id" uuid NOT NULL,
+	"claimed_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "research_calls" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -63,7 +69,22 @@ CREATE TABLE "research_clearances" (
 	CONSTRAINT "research_clearances_reason_stated" CHECK (char_length(btrim("research_clearances"."reason")) >= 12)
 );
 --> statement-breakpoint
+CREATE TABLE "research_process_refusals" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"requested_call_id" text,
+	"tenant_id" uuid,
+	"prompt_id" uuid,
+	"code" text NOT NULL,
+	"reason" text NOT NULL,
+	"payload" jsonb NOT NULL,
+	"refused_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "research_process_refusals_code_known" CHECK ("research_process_refusals"."code" IN ('bad_request', 'not_sent', 'not_cleared', 'wrong_model', 'prompt_mismatch', 'daily_cap', 'spend', 'no_limit', 'already_claimed', 'busy')),
+	CONSTRAINT "research_process_refusals_reason_stated" CHECK (char_length(btrim("research_process_refusals"."reason")) >= 12),
+	CONSTRAINT "research_process_refusals_payload_object" CHECK (jsonb_typeof("research_process_refusals"."payload") = 'object')
+);
+--> statement-breakpoint
 ALTER TABLE "research_imports" ADD COLUMN "call_id" uuid;--> statement-breakpoint
+ALTER TABLE "research_call_claims" ADD CONSTRAINT "research_call_claims_sent_call_id_research_calls_id_fk" FOREIGN KEY ("sent_call_id") REFERENCES "public"."research_calls"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "research_calls" ADD CONSTRAINT "research_calls_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "research_calls" ADD CONSTRAINT "research_calls_prompt_id_research_prompts_id_fk" FOREIGN KEY ("prompt_id") REFERENCES "public"."research_prompts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "research_calls" ADD CONSTRAINT "research_calls_sent_call_id_research_calls_id_fk" FOREIGN KEY ("sent_call_id") REFERENCES "public"."research_calls"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -74,11 +95,15 @@ ALTER TABLE "research_clearances" ADD CONSTRAINT "research_clearances_institutio
 ALTER TABLE "research_clearances" ADD CONSTRAINT "research_clearances_industry_id_industries_id_fk" FOREIGN KEY ("industry_id") REFERENCES "public"."industries"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "research_clearances" ADD CONSTRAINT "research_clearances_withdraws_clearance_id_research_clearances_id_fk" FOREIGN KEY ("withdraws_clearance_id") REFERENCES "public"."research_clearances"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "research_clearances" ADD CONSTRAINT "research_clearances_person_id_persons_id_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "research_process_refusals" ADD CONSTRAINT "research_process_refusals_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "research_process_refusals" ADD CONSTRAINT "research_process_refusals_prompt_id_research_prompts_id_fk" FOREIGN KEY ("prompt_id") REFERENCES "public"."research_prompts"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "research_call_claims_once" ON "research_call_claims" USING btree ("sent_call_id");--> statement-breakpoint
 CREATE INDEX "research_calls_prompt_idx" ON "research_calls" USING btree ("prompt_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "research_calls_one_sent_per_prompt" ON "research_calls" USING btree ("prompt_id") WHERE "research_calls"."kind" = 'sent';--> statement-breakpoint
 CREATE UNIQUE INDEX "research_calls_one_result_per_call" ON "research_calls" USING btree ("sent_call_id");--> statement-breakpoint
 CREATE INDEX "research_clearances_institution_idx" ON "research_clearances" USING btree ("institution_id");--> statement-breakpoint
 CREATE INDEX "research_clearances_industry_idx" ON "research_clearances" USING btree ("industry_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "research_clearances_one_withdrawal" ON "research_clearances" USING btree ("withdraws_clearance_id");--> statement-breakpoint
+CREATE INDEX "research_process_refusals_at_idx" ON "research_process_refusals" USING btree ("refused_at");--> statement-breakpoint
 ALTER TABLE "research_imports" ADD CONSTRAINT "research_imports_call_id_research_calls_id_fk" FOREIGN KEY ("call_id") REFERENCES "public"."research_calls"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "research_imports_one_per_call" ON "research_imports" USING btree ("call_id");

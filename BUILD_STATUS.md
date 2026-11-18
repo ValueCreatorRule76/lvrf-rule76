@@ -14635,9 +14635,11 @@ with a key and no stand-in.
 
 - **Migration `0051_s2_ai_research`:**
   - `research_clearances` and `research_calls`, both insert-only;
+  - `research_call_claims` and `research_process_refusals`, written by the research process alone (the socket question,
+    below);
   - `research_imports.call_id` (one import per call);
   - two new acts, `clear` and `withdraw_clearance`;
-  - 15 CHECKs, each definite under NULL and each with a plain sentence (146 in all).
+  - 18 CHECKs, each definite under NULL and each with a plain sentence (149 in all).
 - **`db/hardening.sql` section 36:**
   - guards on clearances (the steward's alone, recorded as the person; a withdrawal must say something of its own)
     and on calls (the prompt's SHA-256; a current clearance for the same model; a result answering its sent row);
@@ -14645,15 +14647,26 @@ with a key and no stand-in.
   - `research_imports_call_matches`;
   - `research_clearances` added to the act-present loop and the governed-row list, and both tables to the
     no-UPDATE list.
-  - **220 triggers** (+10), 342 `information_schema` rows (+13).
-- **`db/ownership.sql`:** both tables are INSERT and SELECT only for `lvrf_app`.
+  - the claims' guard (a `sent` call with no result, claimed as the person who started it, once) with `_immutable`,
+    `_audit` and `_no_delete`; the process refusals' `_immutable` and `_no_delete` (no `_audit`: a socket request has no
+    person);
+  - `lvrf_ownership_violations()` also fails if `lvrf_research` holds any privilege beyond its seven grants.
+  - **226 triggers** (+16), 349 `information_schema` rows (+20).
+- **`db/ownership.sql`:**
+  - `research_clearances` and `research_calls` are INSERT and SELECT only for `lvrf_app`.
+  - It creates the role `lvrf_research` (LOGIN, no password: peer authentication), with SELECT on `research_prompts`,
+    `research_calls`, `research_clearances` and `research_call_claims`, and INSERT on `research_calls`,
+    `research_call_claims` and `research_process_refusals`.
 - **The research process (D2):**
   - code: `server/research/sidecar/main.ts`, bundled by `npm run build:research` to one file,
     `dist/research-sidecar.mjs`, and installed root-owned at `/opt/lvrf-research/sidecar.mjs` by the deploy;
-  - it runs as its own system user, `lvrf-research` (`ops/lvrf-research.service`, sandboxed), with the key from
-    `/etc/lvrf-research.env` (root, 600) through systemd;
+  - it runs as its own system user, `lvrf_research` (`ops/lvrf-research.service`, sandboxed), with the key and its
+    limits from `/etc/lvrf-research.env` (root, 600) through systemd;
   - it removes the key from its own environment at start;
-  - it listens on `/run/lvrf-research/sock` (directory 0750, socket 0660, group `lvrf-research`, which `brad` joins);
+  - it listens on `/run/lvrf-research/sock` (directory 0750, socket 0660, group `lvrf_research`), which only the API's
+    service joins (`SupplementaryGroups=lvrf_research` in `ops/lvrf-api.service`; the user `brad` does not);
+  - it takes `{ call_id }` alone; it reads the `sent` row and the prompt from the database, checks everything itself,
+    claims the call once, sends it and writes the `result` row (the socket question, below);
   - it builds every request itself from `server/research/aiSettings.ts`: the stored prompt as the one user turn,
     `claude-opus-5-5`, effort high, 32,000 output tokens, web search (10) and web fetch (6 of 20,000 tokens),
     `lvrf-rule76.com` blocked; no system prompt, no metadata, no fallbacks, no retries;
@@ -14702,6 +14715,49 @@ with a key and no stand-in.
 2. **The import is the person's act.** §21.2 step 6 read as automatic. As built, the person clicks "Import the answer",
    so the import's actor is the person who imports, through the existing parse route.
 
+#### The socket (Brad's question, 18 Nov 2026)
+
+**Could a request straight to the socket send a call the API would refuse? As first built, yes.** The process took a
+prompt's text and its SHA-256 from the request and sent it, with no clearance, spend, daily or audit check. **Fixed
+before Gate B:**
+- **What the socket takes:** `{ call_id }` alone; the process reads the prompt from the database itself.
+- **The process's own checks** (as the role `lvrf_research`, by peer authentication), each refusal recorded in
+  `research_process_refusals`:
+  - the call was recorded as sent by the API (the audit row before the call), for the process's model;
+  - its clearance is current, for the prompt's account (or industry) and that model;
+  - the prompt's SHA-256 is the stored text's and the `sent` row's;
+  - the account's calls today are within the daily cap, and the month's spend, with this call at its cap, within the
+    limit. Both limits come from `/etc/lvrf-research.env`, root's, and the API reads them from the process's status:
+    one limit, which `brad` cannot raise.
+- **Once:** it claims the call (`research_call_claims`, once per call, ever), then sends it and writes the `result` row
+  itself (the audit row after). An API restart part-way loses nothing; a process stopped part-way leaves the claim, so
+  the call is never sent again.
+- **`brad` does not need the group; only the API process does.** The OS user is renamed `lvrf_research`, matching the
+  role, so the box's `local all all peer` line serves it with no mapping.
+- **Named:**
+  - The API runs as `brad`, so a `brad` process could change the API's code and restart it with the group. The
+    process's own checks, not the socket's permissions, are the barrier.
+  - That the prompt is current, and D5, stay the API's checks. A `brad` process holding `lvrf_app`'s URL could insert
+    its own prompt and a `sent` row for a cleared subject, and the process would send it within the caps. Closing that
+    would mean the process composing the prompt itself, which needs it to read the accounts' facts and evidence.
+  - Read on the box today, read-only: `ptrace_scope` 1; a Claude session's `sudo -n` asks for a password.
+- **Brad's ruling on the two residuals (18 Nov 2026): accepted as recorded residual risk, not fixed in S2.** The two:
+  a `brad` process changing the API's code, and a `brad` process using the API's database login to insert a prompt
+  and a `sent` row. His reason: anything that can act as `brad` can already read the database and send its contents
+  anywhere without the key. The research process's own checks protect the key and the spend, which is D2's purpose,
+  and S2-1 and S2-1b cover the published-rows rule against the API's own bugs. Revisit when LVRF first holds
+  confidential customer-side data (3.1 list).
+
+#### Brad's rulings with the socket answer (18 Nov 2026)
+
+- No full rerun of the first Gate A: 49 of 51 ran on the final product code, and the other 2 changed only their
+  assertions and passed on their own.
+- The three departures are approved: the per-model clearance, the import as a person's act, and the paste path leaving
+  out the same rows.
+- `npm audit fix` (plain) for `body-parser` and `qs` is a separate small change after S2's Gate C, with its own
+  regression, never `--force` (3.1 list).
+- The correction of Scotts' entity can wait; it is not a pilot account.
+
 #### Gate A's two findings, and Brad's ruling (18 Nov 2026)
 
 **The findings.**
@@ -14740,7 +14796,16 @@ with a key and no stand-in.
 
 #### Gate A
 
-- **Full regression, every verify script in one run, on the final code** (51 scripts):
+- **Full regression after the socket fix, every verify script in one run** (51 scripts, 18 Nov 2026):
+  - **49 passed**, and every file was byte-identical after the run.
+  - **The 2 that failed had one cause.** The drift report's D3 check wants an `_audit` trigger on every table, and
+    `research_process_refusals` deliberately has none, so the check warned. The fix adds it to D3's audit exemptions,
+    next to `refusals` and for the same reason: the row is the record, and a socket request has no person, so an audit
+    row would have no actor. That is a one-line change to `server/spine/driftChecks.ts`. After it,
+    `verify_drift` passes 30/0 and `verify_account_research` 160/0, each on its own.
+  - `verify_s2_ai_research` **213/0** in the run.
+  - **Equivalence against the deployed `2306ab3`, again after 0051's amendment:** 213 GETs, **213 identical**.
+- **The earlier full regression, on the code before the socket fix** (51 scripts):
   - 49 passed, and every file was byte-identical after the run.
   - **The 2 that failed** were assertions on prompt text that the ruling changed, and now pass on their own:
     - `verify_account_research`: its typed fixture fact, citing no source, is now left out, so it reads "ALREADY RECORDED
@@ -14752,7 +14817,7 @@ with a key and no stand-in.
       confirmations;
     - the second was stopped at 9/9 passing when Brad's ruling changed the code, with every file byte-identical.
 
-- `verify_s2_ai_research` **187/0**, every break with its positive control:
+- `verify_s2_ai_research` **213/0**, every break with its positive control:
   - **S2-1:** a system-export fact is left out. The page lists it, the stored prompt and what reached the stand-in
     hold none of its value, and the call is sent.
   - **S2-1b:** with the composer's filter removed, the prompt carries the row and the call is refused, naming it, with
@@ -14786,13 +14851,29 @@ with a key and no stand-in.
   - **S2-14:** each new CHECK refuses its NULL case; a cost of 0 lands.
   - **S2-15:** another tenant's account, and an unknown prompt, are 404.
   - **S2-16:** only the research process imports the SDK; a second importer is caught.
+  - **S2-17, straight to the socket (Brad's break), with its positive control.** A `sent` row for an account never
+    cleared (put in with the triggers off, since through `lvrf_app` the guard refuses it), sent straight to the
+    socket, is refused (403 `not_cleared`). The process writes its refusal (naming the tenant, the prompt and the
+    call), and nothing is sent: 0 requests, no claim, no result. **Control:** a call properly recorded as sent, for a
+    cleared pack, straight to the socket, is sent (1 request) and answered, with the claim before it and the result
+    row after it written by the process, each audited as the person who started it. Also refused, each recorded, with
+    nothing sent:
+    - a request carrying its own text (400);
+    - a call never recorded (404);
+    - the same call again, and after a restart (409 `already_claimed`);
+    - past the process's own monthly limit (429 `spend`);
+    - past its daily cap (429 `daily_cap`);
+    - another model (409 `wrong_model`).
+  - **`lvrf_research`'s privileges:** it may not UPDATE, DELETE or TRUNCATE any of the four tables; it cannot write an
+    act, a refusal or a prompt, or read evidence or persons. `lvrf_app` cannot claim a call or write a process refusal.
+    The ownership check names a stray grant (break) and is clean once it is revoked.
 - **Acts:** `clear` and `withdraw_clearance`, each the steward's; a call writes none. No audit row on the new tables
   lacks an actor. Every recorded cost is its usage at the 18 Nov prices.
 - **Through the page, by session, as the steward:** clear (the disclosure and the reason in full), send (the prompt,
   its SHA-256, the model, "cannot be called back"), import, and withdraw. Screens `s2_*` at 1280 and 390.
-- **TOC:** +39 measured on clones of the prod copy (main's hardening, against 0051 with section 36): 2 tables, their
-  data, ACLs and primary keys, 11 foreign keys, 7 indexes, 3 functions and 10 triggers. **Prod: 910 before, 949
-  after.**
+- **TOC:** +59 measured on clones of the prod copy (main's hardening, against 0051 with section 36): 4 tables, their
+  data, ACLs and primary keys, 14 foreign keys, 9 indexes, 4 functions and 16 triggers. **Prod: 910 before, 969
+  after.** The role `lvrf_research` is the cluster's, not in a database dump.
 - Build and lint are clean (the one warning is `ActorContext.tsx`'s, as before). Bundle: `index-ByVQurqv.js` / `index-DkZrfoBg.css`.
 - **Equivalence against the deployed `2306ab3`** (`scripts/equivalence_gets.sh`, the 14 Nov snapshot): 213 GETs, **213 identical**, 0 differing. The three new GET routes are named as added, not compared.
 
@@ -14818,47 +14899,58 @@ Every step is Brad's paste. Stop at any step whose expectation is not met.
    sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_s2.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_s2.log
    sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
    ```
-   Expect 0051 applied (52 migrations), `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **220** triggers.
+   Expect 0051 applied (52 migrations), `ownership exit 0`, `hardening exit 0`, `0` ERROR lines and **226** triggers.
+   `ownership.sql` creates the role `lvrf_research` (LOGIN, no password).
 4. **The TOC after hardening:**
    ```
    F2=~/lvrf-post-s2-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
    ```
-   Expect **949**, which is 910 plus the 39 measured on the clones.
-5. **The research process's user, group and unit,** once, with no key yet (D2):
+   Expect **969**, which is 910 plus the 59 measured on the clones.
+5. **The research process's user, its limits file, the two units,** once, with no key yet (D2):
    ```
-   sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin lvrf-research
-   sudo usermod -aG lvrf-research brad
+   sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin lvrf_research
    sudo install -d -o root -g root -m 755 /opt/lvrf-research
+   sudo test -e /etc/lvrf-research.env && echo "EXISTS: stop" || printf 'LVRF_RESEARCH_MONTHLY_USD=20\nLVRF_RESEARCH_DAILY_LIMIT=3\n' | sudo sh -c 'umask 077 && cat > /etc/lvrf-research.env'
+   sudo stat -c '%a %U:%G' /etc/lvrf-research.env                                                             # 600 root:root
    sudo install -o root -g root -m 644 /srv/lvrf/ops/lvrf-research.service /etc/systemd/system/lvrf-research.service
+   sudo install -o root -g root -m 644 /srv/lvrf/ops/lvrf-api.service /etc/systemd/system/lvrf-api.service   # adds SupplementaryGroups=lvrf_research
    sudo systemctl daemon-reload && sudo systemctl enable lvrf-research
-   grep -c '^LVRF_RESEARCH_MONTHLY_USD=' /srv/lvrf/.env || printf 'LVRF_RESEARCH_MONTHLY_USD=20\n' >> /srv/lvrf/.env
-   grep -c '^ANTHROPIC_' /srv/lvrf/.env
+   sudo -u lvrf_research psql -X -At -d lvrf -c "SELECT current_user, has_table_privilege('research_calls','INSERT')"   # lvrf_research|t (peer authentication)
+   grep -c '^ANTHROPIC_' /srv/lvrf/.env                                                                         # 0
    ```
-   Expect the last line to be **0**. `LVRF_RESEARCH_MONTHLY_USD=20` is Brad's ruling: his Pro fee, $20 a month.
-   **Then log out of the box and back in**, so this ssh session is in the group `lvrf-research` (the socket checks in
-   steps 7 and 8 need it). The deploy's restart gives the API the group.
+   - The limits are the research process's own, in root's file: **$20 a month** (Brad's ruling: his Pro fee) and **3
+     calls per account per day**. `brad` is **not** added to any group.
+   - The `lvrf-api.service` installed is the repo's, which matched the box's on 18 Nov apart from blank lines, plus
+     `SupplementaryGroups=lvrf_research`.
+   - If the `psql` line is refused with "Peer authentication failed", the box's `pg_hba.conf` has no `local all all
+     peer` line: stop and report, and nothing is changed.
 6. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
    - "S2: no Anthropic key or base URL in /srv/lvrf/.env";
-   - "lvrf-research is active (root:root 644)";
+   - "lvrf-research is active (root:root 644)" (the unit is `lvrf-research`; its user `lvrf_research`);
    - the bundle `index-ByVQurqv.js` / `index-DkZrfoBg.css`;
    - steps 5b–5d passed;
    - health 200 and fail-closed;
    - `health ai_research=off` (the process is up, with no key).
 7. **Read-only checks of D2** (Brad's paste, as `brad`; each prints a refusal or a count, never the key):
    ```
-   stat -c '%U:%G %a' /opt/lvrf-research/sidecar.mjs /run/lvrf-research /run/lvrf-research/sock   # root:root 644, lvrf-research:lvrf-research 750, lvrf-research:lvrf-research 660
-   ps -o user= -p "$(systemctl show -p MainPID --value lvrf-research)"                           # lvrf-research
+   sudo stat -c '%U:%G %a' /opt/lvrf-research/sidecar.mjs /run/lvrf-research /run/lvrf-research/sock   # root:root 644, lvrf_research:lvrf_research 750, lvrf_research:lvrf_research 660
+   ps -o user= -p "$(systemctl show -p MainPID --value lvrf-research)"                                # lvrf_research
+   ps -o supgrp= -p "$(systemctl show -p MainPID --value lvrf-api)"                                   # brad,...,lvrf_research: the API's process has the group
+   id -nG brad | tr ' ' '\n' | grep -c '^lvrf_research$'                                               # 0: brad is not in the group
    cat /proc/"$(systemctl show -p MainPID --value lvrf-research)"/environ > /dev/null; echo "brad reading its environment: exit $?"   # Permission denied, exit 1
-   curl -s --unix-socket /run/lvrf-research/sock http://x/status; echo                         # {"configured":false,"model":"claude-opus-5-5",...}
+   curl -s --unix-socket /run/lvrf-research/sock http://x/status; echo "brad reaching the socket: exit $?"   # Permission denied (exit 7)
+   sudo curl -s --unix-socket /run/lvrf-research/sock http://x/status; echo                           # {"configured":false,"model":"claude-opus-5-5",...,"monthly_limit_usd":20,"daily_limit":3}
    ```
 8. **Brad's own steps from §21.6:** the Console (the LVRF workspace, the $20 limit, prepaid credits with auto-reload
-   off, the key), and the key to the box. The path is the same, `/etc/lvrf-research.env`: root 600, never in a Claude
+   off, the key), and the key to the box. The path is the same, `/etc/lvrf-research.env`, and the paste **appends** to
+   it (`cat >>`), so the limits stay: root 600, never in a Claude
    session. Then:
    ```
    sudo stat -c '%a %U:%G' /etc/lvrf-research.env                       # 600 root:root
    cat /etc/lvrf-research.env > /dev/null; echo "brad reading the key file: exit $?"   # Permission denied, exit 1
    sudo systemctl restart lvrf-research
-   curl -s --unix-socket /run/lvrf-research/sock -X POST http://x/smoke; echo   # {"model":"claude-opus-5-5","answer":"OK",...}: the first real call, no client data
+   sudo grep -c '^LVRF_RESEARCH_MONTHLY_USD=20$' /etc/lvrf-research.env                   # 1: the limit kept
+   sudo curl -s --unix-socket /run/lvrf-research/sock -X POST http://x/smoke; echo   # {"model":"claude-opus-5-5","answer":"OK",...}: the first real call, no client data
    curl -s http://127.0.0.1:3001/api/health; echo                            # ... "ai_research":"on"
    journalctl -u lvrf-research -u lvrf-api --since "-10 min" --no-pager | grep -c 'sk-ant\|ANTHROPIC_API_KEY'   # 0
    ```
@@ -14886,15 +14978,16 @@ withdraw.
 
 #### Gate C (read-only, after the acts)
 
-- 52 migrations, drift none, 146 CHECKs with sentences, 220 triggers, ownership clean, TOC 949.
+- 52 migrations, drift none, 149 CHECKs with sentences, 226 triggers, ownership clean (`lvrf_research` included), TOC
+  969.
 - **D2:**
-  - the process runs as `lvrf-research`;
+  - the process runs as `lvrf_research`; only the API's process is in its group; `brad` is not;
   - `/etc/lvrf-research.env` is `600 root:root` (`stat` only);
   - `/opt/lvrf-research/sidecar.mjs` is `644 root:root`;
   - `brad` cannot read the key file or the process's environment (exit 1);
   - a Claude session's `sudo -n true` fails;
   - no `ANTHROPIC_` line in `/srv/lvrf/.env`.
-- **Calls:** each `sent` row has one `result` row (or reads interrupted); each `imported` result names an import whose
+- **Calls:** each `sent` row has one claim and one `result` row (or a process refusal, with nothing sent); each `imported` result names an import whose
   SHA-256 is the answer's; each call relies on a current clearance for its model; the recorded cost totals no more than
   the Console's for the same days.
 - **Clearances:** each is Brad's, with its disclosure's SHA-256 matching the text in code for the model, and one `clear`

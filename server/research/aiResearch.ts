@@ -42,16 +42,13 @@ import {
 
 const env = process.env;
 const socketPath = () => env.LVRF_RESEARCH_SOCKET ?? (env.NODE_ENV === 'production' ? '/run/lvrf-research/sock' : '');
-const dailyLimit = () => { const n = Number(env.LVRF_RESEARCH_DAILY_LIMIT ?? 3); return Number.isInteger(n) && n >= 0 ? n : 3; };
-const monthlyLimit = (): number | null => {
-  const raw = env.LVRF_RESEARCH_MONTHLY_USD;
-  if (raw === undefined || raw.trim() === '') return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : null;
-};
+// The limits are the research process's own (its root-owned settings; Brad's socket question, 18 Nov 2026): the API
+// reads them from its /status and checks them first, for a plain answer; the process checks them again itself.
+let lastDaily = 3;
+const dailyLimit = () => lastDaily;
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
 
-interface SidecarStatus { configured: boolean; model: string; retention_class: string; timeout_ms: number }
+interface SidecarStatus { configured: boolean; model: string; retention_class: string; timeout_ms: number; monthly_limit_usd: number | null; daily_limit: number }
 
 function sidecar<T>(method: 'GET' | 'POST', path: string, body: unknown, timeoutMs: number): Promise<{ status: number; body: T }> {
   return new Promise((resolve, reject) => {
@@ -81,9 +78,8 @@ type Availability =
   | { on: false; why: string; model: ModelSpec | null; limitUsd: number | null };
 
 async function availability(): Promise<Availability> {
-  const limitUsd = monthlyLimit();
   if ((env.LVRF_AI_RESEARCH ?? '').toLowerCase() === 'off') {
-    return { on: false, why: 'Research with Claude is switched off on this server; copy the prompt and run it yourself.', model: null, limitUsd };
+    return { on: false, why: 'Research with Claude is switched off on this server; copy the prompt and run it yourself.', model: null, limitUsd: null };
   }
   let st: SidecarStatus;
   try {
@@ -91,8 +87,10 @@ async function availability(): Promise<Availability> {
     if (r.status !== 200) throw new Error('status');
     st = r.body;
   } catch {
-    return { on: false, why: 'Research with Claude is not set up on this server; copy the prompt and run it yourself.', model: null, limitUsd };
+    return { on: false, why: 'Research with Claude is not set up on this server; copy the prompt and run it yourself.', model: null, limitUsd: null };
   }
+  const limitUsd = typeof st.monthly_limit_usd === 'number' ? st.monthly_limit_usd : null;
+  if (Number.isInteger(st.daily_limit)) lastDaily = st.daily_limit;
   const model = MODELS[st.model] ?? null;
   if (!model || model.retentionClass !== st.retention_class) {
     return { on: false, why: `The research process names a model this server does not know (${st.model}); nothing is sent.`, model: null, limitUsd };
@@ -101,7 +99,7 @@ async function availability(): Promise<Availability> {
     return { on: false, why: 'Research with Claude is not set up on this server (no key); copy the prompt and run it yourself.', model, limitUsd };
   }
   if (limitUsd === null) {
-    return { on: false, why: 'The monthly spend limit for research with Claude is not set on this server (LVRF_RESEARCH_MONTHLY_USD); nothing is sent.', model, limitUsd };
+    return { on: false, why: 'The research process has no monthly spend limit set (LVRF_RESEARCH_MONTHLY_USD in /etc/lvrf-research.env); nothing is sent.', model, limitUsd };
   }
   return { on: true, model, limitUsd };
 }
@@ -172,43 +170,39 @@ const currentClearance = (rows: ClearanceRow[], m: ModelSpec | null) =>
 /** The in-process jobs: a `sent` row with no result and no job here reads "interrupted" (nothing is retried). */
 const inFlight = new Set<string>();
 
+/**
+ * Asks the research process to run the call the `sent` row names: { call_id } alone. The process checks it again,
+ * claims it, sends it and writes the result row itself. The API writes a result only when the process refused it or
+ * could not be reached, so the call never reads "running" for ever; never when the process may still be at work (a
+ * wait that ran out: its own timeout will end the call, and it writes the result).
+ */
 async function runCallJob(pool: Pool, personId: string, sent: { id: string; tenant_id: string; prompt_id: string; prompt_sha256: string },
-  model: ModelSpec, promptText: string, timeoutMs: number): Promise<void> {
+  model: ModelSpec, timeoutMs: number): Promise<void> {
   inFlight.add(sent.id);
-  const zero: CallUsage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, web_search_requests: 0, web_fetch_requests: 0 };
-  let a: { outcome: string; answer_text: string | null; request_id: string | null; stop_reason: string | null; usage: CallUsage;
-    error_type: string | null; http_status: number | null; request_sha256?: string; requests?: number };
+  let failed: string | null = null;
   try {
-    const r = await sidecar<typeof a & { refused?: string }>('POST', '/call',
-      { call_id: sent.id, prompt_text: promptText, prompt_sha256: sent.prompt_sha256 }, timeoutMs + 60_000);
-    if (r.status === 200) a = r.body;
-    else a = { outcome: 'failed', answer_text: null, request_id: null, stop_reason: null, usage: zero, error_type: `research_process_${r.body?.refused ?? r.status}`, http_status: null };
+    const r = await sidecar<{ outcome?: string; result_id?: string | null; refused?: string }>('POST', '/call', { call_id: sent.id }, timeoutMs + 60_000);
+    if (r.status !== 200 && r.body?.refused && r.body.refused !== 'already_claimed') failed = `research_process_${r.body.refused}`;
+    else if (r.status !== 200 && !r.body?.refused) failed = 'research_process_result_unrecorded';
   } catch (e) {
-    const timedOut = e instanceof Error && e.message === 'timeout';
-    a = { outcome: timedOut ? 'timeout' : 'failed', answer_text: null, request_id: null, stop_reason: null, usage: zero,
-      error_type: timedOut ? 'timeout' : 'research_process_unreachable', http_status: null };
+    failed = e instanceof Error && e.message === 'timeout' ? null : 'research_process_unreachable';
   }
-  if (!['answered', 'refused', 'truncated', 'failed', 'timeout'].includes(a.outcome)) {
-    a = { ...a, outcome: 'failed', answer_text: null, error_type: 'research_process_bad_answer' };
-  }
-  if ((a.outcome === 'failed' || a.outcome === 'timeout') && !a.error_type) a.error_type = a.outcome;
-  if (a.outcome !== 'failed' && a.outcome !== 'timeout') a.error_type = null;
-  if (a.outcome !== 'answered') a.answer_text = null;
-  const usage = { ...zero, ...(a.usage ?? {}) };
   try {
-    await withActorTransaction(pool, personId, async (_db, c) => {
-      await c.query(
-        `INSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, sent_call_id, model, retention_class, outcome,
-           answer_text, answer_sha256, request_id, stop_reason, error_type, http_status, usage, cost_usd, person_id)
-         VALUES ($1, 'result', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
-        [sent.tenant_id, sent.prompt_id, sent.prompt_sha256, sent.id, model.id, model.retentionClass, a.outcome,
-          a.answer_text, a.answer_text === null ? null : sha256(a.answer_text), a.request_id, a.stop_reason, a.error_type,
-          a.http_status, { ...usage, requests: a.requests ?? null, request_sha256: a.request_sha256 ?? null, prices_read_on: PRICES_READ_ON },
-          costUsd(model, usage).toFixed(4), personId],
-      );
-    });
+    if (failed) {
+      await withActorTransaction(pool, personId, async (_db, c) => {
+        await c.query(
+          `INSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, sent_call_id, model, retention_class, outcome,
+             error_type, usage, cost_usd, person_id)
+           SELECT $1, 'result', $2, $3, $4, $5, $6, 'failed', $7, $8, 0, $9
+            WHERE NOT EXISTS (SELECT 1 FROM research_calls WHERE sent_call_id = $4)`,
+          [sent.tenant_id, sent.prompt_id, sent.prompt_sha256, sent.id, model.id, model.retentionClass, failed,
+            { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, web_search_requests: 0, web_fetch_requests: 0 },
+            personId],
+        );
+      });
+    }
   } catch (err) {
-    console.error(`LVRF: research call ${sent.id.slice(0, 8)}: the result could not be recorded; the call reads "interrupted".`, err instanceof Error ? err.message : '');
+    console.error(`LVRF: research call ${sent.id.slice(0, 8)}: the failure could not be recorded; the call reads "interrupted".`, err instanceof Error ? err.message : '');
   } finally {
     inFlight.delete(sent.id);
   }
@@ -487,7 +481,7 @@ export function aiResearchRouter(pool: Pool): Router {
         return row;
       });
       const timeoutMs = Number(env.LVRF_RESEARCH_TIMEOUT_MS ?? CAPS.timeoutMs);
-      void runCallJob(pool, req.actor!.personId, sent, m, p.prompt_text, Number.isFinite(timeoutMs) ? timeoutMs : CAPS.timeoutMs);
+      void runCallJob(pool, req.actor!.personId, sent, m, Number.isFinite(timeoutMs) ? timeoutMs : CAPS.timeoutMs);
       res.status(202).json({ call_id: sent.id, sent_at: sent.at, model: m.id, prompt_sha256: p.prompt_sha256 });
     } catch (err) {
       if (await handleGovernanceError(pool, err, req, res, { endpoint: route, subjectTable: 'research_calls', subjectId: null, tenantId, institutionId, attemptedPayload: req.body })) return;

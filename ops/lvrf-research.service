@@ -1,28 +1,35 @@
 # S2 (3.1; LVRF_PLAN §21, D2 ruled by Brad 18 Nov 2026) — the research process: the only holder of Anthropic's key.
 #
-# Runs as its own system user, lvrf-research, from ONE root-owned file (/opt/lvrf-research/sidecar.mjs, installed by
-# scripts/lvrf-deploy.sh). The key is in /etc/lvrf-research.env (root, 600), read by systemd before it drops to the
-# user; the process removes it from its own environment at start. No brad process can read it: not the file (root,
-# 600), not this process's /proc environ (another uid), and not by changing its code (root-owned).
+# Runs as its own system user, lvrf_research, from ONE root-owned file (/opt/lvrf-research/sidecar.mjs, installed by
+# scripts/lvrf-deploy.sh). The key and its limits (LVRF_RESEARCH_MONTHLY_USD, LVRF_RESEARCH_DAILY_LIMIT) are in
+# /etc/lvrf-research.env (root, 600), read by systemd before it drops to the user; the process removes the key from its
+# own environment at start. No brad process can read it: not the file (root, 600), not this process's /proc environ
+# (another uid), and not by changing its code (root-owned).
 #
-# The API (lvrf-api, User=brad) reaches it over /run/lvrf-research/sock: the directory is lvrf-research's, mode 0750,
-# the socket 0660; brad is in the group lvrf-research, which can connect and nothing more.
+# It reaches Postgres as the role lvrf_research by peer authentication over the local socket (the OS user and the role
+# share the name), and checks every call itself (server/research/sidecar/main.ts).
+#
+# The API (lvrf-api, User=brad) reaches it over /run/lvrf-research/sock: the directory is lvrf_research's, mode 0750,
+# the socket 0660, group lvrf_research. Only the API's service joins that group (SupplementaryGroups=lvrf_research in
+# ops/lvrf-api.service); the user brad does not, so a brad shell cannot reach the socket.
 #
 # Install (Brad's Gate B paste, once): see LVRF_PLAN §21.6 and BUILD_STATUS's S2 Gate B note.
 [Unit]
 Description=LVRF research process (S2: holds Anthropic's key)
-After=network-online.target
+After=network-online.target postgresql.service
 Wants=network-online.target
+Requires=postgresql.service
 
 [Service]
 Type=simple
-User=lvrf-research
-Group=lvrf-research
+User=lvrf_research
+Group=lvrf_research
 # The leading "-": with no key file, the process starts and reports "off: no key".
 EnvironmentFile=-/etc/lvrf-research.env
 Environment=NODE_ENV=production
 Environment=LVRF_RESEARCH_SOCKET=/run/lvrf-research/sock
 Environment=LVRF_APP_DIR=/srv/lvrf
+Environment=LVRF_RESEARCH_DATABASE_URL=postgresql://lvrf_research@/lvrf?host=/var/run/postgresql
 ExecStart=/usr/bin/node /opt/lvrf-research/sidecar.mjs
 RuntimeDirectory=lvrf-research
 RuntimeDirectoryMode=0750
