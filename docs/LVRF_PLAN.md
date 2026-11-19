@@ -4985,3 +4985,143 @@ When Gate C passes, and not before (OWN-1-D3), `CLAUDE.md`'s research seam is am
 
 Nothing else in the seam changes: a prompt is generated from live rows, a new result names its prompt, and accept is
 per field by a person.
+
+## 22. 3.1 slice S3: the printed case and the POV brought into the CVAF family (planned 19 Nov 2026; **for Brad's approval**)
+
+Ruling it builds: "One Rule76 family with CVAF" (Brad, 15 Nov 2026, `docs/LVRF_3.0_CRITICAL_PATH.md`). LVRF's design,
+colours and UX read as the same family as CVAF, with CVAF's `docs/RULE76_DESIGN_SYSTEM.md` as the reference. It is read
+from `cvaf-rule76`, and nothing is copied into CVAF. Tokens stay cited from `CLAUDE.md`; any value where CVAF's system
+and `CLAUDE.md` disagree is named for Brad. This is the last item of the 3.1 build order's first group ("the printed
+case and POV brought into the CVAF family"). Value spine: `return`, the documents a CFO reads.
+
+**Scope: the two printed documents only.** They are the value case (`/runs/:id/case`, under both lenses) and the POV
+(`/accounts/:id/pov`). The screen UI, the run page's print and the rest of the design-family audit come after the
+pilot starts (3.1 build order).
+
+### What was read (19 Nov 2026; CVAF read only, its templates' source, no CVAF client data)
+
+- **CVAF's canon, `docs/RULE76_DESIGN_SYSTEM.md`:**
+  - palette: ink, gold `#C9A24A`, silver, off-white; dark-tuned neutrals and status colours;
+  - two faces, Bebas Neue and Barlow, with Barlow Condensed "the sanctioned condensed variant"; no monospace face;
+  - flexbox and tables, no CSS Grid;
+  - no decorative stripes, except the short gold kicker-rule;
+  - colour only through tokens.
+- **CVAF's business case (`apps/api/src/services/render_business_case.py`), the closest analogue of LVRF's value case:**
+  - **light paper pages** under **an ink cover page** (`@page cover`, no margins, ink background);
+  - a gold small-caps kicker in Barlow Condensed, and Bebas headings;
+  - a 40pt gold rule under the title;
+  - a stats row of Bebas numerals between an ink rule and a hairline;
+  - tables with small-caps condensed headers and hairline rows;
+  - boxes (plain, ink, gold-edged, warn-edged), and tinted tags for each basis;
+  - in the page margins: a one-line footer at bottom left in Barlow Condensed, the page counter at bottom right
+    (`n / N`), and a band at top centre for a draft or disclosure;
+  - US Letter;
+  - ending with the Rule 76 tagline ("Rule 76 — No Excuses. Play Like A Champion.") and a disclaimer.
+- **CVAF's POV (`render_pov.py`)** is dark throughout: ink pages, off-white text and ink cards. It still carries the
+  `#C8A24A` gold typo that CVAF's canon says to fix. The PDFs in CVAF's "Claude outputs" folder are named for CVAF's
+  clients, so they were not opened.
+- **LVRF today:** both documents are the browser's print of their page (O-D5). Each has:
+  - US Letter (`@page letter`), white paper, ink text;
+  - Bebas and Barlow loaded from Google Fonts;
+  - the banners at the top of each page, in monospace and `ink-70`;
+  - a kicker ("VALUE CASE · CFO LENS"), the account as title, a meta line, and section headings in Bebas with a
+    hairline;
+  - a per-page footer naming the account, the run, the lens, the record hash and the date, with "Page n of N" in a
+    margin box (kept by Brad, 15 Nov 2026).
+  - `PovPage.tsx` uses CSS Grid in 5 places; `ValueCasePage.tsx` in none.
+
+### The conflicts to name (CLAUDE.md wins; each is named, none resolved silently)
+
+| # | CVAF | LVRF (`CLAUDE.md`) | In S3 |
+|---|---|---|---|
+| C1 | POV: ink pages throughout; business case: paper with an ink cover | Light paper | **D1** |
+| C2 | Small gold text on paper (the kicker, 7.4pt, gold `#C9A24A`: 2.40:1) | **Only `--gold-ink` for small text on light** (AMENDMENT-004) | `--gold-ink` on paper; gold only on ink |
+| C3 | Paper `#FAF8F3`, rule `#D9D3C4`, mute `#6B675E`; tag tints by basis | `--offwhite`/white, the `rule` token, `--ink-45`; the status palette of AMENDMENT-004 | LVRF's tokens throughout; no CVAF hex enters LVRF |
+| C4 | Barlow Condensed for labels, footers and table heads | Not in `CLAUDE.md`'s token table (display, body, mono) | **D4** |
+| C5 | No monospace face | Monospace for hashes, IDs and register numbers | Kept: the hash prints in mono |
+| C6 | Page counter `n / N` | "Page n of N" (Brad, 15 Nov 2026) | Kept, as ruled |
+| C7 | No CSS Grid | `PovPage.tsx` uses Grid | **D7** |
+| C8 | The tagline and a disclaimer close the document | A disclosure banner on every page; no tagline | **D6** |
+| C9 | `CLAUDE.md` lists gold for "display numerals" | AMENDMENT-004: gold on white fails AA at every size, large text included (2.40 < 3:1) | Gold numerals on ink only; on paper the numerals print in ink, with the gold rule |
+
+### What S3 builds (if approved as recommended)
+
+1. **First, the conformance audit** (CVAF pattern 3, read-only). For each of the two documents, a table of every
+   element against the CVAF family: what it is, what it should be, the token it cites, and which conflict above
+   governs it. Committed as docs. If it finds anything outside D1–D9, building stops for Brad.
+2. **A cover page in ink (D1),** first in both documents, as a named page (`@page cover`, no margins, the ink fill
+   printed exact). It carries:
+   - **the disclosure banners** (every printed page carries them: rule 6, O-D5), in `--offwhite` on ink, with the
+     unverified banner keeping its `--warning` rule;
+   - the kicker in gold;
+   - the title (the account) in Bebas `--offwhite`, and the document's name in gold below it (CVAF's two-line title);
+   - the meta line (lens, run, locked by, confidence) in `--silver`;
+   - a 40pt gold rule;
+   - at the foot, the record hash in mono, the date, and "Page 1 of N".
+3. **Paper pages in the CVAF furniture with LVRF's tokens:**
+   - the kicker in Barlow Condensed (D4) in `--gold-ink`;
+   - Bebas headings, each followed by a hairline;
+   - the stats row (baseline, target, actual, realization; or confidence and cost of delay), Bebas numerals in ink
+     between an ink rule and a hairline;
+   - tables with small-caps headers and hairline rows;
+   - boxes: a refusal box in ink, with gold text on ink; the asks and the gaps edged in `--warning`;
+   - basis tags in the AMENDMENT-004 palette;
+   - every page keeps its banners at the top, and its footer line with the hash, and "Page n of N".
+4. **The close (D6):** the Rule 76 tagline and LVRF's disclaimer, from text in code, never hand-written per document.
+5. **Shared print pieces:** `PrintCover`, `PrintKicker`, `PrintStats`, `PrintFooter` and `PrintClose`, used by both
+   pages. Their colours are tokens (`theme()`), with no hex, and `check_design_tokens` is extended to the two pages and
+   these pieces.
+6. **No change to what prints.** The content stays exactly what the seal and the case read give it: no figure, word or
+   order changes, only how it is set. No migration, no server change and no new dependency (D4's font comes from the
+   Google Fonts link already loaded).
+
+### Decisions for Brad
+
+| # | Question | Recommended |
+|---|---|---|
+| D1 | The page | **The business-case pattern:** an ink cover, then light paper. That is CVAF's own printed case, keeps AMENDMENT-004's palette for the body, and prints sensibly on paper. Dark pages throughout (the POV pattern) would need a dark print palette amended into `CLAUDE.md` and a full-bleed browser print on every page |
+| D2 | The cover's content | **Banners, kicker, title and document name, meta, the gold rule, then the hash, the date and "Page 1 of N"** (rule 6 and O-D5 hold on the cover) |
+| D3 | What the title reads | **The account's name, then "Value Case" or "Point of View" in gold below it;** the kicker "Rule 76 · Learning Value Realization" |
+| D4 | Barlow Condensed | **Adopt it, for kickers, labels, table heads and footers,** as CVAF's canon sanctions, recorded in `CLAUDE.md`'s token table as a condensed body face. It is a token change, so it is written there first. Without it, the kickers and labels stay in Barlow |
+| D5 | Page numbers | **"Page n of N", as ruled 15 Nov,** not CVAF's `n / N` |
+| D6 | The close | **The Rule 76 tagline and LVRF's own disclaimer** (that the document renders from a sealed record, unverified until it is), on the last page |
+| D7 | Grid in `PovPage.tsx` | **Flexbox or tables,** as CVAF's canon requires, in the two printed pages only (the screen-wide audit comes later) |
+| D8 | A mock-up first | **Yes:** a cover and one body page of each document as an HTML mock-up in `design/mockups/`, citing `tokens.css`, printed to PDF for Brad's look, before any page is changed (UX-1's mock-ups-before-code rule) |
+| D9 | Scope | **The two printed documents,** both lenses of the case; the run page's print and the screen UI later |
+
+### Gate A (planned)
+
+- **The mock-up approved by Brad (D8),** then the build.
+- **Every page printed to PDF and looked at** (CLAUDE.md's PDF rule), on clones of the prod copy, by headless Chrome's
+  print, each page also rendered to PNG:
+  - the case under the default lens;
+  - the case under the CFO lens, refused;
+  - the case under the CFO lens with the case shown (a fixture run that meets the lens);
+  - a POV.
+- **On every page,** cover included, read from the PDF's text:
+  - the disclosure banners;
+  - the run's `payload_hash`, equal to the stored one;
+  - "Page n of N";
+  - no browser header or footer.
+- **The content** equals the current print's, word for word, apart from the furniture added: the cover's lines, the
+  stats labels, the close. This is shown by comparing the extracted text before and after.
+- **Fonts:** `pdffonts` shows Bebas Neue, Barlow, Barlow Condensed (D4) and the mono face embedded, and no other.
+- **Contrast:** every text colour on its background in the print stylesheet meets AA (4.5:1 for small text, 3:1 for
+  large). This is computed from `CLAUDE.md`'s tokens by a small script.
+- **Breaks, each with its positive control:**
+  - the banners dropped from the cover;
+  - the hash dropped from a body page;
+  - a small `text-gold` label on paper (caught by the contrast check);
+  - a hex in a print piece (`check_design_tokens`);
+  - `grid` in a printed page (a grep);
+  - a changed word in the content (the text comparison).
+- **Regression and equivalence:** the full regression (`verify_value_case` and `verify_pov_print` assert on the
+  print), and equivalence on every GET (no server change, so all identical). Build and lint are clean.
+
+### Gate B, the act and Gate C (planned)
+
+- **Gate B:** deploy only, with no migration. The TOC stays 969 and the triggers 226; expect a new bundle.
+- **Brad's act:** print run 3 under both lenses and a POV, and look at every page. The stage-10 check follows on those
+  PDFs, as on 15 Nov.
+- **Gate C (read-only):** the print requests are Brad's; no other row changed; every sealed run is byte-identical.
+- **About 2 days of work after the mock-up is approved.**
