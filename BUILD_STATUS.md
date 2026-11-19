@@ -14998,3 +14998,95 @@ withdraw.
 - No refusal but the ones Brad met, and no audit row without an actor. Every sealed run is byte-identical, and
   `check_run_hashes` matches all of them.
 - **Then** `CLAUDE.md`'s research seam is amended (§21.8), in a docs commit.
+
+### S2: Gate B steps 1–7 (Brad), Gate C with no key; step 8 and the act session deferred — 19 Nov 2026 (UTC)
+
+**Gate B, steps 1–7, run by Brad.** Recorded outputs:
+
+1. main and the box at `d9b3a80`.
+2. **Pre-S2 backup:** `~/lvrf-pre-s2-20261119T001520Z.dump`, **TOC 910**.
+3. **Migrate, ownership, hardening:** the migration raised no error; `ownership exit 0`; `hardening exit 0` with 0
+   ERROR lines; **226 triggers**.
+4. 52 migrations; **post-S2 backup** `~/lvrf-post-s2-20261119T001714Z.dump`, **TOC 969**, as Gate A measured.
+5. **The research process's user and setup:**
+   - `lvrf_research` created;
+   - the limits file `600 root:root`;
+   - `lvrf-research` enabled;
+   - peer authentication `lvrf_research|t`;
+   - no `ANTHROPIC_` line in `/srv/lvrf/.env`.
+6. **Deploy:**
+   - bundle `index-ByVQurqv.js` / `index-DkZrfoBg.css`;
+   - drift none (52, newest 0051); D1, D3 and D4 no findings; ownership clean;
+   - "S2: no Anthropic key or base URL in /srv/lvrf/.env";
+   - `lvrf-research` and `lvrf-api` active.
+7. **D2 checks, all as expected:**
+   - `sidecar.mjs` `root:root 644`;
+   - `/run/lvrf-research` `lvrf_research` 750, the socket 660;
+   - the process's user `lvrf_research`;
+   - the API's supplementary groups include `lvrf_research`, and `brad` is not in the group (0);
+   - `brad` reading the process's environment: Permission denied, exit 1;
+   - `brad` reaching the socket: exit 7;
+   - status `configured: false`, `claude-opus-5-5`, standard retention, the caps as ruled, $20, 3 a day.
+
+**Step 6's expectations, as Brad asked.** BUILD_STATUS's wording was wrong, not the deploy. `lvrf-deploy.sh` prints each
+step's result, not its step number:
+- 5b prints "steward-grant pre-check: 0 tenants locked out";
+- 5c prints the two drift lines Brad saw;
+- 5d prints the ownership line he saw;
+- step 7 prints "GET http://127.0.0.1:3001/api/health -> 200 (expect 200)…", "health actor_header=off", "health
+  ai_research=off …", the two 401 checks, the vhost check, then the summary and "deploy OK".
+
+Every one of these steps ends the deploy with `die` on failure. Read on the box today, read-only:
+- the deployed `lvrf-deploy.sh` is byte-identical to `d9b3a80`'s;
+- the client was built at 00:18:36 and the research process's file installed at 00:18:38 (step 6a, which follows 5b–5e
+  in the script);
+- `lvrf-research` restarted at 00:18:38, and `lvrf-api` at 00:18:39 (step 6).
+
+So 5b–5d ran and passed. Step 7's lines leave no record on the box. Brad's own check matches what step 7 tests: health
+200, `{"status":"ok","db":"connected","origin_check":"configured","actor_header":"off","ai_research":"off"}`. Gate C
+read the same.
+
+**The `argon2` warning is not new, and needs nothing.** It was recorded at sign-in P1's Gate A (11 Oct 2026): npm 11
+does not run `argon2@0.45.1`'s install script without an allow-scripts approval, and argon2 loads from its shipped
+prebuilds (`linux-x64`, glibc and musl), so prod needs no compiler. It prints on every `npm ci`. An explicit
+`"argon2@0.45.1": false` under `allowScripts` in `package.json` would silence it, as a small change of its own; not
+done.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone; the state before step 8: no key, no calls):**
+- **Schema:**
+  - 52 migrations, newest `0051_s2_ai_research`; drift none at 1342 objects; `drift_report` D1, D3, D4 no findings;
+  - 149 CHECKs, each with a plain sentence;
+  - **226 triggers**, none disabled;
+  - ownership clean, `lvrf_research` included (0 violations): `lvrf_research` may INSERT into `research_calls`, but not
+    UPDATE it or read `evidence`; `lvrf_app` may not claim a call or UPDATE `research_calls`;
+  - the roles: `lvrf_app` (login), `lvrf_migrate` (login), `lvrf_owner` (no login), `lvrf_research` (login, not
+    superuser);
+  - TOC 969 (Brad's post-S2 dump).
+- **Research with Claude, untouched:** `research_clearances`, `research_calls`, `research_call_claims` and
+  `research_process_refusals` each hold 0 rows; no import names a call; no prompt has been generated since the deploy.
+- **Since the deploy (00:18:39):** 0 governance acts (still 228, the last at 15 Nov 21:12:17); 0 refusals; 0 audit
+  rows, none without an actor.
+- **Runs:**
+  - 27, all locked;
+  - `check_run_hashes` 27/27, recomputed and embedded;
+  - the 26 earlier runs byte-identical to the 14 Nov snapshot (per-row md5 in UTC, the box against `lvrf_prodcopy`);
+  - run 3 `0061c95f` unchanged (`abcb5444…`, as at S1's Gate C).
+- **D2, read as `brad`:**
+  - `/opt/lvrf-research/sidecar.mjs` `root:root 644`; `/etc/lvrf-research.env` `root:root 600` (`stat` only);
+    `/run/lvrf-research` `lvrf_research:lvrf_research 750`;
+  - the process runs as `lvrf_research`, and the API's process has the group `lvrf_research`; `brad`'s groups are
+    `brad sudo users`;
+  - `brad` reading the key file, exit 1; the process's environment, exit 1; the socket, exit 7;
+  - a Claude session's `sudo -n`: "a password is required";
+  - no `ANTHROPIC_` line in `/srv/lvrf/.env`;
+  - health `ai_research: "off"`.
+- **The key in the logs:** `lvrf-api`'s journal since 00:15 (18 lines) mentions `sk-ant` or `ANTHROPIC_API_KEY` 0
+  times. **`lvrf-research`'s journal shows 0 lines to `brad`:** it runs under its own uid, and `brad` is in neither
+  `adm` nor `systemd-journal`. That is consistent with D2, but it makes the check there Brad's, with `sudo`, at step 8:
+  `sudo journalctl -u lvrf-research --since … | grep -c 'sk-ant\|ANTHROPIC_API_KEY'` should print 0, and its start line
+  should read `[ai-research] off: no key` (or `on: …` after the key).
+
+**Deferred by Brad, no date:** Gate B step 8 (the Console, the key to the box, the smoke test, the dollar limit
+recorded) and S2's act session, and with them the rest of Gate C (calls, clearances, accepted fields) and the
+`CLAUDE.md` amendment (§21.8), which waits for the full Gate C. **Research with Claude stays off; the paste path is
+unchanged.**
