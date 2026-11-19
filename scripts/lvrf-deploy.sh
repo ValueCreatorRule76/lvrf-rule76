@@ -50,7 +50,20 @@
 # and it runs only if the file on disk is exactly HEAD's copy of this
 # script — so it can never re-exec a second time or run anything else.
 
+#
+# NO SILENT STOP (19 Nov 2026, approved by Brad). The S4 deploy ended with
+# no message after "lvrf-api is active": step 7's first curl was refused
+# while the API was still loading, and under `set -e` a failing command
+# substitution ends the script on the spot. Now:
+#   - step 6 polls /api/health until the API answers (up to 30s) instead
+#     of sleeping a fixed 2 seconds;
+#   - every request and parse in step 7 reports instead of ending the
+#     script, so its own comparisons and their `die` lines say what failed;
+#   - an ERR trap prints the failing line and exit code for any other
+#     unguarded failure, anywhere in the script.
+
 set -euo pipefail
+trap 'rc=$?; echo "DEPLOY FAILED: line ${LINENO} exited ${rc} (an unguarded command; see the line above)" >&2' ERR
 
 REPO_DIR="/srv/lvrf"
 SERVICE="lvrf-api"
@@ -185,28 +198,41 @@ else
   log "lvrf-research.service is not installed: research with Claude stays absent"
 fi
 
-# 6. Restart the service and confirm it came up.
+# 6. Restart the service, wait until it answers, and confirm it is active.
+#    "active" means only that the process is forked; the API listens once
+#    every router has loaded (about 2–3 s on the box, 19 Nov 2026). So poll
+#    GET /api/health every 0.5 s, up to 30 s (60 tries). Any HTTP answer
+#    counts as up: step 7 checks the status itself.
 sudo systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed"
-sleep 2
+HEALTH_TRIES=0
+until curl -s -o /dev/null --max-time 2 "http://127.0.0.1:3001/api/health"; do
+  HEALTH_TRIES=$((HEALTH_TRIES + 1))
+  if [ "$HEALTH_TRIES" -ge 60 ]; then
+    die "$SERVICE did not answer /api/health within 30s (state: $(systemctl is-active "$SERVICE" || true)); see: journalctl -u $SERVICE -n 50"
+  fi
+  sleep 0.5
+done
 ACTIVE_STATE="$(systemctl is-active "$SERVICE" || true)"
 if [ "$ACTIVE_STATE" != "active" ]; then
   die "$SERVICE is not active after restart (state: $ACTIVE_STATE)"
 fi
-log "$SERVICE is active"
+log "$SERVICE is active and answering (after ${HEALTH_TRIES} refused tries at 0.5s)"
 
 # 7. Smoke-test two paths: the API directly (bypasses Caddy's
-#    basic_auth) and the public vhost (which requires it).
-HEALTH_BODY="$(curl -s -w '\n%{http_code}' "http://127.0.0.1:3001/api/health")"
-HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1)"
-ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4)"
-ACTOR_HEADER="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"actor_header":"[a-z]+"' | cut -d'"' -f4)"
-AI_RESEARCH="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"ai_research":"[a-z]+"' | cut -d'"' -f4)"
-API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
+#    basic_auth) and the public vhost (which requires it). Each request and
+#    parse ends in `|| true`: a refused connection reads as status 000 and a
+#    missing field as <none>, and the comparisons below report it.
+HEALTH_BODY="$(curl -s -w '\n%{http_code}' "http://127.0.0.1:3001/api/health" || true)"
+HEALTH_STATUS="$(printf '%s' "$HEALTH_BODY" | tail -n1 || true)"
+ORIGIN_MODE="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"origin_check":"[a-z-]+"' | cut -d'"' -f4 || true)"
+ACTOR_HEADER="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"actor_header":"[a-z]+"' | cut -d'"' -f4 || true)"
+AI_RESEARCH="$(printf '%s' "$HEALTH_BODY" | head -n1 | grep -oE '"ai_research":"[a-z]+"' | cut -d'"' -f4 || true)"
+API_STATUS="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3001/api/runs/${RUN_ID}" || true)"
 STAFF_ID="$(psql -X -At "$DB_URL" -c "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")" \
   || die "could not read a vendor-staff id for the header check"
 [ -n "$STAFF_ID" ] || die "no current vendor-staff person to name in the header check"
-HEADER_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -H "X-Actor-Person-Id: ${STAFF_ID}" "http://127.0.0.1:3001/api/runs/${RUN_ID}")"
-VHOST_STATUS="$(curl -sIk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/")"
+HEADER_STATUS="$(curl -s -o /dev/null -w '%{http_code}' -H "X-Actor-Person-Id: ${STAFF_ID}" "http://127.0.0.1:3001/api/runs/${RUN_ID}" || true)"
+VHOST_STATUS="$(curl -sIk -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/" || true)"
 
 log "GET http://127.0.0.1:3001/api/health -> ${HEALTH_STATUS} (expect 200), origin_check=${ORIGIN_MODE:-<none>} (expect configured)"
 log "health actor_header=${ACTOR_HEADER:-<none>} (expect off)"
