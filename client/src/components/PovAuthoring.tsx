@@ -202,7 +202,7 @@ function Restate({ h, outcome, onChanged }: { h: PovHypothesis; outcome: PovOutc
           ...(/[0-9]/.test(f.conditions) ? ['take the digits out of the conditions'] : []),
           ...(why.trim().length < 12 ? [`say why it is restated, in at least 12 characters (${12 - why.trim().length} more)`] : []),
         ]}
-        confirm={<span data-testid="confirm-text">Restate the hypothesis {h.id.slice(0, 8)}, &ldquo;{h.statement.slice(0, 80)}&rdquo;, as a new version: &ldquo;{statement.trim().slice(0, 80)}&rdquo;. The old version stays on the record.</span>}
+        confirm={<span data-testid="confirm-text">Restate the hypothesis {h.id.slice(0, 8)}, &ldquo;{h.statement}&rdquo;, as a new version: &ldquo;{statement.trim()}&rdquo;. The old version stays on the record.</span>}
         buildBody={() => ({ statement, falsifier_reference: f.reference, falsifier_due: f.due, falsifier_conditions: f.conditions, supersession_reason: why })}
         submitLabel="Restate it" onSuccess={() => { setOpen(false); onChanged('Restated as a new version. The earlier version stays on the record, marked superseded.'); }} renderSuccess={() => <>Restated.</>} />
     </div>
@@ -222,7 +222,7 @@ function Withdraw({ h, onChanged }: { h: PovHypothesis; onChanged: (notice?: str
           <textarea rows={2} className={INPUT} value={why} onChange={(e) => setWhy(e.target.value)} /></label>}
         canSubmit={why.trim().length >= 12}
         unmet={[`say why it is withdrawn, in at least 12 characters (${12 - why.trim().length} more)`]}
-        confirm={<span data-testid="confirm-text">Withdraw the hypothesis {h.id.slice(0, 8)}, &ldquo;{h.statement.slice(0, 80)}&rdquo;, with this reason: &ldquo;{why.trim()}&rdquo;. It stays on the record, marked withdrawn.</span>}
+        confirm={<span data-testid="confirm-text">Withdraw the hypothesis {h.id.slice(0, 8)}, &ldquo;{h.statement}&rdquo;, with this reason: &ldquo;{why.trim()}&rdquo;. It stays on the record, marked withdrawn.</span>}
         buildBody={() => ({ retirement_reason: why })}
         submitLabel="Withdraw" onSuccess={() => { setOpen(false); onChanged('Withdrawn. It stays on the record, marked withdrawn.'); }} renderSuccess={() => <>Withdrawn.</>} />
     </div>

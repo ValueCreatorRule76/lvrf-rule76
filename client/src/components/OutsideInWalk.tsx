@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { ConfirmFields } from './confirm/ConfirmFields';
+import { same } from './confirm/repeats';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api/http';
@@ -79,10 +81,17 @@ export function ClaimForm({ capabilities, pack, primary = false, onDone }: {
 }
 
 export function PackBasisForm({ metric, claimed, primary = false, onDone }: {
-  metric: { id: string }; claimed: { industry_measure_id: string; measure_name: string }[]; primary?: boolean; onDone: () => void;
+  metric: { id: string; name?: string }; claimed: { industry_measure_id: string; measure_name: string; claim?: string }[]; primary?: boolean; onDone: () => void;
 }) {
   const claimedForBasis = claimed;
   const [p5, setP5] = useState({ industry_measure_id: '', basis_note: '' });
+  // S4 (LVRF_PLAN §23, D3; eed11e02 on prod): the note says something of its own, never the entry's name nor the
+  // capability's claim on it. Said here before any request; the route and hardening section 37 refuse it too.
+  const entry = claimedForBasis.find((c) => c.industry_measure_id === p5.industry_measure_id);
+  const repeats = !entry ? null : same(p5.basis_note, entry.measure_name) ? "the entry's name"
+    : same(p5.basis_note, entry.claim) ? "the capability's claim on this entry" : null;
+  const unmet = [...(p5.industry_measure_id === '' ? ['choose the pack entry'] : []), ...(p5.basis_note.trim() === '' ? ['write the basis note'] : []),
+    ...(repeats ? [`the basis note repeats ${repeats}: say why this metric is an instance of the entry, in your own words`] : [])];
   return (
     <GovernedForm<{ metric_id: string }>
       path={`/api/business-metrics/${metric.id}/pack-basis`} provenanceLabel="What this records"
@@ -92,8 +101,10 @@ export function PackBasisForm({ metric, claimed, primary = false, onDone }: {
           <option value="">— choose —</option>{claimedForBasis.map((c) => <option key={c.industry_measure_id} value={c.industry_measure_id}>{c.measure_name}</option>)}</select>)}
         {field('Basis note', <textarea rows={2} className={INPUT_CLASS} value={p5.basis_note} onChange={(e) => setP5({ ...p5, basis_note: e.target.value })} />, undefined, true)}
       </div>}
-      canSubmit={!!p5.industry_measure_id && p5.basis_note.trim() !== ''}
-      buildBody={() => ({ industry_measure_id: p5.industry_measure_id, basis_note: p5.basis_note })}
+      canSubmit={unmet.length === 0} unmet={unmet}
+      confirm={<ConfirmFields lead={<>Set the pack basis of metric {metric.id.slice(0, 8)}. Final: a basis is not amended.</>}
+        fields={[...(metric.name ? [{ label: 'Metric', value: metric.name }] : []), { label: 'Pack entry', value: entry?.measure_name ?? '' }, { label: 'Basis note', value: p5.basis_note.trim() }]} />}
+      buildBody={() => ({ industry_measure_id: p5.industry_measure_id, basis_note: p5.basis_note.trim() })}
       primary={primary} submitLabel="Set the basis" onSuccess={() => { setP5({ industry_measure_id: '', basis_note: '' }); onDone(); }} renderSuccess={() => <>Set.</>} />
   );
 }
@@ -219,7 +230,7 @@ function CorrectSupport({ e, outcomeId, metricName, sealedRuns, onDone }: { e: W
             <p className={HELP_CLASS}>At least 12 characters. Kept with the withdrawn link and the new one.</p></label>
         </div>}
         // C2c (Brad, 26 Oct 2026): the link, the change, the outcome and how many runs share it, before submitting.
-        confirm={<span data-testid="confirm-text">Correct {shortId(e.id)}, “{e.summary.slice(0, 80)}”, on {metricName}: from {label(SUPPORTS, e.supports)} to {label(SUPPORTS, supports)}. {sealedRuns} sealed run{sealedRuns === 1 ? '' : 's'} share{sealedRuns === 1 ? 's' : ''} this outcome; none of them changes: record an erratum on each that sealed it.</span>}
+        confirm={<span data-testid="confirm-text">Correct {shortId(e.id)}, “{e.summary}”, on {metricName}: from {label(SUPPORTS, e.supports)} to {label(SUPPORTS, supports)}. {sealedRuns} sealed run{sealedRuns === 1 ? '' : 's'} share{sealedRuns === 1 ? 's' : ''} this outcome; none of them changes: record an erratum on each that sealed it.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ supports, reason: reason.trim() })}
         submitLabel="Withdraw and correct" onSuccess={() => { setOpen(false); setSupports(''); setReason(''); onDone(); }} renderSuccess={() => <>Corrected.</>} />

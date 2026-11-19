@@ -358,7 +358,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
                 </select></label>
               {whyField}
             </div>}
-            confirm={chosen && <span data-testid="confirm-text">Correct {shortId(chosen.evidence_id)}, “{chosen.summary.slice(0, 80)}”, on {outcome.metric_name}: from {label(SUPPORTS, chosen.supports)} to {label(SUPPORTS, supports)}. {runs}: record an erratum on each that sealed it.</span>}
+            confirm={chosen && <span data-testid="confirm-text">Correct {shortId(chosen.evidence_id)}, “{chosen.summary}”, on {outcome.metric_name}: from {label(SUPPORTS, chosen.supports)} to {label(SUPPORTS, supports)}. {runs}: record an erratum on each that sealed it.</span>}
             canSubmit={Boolean(chosen) && supports !== '' && reason.trim().length >= 12}
             unmet={[...(!chosen ? ['choose the link'] : []), ...(supports === '' ? ['choose what it supports'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
             buildBody={() => ({ supports, reason: reason.trim() })}
@@ -376,7 +376,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
             provenanceLabel="What this records"
             provenance={<p className="m-0 text-[12.5px] text-ink">This <strong>withdraws</strong> a current link of this run's outcome, {outcome.metric_name}, with <strong>no replacement</strong>, for every run that shares it: your name, the date and your reason are kept, and it stays shown struck through. <strong>The sealed run is not changed.</strong></p>}
             fields={<div className="flex flex-col gap-3">{linkField}{whyField}</div>}
-            confirm={chosen && <span data-testid="confirm-text">Withdraw {shortId(chosen.evidence_id)}, “{chosen.summary.slice(0, 80)}”, from {outcome.metric_name}: it supports {label(SUPPORTS, chosen.supports)} now, and will support nothing; no link replaces it. {runs}.</span>}
+            confirm={chosen && <span data-testid="confirm-text">Withdraw {shortId(chosen.evidence_id)}, “{chosen.summary}”, from {outcome.metric_name}: it supports {label(SUPPORTS, chosen.supports)} now, and will support nothing; no link replaces it. {runs}.</span>}
             canSubmit={Boolean(chosen) && reason.trim().length >= 12}
             unmet={[...(!chosen ? ['choose the link'] : []), ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])]}
             buildBody={() => ({ reason: reason.trim() })}

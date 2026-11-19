@@ -23,7 +23,7 @@ export const aboutBody = (choice: string, party: string): unknown =>
   (choice === 'account' ? 'account' : choice === 'other_party' ? { other_party: party.trim() } : { institution_id: choice });
 
 /** L41-D1: what evidence is about. L52: nothing is pre-filled; the choice is always made. */
-export function useAbout(institutionId: string | undefined): { fields: ReactNode; body: () => unknown; unmet: string[] } {
+export function useAbout(institutionId: string | undefined): { fields: ReactNode; body: () => unknown; unmet: string[]; describe: () => string } {
   const accounts = useAccounts();
   const [choice, setChoice] = useState('');
   const [party, setParty] = useState('');
@@ -42,6 +42,9 @@ export function useAbout(institutionId: string | undefined): { fields: ReactNode
   return {
     fields,
     body: () => aboutBody(choice, party),
+    /** S4: what the choice means, in words, for the confirmation. */
+    describe: () => (choice === 'account' ? 'this account' : choice === 'other_party' ? party.trim()
+      : (Array.isArray(accounts) ? accounts.find((a) => a.id === choice)?.name : undefined) ?? (choice === '' ? '' : choice)),
     unmet: [...(accounts === 'failed' ? ["the accounts couldn't be loaded, so what this is about can't be stated: reload the page"] : []),
       ...(ready && choice === '' ? ['say what this evidence is about'] : []),
       ...(other && party.trim().length < 3 ? ['name the company this evidence is about'] : [])],

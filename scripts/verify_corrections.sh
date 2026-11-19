@@ -120,8 +120,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "226" ] \
-    && ok "  ...hardening.sql re-applied: the function as declared, 226 triggers (S2 section 36: +16) (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "227" ] \
+    && ok "  ...hardening.sql re-applied: the function as declared, 227 triggers (S4 section 37: +1) (S2 section 36: +16) (with P2's section 27)" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 seals() { q "SELECT string_agg(r.id || ':' || md5(r::text), ' ' ORDER BY r.run_number) FROM value_runs r WHERE r.id IN ('$R1', '$R2')"; }
@@ -138,7 +138,7 @@ HASH0="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | t
 printf '%s' "$HASH0" | grep -qE "^$RUNS0 runs: recompute matches $RUNS0, differs 0; embedded payloadHash matches $RUNS0, differs 0" && ok "before: check_run_hashes $HASH0" || bad "hashes before: $HASH0"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0040_corrections and later)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "226" ] && ok "226 triggers (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
+[ "$(trig)" = "227" ] && ok "227 triggers (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) by pg_trigger (C3 section 28: +9; C3b section 29: +5; 135 + section 26's six + P2's 26)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 # (0040 orphaning nothing and leaving Scotts' runs byte-identical was proven at C1's Gate A, on a copy

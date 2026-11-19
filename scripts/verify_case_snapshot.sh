@@ -116,8 +116,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "226" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 226 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "227" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 227 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -130,11 +130,11 @@ make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "226" ] && ok "226 triggers (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "349" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "227" ] && ok "227 triggers (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18; before:: section 32 adds value_runs_case_current" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "350" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (287 + 1)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: section 32 writes nothing" || bad "  ...a run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 52 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 53 migrations" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"

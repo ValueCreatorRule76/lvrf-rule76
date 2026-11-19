@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { evidenceRepeat, reasonRepeats } from '../lib/repeatedFields.js';
 import type { Pool, PoolClient } from 'pg';
 import { recordAct, type ActRecord } from '../lib/governanceAct.js';
 import { checkFiguresOfLinks } from '../lib/figureCheck.js';
@@ -77,6 +78,10 @@ async function insertRecorded(client: PoolClient, body: Record<string, unknown>,
   if (text('provenance').length < MIN_PROVENANCE) throw new Refusal(422, `State where this evidence came from, in at least ${MIN_PROVENANCE} characters.`);
   const sourceReference = text('source_reference') === '' ? null : text('source_reference');
   const form = parseEvidenceForm(body, { allowStatement: kind === 'attestation', kind, sourceReference });
+  // S4 (LVRF_PLAN §23): a field may not repeat another; 0052's CHECKs are the database's half.
+  const repeat = evidenceRepeat({ summary: text('summary'), provenance: text('provenance'), source_reference: sourceReference,
+    quote_text: form.quoteText, how_read: form.howRead });
+  if (repeat) throw new Refusal(422, repeat);
   const about = await parseAbout(client, body.about, institutionId, tenantId);
   const attestedBy = body.attested_by_person_id ?? null;
   const attestedAt = body.attested_at ?? null;
@@ -493,8 +498,10 @@ export function evidenceActsRouter(pool: Pool): Router {
 
   const rowOf = async (client: PoolClient, req: Request, id: string) => {
     const { rows: [e] } = await client.query<{ id: string; institution_id: string; tenant_id: string; source_verified: boolean;
-      citation_resolved: boolean; deleted_at: string | null; superseded_by_id: string | null; ai_sourced: boolean; research_query: string | null; research_tool: string | null; confidence: string }>(
-      `SELECT e.id, e.institution_id, i.tenant_id, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id, e.ai_sourced, e.research_query, e.research_tool, e.confidence::text
+      citation_resolved: boolean; deleted_at: string | null; superseded_by_id: string | null; ai_sourced: boolean; research_query: string | null; research_tool: string | null; confidence: string;
+      summary: string; provenance: string; source_reference: string | null; quote_text: string | null; how_read: string | null }>(
+      `SELECT e.id, e.institution_id, i.tenant_id, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id, e.ai_sourced, e.research_query, e.research_tool, e.confidence::text,
+              e.summary, e.provenance, e.source_reference, e.quote_text, e.how_read
          FROM evidence e JOIN institutions i ON i.id = e.institution_id WHERE e.id = $1 FOR UPDATE OF e`, [id]);
     return !e || isOtherTenant(req, e.tenant_id, { table: 'evidence', id }) ? null : e;
   };
@@ -543,10 +550,18 @@ export function evidenceActsRouter(pool: Pool): Router {
       const b = isRecord(req.body) ? req.body : {};
       const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
       if (reason.length < MIN_REASON) throw new Refusal(422, `Say why it is superseded, in at least ${MIN_REASON} characters.`);
+      // S4 (LVRF_PLAN §23; the 15 Nov act that made 673861eb): the reason says why, in words of its own, never a field
+      // of the row it supersedes or of the new one. An act's reason is not on the evidence row, so this is the route's.
+      const t = (k: string) => (typeof b[k] === 'string' ? (b[k] as string) : null);
       if (b.simulated !== undefined && typeof b.simulated !== 'boolean') throw new Refusal(422, 'Say whether the new row is simulated: true or false.');
       if (e.deleted_at !== null || e.superseded_by_id !== null) throw new Refusal(409, 'This evidence is not current (retired or superseded).');
       const { rows: grants } = await client.query('SELECT 1 FROM customer_role_grants WHERE source_evidence_id = $1 AND revoked_at IS NULL', [id]);
       if (grants.length > 0) throw new Refusal(409, 'A current customer-side role is named from this evidence. Revoke the role first.');
+      const repeated = reasonRepeats(reason, [
+        { which: 'the row it supersedes', v: { summary: e.summary, provenance: e.provenance, source_reference: e.source_reference, quote_text: e.quote_text, how_read: e.how_read } },
+        { which: 'the new row', v: { summary: t('summary'), provenance: t('provenance'), source_reference: t('source_reference'), quote_text: t('quote_text'), how_read: t('how_read') } },
+      ]);
+      if (repeated) throw new Refusal(422, `Why it is superseded repeats ${repeated}; say why it is superseded, in words of its own.`);
       // Q4k: AI origin is permanent, so a successor carries it.
       const origin = e.ai_sourced ? { researchQuery: e.research_query ?? '', researchTool: e.research_tool ?? '' } : null;
       const successor = await insertRecorded(client, b, e.institution_id, e.tenant_id, actorOf(req), b.simulated === true, e.confidence, origin);

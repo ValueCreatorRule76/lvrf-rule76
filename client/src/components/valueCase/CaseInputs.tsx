@@ -67,7 +67,7 @@ function RecordRate({ vc, onDone }: { vc: CaseRef; onDone: () => void }) {
             </select></label>
           <label className="mt-2 block"><span className={L}>Why (needed when it corrects a rate)</span><textarea rows={2} className={I} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="rate-reason" /></label>
         </>}
-        confirm={<span data-testid="confirm-text">Record {currency} {n} per {o.rate_unit_word} of {o.metric} per year ({kind}), resting on <ShortId id={evidenceId} /> “{picked?.summary.slice(0, 80) ?? ''}”.</span>}
+        confirm={<span data-testid="confirm-text">Record {currency} {n} per {o.rate_unit_word} of {o.metric} per year ({kind}), resting on <ShortId id={evidenceId} /> “{picked?.summary ?? ''}”.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ rate: n, currency, per_unit: o.unit ?? '', rate_kind: kind, how_read: howRead.trim(), evidence_id: evidenceId, ...(reason.trim() ? { reason: reason.trim() } : {}) })}
         submitLabel="Record the rate" onSuccess={onDone} renderSuccess={() => <>Recorded. The next run reads it.</>} />

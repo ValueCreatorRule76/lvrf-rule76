@@ -6,6 +6,7 @@ import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 import { EvidenceFormError, parseEvidenceForm } from '../lib/evidenceFormBody.js';
+import { evidenceRepeat } from '../lib/repeatedFields.js';
 import { parseAbout } from '../lib/evidenceAbout.js';
 import { checkFigure, recordFigureCheck } from '../lib/figureCheck.js';
 
@@ -291,6 +292,11 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
           return;
         }
       }
+
+      // S4 (LVRF_PLAN §23): a field may not repeat another; 0052's CHECKs are the database's half. Answered and
+      // recorded as a route refusal, through the EvidenceFormError path below.
+      const repeat = evidenceRepeat({ summary, provenance, source_reference: sourceReference, quote_text: form.quoteText, how_read: form.howRead });
+      if (repeat) throw new EvidenceFormError(repeat);
 
       // institution_id comes from the outcome, never the payload.
       const { rows: [evidence] } = await client.query<{ id: string }>(

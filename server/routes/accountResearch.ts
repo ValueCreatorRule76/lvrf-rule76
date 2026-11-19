@@ -548,10 +548,13 @@ export function accountResearchRouter(pool: Pool): Router {
       const form = entityQuote(body);
 
       refusalTable = 'evidence';
+      // S4 (LVRF_PLAN §23; Brad, 19 Nov 2026): the provenance names who corrected it, as the other writers name their
+      // person; the citation stays in source_reference alone (0052: a field may not repeat another).
+      const { rows: [corrector] } = await client.query<{ full_name: string }>('SELECT full_name FROM persons WHERE id = $1', [actorPersonId]);
       const evidenceId = await insertEvidence(client, institutionId,
         `Entity: ${describe(entity)} (corrects ${describe(old)})`,
         {
-          evidenceKind: evidenceKindFor(entity.source_kind), provenance: entity.citation, confidence: 'medium',
+          evidenceKind: evidenceKindFor(entity.source_kind), provenance: `Entity corrected by ${corrector.full_name}: ${entity.citation}`, confidence: 'medium',
           sourceReference: entity.citation, aiSourced: false, researchQuery: null, researchTool: null,
           ...form,
         }, actorPersonId);

@@ -339,7 +339,8 @@ if (MODE === 'links') {
   await shot('s1_d1_q1_record_source_1280');
   await waitFor(enabledButton(f, 'Record the source'), 10000);
   const said1 = await act(f, 'Record the source', 'record the source');
-  check(said1 === '', '  ...recording a source asks no confirmation (the row is born unverified)', said1 ?? 'not sent');
+  // S4 (LVRF_PLAN §23, Brad 19 Nov 2026) replaced S1's "no confirmation": recording a source now confirms every field in full.
+  check(said1 !== '' && said1.includes(E.Q2_SUMMARY), '  ...recording a source confirms every field in full first (S4), What it states quoted whole', (said1 ?? 'not sent').slice(0, 120));
   const row = `[...document.querySelectorAll('[data-testid=account-evidence-row]')].find(r=>r.textContent.includes(${JSON.stringify(E.Q2_SUMMARY.slice(0, 60))}))`;
   check(await waitFor(`!!${row}`, 20000), '  ...it is on card 01c');
   check((await ev(`${row}.textContent`)).includes('Not source-verified'), '  ...unverified until it is opened');

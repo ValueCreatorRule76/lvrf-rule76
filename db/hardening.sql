@@ -4321,6 +4321,45 @@ DROP TRIGGER IF EXISTS research_process_refusals_no_delete ON research_process_r
 CREATE TRIGGER research_process_refusals_no_delete BEFORE DELETE ON research_process_refusals
   FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A refusal by the research process is on the record. It cannot be deleted.');
 
+-- 37. S4 (3.1; LVRF_PLAN §23, approved by Brad 19 Nov 2026, D3 and D4) — a pack basis note says something of its own.
+-- ------------------------------------------------------------------
+--   business_metrics_basis_note_own (U, of industry_measure_id and pack_basis_evidence_id): when a metric's basis is
+--     set, the note it was set with (pack_basis_evidence_id, 0052) may not repeat the pack entry's name, nor the claim
+--     of a capability of the metric's own account on that entry. On 15 Nov 2026 the note on prod (eed11e02) was the
+--     capability's claim, character for character. The pack-basis route refuses first (422, the same sentence); this
+--     is the database's half. It reads two other tables, so it is a trigger, not a CHECK (Brad, D4).
+--   Compared as the CHECKs of 0052 compare: trimmed, whitespace collapsed, lower-cased (D5). An empty or absent note
+--     repeats nothing; a metric with no note linked (the three given a basis before 0052) is not read.
+CREATE OR REPLACE FUNCTION lvrf_basis_note_own() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  n text;
+BEGIN
+  IF NEW.pack_basis_evidence_id IS NULL OR NEW.industry_measure_id IS NULL THEN RETURN NEW; END IF;
+  IF NEW.pack_basis_evidence_id IS NOT DISTINCT FROM OLD.pack_basis_evidence_id
+     AND NEW.industry_measure_id IS NOT DISTINCT FROM OLD.industry_measure_id THEN RETURN NEW; END IF;
+  SELECT coalesce(lower(regexp_replace(btrim(e.summary), '[[:space:]]+', ' ', 'g')), '') INTO n
+    FROM evidence e WHERE e.id = NEW.pack_basis_evidence_id;
+  IF coalesce(n, '') = '' THEN RETURN NEW; END IF;
+  IF EXISTS (SELECT 1 FROM industry_measures m WHERE m.id = NEW.industry_measure_id
+                AND lower(regexp_replace(btrim(m.name), '[[:space:]]+', ' ', 'g')) = n) THEN
+    RAISE EXCEPTION 'LVRF: business_metrics: the pack basis note repeats the entry''s name; say why this metric is an instance of the entry, in your own words.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'business_metrics_basis_note_own';
+  END IF;
+  IF EXISTS (SELECT 1 FROM capability_industry_measures c JOIN capabilities cap ON cap.id = c.capability_id
+              WHERE c.industry_measure_id = NEW.industry_measure_id AND cap.institution_id = NEW.institution_id
+                AND lower(regexp_replace(btrim(c.claim), '[[:space:]]+', ' ', 'g')) = n) THEN
+    RAISE EXCEPTION 'LVRF: business_metrics: the pack basis note repeats the capability''s claim on this entry; say why this metric is an instance of the entry, in your own words.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'business_metrics_basis_note_own';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS business_metrics_basis_note_own ON business_metrics;
+CREATE TRIGGER business_metrics_basis_note_own
+  BEFORE UPDATE OF industry_measure_id, pack_basis_evidence_id ON business_metrics
+  FOR EACH ROW EXECUTE FUNCTION lvrf_basis_note_own();
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4433,7 +4472,8 @@ COMMIT;
 --   system_exercise_marks_guard, _immutable, _audit, _no_delete, _act_present — 9
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
---   Total: 226 distinct triggers (210 before section 36: research_clearances' five, research_calls' four,
+--   37: business_metrics_basis_note_own — 1
+--   Total: 227 distinct triggers (226 before section 37: business_metrics_basis_note_own, +1; 210 before section 36: research_clearances' five, research_calls' four,
 --   research_imports_call_matches, research_call_claims' four and research_process_refusals' two, +16; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
@@ -4458,9 +4498,9 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 226.
+-- TRUNCATE in section 14 fail. Total stays 227.
 --
--- Expect 329 rows here (328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
+-- Expect 330 rows here (329 before section 37: business_metrics_basis_note_own U, +1. 328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
 -- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
 -- (7 each), and record_documents guard I+U and act_present I+U. 287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,

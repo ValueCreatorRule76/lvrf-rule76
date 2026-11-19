@@ -125,6 +125,8 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   await setField(step('w5'), 'Pack entry', entry);
   await setField(step('w5'), 'Basis note', 'Verification: the same rate, per 200,000 hours.');
   await sleep(200); await click(step('w5'), 'Set the basis');
+  // S4 (LVRF_PLAN §23): the pack basis now confirms every field in full before it records.
+  await sleep(400); await ev(`(()=>{const b=(${step('w5')}).querySelector('[data-testid=form-confirm-yes]');if(!b)return false;b.click();return true})()`);
   check(await done('w5'), 'W5 done: the pack basis');
   const evScope = `(${step('w6')})`;
   if (MODE === 'break-evidence') {

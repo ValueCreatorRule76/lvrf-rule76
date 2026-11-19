@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, recordRouteRefusal } from '../lib/refusal.js';
+import { same } from '../lib/repeatedFields.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 
@@ -187,6 +188,27 @@ export function metricPackBasisRouter(pool: Pool): Router {
         return;
       }
 
+      // S4 (LVRF_PLAN §23, D3; on prod, eed11e02's note was the capability's claim, character for character): the
+      // note says why this metric is an instance of the entry, in words of its own: never the entry's name, nor a
+      // claim on the entry by a capability of this account. Hardening section 37 (business_metrics_basis_note_own)
+      // is the database's half, with the same sentences.
+      const { rows: claims } = await client.query<{ claim: string }>(
+        `SELECT c.claim FROM capability_industry_measures c JOIN capabilities cap ON cap.id = c.capability_id
+          WHERE c.industry_measure_id = $1 AND cap.institution_id = $2`,
+        [measure.id, metric.institution_id],
+      );
+      const repeats = same(basisNote, measure.name) ? "the entry's name"
+        : claims.some((c) => same(basisNote, c.claim)) ? "the capability's claim on this entry" : null;
+      if (repeats) {
+        const message = `The pack basis note repeats ${repeats}; say why this metric is an instance of the entry, in your own words.`;
+        await recordRouteRefusal(pool, req, {
+          endpoint: 'POST /api/business-metrics/:metricId/pack-basis', subjectTable: 'business_metrics', subjectId: metricId,
+          tenantId: measure.tenant_id, institutionId: metric.institution_id, attemptedPayload: req.body,
+        }, message);
+        res.status(422).json({ message });
+        return;
+      }
+
       // actorContext already confirmed this id names a real, non-simulated
       // person before calling next() — this lookup is only for a readable
       // name in the provenance text, not another authorization check.
@@ -220,10 +242,10 @@ export function metricPackBasisRouter(pool: Pool): Router {
       // whoever won.
       const { rows: [updated] } = await client.query<{ industry_measure_id: string }>(
         `UPDATE business_metrics
-            SET industry_measure_id = $1
+            SET industry_measure_id = $1, pack_basis_evidence_id = $3
           WHERE id = $2 AND industry_measure_id IS NULL
           RETURNING industry_measure_id`,
-        [measure.id, metricId],
+        [measure.id, metricId, evidenceRow.id],
       );
       if (!updated) {
         res.status(409).json({

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { ConfirmFields, type ConfirmField } from './confirm/ConfirmFields';
+import { EVIDENCE_FIELD_LABEL, reasonRepeats, repeatedPairs, summaryRepeatsQuote, SUMMARY_QUOTE_WARNING, type EvidenceTexts } from './confirm/repeats';
 import { apiFetch } from '../api/http';
 import { useActor } from '../actor/ActorContext';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
@@ -37,11 +39,16 @@ interface Row extends EvidenceFormShown {
   under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean; value_outcome_id: string; metric: string }[];
   superseded_about: string | null;
 }
-function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice, confirm }: {
+function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice, confirm, reasonCheck }: {
   institutionId: string; path: string; submitLabel: string; provenance: ReactNode; extraFields?: ReactNode;
   extraBody?: () => Record<string, unknown>; extraUnmet?: string[]; onDone: () => void; simulatedChoice?: boolean;
-  /** Steward safety (Brad, 5 Nov 2026): what will be recorded, naming the row and its short id, before it is. */
-  confirm?: (summary: string) => ReactNode;
+  /**
+   * Steward safety (Brad, 5 Nov 2026): what will be recorded, naming the row and its short id, before it is. S4 (LVRF_PLAN
+   * §23): every field in full, with its count (ConfirmFields); without this, the form's own confirmation of a new source.
+   */
+  confirm?: (c: { fields: ConfirmField[]; warnings: string[] }) => ReactNode;
+  /** S4: a reason given with the act may not repeat a field of the old row or of the new one (the 15 Nov supersede). */
+  reasonCheck?: { label: string; reason: string; old: EvidenceTexts };
 }) {
   const [kind, setKind] = useState('');
   const [summary, setSummary] = useState('');
@@ -50,8 +57,29 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
   const [simulated, setSimulated] = useState('false');
   const about = useAbout(institutionId);
   const form = useEvidenceForm({ allowed: ['quote', 'locator'], kind, sourceReference: reference });
+  // S4 (LVRF_PLAN §23): every field as it will be sent, for the confirmation and for the repeated-value rule.
+  const fb = form.body() as { evidence_form?: string; quote_text?: string; how_read?: string; locator?: { document: string; value: number; scale: string; table?: string; row?: string; column?: string } };
+  const texts: EvidenceTexts = { summary: summary.trim(), provenance: origin.trim(), source_reference: reference.trim(), quote_text: fb.quote_text, how_read: fb.how_read };
+  const repeatsReason = reasonCheck && reasonCheck.reason.trim() !== ''
+    ? reasonRepeats(reasonCheck.reason, [{ which: 'the row it supersedes', v: reasonCheck.old }, { which: 'the new row', v: texts }]) : null;
   const unmet = [...(kind === '' ? ['choose the kind'] : []), ...(summary.trim() === '' ? ['write the summary'] : []),
-    ...(origin.trim().length < 12 ? ['state where it came from, in at least 12 characters'] : []), ...form.unmet, ...about.unmet, ...extraUnmet];
+    ...(origin.trim().length < 12 ? ['state where it came from, in at least 12 characters'] : []), ...form.unmet, ...about.unmet, ...extraUnmet,
+    ...repeatedPairs(texts), ...(repeatsReason && reasonCheck ? [`${reasonCheck.label} repeats ${repeatsReason}: say it in words of your own`] : [])];
+  const loc = fb.locator;
+  const confirmFields: ConfirmField[] = [
+    { label: 'Kind', value: kind === '' ? '' : label(EVIDENCE_KIND, kind) },
+    { label: EVIDENCE_FIELD_LABEL.summary, value: texts.summary },
+    { label: EVIDENCE_FIELD_LABEL.provenance, value: texts.provenance },
+    { label: 'Citation, export ID or URL', value: texts.source_reference },
+    { label: 'What it is about', value: about.describe() },
+    { label: 'What it rests on', value: fb.evidence_form === 'quote' ? 'A quote' : fb.evidence_form === 'locator' ? 'A located cell' : fb.evidence_form === 'statement' ? "A person's statement" : '' },
+    ...(fb.evidence_form === 'quote' ? [{ label: EVIDENCE_FIELD_LABEL.quote_text, value: fb.quote_text }] : []),
+    ...(loc ? [{ label: 'Document', value: loc.document }, { label: 'Value', value: String(loc.value) }, { label: 'Scale', value: loc.scale },
+      ...(loc.table ? [{ label: 'Table', value: loc.table }] : []), ...(loc.row ? [{ label: 'Row', value: loc.row }] : []), ...(loc.column ? [{ label: 'Column', value: loc.column }] : [])] : []),
+    ...(fb.evidence_form === 'quote' || fb.evidence_form === 'locator' ? [{ label: EVIDENCE_FIELD_LABEL.how_read, value: fb.how_read }] : []),
+    ...(simulatedChoice ? [{ label: 'Simulated', value: simulated === 'true' ? 'Yes' : 'No' }] : []),
+  ];
+  const warnings = summaryRepeatsQuote(texts) ? [SUMMARY_QUOTE_WARNING] : [];
   return (
     <GovernedForm<{ evidence_id: string }>
       path={path} provenanceLabel="What this records" provenance={provenance}
@@ -76,7 +104,9 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
         {extraFields}
       </div>}
       canSubmit={unmet.length === 0} unmet={unmet}
-      confirm={confirm ? confirm(summary.trim()) : undefined}
+      confirm={confirm ? confirm({ fields: confirmFields, warnings })
+        : <ConfirmFields lead={<>Record this source on this account. It supports <strong>no outcome</strong> and is recorded <strong>unverified</strong>; a person verifies it by opening the source.</>}
+            fields={confirmFields} warnings={warnings} />}
       buildBody={() => ({ kind, summary: summary.trim(), provenance: origin.trim(), about: about.body(), ...form.body(),
         ...(reference.trim() !== '' ? { source_reference: reference.trim() } : {}),
         ...(simulatedChoice && simulated === 'true' ? { simulated: true } : {}), ...(extraBody?.() ?? {}) })}
@@ -138,7 +168,7 @@ function OpenSource({ row, onDone }: { row: Row; onDone: () => void }) {
             <textarea rows={2} className={I} value={why} onChange={(ev) => setWhy(ev.target.value)} data-testid="open-source-why" /></label>}
         </div>}
         canSubmit={unmet.length === 0} unmet={unmet}
-        confirm={<span data-testid="confirm-text">Record that you opened {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;: {yes ? 'the source says what it states, so it reads source-verified' : 'the source does not support it, so it stays unverified'}. An opening is final.</span>}
+        confirm={<span data-testid="confirm-text">Record that you opened {row.id.slice(0, 8)}, &ldquo;{row.summary}&rdquo;: {yes ? 'the source says what it states, so it reads source-verified' : 'the source does not support it, so it stays unverified'}. An opening is final.</span>}
         buildBody={() => ({ source_verified: yes, ...(yes && attestation ? { attester_document: document } : {}), ...(yes && needsReading ? form.body() : {}), ...(yes ? {} : { reason: why.trim() }) })}
         submitLabel="Record the opening" onSuccess={onDone} renderSuccess={() => <>Recorded.</>} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
@@ -173,7 +203,7 @@ function CorrectLink({ row, link, notSteward, onDone }: { row: Row; link: Row['l
           <label className="block"><span className={L}>Why</span>
             <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="correct-link-reason" /></label>
         </div>}
-        confirm={<span data-testid="confirm-text">Correct {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, on {link.metric}: from {label(SUPPORTS, link.supports)} to {label(SUPPORTS, supports)}.</span>}
+        confirm={<span data-testid="confirm-text">Correct {row.id.slice(0, 8)}, &ldquo;{row.summary}&rdquo;, on {link.metric}: from {label(SUPPORTS, link.supports)} to {label(SUPPORTS, supports)}.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ supports, reason: reason.trim() })}
         submitLabel="Withdraw and correct" onSuccess={onDone} renderSuccess={() => <>Corrected.</>} />
@@ -202,7 +232,7 @@ function WithdrawLink({ row, link, notSteward, onDone }: { row: Row; link: Row['
         provenance={<p className="m-0 text-[12.5px] text-ink">This <strong>withdraws</strong> the current link of this row to {link.metric}, with <strong>no replacement</strong>: who, when and why. It stays on the record, struck through. <strong>No sealed run changes.</strong></p>}
         fields={<label className="block"><span className={L}>Why</span>
           <textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="withdraw-link-reason" /></label>}
-        confirm={<span data-testid="confirm-text">Withdraw {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, from {link.metric}: it supports {label(SUPPORTS, link.supports)} now, and will support nothing.</span>}
+        confirm={<span data-testid="confirm-text">Withdraw {row.id.slice(0, 8)}, &ldquo;{row.summary}&rdquo;, from {link.metric}: it supports {label(SUPPORTS, link.supports)} now, and will support nothing.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ reason: reason.trim() })}
         submitLabel="Withdraw the link" onSuccess={onDone} renderSuccess={() => <>Withdrawn.</>} />
@@ -222,7 +252,7 @@ function WithdrawVerification({ row, notSteward, onDone }: { row: Row; notStewar
         path={`/api/evidence/${row.id}/withdraw-verification`} provenanceLabel="What this records" disabledReason={notSteward}
         provenance={<p className="m-0 text-[12.5px] text-ink">That this evidence is no longer verified, by you, with your reason. <strong>No sealed run changes</strong>; the next run reads it unverified. Only an opening can verify it after this.</p>}
         fields={<label className="block"><span className={L}>Why</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="withdraw-verification-reason" /></label>}
-        confirm={<span data-testid="confirm-text">Withdraw the verification of {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;: it reads unverified from now on, and only an opening can verify it again.</span>}
+        confirm={<span data-testid="confirm-text">Withdraw the verification of {row.id.slice(0, 8)}, &ldquo;{row.summary}&rdquo;: it reads unverified from now on, and only an opening can verify it again.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
         buildBody={() => ({ reason: reason.trim() })}
         submitLabel="Withdraw the verification" onSuccess={onDone} renderSuccess={() => <>Withdrawn.</>} />
@@ -242,7 +272,10 @@ function Supersede({ row, institutionId, notSteward, onDone }: { row: Row; insti
         extraFields={<label className="block"><span className={L}>Why it is superseded</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="supersede-reason" /></label>}
         extraBody={() => ({ reason: reason.trim() })}
         extraUnmet={reason.trim().length < 12 ? ['say why, in at least 12 characters'] : []}
-        confirm={(next) => <span data-testid="confirm-text">Supersede {row.id.slice(0, 8)}, &ldquo;{row.summary.slice(0, 80)}&rdquo;, with a new row: &ldquo;{next.slice(0, 80)}&rdquo;, recorded unverified. Its links and its mark move to the new row.</span>}
+        reasonCheck={{ label: 'Why it is superseded', reason, old: { summary: row.summary, provenance: row.provenance, source_reference: row.source_reference, quote_text: row.quote_text, how_read: row.how_read } }}
+        confirm={({ fields, warnings }) => <ConfirmFields
+          lead={<>Supersede {row.id.slice(0, 8)}, &ldquo;{row.summary}&rdquo;, with the new row below, recorded unverified. Its links and its mark move to the new row.</>}
+          fields={[...fields, { label: 'Why it is superseded', value: reason.trim() }]} warnings={warnings} />}
         onDone={onDone} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
     </div>

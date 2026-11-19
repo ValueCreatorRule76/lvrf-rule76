@@ -389,6 +389,14 @@ export const businessMetrics = pgTable('business_metrics', {
    */
   industryMeasureId: uuid('industry_measure_id')
     .references((): AnyPgColumn => industryMeasures.id, { onDelete: 'restrict' }),
+  /**
+   * S4 (3.1; LVRF_PLAN §23, Brad 19 Nov 2026): the evidence row holding the note the pack basis was set with. The
+   * basis note was an unlinked evidence row, found only by its text; this names it, so hardening section 37's
+   * business_metrics_basis_note_own can compare it with the entry's name and the capability's claim on the entry.
+   * Nullable: the metrics given a basis before 0052 keep NULL, and their notes stay as recorded.
+   */
+  packBasisEvidenceId: uuid('pack_basis_evidence_id')
+    .references((): AnyPgColumn => evidence.id, { onDelete: 'restrict' }),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
@@ -663,6 +671,18 @@ export const assessments = pgTable('assessments', {
 
 /* ================================================================== */
 /* Evidence                                                           */
+
+/**
+ * S4 (LVRF_PLAN §23): two free-text values may not be the same text. Normalised as server/lib/repeatedFields.ts
+ * normalises: trimmed, runs of whitespace collapsed to one space, lower-cased. Each term is definite under NULL.
+ */
+function normalised(c: AnyPgColumn) {
+  return sql`lower(regexp_replace(btrim(${c}), '[[:space:]]+', ' ', 'g'))`;
+}
+function fieldsDiffer(name: string, a: AnyPgColumn, b: AnyPgColumn) {
+  return check(name, sql`coalesce(${normalised(a)}, '') = '' OR coalesce(${normalised(b)}, '') = '' OR ${normalised(a)} <> ${normalised(b)}`);
+}
+
 /* ================================================================== */
 
 export const evidence = pgTable('evidence', {
@@ -789,6 +809,20 @@ export const evidence = pgTable('evidence', {
   check('evidence_attestation_is_complete',
     sql`(${t.attestedByPersonId} IS NULL AND ${t.attestedAt} IS NULL)
         OR (${t.attestedByPersonId} IS NOT NULL AND ${t.attestedAt} IS NOT NULL)`),
+  /**
+   * S4 (3.1; LVRF_PLAN §23; Brad, 19 Nov 2026, D2, D4, D5): a field may not repeat another. The nine pairs of the
+   * five free-text fields, compared trimmed, whitespace collapsed and lower-cased; summary against the quote is the
+   * one pair exempt (the form warns instead). Definite under NULL: an empty or NULL value passes.
+   */
+  fieldsDiffer('evidence_summary_not_provenance', t.summary, t.provenance),
+  fieldsDiffer('evidence_summary_not_reference', t.summary, t.sourceReference),
+  fieldsDiffer('evidence_summary_not_how_read', t.summary, t.howRead),
+  fieldsDiffer('evidence_provenance_not_reference', t.provenance, t.sourceReference),
+  fieldsDiffer('evidence_provenance_not_quote', t.provenance, t.quoteText),
+  fieldsDiffer('evidence_provenance_not_how_read', t.provenance, t.howRead),
+  fieldsDiffer('evidence_reference_not_quote', t.sourceReference, t.quoteText),
+  fieldsDiffer('evidence_reference_not_how_read', t.sourceReference, t.howRead),
+  fieldsDiffer('evidence_quote_not_how_read', t.quoteText, t.howRead),
   index('evidence_institution_idx').on(t.institutionId),
   index('evidence_verified_idx').on(t.sourceVerified),
   index('evidence_attested_idx').on(t.attestedByPersonId),
