@@ -5400,3 +5400,151 @@ reaches every print.
 **Closed (19 Nov 2026).** S4 is deployed at `7f889b4`, with the TOC at 972 and 227 triggers, and Gate C is clean. The
 deploy script stopped silently at step 7, on a start-up race; the API was healthy. A fix is proposed in
 `BUILD_STATUS.md`, "S4 closed", for Brad's approval.
+
+## 24. 3.1 slice S5: the account frame (planned 19 Nov 2026; **plan only, for Brad's approval; mock-ups first, no UI code until Brad approves them**)
+
+**The ruling it builds** (`docs/LVRF_3.0_CRITICAL_PATH.md`, 3.1 list, "The War Room and account focus"; Brad, 15 Nov
+2026, approved in this shape):
+- The flat, shareable routes stay underneath.
+- An account frame on top carries the chosen account through every page (header, runs, case, POV, research) until it
+  is left.
+- The War Room never sums or averages money across accounts.
+- Mock-ups before code, as UX-1.
+
+This **reverses** the design's navigation decision (`LVRF_DESIGN_PACKS_ADMIN_VALUE_CASE.md` §4: accounts as the front
+door, flat object-keyed routes, no stage sequence), as ruled. The revised build order (Brad, 19 Nov 2026) makes it S5,
+mock-ups first. The War Room itself is S6, not this slice.
+
+**Value spine:** all seven stages, for one account. The frame is how the operator walks `baseline → … → return` for the
+account in focus without losing it. It changes how pages are reached, not any rule, route, table, trigger or CHECK.
+
+### 1. What the code holds today (read 19 Nov 2026, `0f57667`; read only)
+
+- **Navigation:**
+  - `AppHeader` holds `NavBar`, with four links (Accounts, Packs, Runs, Policies), and `ActorBar`;
+  - below 640 px the two fold into one panel;
+  - no page knows a "current account" beyond its own record.
+- **Where each page's account comes from today**, each from its own read (no new read is needed to know it):
+
+  | Page | Its account |
+  |---|---|
+  | `/accounts/:id` (the six-step workspace) and `/accounts/:id/pov` | the id in the URL |
+  | `/runs/:id` | the run's `institution_id` |
+  | `/runs/:id/case` | `account` |
+  | `/engagements/:id/snapshots` | the engagement's `institution_id` |
+  | `/lineage/:table/:id` | none in general |
+  | `/runs`, `/packs`, `/packs/:slug`, `/policies` | none: they list across accounts or are the tenant's |
+- **Where an account stands** is already derived in `client/src/lib/workspaceStatus.ts`, from `/walk`, `/pov` and
+  `/research`. Accounts home uses it, with `/view`, at up to four reads per account (L34).
+- **CVAF's pattern** (read only, `cvaf-rule76`, no client data):
+  - an account-scoped route tree, `/ecc/:accountId/…`, under `ECCLayout`;
+  - an `AccountContext` provider that holds the account and gates every page on it;
+  - a sidebar of the account's stages;
+  - "Back to the War Room" to leave.
+
+  LVRF keeps its flat routes, as ruled. **So S5 takes CVAF's held focus and its leave, not its route tree.**
+- **The 3.1 item that rides with the frame** (S1's Gate A, Brad 15 Nov 2026): "Classify as…" on an unclassified customer
+  account, with the account frame.
+
+### 2. What S5 builds (if approved as recommended)
+
+1. **The frame:** a band under the header, on screen only (`print:hidden`; the printed case and POV are untouched,
+   S3), on every page while an account is in focus.
+   - **Left, the account:**
+     - its name;
+     - its industry pack;
+     - for a reference example, the marker's label: "Reference example, not a customer engagement";
+     - its computed confidence (n / 100, band);
+     - where it stands: the workspace's current step, in words.
+   - **Right, the account's pages:**
+     - Workspace;
+     - Research (step 1);
+     - Runs: this account's;
+     - Value case: the latest locked run's, both lenses;
+     - Point of view.
+   - **Last, "Leave the account",** back to Accounts home (the War Room, after S6).
+   - **No money in the frame** (the War Room's rule, design §4.3).
+2. **How focus is set and kept:**
+   - opening an account sets it;
+   - **any page whose own record belongs to an account frames that account.** A shared link to another account's run
+     frames that account and says so, once ("You're now in {account}"); it never shows the run under the held account;
+   - a page with no account of its own (Runs, Packs, Policies, a lineage row with none) keeps the held focus;
+   - "Leave" clears it.
+3. **Runs, with an account in focus,** lists that account's runs, with "Show every account's runs" one click away.
+   Packs and Policies are unchanged under the frame. A link to a pack the account is classified into is highlighted.
+4. **Phone width (390):** the frame is one line (the name, then "▸" for its pages), with no sideways scroll (UX-1
+   finding 7).
+5. **"Classify as…"** on an unclassified customer account, from the frame (D6). It is the shared component S1 built,
+   with its route and act unchanged.
+
+### 3. Decisions for Brad
+
+- **D1, where focus is held. Recommended: per tab** (`sessionStorage`).
+  - Two tabs can hold two accounts. Nothing is stored on the server; no route, table or act.
+  - Option: per browser (`localStorage`), so it survives closing the tab.
+- **D2, a page whose record belongs to another account. Recommended: the page's own account wins.** The frame switches
+  and says so once. The rule: no page ever shows one account's record under another's frame.
+- **D3, Runs with an account in focus. Recommended:** that account's runs, with "Show every account's runs".
+  - Option: always every run, with the account's runs marked.
+- **D4, how the frame learns where the account stands. Recommended: reuse `workspaceStatus.ts`'s reads**
+  (`/view`, `/walk`, `/pov`, `/research`). No API change, so equivalence stays all-identical.
+  - The reads happen once when the account changes and again after any write on the page, not on every navigation.
+  - Option: one new read, `GET /api/institutions/:id/frame`, which is cheaper. It is a new route, named in equivalence
+    and tenant-checked (P3).
+- **D5, the tenant's own account** (Skillsoft, `is_tenant_self`, still the old record view, L33). **Recommended:** it
+  gets the frame like any account, with its "where it stands" read from `TenantChain`.
+- **D6, "Classify as…" in S5. Recommended: yes,** as ruled, "with the account frame". It reuses S1's component, route
+  and act. Option: leave it to a later slice.
+- **D7, the mock-ups. Recommended:** static pages in the repo's mock-up style (`design/mockups/`, `tokens.css`,
+  `mock.css`), with **fictional accounts only**, each also printed to PDF in `~/lvrf-backups/s5-mockup/`
+  (`chmod 600`). The screens:
+  1. the workspace in focus;
+  2. a run page in focus;
+  3. the value case on screen, in focus;
+  4. the POV in focus;
+  5. Runs, filtered and with every account;
+  6. a shared link to another account's run, with the frame switching and saying so;
+  7. a reference-example account in focus;
+  8. the frame at 390;
+  9. "Classify as…" from the frame (D6).
+
+### 4. Conflicts to name (CLAUDE.md wins; each is named, none resolved silently)
+
+- **Design §4's navigation decision** is reversed by Brad's 15 Nov ruling. The flat routes stay, so links already sent
+  keep working.
+- **Q7 (24 Oct 2026): the War Room at `/book`, with a band on `/`.** That is S6's question. S5's "Leave" goes to
+  Accounts home, which S6 may change to the War Room.
+- **The pilot window** (the revised build order): no large navigation change deploys during 4–15 Jan 2027. The rule is
+  written for S6, but **S5 is a navigation change too.** **For Brad:** S5 deploys before 4 Jan or waits until after
+  15 Jan.
+
+### 5. Gate A (planned; after the mock-ups are approved)
+
+- **`verify_s5_account_frame.sh`, through the page as the steward, by session, on clones of the prod copy:**
+  - the frame on every account page, with its fields read from the record;
+  - focus held across Runs, Packs and Policies;
+  - a shared link to another account's run: the frame switches and says so, and the run never shows under the held
+    account;
+  - "Leave" clears the focus;
+  - two tabs hold two accounts (D1);
+  - at 390 no page scrolls sideways;
+  - keyboard: the frame's links are reachable and show focus;
+  - contrast at AA, computed;
+  - no hex (`check_design_tokens`).
+- **The printed case and POV unchanged:** S3's checks pass as they stand, and the frame never prints.
+- **Breaks, each with its positive control:**
+  - the frame showing the held account on another account's run;
+  - focus kept after "Leave";
+  - the frame printing;
+  - a sideways scroll at 390;
+  - (D6) "Classify as…" offered on a classified account.
+- **The full regression; equivalence** on every GET: all identical under D4 as recommended, the new route named
+  otherwise.
+
+### 6. Gate B, the act and Gate C (planned)
+
+- **Gate B:** deploy only, with no migration. The TOC stays 972 and the triggers 227; the bundle is new.
+- **Brad's act:** none is needed; it writes nothing. Brad walks one account through the frame on prod and looks.
+- **Gate C (read-only):** no row changed by the deploy; under D6, any classification made is Brad's own act, through
+  the page.
+- **About half a day for the mock-ups; about 2 days for the build after they are approved.**
