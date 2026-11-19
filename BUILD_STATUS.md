@@ -15859,3 +15859,39 @@ A deploy only: no migration, so no backup is needed for a schema change (rule 8)
    Expect `body-parser@2.4.0` and `qs@6.17.1`.
 
 **Gate C (read-only):** no row changed by the deploy; TOC 972, 227 triggers; drift none; ownership clean.
+
+### Ops change closed: deployed at `4e5c13b`; Gate C clean — 19 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- `main` and the box at `4e5c13b`.
+- Deploy:
+  - **`lvrf-api is active and answering (after 6 refused tries at 0.5s)`**: about 3 s, the race S4's deploy lost, now
+    waited out;
+  - health 200, `origin_check=configured`, `actor_header=off`, `ai_research` off;
+  - both 401 checks, the site 401;
+  - bundle **`index-8gKwKIMx.js` / `index-xp3nTj2A.css`**, unchanged;
+  - **`deploy OK`.** The script now reaches its end.
+- `npm ls` on the box: **`body-parser@2.4.0`, `qs@6.17.1`.**
+- Brad saw only the deploy's last 25 lines, so the `npm ci` warning was checked from the box afterwards (below).
+
+**Checked from the box, read-only (over ssh with the LVRF key alone), as Brad asked:**
+- **The argon2 allow-scripts warning no longer appears.** `npm ci --dry-run` in `/srv/lvrf` prints no `allow-scripts`
+  line at all: argon2 is covered by `"argon2@0.45.1": false`, and the Mac's one remaining line (`fsevents`) is never
+  installed on Linux. On the Mac, the dry run was checked first to change nothing in `node_modules`.
+- **argon2 loads.** In `/srv/lvrf`, `argon2` hashes `$argon2id$v=19…` from its shipped `linux-x64` prebuild (no `build/`
+  directory: the install script did not run), verifies the right password `true` and a wrong one `false`.
+  - The running API imports argon2 in `auth.js` and computes its dummy argon2id hash at start-up. It started at
+    22:26:01 UTC with **0 error lines** in its journal since.
+- **Sign-in itself has not been exercised on prod since the deploy:** 0 sessions created since 22:26. A test sign-in
+  would write a session row on prod, so it was not done (rule 9). **Brad's next sign-in is the live proof.**
+
+**Gate C (read-only, as `lvrf_app`):**
+- **Since the deploy (22:26:01 UTC):** 0 governance acts (still 228, the last at 15 Nov 21:12:17), 0 refusals, 0 audit
+  rows, 0 print requests, 0 sessions.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052_s4_form_confirmation`; 1,353 objects match
+  `0052_snapshot.json`); ownership clean.
+- **TOC 972** (Brad). No migration ran, so it is S4's post-deploy dump's 972; `lvrf_app` cannot dump the database
+  (no `SELECT` on the migrations sequence), so it was not re-measured from here.
+
+**The ops change is closed.** L27's `body-parser` and `qs` are fixed on prod; `drizzle-kit`'s four remain (rule 7).

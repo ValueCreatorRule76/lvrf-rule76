@@ -202,7 +202,8 @@ cut line applied first.
      - the small items: the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05,
        and the confidence legend's markers as SVG (Brad, 19 Nov 2026).
      - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script
-       fix, as one ops change (`BUILD_STATUS.md`, "Ops: the deploy script's silent stop fixed").
+       fix, as one ops change (`BUILD_STATUS.md`, "Ops: the deploy script's silent stop fixed"). **Closed
+       (19 Nov 2026):** deployed at `4e5c13b`, Gate C clean.
 
   S2's Gate B step 8 and its act session stay deferred until Brad funds the API.
 
