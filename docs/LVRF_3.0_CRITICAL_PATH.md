@@ -292,6 +292,15 @@ cut line applied first.
   `sent` row for a cleared account. The fix then: the research process builds its own prompt from a root-owned copy of
   the composer, so "the prompt is current" and the published-rows rule (D5) are its checks too, not the API's alone.
 
+- **A verified case's status line on every printed page** (Brad, 19 Nov 2026, from S3's Gate A; not in S3).
+  - **Today:** a verified case on customer-side evidence prints no banner, because the case prints one only when there
+    is something to disclose. Its verification shows only in the closing disclaimer, while the run page shows a
+    VERIFIED banner (`Workbench.tsx`).
+  - **The item:** every page of a verified case carries a status line, matching the run page's VERIFIED banner. For
+    example: "VERIFIED: measured result verified by {name, role} on {date} against {system}".
+  - **Condition (Brad):** it ships before any verified case is printed for a customer.
+  - S3's fixture, a verified case the CFO lens shows (`scripts/lib/s3_cfo_fixture.sh`), is the test bed.
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the

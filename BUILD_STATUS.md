@@ -15224,3 +15224,86 @@ dependency. Plan, rulings and the mock-up review: `docs/LVRF_PLAN.md` §22.
 
 **Gate B (planned):** deploy only, with no migration. The TOC stays 969 and the triggers 226; a new bundle carries the
 fonts. **Brad's act:** print run 3 under both lenses and a POV, and look at every page; the stage-10 check follows.
+
+#### Gate B (not run; Brad's pastes), and Brad's print acts — S3 Gate A accepted by Brad, 19 Nov 2026
+
+Deploy only: no migration, no hardening change, no server change. Every step is Brad's paste; nothing here was run on
+the box. Stop at any step whose expectation is not met.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s3-print-family && git push && git log --oneline -4
+   ```
+   Expect the merge to fast-forward from `8ce809b` (the branch's base), and three commits on top:
+   - the S3 code, `ecbae70`;
+   - the revised build order, `357233d`;
+   - this docs commit (the verified-case item on the 3.1 list, and these steps), the head.
+2. **On the box, pull, then a backup before the deploy** (rule 8's habit; nothing migrates):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s3-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the same head as step 1, and the last line **969**, as after S2's Gate B: S3 adds no object. Stop if it
+   differs.
+3. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-DabDtny_.js`** / **`index-CKuxf99-.css`** (built from this code on the dev Mac, 19 Nov 2026);
+   - steps 5b, 5c and 5d passed: drift none, with 52 migrations, newest 0051;
+   - health 200, `origin_check` configured, `actor_header` off, `ai_research` off;
+   - the API fail-closed (401 with no session, and 401 with the header).
+4. **The fonts are served from the bundle, and nothing loads from Google:**
+   ```
+   cd /srv/lvrf && find client/dist/fonts -type f | sort && grep -c 'fonts.googleapis\|fonts.gstatic' client/dist/index.html client/dist/assets/*.css
+   ```
+   Expect 11 files: 8 `.ttf` and 3 `OFL.txt`, under `barlow`, `barlow-condensed` and `bebas-neue`. Expect each
+   count line to end in `:0`.
+5. **The database is as before** (read-only):
+   ```
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+   ```
+   Expect **226**.
+
+**Brad's print acts, after Gate B (rule 10: Brad's, through the page).** Three prints, each saved as a PDF in
+`~/lvrf-backups/`. The case's "Print" button records a print request (a `record_documents` row, Brad's) and then opens
+the browser's print. The POV has no button, so its print is ⌘P and records no row.
+
+**In Chrome's print dialog, each time:**
+- Destination: **Save as PDF**;
+- Paper size: **Letter**;
+- Margins: **Default**;
+- Scale: **Default**;
+- under More settings: **Headers and footers off**, **Background graphics on**. The ink cover needs background
+  graphics.
+
+1. **Run 3 under the default lens.** Runs → Skillsoft's run 3 (`0061c95f`) → its value case (the default lens) →
+   **Print** → save as `~/lvrf-backups/skillsoft_run3_default_s3.pdf`.
+2. **Run 3 under the CFO lens.** Run 3's header → "under the CFO lens" → **Print** → save as
+   `~/lvrf-backups/skillsoft_run3_cfo_s3.pdf`. It is refused; the refusal prints in its ink box.
+3. **Curia's POV**, the one that carries the marker's citation on its cover (Brad's ruling 1). Accounts → Curia →
+   Point of view → **⌘P** → save as `~/lvrf-backups/curia_pov_s3.pdf`.
+
+Then look at every page. Each print opens with the ink cover; on 15 Nov the default and CFO prints ran 3 and 2 pages,
+so expect about one more page each.
+
+**After the acts: the stage-10 check (mine, read-only; the PDFs are read with `pdftotext`/`pdffonts` and never
+modified, re-saved or copied).**
+- **On every page:**
+  - the OUTSIDE-IN HYPOTHESIS and UNVERIFIED banners (Curia: also the reference-example line);
+  - the full hash `fb2917d18928c1eda1f5735d11ff402c01cea13f5282ac02fc98f2b30c0c372c`, equal to run 3's stored
+    `payload_hash`, in the record line at the foot (Curia: each engagement's latest run's full hash);
+  - "Page n of N";
+  - no browser header or footer.
+- **On the covers:**
+  - the cover carries the same banners;
+  - the ink is unbroken;
+  - on Curia's, the full citation is on page 1.
+- **Fonts:** `pdffonts` shows Bebas Neue, Barlow and Barlow Condensed embedded.
+- **The close is last:** "About this document", then the tagline.
+- **The 15 Nov checks still hold:** "one point of Dollar Retention Rate (trailing twelve months)" where the rate is
+  asked, and no short id or row code.
+
+**Gate C (read-only):**
+- 2 new `record_documents` rows, Brad's: run 3, one `general` and one `cfo`, the CFO row naming the lens policy;
+- no other row changed: no audit row but those two print requests, and no refusal;
+- every sealed run byte-identical (`check_run_hashes`);
+- TOC 969, triggers 226, drift none.
