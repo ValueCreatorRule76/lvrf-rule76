@@ -5186,3 +5186,140 @@ case prints a banner only when there is something to disclose. It is the deploye
 kicker, tagline and ink band: Barlow Condensed under `font-display: block`, and Background graphics off. Fixed forward
 (`s3-print-fix`, deployed at `81cc5d8`): Brad's Incognito reprints, with Background graphics off, pass every check, and
 Gate C is clean. Record: `BUILD_STATUS.md`, "S3 closed".
+
+## 23. 3.1 slice S4: steward forms confirm every field in full, and a field may not repeat another (planned 19 Nov 2026; **for Brad's approval**)
+
+**The item it builds** (`docs/LVRF_3.0_CRITICAL_PATH.md`, 3.1 list, from S1's act session; Brad, 15 Nov 2026): steward
+forms that write to prod confirm every field in full, and a field may not repeat another. It is first in the revised
+build order (Brad, 19 Nov 2026), as a small slice before the pilot.
+
+**Value spine:** `attach`. These forms record the evidence and the pack basis that attach an account's case to its
+sources (rule 5: provenance is required on evidence). Every later stage reads what they record, so an error here
+reaches every print.
+
+### 1. What the code holds today (read 19 Nov 2026, `ac95a49`; prod read-only)
+
+- **The three departures it answers** (prod, 15 Nov 2026):
+  - **`eed11e02`:** the pack-basis note is the capability's own claim on that entry, character for character
+    (checked on prod, 19 Nov 2026). The basis form has no confirmation, and the note is compared with nothing.
+  - **`c56a3d33`:** "What it states" holds the last 340 of its 557 characters. "Record a source…" records with no
+    confirmation at all, so nothing showed the cut-off start.
+  - **The `supersede` act that made `673861eb`:** its reason is the how-read text of the row it supersedes, `c56a3d33`
+    (checked on prod). The supersede confirmation quotes each row's summary cut to 80 characters and never shows the
+    reason.
+- **Confirmations:** `GovernedForm`'s `confirm` shows a statement before "Confirm", in about 41 of 63 governed forms.
+  - **13 of them cut a value to 80 characters** (`summary.slice(0, 80)`), in `AccountEvidence`, `OutsideInWalk`,
+    `PovAuthoring`, `Workbench` and `CaseInputs`.
+  - The 17 `slice(0, 8)` are short ids, as ruled; they stay.
+- **About 22 forms have no confirmation.** Among them, the ones that record free text are:
+  - "Record a source…";
+  - the pack basis;
+  - the claim;
+  - "Record the opened citation" (walk);
+  - outcome evidence (`AddEvidenceCard`);
+  - "State the hypothesis";
+  - "Record the summary";
+  - "Record the erratum";
+  - "Record fact".
+- **The repeated-value rule exists only in S2's routes** (`server/research/aiResearch.ts`: a clearance reason against
+  the subject's name or the disclosure; a withdrawal reason against the clearance's). Nothing generic.
+- **Prod's 49 evidence rows hold no repeat** between any two of `summary`, `provenance`, `source_reference`,
+  `quote_text`, `locator` and `how_read`: 0 for every pair, read-only, 19 Nov 2026. So a CHECK across them would
+  validate on today's rows.
+
+### 2. What S4 builds (if approved as recommended)
+
+1. **A confirmation that shows every field in full** (client): one shared piece, `ConfirmFields`.
+   - It lists each field by its form label, with the value exactly as it will be sent: whitespace kept, no slice, no
+     ellipsis.
+   - Each value carries its character count, which is what would have shown "340 characters" against a 557-character
+     paste.
+   - It names the row and its short id, as today.
+   - `GovernedForm` is unchanged; the forms pass `ConfirmFields` as their `confirm`.
+2. **The three named forms get it** (D1):
+   - **"Record a source…"** (new). It shows every field:
+     - the kind;
+     - what it states;
+     - where it came from;
+     - the citation;
+     - what it is about;
+     - the evidence form, with its quote or locator and how it was read.
+   - **"Supersede…"** shows:
+     - the old row's what-it-states, in full;
+     - every field of the new row, in full;
+     - the reason, in full.
+   - **The pack basis** (new): the metric, the pack entry's name, and the note, in full.
+3. **Every confirmation that cuts a value quotes it in full:** the 13 `slice(0, 80)` (D1).
+4. **The route refuses a value identical to another field's** (server): one shared helper,
+   `server/lib/repeatedFields.ts`.
+   - **Comparison:** trimmed, with whitespace collapsed, case-insensitive, equality only (not "contains"). Empty values
+     are skipped.
+   - **The refusal:** 422 with a plain sentence naming both fields by their form labels, for example "How it was read
+     repeats What it states; say how it was read.", recorded in `refusals` like any route refusal.
+   - **Applied to:**
+     - the evidence routes (`POST /api/institutions/:id/evidence`, `POST /api/value-outcomes/:id/evidence`,
+       `POST /api/evidence/:id/supersede`): every pair among the six free-text fields (D2);
+     - supersede's reason against every field of the old row and of the new one (the `673861eb` case);
+     - the pack basis note against the capability's stored claim on that entry and the entry's name (D3; the
+       `eed11e02` case, which is not in the same request).
+5. **CHECKs on the evidence row for the same pairs** (D4; migration `0052`):
+   - each is definite under NULL (`coalesce`), with its plain sentence in `server/lib/plainChecks.ts`;
+   - prod's rows satisfy them today (§1).
+
+   The cross-table cases (an act's reason; the basis note against a claim) stay in the route, as S2's do.
+
+### 3. Decisions for Brad
+
+- **D1, scope. Recommended:** the three named forms, plus removing the 13 cuts.
+  - **Option:** also give a full confirmation to the other free-text forms without one: the claim, the walk's opened
+    citation, outcome evidence, the hypothesis, the summary, the erratum and the account fact. That is about twice
+    the client work, and their departures are not yet seen on prod.
+  - Recommended as a follow-up item, not S4.
+- **D2, which evidence pairs. Recommended: all 15 pairs of the six fields.**
+  - Consequence: a summary that quotes its source word for word is refused ("What it states repeats the quote"), and
+    the steward says what it states in their own words. Prod has 0 such rows.
+  - **Option:** exempt summary against quote.
+- **D3, the pack basis note against stored text. Recommended: yes,** against the capability's claim on the entry and
+  the entry's name. This is a step past "the same request", because the `eed11e02` paste came from a stored field.
+- **D4, CHECKs as well as the route. Recommended: yes.** `CLAUDE.md` prefers a constraint, and constraints survive
+  refactors. It costs a migration, so Gate B has the backup, migrate, `ownership.sql` and `hardening.sql` steps, and
+  the TOC grows by one entry per CHECK.
+  - **Option:** route only, as S2; Gate B then stays deploy-only.
+- **D5, the comparison. Recommended:** equality after normalising (trim, collapse whitespace, case-insensitive).
+  - "Contains" would catch a pasted superset, but it refuses honest cases, such as a how-read that names the quote it
+    read.
+
+### 4. Gate A (on clones of the 14 Nov copy; nothing on prod, rule 9)
+
+- **`scripts/verify_s4_form_confirmation.sh`, through the page as the steward, by session** (none by route):
+  - **For each of the three forms:**
+    - fill every field with long values (a 600-character what-it-states, multi-line text, curly quotes);
+    - the confirmation shows each field byte for byte as typed, with its count;
+    - "Back" returns to the fields unchanged;
+    - "Confirm" records exactly what was shown (the stored row against the confirmation, field by field).
+  - **The 13 confirmations** quote their value in full: a seeded 600-character summary, read from each.
+  - **Refusals:**
+    - each pair group, the supersede reason and the basis-note case is refused with its sentence, and recorded in
+      `refusals`;
+    - the same values, made different, are recorded;
+    - with D4, each CHECK refuses at the database, with a NULL-input refusal per CHECK (definite under NULL).
+- **Breaks, each with its positive control:**
+  - a `slice(0, 80)` put back in one confirmation;
+  - the helper removed from the evidence route (the CHECK then still refuses, under D4);
+  - the basis-note comparison removed (the `eed11e02` paste then records);
+  - a CHECK dropped (caught by the drift and plain-sentence checks);
+  - a confirmation that shows a value other than the one sent.
+- **The scripts that assert on today's confirmation text** are updated to the full text, with no lost assertion:
+  `verify_c2c`, `verify_steward_safety`, and the `c3_walk`, `c3b_walk`, `l41_walk`, `s1_walk` and `s2_walk` libraries.
+- **The full regression; equivalence** on every GET (no GET changes, so all identical); build and lint clean; drift,
+  CHECK and trigger counts.
+
+### 5. Gate B, the act and Gate C (planned)
+
+- **Gate B:** with D4, a migration (back up, migrate, `ownership.sql`, `hardening.sql`), then deploy. CHECKs 149 plus
+  D4's, the TOC from the latest schema, triggers 226. Without D4, deploy only.
+- **Brad's act:** none is needed. S4 records nothing of its own, and the prod forms are exercised the next time a source
+  is recorded (rule 9: nothing on prod to exercise the system). **Option:** Brad opens each form on prod and backs out
+  at the confirmation, recording nothing.
+- **Gate C (read-only):** no row changed by the deploy; CHECKs as planned; every sealed run byte-identical.
+- **About 1 day of work, or 1.5 with D4.**
