@@ -1,0 +1,90 @@
+/* S3 (3.1; LVRF_PLAN §22, approved by Brad 19 Nov 2026) — the D8 mock-up: the printed value case and POV in the
+   CVAF family. CVAF's printed business case is the pattern: an ink cover over light paper pages, Bebas headings, a
+   small-caps condensed kicker, a short gold rule, a stats row, tables with small-caps heads, a footer in the margin.
+   LVRF's tokens throughout (tokens.css, from CLAUDE.md); no hex here (scripts/check_design_tokens.mjs).
+   Barlow Condensed is self-hosted (Brad's condition 2): fonts/barlow-condensed/, its OFL.txt beside it. */
+
+@font-face { font-family: 'Barlow Condensed'; font-weight: 400; src: url('fonts/barlow-condensed/BarlowCondensed-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed/BarlowCondensed-SemiBold.ttf') format('truetype'); }
+
+:root { --condensed: 'Barlow Condensed', 'Barlow', sans-serif; }
+
+@page s3cover { size: letter; margin: 0; }
+@page s3body {
+  size: letter;
+  margin: 0.55in 0.6in 0.75in;
+  @bottom-right { content: 'Page ' counter(page) ' of ' counter(pages); font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 8pt; color: var(--ink-45); }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: var(--body); }
+.cover { page: s3cover; break-after: page; width: 8.5in; height: 11in; display: flex; flex-direction: column; }
+.body-page { page: s3body; }
+
+/* The banners: ONE element, the same on the cover and on every body page (Brad's condition 1). */
+.banners { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; }
+.banners div { border-bottom: 1px solid var(--rule); padding: 4px 4px; color: var(--ink-70); }
+.banners .unverified { border-bottom-color: var(--warning); color: var(--warning); }
+.cover .banners { background: var(--paper); padding: 0.45in 0.6in 0.12in; }
+
+/* The cover: ink, the title in two lines, the gold rule, the hash at the foot. */
+.cover .panel { flex: 1; background: var(--ink); color: var(--offwhite); padding: 1.1in 0.6in 0.5in; display: flex; flex-direction: column;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.cover .kicker { font-family: var(--condensed); font-weight: 600; font-size: 9pt; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); }
+.cover h1 { font-family: var(--display); font-weight: 400; font-size: 54pt; line-height: 0.92; letter-spacing: 0.01em; margin: 10pt 0 0; color: var(--offwhite); }
+.cover h1 .doc { display: block; color: var(--gold); }
+.cover .meta { margin-top: 14pt; font-size: 10pt; line-height: 1.5; color: var(--silver); max-width: 5.6in; }
+.cover .goldrule { width: 40pt; border-top: 1.6pt solid var(--gold); margin-top: 16pt; }
+.cover .lede { margin-top: 22pt; font-size: 12pt; line-height: 1.45; color: var(--offwhite); max-width: 5.6in; }
+.cover .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end; border-top: 0.6pt solid var(--ink-70); padding-top: 8pt; }
+.cover .foot .hash { font-family: var(--mono); font-size: 8pt; color: var(--silver); max-width: 5.4in; overflow-wrap: anywhere; }
+.cover .foot .pg { font-family: var(--mono); font-size: 8pt; color: var(--silver); white-space: nowrap; }
+
+/* Paper pages: the CVAF furniture, LVRF's tokens. */
+.kicker-p { font-family: var(--condensed); font-weight: 600; font-size: 8pt; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-ink); margin-top: 14pt; }
+h2.sec { font-family: var(--display); font-weight: 400; font-size: 19pt; letter-spacing: 0.03em; line-height: 1; margin: 3pt 0 0; }
+.hair { border-top: 0.6pt solid var(--rule); margin: 5pt 0 8pt; }
+p { font-size: 9.6pt; line-height: 1.45; margin: 0 0 6pt; }
+.small { font-size: 8.4pt; color: var(--ink-45); line-height: 1.4; }
+.stats { display: flex; border-top: 1.2pt solid var(--ink); border-bottom: 0.6pt solid var(--rule); margin: 8pt 0 12pt; }
+.stat { flex: 1; padding: 7pt 8pt 7pt 0; }
+.stat .v { font-family: var(--display); font-size: 25pt; line-height: 1; color: var(--ink); }
+.stat .v .u { font-family: var(--body); font-size: 9pt; color: var(--ink-45); }
+.stat .l { font-family: var(--condensed); font-weight: 600; font-size: 7.2pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-45); margin-top: 3pt; }
+.stat .s { font-size: 8pt; color: var(--ink-45); margin-top: 2pt; }
+table { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; }
+th { font-family: var(--condensed); font-weight: 600; font-size: 7.4pt; letter-spacing: 0.12em; text-transform: uppercase; text-align: left; color: var(--ink-45);
+  border-bottom: 1pt solid var(--ink); padding: 3pt 6pt 3pt 0; }
+td { font-size: 9pt; line-height: 1.4; border-bottom: 0.5pt solid var(--rule); padding: 4pt 6pt 4pt 0; vertical-align: top; }
+td.n { white-space: nowrap; }
+tr { break-inside: avoid; }
+.ask { font-size: 8.6pt; color: var(--ink-45); margin-top: 2pt; }
+.box { border: 0.6pt solid var(--rule); padding: 8pt 10pt; margin: 6pt 0 10pt; break-inside: avoid; }
+.box.ink { background: var(--ink); color: var(--offwhite); border-color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.box.ink .bh { font-family: var(--display); font-size: 14pt; letter-spacing: 0.03em; color: var(--gold); }
+.box.ink p { color: var(--offwhite); font-size: 9.2pt; margin: 4pt 0 0; }
+.box.ink .small { color: var(--silver); }
+.box.warn { border-left: 2.4pt solid var(--warning); }
+.tag { display: inline-block; font-family: var(--condensed); font-weight: 600; font-size: 7pt; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.5pt 3.5pt; border: 0.6pt solid currentColor; vertical-align: 1pt; }
+.tag.published { color: var(--healthy); }
+.tag.claimed { color: var(--warning); }
+.tag.none { color: var(--ink-45); }
+.chain { display: flex; align-items: stretch; margin: 6pt 0 10pt; border-top: 1.2pt solid var(--ink); }
+.chain > div { flex: 1; padding: 6pt 8pt 6pt 0; border-right: 0.5pt solid var(--rule); margin-right: 8pt; }
+.chain > div:last-child { border-right: 0; margin-right: 0; }
+.chain .l { font-family: var(--condensed); font-weight: 600; font-size: 7.2pt; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-ink); }
+.chain .t { font-size: 9pt; line-height: 1.35; margin-top: 2pt; }
+.close { margin-top: 18pt; border-top: 0.6pt solid var(--rule); padding-top: 8pt; break-inside: avoid; }
+.close .tagline { font-family: var(--display); font-size: 13pt; letter-spacing: 0.1em; color: var(--gold-ink); }
+.close .disc { font-size: 8pt; color: var(--ink-45); line-height: 1.45; margin-top: 3pt; }
+.mock-note { font-family: var(--mono); font-size: 7.5pt; color: var(--ink-45); margin-top: 10pt; }
+
+/* Body pages repeat the banners and the record line on every page as the app does: the document is one table whose
+   <thead> and <tfoot> the browser repeats (ValueCasePage.tsx, PovPage.tsx). The page counter stays in the margin. */
+table.doc, table.doc > thead > tr > td, table.doc > tfoot > tr > td, table.doc > tbody > tr > td { border: 0; padding: 0; margin: 0; }
+table.doc > thead { display: table-header-group; }
+table.doc > tfoot { display: table-footer-group; }
+table.doc .banners { margin-bottom: 4pt; }
+.pfoot { font-family: var(--condensed); font-weight: 600; font-size: 7.4pt; letter-spacing: 0.06em; color: var(--ink-45);
+  border-top: 0.6pt solid var(--rule); padding-top: 4pt; margin-top: 10pt; }
