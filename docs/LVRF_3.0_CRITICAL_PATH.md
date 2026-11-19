@@ -191,14 +191,18 @@ cut line applied first.
 - **3.1 build order, revised (Brad, 19 Nov 2026).** After S3's Gate B and Gate C:
   1. **S4:** the steward-form full-text confirmation and the repeated-value refusal (from the 3.1 list), as a small
      slice, before the pilot.
-  2. **S5:** the account frame, mock-ups first (as UX-1).
-  3. **S6:** the War Room, mock-ups first. If it has not passed Gate C by 4 Jan 2027, it waits until after the
-     pilot's account-selection weeks (4–15 Jan). No large navigation change deploys in that window.
+  2. **S5:** the account frame, mock-ups first (as UX-1). **Approved (Brad, 19 Nov 2026), LVRF_PLAN §24.** It must
+     pass Gate C by **Fri 18 Dec 2026**; otherwise it waits until after 15 Jan 2027.
+  3. **S6:** the War Room, mock-ups first. **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
+     **Fri 18 Dec 2026**, it waits until after the pilot's account-selection weeks (4–15 Jan 2027). No large navigation
+     change deploys in that window.
   4. **Then:**
      - the solution catalog page;
      - `/people`;
-     - the small items: the pack-basis note correction, retiring a fact, the dependency change, the "Moves first"
-       label, tenant card 05, and the confidence legend's markers as SVG (Brad, 19 Nov 2026).
+     - the small items: the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05,
+       and the confidence legend's markers as SVG (Brad, 19 Nov 2026).
+     - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script
+       fix, as one ops change (`BUILD_STATUS.md`, "Ops: the deploy script's silent stop fixed").
 
   S2's Gate B step 8 and its act session stay deferred until Brad funds the API.
 

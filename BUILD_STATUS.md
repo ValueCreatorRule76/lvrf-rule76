@@ -15771,3 +15771,91 @@ no "deploy OK", unlike the `s3-print-fix` deploy that morning. Brad's own checks
 - Runs: 27, all locked; `check_run_hashes` 27/27, recomputed and embedded.
 
 **S4 is closed.** The follow-up item (a full confirmation on the other free-text forms) is on the 3.1 list.
+
+### Ops: the deploy script's silent stop fixed, and the dependency change (`body-parser`, `qs`, argon2) — Gate A 19 Nov 2026
+
+**Brad's rulings (19 Nov 2026):** the deploy fix proposed under "S4 closed" is approved as proposed, shipped now as one
+small ops change together with the dependency item (L27; the 3.1 list's "dependency change"): a plain `npm audit fix`
+for `body-parser` and `qs`, and `"argon2@0.45.1": false` in `allowScripts`, never `--force`. One full regression.
+Gate B is Brad's. Branch `ops-deploy-deps`. No migration, no schema change, no product code.
+
+**The deploy fix (`scripts/lvrf-deploy.sh`):**
+- **Step 6 waits for the API to answer** instead of sleeping 2 seconds. It polls `GET /api/health` every 0.5 s,
+  each try bounded by `--max-time 2`, up to 60 tries (30 s). If the API never answers: `DEPLOY FAILED: lvrf-api did
+  not answer /api/health within 30s (state: …); see: journalctl -u lvrf-api -n 50`. Any HTTP answer counts as up;
+  step 7 checks the status. The log line is now `lvrf-api is active and answering (after N refused tries at 0.5s)`.
+- **Step 7's requests and parses report instead of ending the script.** Each `curl` and each `grep -oE` parse ends in
+  `|| true`. A refused connection reads as status `000` and a missing field as `<none>`, and the existing comparisons
+  and their `die` lines say what failed.
+  - **One more silent path found while reading step 7, and closed by the same change:** the three health-field parses
+    pipe into `grep -oE`. With no match, `pipefail` failed the assignment and the script ended with no message, just
+    as the refused `curl` did.
+- **An `ERR` trap** prints `DEPLOY FAILED: line N exited M` for any unguarded failure anywhere in the script. A `die`
+  does not also trigger it: exactly one failure line.
+
+**The dependency change:**
+- `npm audit fix` (plain), root only:
+  - `body-parser` 2.3.0 → **2.4.0** (GHSA-27r3-jxmh-p828, high);
+  - `qs` 6.16.0 → **6.17.1** (GHSA-6pq8-jhm2-2vcw, moderate);
+  - `content-type` 2.0.0 → 2.1.0, as `body-parser` 2.4.0's dependency.
+
+  Nothing else in `package-lock.json` changed.
+- **The root audit, 6 → 4:** `drizzle-kit`'s four (moderate, build-time, fixable only by `--force` to a breaking
+  version). Left as they are (rule 7).
+- **`package.json`:** `"argon2@0.45.1": false` under `allowScripts`. After `npm ci`, the argon2 warning is gone and
+  argon2 still hashes from its shipped prebuild (`$argon2id$v=19…`).
+  - **The one remaining warning,** `fsevents@2.3.3`, is a macOS-only optional dependency that the Linux box never
+    installs. Left as it is.
+- The client's dependencies are untouched. The bundle is unchanged: **`index-8gKwKIMx.js` / `index-xp3nTj2A.css`**
+  (S4's).
+
+**Verification: `scripts/verify_deploy_steps.sh` (new), 27 passed, 0 failed.** It touches no database, no service and
+no network. Like `verify_deploy_reexec.sh`, it runs the real script in a throwaway box clone, with every outside command
+stubbed. The `curl` stub refuses connections until N seconds after the stubbed restart, as the box's API does for
+2–3 s.
+- **A, the S4 race:** the API answers 3 s after the restart. The deploy waits (5 refused tries), prints every step-7
+  line and ends `deploy OK`, exit 0, in 5 s.
+- **B:** the API never answers. One `DEPLOY FAILED … within 30s` line, and no trap line on top. 60 tries; it gives up
+  after 32 s.
+- **C:** the vhost refuses. Reported `vhost=000` through the existing `die`.
+- **D:** the health body lacks `origin_check`. Reported `<none>` through its own `die`.
+- **E:** an unguarded failure (step 8's `find`). The trap names the line: `line 255 exited 3`.
+- **F, the positive control:** the script at `7f889b4`, under A's stubs, exits 7 with "lvrf-api is active" as its last
+  line and nothing after it. That is the silent stop Brad saw, reproduced.
+- **Breaks, each caught; the file restored byte-identical after each:**
+  - B1, the poll replaced by `sleep 2`: 12 failures;
+  - B2, the vhost `curl` unguarded: 3;
+  - B3, the `origin_check` parse unguarded: 2;
+  - B4, the trap removed: 1.
+
+**The full regression: all 54 scripts pass in one run, 54 passed, 0 failed** (49 min), on the code as committed.
+- **5,169 tallied checks,** plus `verify_tenant_scope`, which has its own tally form: 326 PASS lines, 0 FAIL.
+- `verify_deploy_reexec` 13/0, `verify_deploy_steps` 27/0, `verify_drift` 30/0 and `verify_grant_enforcement` 31/0.
+  The last two read steps 5b and 5c and the restart line from the script.
+- **Every tracked file byte-identical after the run.** Build, typecheck and the research bundle are clean.
+- **Left as found:** `scripts/demo/`, untracked, not part of this change.
+
+#### Gate B for the ops change (not run; Brad's pastes)
+
+A deploy only: no migration, so no backup is needed for a schema change (rule 8). The TOC stays 972 and the triggers
+227.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only ops-deploy-deps && git push && git log --oneline -3
+   ```
+2. **Deploy**, on the box: `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - "lvrf-deploy.sh changed in this pull; re-running the new version", then the re-run line;
+   - `npm ci` with **no `argon2` warning**;
+   - bundle **`index-8gKwKIMx.js`** / **`index-xp3nTj2A.css`**, unchanged;
+   - 5b, 5c and 5d passed, drift none (53 migrations, newest `0052`);
+   - **`lvrf-api is active and answering (after N refused tries at 0.5s)`**, with N about 4–6;
+   - health 200, `origin_check=configured`, `actor_header=off`, the API and header checks 401, the vhost 401;
+   - **`deploy OK`.**
+3. **The versions on the box:**
+   ```
+   cd /srv/lvrf && npm ls body-parser qs --omit=dev
+   ```
+   Expect `body-parser@2.4.0` and `qs@6.17.1`.
+
+**Gate C (read-only):** no row changed by the deploy; TOC 972, 227 triggers; drift none; ownership clean.
