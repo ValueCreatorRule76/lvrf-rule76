@@ -15537,3 +15537,184 @@ way for a clean set.
 **Carried to the 3.1 list:**
 - a verified case's status line on every page, to ship before any verified case is printed for a customer;
 - the legend's markers as SVG.
+
+### S4: steward forms confirm every field in full; a field may not repeat another — Gate A, 19 Nov 2026 (UTC)
+
+Branch `s4-form-confirmation` from `main` at `b88053e`. Plan and rulings: `docs/LVRF_PLAN.md` §23 (approved by Brad,
+19 Nov 2026, with D1, D3, D4 and D5 as recommended and D2 changed). Value spine: `attach`.
+
+**What was built**
+- **The confirmation, in full** (client):
+  - `ConfirmFields` (`client/src/components/confirm/`) lists each field by its form label, with the value exactly as it
+    is sent (whitespace kept, no slice, no ellipsis) and its character count.
+  - **The three named forms:**
+    - **"Record a source…"** (it had none) shows the kind, what it states, where it came from, the citation, what it is
+      about, what it rests on, and the quote or locator with how it was read;
+    - **"Supersede…"** shows the old row's what-it-states in full, every field of the new row, and the reason;
+    - **the pack basis** (it had none) shows the metric with its short id, the entry and the note.
+  - **The 13 cuts to 80 characters, in 12 confirmations, are gone:** supersede's two, and eleven in `AccountEvidence`,
+    `OutsideInWalk`, `PovAuthoring`, `Workbench` and `CaseInputs`.
+  - **Named, left as they are:** four cuts outside any confirmation, in `Workbench.tsx`'s dropdown labels and history
+    lines (316, 331, 336, 523).
+  - **The pack-basis form now sends the note trimmed,** exactly as its confirmation shows it.
+- **A field may not repeat another** (D2 as changed, D5):
+  - **The five free-text fields** of an evidence row; `locator` is a structured cell, named in §23.
+  - **The nine pairs,** compared trimmed, whitespace collapsed and lower-cased.
+  - **Summary against the quote is warned, not refused:** "This summary repeats the quote word for word.", and the
+    steward may confirm.
+  - **At the form:** a refused pair is said beside the disabled button, and no request is sent.
+  - **At the route** (`server/lib/repeatedFields.ts`): refused before the write and recorded as the route's refusal.
+    - Applies to `POST /api/institutions/:id/evidence`, `POST /api/value-outcomes/:id/evidence` and
+      `POST /api/evidence/:id/supersede`.
+    - Supersede's reason may not repeat any field of the old row or the new one: the 15 Nov act that made
+      `673861eb`.
+  - **In the database** (D4, migration `0052`): nine CHECKs on `evidence`, each definite under NULL, each with its plain
+    sentence in `PLAIN_CHECK`.
+- **The pack basis note says something of its own** (D3):
+  - the route refuses a note equal to the entry's name or to a claim on that entry by a capability of the account;
+  - **the trigger `business_metrics_basis_note_own`** (hardening section 37) is the database's half;
+  - **`0052` adds `business_metrics.pack_basis_evidence_id`** (nullable, `RESTRICT`), which the route sets with the
+    basis, so the note is linked, not found by its text. The copy's metrics with a basis keep NULL; nothing was
+    backfilled or orphaned.
+
+**Verification** (`scripts/verify_s4_form_confirmation.sh`, on a clone of the 14 Nov prod copy): **106 passed, 0 failed.**
+- **The source:**
+  - no confirmation cuts a value;
+  - the route's nine pairs are the nine CHECKs by name;
+  - summary against the quote is in neither list.
+- **The clone:**
+  - `0052` applies to the copy's rows, so every evidence row already satisfied the nine CHECKs;
+  - 227 triggers;
+  - **158 CHECKs**, each with a plain sentence;
+  - drift none (53 migrations, newest `0052`).
+- **The database:**
+  - each CHECK refuses its pair;
+  - an upper-cased, padded copy is refused too (D5);
+  - summary equal to the quote is accepted;
+  - each of the nine reads true, never NULL, on NULL, empty and blank inputs;
+  - the trigger refuses a note that repeats the claim or the entry's name, and accepts a note of its own.
+- **The route:**
+  - each pair: 422 with its sentence, recorded as the route's refusal with no sqlstate;
+  - outcome evidence: 422;
+  - supersede's reason repeating the old row's how-read, and the new row's what-it-states: 422;
+  - the basis note repeating the claim, and the entry's name: 422, the metric left without a basis.
+- **Through the page, as the steward by session.** Every control is clicked only when visible: "Account detail" and
+  the walk's step are opened as a person opens them.
+  - **"Record a source…":**
+    - a 638-character, multi-line what-it-states with curly quotes;
+    - each field byte for byte, with its count;
+    - nothing sent before "Confirm";
+    - "Back" keeps the fields;
+    - the stored row equals what was shown.
+  - **Summary equal to the quote:** warned, then recorded.
+  - **Where it came from equal to How it was read:** said at the form, the button disabled, no request.
+  - **"Supersede…":** a reason equal to the old row's how-read is said at the form; then a confirmation in full, and the
+    act carrying the reason as shown.
+  - **The pack basis:**
+    - a note equal to the claim, then to the entry's name in other case and spacing, is said at the form;
+    - then a note of its own, confirmed in full;
+    - the basis is set with its note linked.
+  - **An existing confirmation,** the opening of a citation, quotes a 600-character what-it-states in full.
+- **Breaks, each with its positive control; all caught, all controls pass, every file restored byte-identical:**
+  - **B1:** a cut put back in the confirmation.
+  - **B2:** the route's pair check removed. The CHECK refused instead (23514), so the database is the second half.
+  - **B3:** the route's basis check removed. The trigger refused instead.
+  - **B4:** a CHECK dropped. Its sentence goes stale and the schema drifts.
+  - **B5:** the form sends other than it shows: the summary cut to 340 characters, the `c56a3d33` case.
+  - **B6:** another pair identical, let through at the form, is caught; restored, it is refused (Brad's break).
+  - **B7:** the summary/quote warning removed.
+  - **B8:** a cut put back in the opening's confirmation.
+- **Every sealed run byte-identical.**
+
+**Found by the regression and fixed, a product path (approved by Brad, 19 Nov 2026)**
+- **"Correct the entity"** (`POST /api/institutions/:id/entity/supersede`) wrote the entity's citation as both
+  `provenance` and `source_reference`. That is the same text in two fields, which `0052` now refuses. Prod has no entity
+  correction yet, which is why the copy's rows all passed.
+- **Fixed:** the provenance names who corrected it, as the other writers name their person: "Entity corrected by
+  {name}: {citation}". The citation stays in `source_reference` alone.
+  - **Wording:** the other writers use "Asserted at {event} by {name}", which reads as a person's statement. A corrected
+    entity rests on a quoted, cited source, so Brad's form is kept.
+- **The other nine evidence writers were read:** each writes a fixed provenance ("Asserted at … by {name}") that never
+  equals its own fields.
+
+**Scripts changed for S4**
+- **The stated counts** in 15 verify scripts:
+  - triggers 226 → 227;
+  - trigger event rows 349 → 350;
+  - CHECKs 149 → 158;
+  - the journal 52 → 53, newest `0052`.
+- **`s1_walk`:** S1's "recording a source asks no confirmation" is replaced by its S4 rule: the confirmation quotes
+  what-it-states in full.
+- **`verify_s1_hypothesis_rule`:** its H2 break drops a trigger and now expects 226, not 225.
+- **`verify_commit_measure_verify`:** a withdrawal's confirmation is now expected in full.
+- **`outside_in_walk`:** it confirms the pack basis.
+- **`verify_steward_safety`:** passes with the pack basis's confirmation naming the metric by short id, as steward
+  safety asks.
+
+**Regression and equivalence**
+- **The first full regression:** 48 of 53. The 5 failures had 4 causes, all fixed:
+  - the entity writer, above (`verify_account_research`, `verify_acts_lineage`);
+  - three test expectations: a full confirmation text, the walk's missing Confirm, and S1's H2 count.
+- **The full regression after the fixes, rerun whole because the entity fix changes a product path (Brad): all 53
+  scripts in one run, 53 passed, 0 failed, 5,163 checks,** every file byte-identical after the run (47 min).
+  `verify_s4_form_confirmation` 106/0.
+- **Equivalence against the deployed `81cc5d8`:** 213 GETs, **213 identical, no added keys.** The new column appears in
+  no GET.
+- **The TOC, measured on clones of the prod copy.** `0052` and section 37 add exactly 3 entries:
+  - the foreign key `business_metrics_pack_basis_evidence_id_evidence_id_fk`;
+  - the function `lvrf_basis_note_own`;
+  - the trigger `business_metrics_basis_note_own`.
+
+  The nine CHECKs are dumped inside `CREATE TABLE`. Locally 967 → 970, so on prod **969 → 972**.
+- **The bundle,** built from this code: `index-8gKwKIMx.js` / `index-xp3nTj2A.css`.
+- **Left as found:** `scripts/demo/`, a read-only demo recorder that is untracked, dated 19 Nov 11:53, and not part of
+  S4. It is not committed.
+
+#### Gate B for S4 (not run; Brad's pastes)
+
+A migration. Every step is Brad's paste; nothing here was run on the box. Stop at any step whose expectation is not met.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s4-form-confirmation && git push && git log --oneline -3
+   ```
+   Expect the merge to fast-forward from `b88053e`, the branch's base.
+2. **On the box, pull, then back up before migrating** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s4-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the same head as step 1, and the last line **969**. Stop if it differs.
+3. **Migrate `0052`, then ownership, then hardening (section 37):**
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_s4.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_s4.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"
+   ```
+   Expect:
+   - the migrate to apply `0052` with no error. If a prod row repeats a field, the CHECK refuses and the migration
+     stops with nothing applied; the 49 rows read on 19 Nov hold none;
+   - `ownership exit 0`;
+   - `hardening exit 0`, with `0` ERROR lines;
+   - **227** triggers.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-s4-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**: 969 plus the foreign key, the function and the trigger.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-8gKwKIMx.js`** / **`index-xp3nTj2A.css`**;
+   - steps 5b, 5c and 5d passed, drift none (53 migrations, newest `0052_s4_form_confirmation`);
+   - health 200, `actor_header` off;
+   - the API fail-closed.
+
+**Gate C (read-only):**
+- 53 migrations; 158 CHECKs, each with a plain sentence; 227 triggers; drift none; ownership clean; TOC 972;
+- `pack_basis_evidence_id` NULL on every metric;
+- no row changed by the deploy;
+- every sealed run byte-identical.
+
+**Brad's act:** none is needed. S4 records nothing of its own (rule 9), and the forms are exercised the next time a
+source is recorded on prod. **Option (§23):** open each form and back out at its confirmation, recording nothing.

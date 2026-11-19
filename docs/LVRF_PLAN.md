@@ -5385,3 +5385,14 @@ reaches every print.
   at the confirmation, recording nothing.
 - **Gate C (read-only):** no row changed by the deploy; CHECKs as planned; every sealed run byte-identical.
 - **About 1 day of work, or 1.5 with D4.**
+
+### Gate A, as built (19 Nov 2026)
+
+- **All checks pass:**
+  - `verify_s4_form_confirmation` 106/0, with breaks B1–B8;
+  - the full regression, 53 scripts, all pass (5,163 checks);
+  - equivalence against `81cc5d8`, 213/213.
+- **Found and fixed:** "Correct the entity" wrote its citation as its provenance too. Its provenance now reads "Entity
+  corrected by {name}: {citation}" (Brad, 19 Nov 2026).
+- **Gate B is a migration,** with the TOC at 969 → 972.
+- **The full record** is in `BUILD_STATUS.md`, "S4: … Gate A".
