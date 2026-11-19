@@ -5187,7 +5187,69 @@ kicker, tagline and ink band: Barlow Condensed under `font-display: block`, and 
 (`s3-print-fix`, deployed at `81cc5d8`): Brad's Incognito reprints, with Background graphics off, pass every check, and
 Gate C is clean. Record: `BUILD_STATUS.md`, "S3 closed".
 
-## 23. 3.1 slice S4: steward forms confirm every field in full, and a field may not repeat another (planned 19 Nov 2026; **for Brad's approval**)
+## 23. 3.1 slice S4: steward forms confirm every field in full, and a field may not repeat another (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1, D3, D4 and D5 as recommended and D2 changed**)
+
+**Brad's rulings (19 Nov 2026):**
+- **D2, changed.** Every pair of evidence fields is refused if identical, **except "What it states" against the
+  quote.** For that pair the confirmation shows a warning, "This summary repeats the quote word for word", and lets
+  the steward confirm.
+  - Gate A adds a check that the pair is warned, not refused.
+  - Gate A adds a break where another pair is identical and is refused.
+- **D4: route and database.** D3's comparison, against the stored claim and the entry's name, reads another table, so
+  it is a trigger, not a CHECK. Each is named below, with its plain sentence registered.
+- **D1:** the other free-text forms without a confirmation go on the 3.1 list as a follow-up item.
+- **D3 and D5** as recommended.
+
+**As ruled, the database's half** (migration `0052` and hardening section 37):
+- **The free-text fields of an evidence row are five:**
+  - `summary` ("What it states");
+  - `provenance` ("Where it came from");
+  - `source_reference` ("Citation, export ID or URL");
+  - `quote_text` ("Quote");
+  - `how_read` ("How it was read").
+- **Named for Brad: `locator` is not among them.** It is a structured cell (document, value and scale, `jsonb`),
+  never free text, and the form makes quote and locator exclusive. So "all pairs" is the 10 pairs of the five, and
+  9 are refused once summary against quote is exempt.
+- **Nine CHECKs on `evidence`.** Each:
+  - compares the two values trimmed, whitespace collapsed and lower-cased (D5);
+  - is definite under NULL: an empty or NULL value passes, by `coalesce`;
+  - has its plain sentence in `server/lib/plainChecks.ts`.
+
+  | CHECK | Plain sentence |
+  |---|---|
+  | `evidence_summary_not_provenance` | "Where it came from repeats What it states; say where it came from." |
+  | `evidence_summary_not_reference` | "The citation repeats What it states; give the citation, export ID or URL." |
+  | `evidence_summary_not_how_read` | "How it was read repeats What it states; say how the value was read from the source." |
+  | `evidence_provenance_not_reference` | "The citation repeats Where it came from; give the citation, export ID or URL itself." |
+  | `evidence_provenance_not_quote` | "The quote repeats Where it came from; quote the source's own words." |
+  | `evidence_provenance_not_how_read` | "How it was read repeats Where it came from; say how the value was read." |
+  | `evidence_reference_not_quote` | "The quote repeats the citation; quote the source's own words." |
+  | `evidence_reference_not_how_read` | "How it was read repeats the citation; say how the value was read." |
+  | `evidence_quote_not_how_read` | "How it was read repeats the quote; say how the value was read, not what it says." |
+- **One trigger, `business_metrics_basis_note_own`** (BEFORE UPDATE of `industry_measure_id, pack_basis_evidence_id`
+  on `business_metrics`).
+  - When a basis is set, the note's evidence row may not repeat:
+    - the pack entry's name;
+    - any current claim on that entry by a capability of the metric's account.
+  - **Its sentence** (raised as written, as S1's trigger is): "LVRF: business_metrics: the pack basis note repeats
+    {the capability's claim on this entry | the entry's name}; say why this metric is an instance of the entry, in your
+    own words."
+  - **To find the note it needs a link,** so `0052` adds `business_metrics.pack_basis_evidence_id` (uuid, nullable,
+    `REFERENCES evidence ON DELETE RESTRICT`), which the route sets with the basis.
+    - **What it changes:** one nullable column; the route writes it. Today the note is unlinked and found only by its
+      text.
+    - **What it could orphan:** nothing. The 3 metrics on prod with a basis keep NULL, and their notes stay as
+      recorded.
+- **The route's half** (`server/lib/repeatedFields.ts`):
+  - the same nine pairs, refused before the write, with the same sentences;
+  - supersede's reason against every field of the old row and of the new one (an act's reason is not on the evidence
+    row, so this is the route's alone);
+  - the basis note against the claim and the entry's name, before the trigger.
+- **The client's half:**
+  - the confirmation lists every field in full, with its character count;
+  - summary equal to the quote shows the warning and may be confirmed;
+  - any refused pair is said before the request: the confirmation names it, and "Confirm" is disabled with the reason.
+
 
 **The item it builds** (`docs/LVRF_3.0_CRITICAL_PATH.md`, 3.1 list, from S1's act session; Brad, 15 Nov 2026): steward
 forms that write to prod confirm every field in full, and a field may not repeat another. It is first in the revised

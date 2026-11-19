@@ -301,6 +301,19 @@ cut line applied first.
   - **Condition (Brad):** it ships before any verified case is printed for a customer.
   - S3's fixture, a verified case the CFO lens shows (`scripts/lib/s3_cfo_fixture.sh`), is the test bed.
 
+- **A full-text confirmation on the other free-text steward forms** (Brad, 19 Nov 2026, S4's D1; a follow-up, not in
+  S4). The forms with no confirmation that record free text:
+  - the claim;
+  - the walk's "Record the opened citation";
+  - outcome evidence (`AddEvidenceCard`);
+  - "State the hypothesis";
+  - "Record the summary";
+  - "Record the erratum";
+  - "Record fact".
+
+  Each gets S4's `ConfirmFields`: every field in full, with its count. S4's route and database refusals already cover
+  their evidence fields.
+
 - **The confidence legend's markers as SVG** (Brad, 19 Nov 2026, from S3's Gate C; a small item, not in the fix).
   - **The problem:** the legend of the "Confidence over time" chart sets four glyphs that no face the app carries
     has, so the print falls back to system fonts, embedded as Type 3:
