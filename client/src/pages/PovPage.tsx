@@ -17,6 +17,8 @@ import { Badge } from '../components/workbench/Card';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { HypothesisItem, SummaryItem } from '../components/PovAuthoring';
 import { ShortId } from '../components/ShortId';
+import { PrintClose, PrintCover, PrintRecordLine } from '../components/print/PrintFamily';
+import { KICKER_PRINT } from '../components/print/printText';
 
 /**
  * O2 — the account POV (/accounts/:id/pov): the document a value engineer
@@ -35,7 +37,7 @@ import { ShortId } from '../components/ShortId';
  */
 
 const H2 = 'm-0 font-display text-[24px] tracking-[.02em] text-ink';
-const KICKER = 'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
+const KICKER = 'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45 ' + KICKER_PRINT;
 const BASIS_TONE: Record<string, 'healthy' | 'neutral' | 'watch' | 'warning'> = {
   system_of_record: 'healthy', client_stated: 'healthy', published: 'neutral', inferred: 'watch', assumed: 'warning',
 };
@@ -81,7 +83,7 @@ function StageBars({ pov }: { pov: Pov }) {
         return (
           <nav key={e.id} aria-label={`Value spine progress: ${e.name}`}>
             <span className="text-[11.5px] text-ink-45">{e.name}{e.retired ? ' (retired)' : ''} · the furthest stage of the engagement and its outcomes</span>
-            <ol className="m-0 mt-1 grid list-none grid-cols-2 gap-1.5 p-0 sm:grid-cols-7">
+            <ol className="m-0 mt-1 flex list-none flex-wrap gap-1.5 p-0 [&>li]:min-w-[calc(50%-0.375rem)] sm:flex-nowrap sm:[&>li]:min-w-0 sm:[&>li]:flex-1">
               {pov.value_spine.map((stage, i) => {
                 // A stage before the one reached is 'passed', never ticked: the
                 // record does not confirm it — except commit, which it does
@@ -147,7 +149,7 @@ function Chain({ h, o }: { h: PovHypothesis; o: PovOutcome | undefined }) {
       detail: o ? (o.source_verified ? `verified by ${o.verified_by}` : o.actual_value !== null ? 'actual not verified' : 'no actual yet') : undefined },
   ];
   return (
-    <ol className="m-0 grid list-none grid-cols-1 border border-ink bg-white p-0 sm:grid-cols-6" data-testid="chain">
+    <ol className="m-0 flex list-none flex-col border border-ink bg-white p-0 sm:flex-row sm:[&>li]:flex-1" data-testid="chain">
       {cells.map((c, i) => (
         <li key={c.label} className={'flex flex-col gap-1 px-3 py-3 ' + (i < cells.length - 1 ? 'border-b border-rule sm:border-b-0 sm:border-r ' : '') + (c.value === null ? 'bg-offwhite' : '')}
           data-gap={c.value === null ? 'true' : 'false'}>
@@ -180,7 +182,7 @@ function OutcomeDetail({ o }: { o: PovOutcome }) {
   const vendorClaims = o.evidence.filter((e) => e.kind === 'vendor_publication');
   const other = o.evidence.filter((e) => e.kind !== 'vendor_publication');
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="outcome">
+    <div className="flex flex-col gap-4 sm:flex-row sm:[&>*]:flex-1 sm:[&>*]:min-w-0" data-testid="outcome">
       <div className="border border-rule bg-white px-4 py-3">
         <span className={KICKER}>{o.metric_name}</span>
         <table className="mt-1 w-full border-collapse text-[13px]">
@@ -304,19 +306,21 @@ export function PovPage() {
     // EVERY printed page (CLAUDE.md: every printed page carries the disclosure
     // banner and the run's hash). Real table elements, not CSS-table divs:
     // Chrome repeats only <thead>/<tfoot>. On screen they are plain blocks.
-    <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="pov">
+    <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-transparent" data-testid="pov">
       <div className="print:hidden"><Banners pov={pov} /></div>
+      {/* S3 (§22): the record line (the footer's lines, word for word) at the foot of every page, with every engagement's
+          FULL hash; the ink cover, carrying the same banners element the body pages repeat. */}
+      <PrintRecordLine lines={printFooterLines(pov)} />
+      <PrintCover banners={<Banners pov={pov} compact />} kicker="Rule 76 · Learning Value Realization" title={pov.institution.name} doc="Point of View"
+        meta={[pov.institution.industry_name ? `${pov.institution.industry_name} pack` : null, pov.entity ? pov.entity.legal_name : 'no legal entity pinned'].filter(Boolean).join(' · ')}
+        lede="Where the value would come from, what it rests on today, and what it would take to raise confidence in it."
+        source={pov.reference_example ? `${MARKER_KIND[pov.reference_example.kind].banner} · Source: ${pov.reference_example.source_citation}` : undefined} />
       <table className="block w-full border-collapse print:table print:table-fixed">
       <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell"><Banners pov={pov} compact /></td></tr></thead>
-      <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell"><PrintFooter pov={pov} /></td></tr></tfoot>
       <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
       <div className="mx-auto flex max-w-5xl flex-col gap-10 px-4 pb-16 pt-8 sm:px-[30px] print:gap-6 print:px-0 print:pb-4 print:pt-4">
-        {/* C1b: the marker's full citation, printed once on page 1 (the header line points here). */}
-        {pov.reference_example && (
-          <p className="m-0 hidden font-mono text-[10.5px] text-ink [overflow-wrap:anywhere] print:block" data-testid="print-marker-full">
-            {MARKER_KIND[pov.reference_example.kind].banner} · Source: {pov.reference_example.source_citation}
-          </p>
-        )}
+        {/* C1b: the marker's full citation prints once on page 1, which S3 made the cover; it is set there (PrintCover's
+            source line), so the banners' "Source on page 1" stays true. */}
         <header className="flex flex-col gap-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div className="flex flex-col gap-1">
@@ -332,7 +336,7 @@ export function PovPage() {
           <Link to={`/accounts/${pov.institution.id}`} className={'self-start text-[11px] text-ink-45 hover:text-gold-ink print:hidden ' + FOCUS_RING}>← the account page (where this is authored)</Link>
         </header>
 
-        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 print:block print:space-y-6" aria-labelledby="es">
+        <section className="flex flex-col gap-6 sm:flex-row sm:[&>*]:flex-1 sm:[&>*]:min-w-0 print:block print:space-y-6" aria-labelledby="es">
           <div className="flex flex-col gap-2">
             <h2 id="es" className={H2}>Executive summary</h2>
             {summaries.length === 0
@@ -363,7 +367,7 @@ export function PovPage() {
           <WhatItTakes outcomes={pov.outcomes} />
         </section>
 
-        <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 print:block print:space-y-6">
+        <section className="flex flex-col gap-6 sm:flex-row sm:[&>*]:flex-1 sm:[&>*]:min-w-0 print:block print:space-y-6">
           <div className="flex flex-col gap-2">
             <h2 className={H2}>Account facts</h2>
             {pov.facts.length === 0 ? <p className="m-0 text-[12.5px] text-ink-45">No facts recorded.</p> : (
@@ -390,6 +394,9 @@ export function PovPage() {
             <ul className="m-0 list-none border border-rule bg-white px-4 p-0">{earlier.map((h) => <HypothesisItem key={h.id} h={h} />)}</ul>
           </section>
         )}
+
+        {/* S3, change 3: the disclaimer first, under its heading; the tagline below it, smaller. */}
+        <PrintClose heading="About this document" text={`This point of view renders from the record at the time of printing, marked unverified until it is verified. Each figure carries its basis; none is applied beyond it. Rule 76 Consulting LLC · Learning Value Realization Framework.`} />
 
         <footer className="flex flex-wrap justify-between gap-3 border-t border-ink pt-3 text-[11.5px] text-ink-45 print:hidden">
           <span>Basis order: system of record › published › client-stated › inferred › assumed</span>
@@ -443,23 +450,17 @@ function LockedRuns({ pov }: { pov: Pov }) {
 // Every printed page carries the FULL record hash of each engagement's latest
 // locked run, never a shortened one, and says how many runs there are in all;
 // every run's full hash prints once, under Locked runs (Brad, 19 Oct 2026).
-function PrintFooter({ pov }: { pov: Pov }) {
+function printFooterLines(pov: Pov): string[] {
   const sealed = pov.engagements.filter((e) => e.locked_runs.length > 0);
   const total = sealed.reduce((n, e) => n + e.locked_runs.length, 0);
   // C3b (Brad, 27 Oct 2026): a marked run is never "the latest"; the footer names the headline run.
   const pool = (e: Pov['engagements'][number]) => { const u = e.locked_runs.filter((r) => !r.system_exercise); return u.length > 0 ? u : e.locked_runs; };
   const latest = (e: Pov['engagements'][number]) => pool(e).reduce((a, r) => (r.run_number > a.run_number ? r : a));
-  return (
-    <div className="mt-3 border-t border-ink pt-1.5 text-[9px] leading-snug text-ink-70">
-      {sealed.length === 0
-        ? <p className="m-0" data-testid="print-unsealed">No locked run: nothing on this page is sealed.</p>
-        : <>
-          {sealed.map((e) => { const r = latest(e); return (
-            <p key={e.id} className="m-0 [overflow-wrap:anywhere]">{e.name}{e.retired ? ' (retired)' : ''}: {e.locked_runs.some((x) => x.system_exercise) ? 'latest unmarked run' : 'latest locked run'}, run {r.run_number} · record hash <span className="font-mono">{r.payload_hash}</span></p>
-          ); })}
-          <p className="m-0">{total} locked {total === 1 ? 'run' : 'runs'} in all; every run&apos;s full hash is listed under Locked runs.</p>
-        </>}
-      <p className="m-0">Printed {day(new Date().toISOString())} · rendered from the record as it stands · basis order: system of record › published › client-stated › inferred › assumed</p>
-    </div>
-  );
+  const lines = sealed.length === 0
+    ? ['No locked run: nothing on this page is sealed.']
+    : [
+      ...sealed.map((e) => { const r = latest(e); return `${e.name}${e.retired ? ' (retired)' : ''}: ${e.locked_runs.some((x) => x.system_exercise) ? 'latest unmarked run' : 'latest locked run'}, run ${r.run_number} · record hash ${r.payload_hash}`; }),
+      `${total} locked ${total === 1 ? 'run' : 'runs'} in all; every run's full hash is listed under Locked runs.`,
+    ];
+  return [...lines, `Printed ${day(new Date().toISOString())} · rendered from the record as it stands · basis order: system of record › published › client-stated › inferred › assumed`];
 }

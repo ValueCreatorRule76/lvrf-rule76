@@ -15090,3 +15090,137 @@ done.
 recorded) and S2's act session, and with them the rest of Gate C (calls, clearances, accepted fields) and the
 `CLAUDE.md` amendment (§21.8), which waits for the full Gate C. **Research with Claude stays off; the paste path is
 unchanged.**
+
+### S3: the printed case and POV in the CVAF family — Gate A, 19 Nov 2026 (UTC)
+
+Branch `s3-print-family`. Client and scripts only: nothing under `server/` or `db/` changes, no migration, no new
+dependency. Plan, rulings and the mock-up review: `docs/LVRF_PLAN.md` §22.
+
+**What was built**
+- **The cover:** an ink page over paper pages, with CVAF's printed business case as the pattern, in `CLAUDE.md`'s
+  tokens.
+  - Its banners are the very element every body page repeats, as large and as heavy (condition 1).
+  - Then the kicker, the account and the document's name, the meta line, the gold rule and a lede.
+  - **On the POV, the marker's full citation** (Brad's Gate A ruling 1, below).
+  - A case with nothing to disclose prints no banner strip, so the ink fills the cover.
+- **The record line with the full hash on every page,** cover included, at the foot (changes 1 and 4).
+  - It moved from the table footer into the page's bottom-left margin box; "Page n of N" is in the bottom-right box.
+  - **The bottom margin grows with the record line.** A POV names one hash per engagement, so Curia's record line is
+    four lines that wrap to seven, and at the fixed 0.75in margin it was clipped. `PrintRecordLine` now sizes the
+    margin from its lines, and the cover's height follows, so the cover stays one page.
+- **Display type for measured numbers only** (change 2):
+  - the stats row prints a number in Bebas;
+  - a status or an absence ("not committed", "not measured") prints at label size;
+  - a long unit ("incidents per 200,000 hours") prints on its own line under the number.
+- **The close** (change 3): "About this document", the disclaimer as drafted, then the tagline, smaller.
+- **Fonts self-hosted** with their OFL licences (`client/public/fonts/`): Bebas Neue, Barlow, Barlow Condensed
+  (condition 2). The Google Fonts link is gone from `index.html`. `CLAUDE.md`'s token table names Barlow Condensed.
+- **The CFO lens's refusal** prints in an ink box: its heading in gold, its text in off-white and silver, all at AA.
+- **The POV's chain** is flex, not Grid (C7).
+
+**Found and fixed during Gate A**
+- **The POV's source citation.** The marker banner says "Source on page 1" (C1b, Brad, 25 Oct 2026), and the full
+  citation printed at the top of page 1. With the cover, page 1 is the cover, so the citation fell to page 2 and the
+  banner pointed at the wrong page. `verify_pov_print`'s page-1 check caught it in the first full regression. **The
+  citation now prints on the cover,** below the lede, in mono silver; the banner's words are unchanged and true again.
+  **Approved by Brad (19 Nov 2026).** The Gate A PDF is in `~/lvrf-backups/s3-mockup/s3-gateA-pov-curia.pdf` (`600`).
+- **A seam on every cover.** A thin light line crossed the cover where its ink panel met the ink foot band. The
+  cover's height is not a whole pixel, and the white page background showed at the antialiased edge. The case and the
+  POV now print with nothing white beneath them (paper is white anyway); under the cover the page's own ink shows.
+  The first seam check (rows averaging light) missed a grey seam; the check now renders each cover at 144dpi and fails
+  on any row, from the panel to the foot, without one ink pixel.
+- **The refusal box** had ink text on its ink background (the reasons list carries `text-ink`). The contrast check
+  caught it.
+
+**A case the CFO lens shows (Brad's Gate A ruling 2): a synthetic fixture, on the clone only**
+- No run on the copy, nor on prod, meets the lens: no outcome has a measured actual, and Curia's runs are reference
+  examples, which the lens never reads.
+- So `scripts/lib/s3_cfo_fixture.sh` builds one inside the verify script's throwaway clone, never prod (rule 9). It
+  runs through the routes, as the clone's steward:
+  - **the account:** Northwind Fabrication (fictional), with two fictional people named customer-side from an opened
+    source;
+  - **the measures:** a TRIR baseline of 2.4 and an actual of 1.9, each from a system export whose quote states the
+    figure, both opened as verified;
+  - **the chain:** a commitment to 2.0 by the customer-side owner, the measurement, and the verification by the
+    customer-side controller;
+  - **the run:** a hypothesis, then produced and locked.
+- **Computed confidence 80 / 100 (high),** at least the ratified lens's 55. The lens shows it: `refused: false`, read
+  through the app's session.
+- It is printed and checked like the other three documents, plus: no refusal box, and the close's verified wording.
+- **Its banners:** the database reads the run as neither outside-in nor unverified, so the case prints no disclosure
+  banner. That is the deployed behaviour: a banner prints only when there is something to disclose. The check is the
+  reverse: no page prints "UNVERIFIED" or "OUTSIDE-IN", and the cover's and the body's banner elements are the same.
+- **Named, not changed:** the run page shows a VERIFIED banner (`Workbench.tsx`) where the printed case shows none.
+  That predates S3 and is for Brad.
+
+**Verification** (`scripts/verify_s3_print_family.sh`, on a clone of the 14 Nov prod copy): **116 passed, 0 failed.**
+- **Four documents,** printed by headless Chrome, every page looked at as an image:
+  - run 2 (`98a71a82`) under the default lens (4 pages);
+  - run 2 refused by the CFO lens (3 pages);
+  - the fixture's case shown by the CFO lens (4 pages);
+  - Curia's POV (7 pages).
+- **On every page of each PDF:**
+  - the disclosure banners (or, on the verified fixture, none);
+  - the full record hash(es), equal to the stored `payload_hash`;
+  - every line of the record line, whole;
+  - the record line in the bottom band;
+  - "Page n of N";
+  - no browser header or footer;
+  - the cover's ink unbroken.
+- **In print media, from the live page:**
+  - the cover's banners equal the body's (text, size, weight, face, colour);
+  - no status word, nor any non-number, in display type outside headings;
+  - every text element at AA on its computed background (91, 66, 86 and 215 elements);
+  - no request outside the app, every font from `/fonts/`;
+  - no Grid;
+  - the close in order.
+- **Fonts:** `pdffonts` shows Bebas Neue, Barlow, Barlow Condensed and the mono face embedded in every PDF.
+- **The content is unchanged:** each document's screen text, line by line as rendered, equals the deployed code's
+  (`main`, from a worktree): 76, 52, 65 and 63 lines.
+- **Breaks, each with its positive control; all caught, all controls pass, every file restored byte-identical:**
+  - **B1:** a cover banner smaller than the body's.
+  - **B2:** the hash dropped from the record line.
+  - **B3:** the kicker in gold on paper (2.40:1).
+  - **B4:** a hex in a print piece.
+  - **B5:** Grid in a printed page.
+  - **B6:** a word changed.
+  - **B7:** a status word in display.
+  - **B8:** a Google Fonts link.
+  - **B9a:** two lines merged, every character the same (76 lines to 73).
+  - **B9b:** a block moved, every line the same.
+  - **B10:** white under the cover (the seam).
+
+  B9 is Brad's (19 Nov 2026): the comparison now reads the live page's rendered lines. A detached clone's `innerText`
+  had been one line, which could not see either break.
+
+**Departures from the planned Gate A, named**
+- **The content comparison is on the rendered screen text,** not on text extracted from the PDFs before and after. The
+  print gains a cover, a stats row and a close and loses the table footer, so the PDFs' text differs by design. The
+  screen text, with the print-only pieces hidden as on screen, must equal `main`'s line for line.
+- **Fonts "and no other":** the case PDFs with a confidence chart also embed system faces (`.SFNS`, Lucida Grande,
+  PingFang SC). They are the chart's SVG glyphs, as before S3; no text outside the chart uses them.
+- **Contrast** is computed from the live print's computed colours, element by element, rather than from the token
+  table, so it covers every element actually printed.
+
+**Script changes for the cover**
+- `verify_pov_print`: page 1 is now the cover, so B1 reads pages 2 and 3 and B6 reads the whole PDF. B4 shortens the
+  hash where the record line is now built.
+- **A latent fault, fixed in both print scripts:** `pdftotext … | grep -q` under `pipefail` fails whenever grep stops
+  early and `pdftotext` takes SIGPIPE. It is now a grep that reads to the end (`has`).
+
+**Regression and equivalence**
+- **Full regression, all 52 verify scripts in one run, on the code before the last two print-only fixes** (the empty
+  banner strip and the long unit): **52 passed, 0 failed, 5,019 checks,** every file byte-identical after the run
+  (43 min).
+  - The run before it ended 51/52. `verify_pov_print` failed on the cover, which found the citation defect; fixed as
+    above.
+- **After those two fixes** (`PrintFamily.tsx` and `index.css`, print only), the scripts that print these documents,
+  each on its own:
+  - `verify_s3_print_family` 116/0;
+  - `verify_pov_print` 121/0;
+  - `verify_value_case` 198/0.
+- **Equivalence against the deployed `d9b3a80`,** every GET over the 14 Nov copy: **213 GETs, 213 identical,** no
+  added keys. There is no server change.
+
+**Gate B (planned):** deploy only, with no migration. The TOC stays 969 and the triggers 226; a new bundle carries the
+fonts. **Brad's act:** print run 3 under both lenses and a POV, and look at every page; the stage-10 check follows.

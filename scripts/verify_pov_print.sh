@@ -40,6 +40,7 @@ PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
+has()  { grep "$@" > /dev/null; }   # grep -q's early exit SIGPIPEs the writer (pdftotext), failing the pipe under pipefail
 stop_server() { [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; SERVER_PID=""; sleep 1; }
 start_server() {
   LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 &
@@ -301,8 +302,9 @@ assert s.count(a) == 1, a; open(p, 'w').write(s.replace(a, b))
 PY
 }
 B="$W/breaks"; mkdir -p "$B"
-# B1 — the banners in the page only, not a repeating header: only page 1 carries them.
-[ "${SCOTTS_PAGES:-1}" -ge 2 ] && {
+# B1 — the banners in the page only, not a repeating header. Since S3 (19 Nov 2026) page 1 is the cover, which carries
+# the banners itself; so the first body page (page 2) carries them from the page, and page 3 loses them.
+[ "${SCOTTS_PAGES:-1}" -ge 3 ] && {
   edit "$POVPAGE" '<thead className="hidden print:table-header-group" data-testid="print-header">' '<thead className="hidden" data-testid="print-header">'
   edit "$POVPAGE" '<div className="print:hidden"><Banners pov={pov} /></div>' '<div><Banners pov={pov} /></div>'
   # Its own fresh directory, and a positive control: a walk that crashed leaves no
@@ -310,11 +312,11 @@ B="$W/breaks"; mkdir -p "$B"
   B1D="$B/b1"; mkdir -p "$B1D"
   sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B1D" scotts "$SCOTTS" '{}' > /dev/null 2>&1 || true
   if [ ! -f "$B1D/ux1s3_pov_scotts.pdf" ]; then bad "B1: the break's walk printed no PDF — nothing to judge"
-  elif ! pdftotext -f 1 -l 1 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | grep -qF "OUTSIDE-IN TEST"; then bad "B1: page 1 of the break's PDF has no banner either — the control failed, nothing to judge"
-  elif pdftotext -f 2 -l 2 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | grep -qF "OUTSIDE-IN TEST"; then bad "B1: page 2 still carries the banner without the header group"
-  else ok "B1: without the repeating header group, page 1 carries the banner and page 2 loses it — the header group is what puts it on every page"; fi
+  elif ! pdftotext -f 2 -l 2 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | has -F "OUTSIDE-IN TEST"; then bad "B1: page 2 of the break's PDF has no banner either — the control failed, nothing to judge"
+  elif pdftotext -f 3 -l 3 "$B1D/ux1s3_pov_scotts.pdf" - 2>/dev/null | has -F "OUTSIDE-IN TEST"; then bad "B1: page 3 still carries the banner without the header group"
+  else ok "B1: without the repeating header group, the first body page carries the banner and page 3 loses it — the header group is what puts it on every page"; fi
   restore "$POVPAGE"
-} || bad "B1 needs Scotts to print on 2+ pages (it printed ${SCOTTS_PAGES:-?})"
+} || bad "B1 needs Scotts to print on 3+ pages (it printed ${SCOTTS_PAGES:-?})"
 # B2 — the old falsifier template ("on <date>, <conditions>").
 edit "$ROUTE" "  return \`\${h.metric_name} \${phrase} \${ref} by \${dayOf(h.falsifier_due)}\${conditions ? \`, provided that: \${conditions}\` : ''}.\`;" "  return \`\${h.metric_name} \${phrase} \${ref} on \${h.falsifier_due}\${conditions ? \`, \${conditions}\` : ''}.\`;"
 stop_server; start_server
@@ -328,16 +330,17 @@ grep -q 'FAIL  scotts @1280: no raw long number among the facts' "$W/b3.log" && 
 restore "$FORMAT"
 # B6 — "open the run" without print:hidden: a screen-only link printed.
 edit "$POVPAGE" '<span className="print:hidden"> · <Link to={`/runs/${e.latest_locked_run!.id}`}' '<span> · <Link to={`/runs/${e.latest_locked_run!.id}`}'
-sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" curia "$CURIA" '{}' > /dev/null 2>&1 || true
-pdftotext -f 1 -l 1 "$B/ux1s3_pov_curia.pdf" - 2>/dev/null | grep -qF "open the run" && ok "B6: \"open the run\" not hidden in print → caught on the printed page (screen-only links are hidden)" || bad "B6: not caught"
+B6D="$B/b6"; mkdir -p "$B6D"   # its own directory: a later break's print never stands in for this one's
+sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B6D" curia "$CURIA" '{}' > "$W/b6.log" 2>&1 || true
+pdftotext "$B6D/ux1s3_pov_curia.pdf" - 2>/dev/null | grep -F "open the run" > /dev/null && ok "B6: \"open the run\" not hidden in print → caught on the printed page (screen-only links are hidden)" || bad "B6: not caught: $( [ -f "$B6D/ux1s3_pov_curia.pdf" ] && { pdftotext "$B6D/ux1s3_pov_curia.pdf" - | grep 'run [0-9]*, locked' | head -2 | tr '\n' ' '; } 2>/dev/null || echo "no PDF: $(tail -2 "$W/b6.log" | tr '\n' ' ')")"
 restore "$POVPAGE"
 # B7 — the disclosure regime shown as stored ("public_filer").
 edit "$POVPAGE" "label(DISCLOSURE_REGIME, f.value_text) : f.value_text" "f.value_text : f.value_text"
 sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" scotts "$SCOTTS" '{"labels":["Public filer"]}' > "$W/b7.log" 2>&1 || true
-grep -q 'FAIL  scotts @1280: no stored enum value shown raw' "$W/b7.log" && pdftotext "$B/ux1s3_pov_scotts.pdf" - | grep -qF public_filer && ok "B7: the disclosure regime shown as stored → caught on screen and present in the print (the label is what puts it in words)" || bad "B7: not caught: $(grep -m2 'raw\|Public filer' "$W/b7.log")"
+has 'FAIL  scotts @1280: no stored enum value shown raw' "$W/b7.log" && pdftotext "$B/ux1s3_pov_scotts.pdf" - | has -F public_filer && ok "B7: the disclosure regime shown as stored → caught on screen and present in the print (the label is what puts it in words)" || bad "B7: not caught: $(grep -m2 'raw\|Public filer' "$W/b7.log")"
 restore "$POVPAGE"
-# B4 — a shortened hash in the footer (the first 16 characters and "…").
-edit "$POVPAGE" '<span className="font-mono">{r.payload_hash}</span></p>' '<span className="font-mono">{`${r.payload_hash.slice(0, 16)}…`}</span></p>'
+# B4 — a shortened hash in the footer (the first 16 characters and "…"); since S3 the record line in the page's margin.
+edit "$POVPAGE" 'run ${r.run_number} · record hash ${r.payload_hash}`; })' 'run ${r.run_number} · record hash ${r.payload_hash.slice(0, 16)}…`; })'
 sleep 5; node "$W/pov.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "$B" curia "$CURIA" '{}' > /dev/null 2>&1 || true
 r="$(python3 "$W/hashes.py" "$B/ux1s3_pov_curia.pdf" "$W/pov.curia.json" 2>&1)"
 case "$r" in BAD*shortened-hash*) ok "B4: a shortened hash in the footer → caught (the footer carries full hashes only)" ;; *) bad "B4: not caught: $r" ;; esac

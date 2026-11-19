@@ -2,7 +2,8 @@
 // UX-1 — design/mockups/tokens.css is the mock-ups' one copy of the Rule76
 // tokens; CLAUDE.md is the authority. Exits 1 if any CLAUDE.md token is
 // missing from tokens.css or differs from it, or if any other mock-up file
-// (HTML or CSS) contains a hex colour instead of citing a token.
+// (HTML or CSS) contains a hex colour instead of citing a token; and, since S3,
+// if the printed value case, the printed POV or their print pieces do.
 //
 //   node scripts/check_design_tokens.mjs
 import { readFileSync, readdirSync } from 'node:fs';
@@ -25,5 +26,12 @@ for (const f of readdirSync(dir).filter((f) => /\.(html|css)$/.test(f) && f !== 
   const hits = readFileSync(join(dir, f), 'utf8').match(/#[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{3}\b(?![0-9A-Za-z-])/g);
   if (hits) { console.log(`HEX in ${f}: ${[...new Set(hits)].join(', ')} (cite a token)`); bad++; }
 }
-console.log(bad === 0 ? `design tokens: ${canon.length} CLAUDE.md tokens match tokens.css; no hex elsewhere in design/mockups` : `design tokens: ${bad} problem(s)`);
+// S3 (LVRF_PLAN §22): the two printed documents and their print pieces cite tokens too (Tailwind classes, theme()).
+const PRINTED = ['client/src/pages/ValueCasePage.tsx', 'client/src/pages/PovPage.tsx', 'client/src/index.css',
+  ...readdirSync(join(root, 'client/src/components/print')).map((f) => `client/src/components/print/${f}`)];
+for (const f of PRINTED) {
+  const hits = readFileSync(join(root, f), 'utf8').match(/#[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{3}\b(?![0-9A-Za-z-])/g);
+  if (hits) { console.log(`HEX in ${f}: ${[...new Set(hits)].join(', ')} (cite a token)`); bad++; }
+}
+console.log(bad === 0 ? `design tokens: ${canon.length} CLAUDE.md tokens match tokens.css; no hex elsewhere in design/mockups, nor in the ${PRINTED.length} printed-document files` : `design tokens: ${bad} problem(s)`);
 process.exit(bad === 0 ? 0 : 1);

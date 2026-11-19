@@ -129,7 +129,7 @@ Canonical. Do not restate these values anywhere else in the repo — cite this f
 | Token | Value | Notes |
 |---|---|---|
 | `--ink` | `#09090A` | |
-| `--gold` | `#C9A24A` | Rules, fills, display numerals, text **on ink**. |
+| `--gold` | `#C9A24A` | Rules, fills, text **on ink**; display numerals **on ink only** (on paper they print in ink: S3, C9, Brad 19 Nov 2026). |
 | `--gold-ink` | `#8A6A22` | **Only** permitted gold for small text on light. Never a fill. |
 | `--silver` | `#C0C0C0` | |
 | `--offwhite` | `#FAFAFA` | |
@@ -142,6 +142,7 @@ Canonical. Do not restate these values anywhere else in the repo — cite this f
 | display | Bebas Neue | |
 | body | Barlow | |
 | mono | `ui-monospace` stack | Hashes, IDs, register numbers |
+| condensed | Barlow Condensed | Kickers, labels, table heads, the printed record line. **Self-hosted** with its OFL licence (`client/public/fonts/barlow-condensed/`), never loaded from an outside URL at print time (S3, Brad 19 Nov 2026; CVAF's canon sanctions it) |
 
 `#C8A24A` is a typo that appeared in an early PDF. The SPA's HSL value is drift. Gold is
 `#C9A24A`.

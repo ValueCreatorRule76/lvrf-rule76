@@ -1,3 +1,14 @@
+/* S3 (LVRF_PLAN §22; Brad's condition 2, 19 Nov 2026): every face self-hosted, with its OFL licence beside it in
+   client/public/fonts/. No page, printed or not, requests a font from an outside URL. */
+@font-face { font-family: 'Bebas Neue'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/bebas-neue/BebasNeue-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 300; font-display: block; src: url('/fonts/barlow/Barlow-Light.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/barlow/Barlow-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 500; font-display: block; src: url('/fonts/barlow/Barlow-Medium.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 600; font-display: block; src: url('/fonts/barlow/Barlow-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: italic; font-weight: 400; font-display: block; src: url('/fonts/barlow/Barlow-Italic.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/barlow-condensed/BarlowCondensed-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: block; src: url('/fonts/barlow-condensed/BarlowCondensed-SemiBold.ttf') format('truetype'); }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -24,18 +35,77 @@ body {
 @page letter {
   size: letter;
   margin: 0.55in 0.6in 0.75in;
+  /* S3 (§22, Brad 19 Nov 2026): the record line, with the FULL hash, at the foot of EVERY page, the last included. Its
+     text is the document's own, set by <PrintRecordLine> (components/print/PrintFamily.tsx) in this box's `content`. */
+  @bottom-left {
+    font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+    font-weight: 600;
+    font-size: 7pt;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+    color: theme('colors.ink-45');
+    white-space: pre-wrap;
+    vertical-align: middle;
+    width: 85%;
+  }
   @bottom-right {
     content: "Page " counter(page) " of " counter(pages);
     font-family: ui-monospace, 'SF Mono', Menlo, monospace;
     font-size: 8pt;
     color: theme('colors.ink-45');
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+}
+/* S3 (§22, D1, D2): the cover, in ink, with no margins but a thin ink band at its foot for the record line and "Page 1
+   of N" (a page total prints only from a margin box). */
+@page lvrf-cover {
+  size: letter;
+  margin: 0 0 0.6in 0;
+  background: theme('colors.ink');
+  @bottom-left {
+    font-family: 'Barlow Condensed', 'Barlow', sans-serif;
+    font-weight: 600;
+    font-size: 7pt;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+    color: theme('colors.silver');
+    white-space: pre-wrap;
+    vertical-align: middle;
+    width: 72%;
+    margin-left: 0.6in;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 8pt;
+    color: theme('colors.silver');
+    vertical-align: middle;
+    white-space: nowrap;
+    margin-right: 0.6in;
   }
 }
 @media print {
   [data-testid='value-case'], [data-testid='pov'] { page: letter; }
+  /* S3 (§22): the cover. Its banners are the very element every body page repeats (Brad's condition 1). */
+  [data-testid='print-cover'] { page: lvrf-cover; break-after: page; height: calc(11in - var(--lvrf-cover-foot, 0.6in)); display: flex; flex-direction: column;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  [data-testid='print-cover'] > [data-testid='cover-banners'] { background: theme('colors.white'); padding: 0.45in 0.6in 0.12in; }
+  /* A case with nothing to disclose (verified, on customer-side evidence) prints no banner: no empty white strip either. */
+  [data-testid='print-cover'] > [data-testid='cover-banners']:not(:has([data-testid^='banner-'])) { display: none; }
+  [data-testid='print-cover'] > [data-testid='cover-panel'] { flex: 1; background: theme('colors.ink'); padding: 1.05in 0.6in 0.4in; }
+  /* The refusal under the CFO lens, in an ink box: gold on ink for its heading, silver and off-white for its text. */
+  [data-testid='cfo-refusal'] { background: theme('colors.ink'); color: theme('colors.offwhite'); padding: 10pt 12pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  [data-testid='cfo-refusal'] h2 { color: theme('colors.gold'); border-color: theme('colors.ink-70'); }
+  [data-testid='cfo-refusal'] .text-ink { color: theme('colors.offwhite'); }
+  [data-testid='cfo-refusal'] .text-ink-45, [data-testid='cfo-refusal'] .text-ink-70 { color: theme('colors.silver'); }
+  [data-testid='print-close'] { break-inside: avoid; }
   /* UX item 1 (Brad, 5 Nov 2026): no short ids in a customer print; they stay on screen, where B2 put them. */
   [data-testid='pov'] [data-testid='evidence-short-id'] { display: none; }
   body { background: theme('colors.white'); }
+  /* S3: nothing white under the printed case or POV. Paper is white; under the cover the page's own ink shows, so the
+     antialiased edge where the cover meets its ink band blends ink into ink, not into white (the seam, 19 Nov 2026). */
+  html:has([data-testid='print-cover']), body:has([data-testid='print-cover']) { background: transparent; }
   [data-testid^='banner-'] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* Keep small units whole; let long sections break, so no page is left half empty. */
   [data-testid='chain'], [data-testid='facts'] tr, [data-testid='outcome'] > div { break-inside: avoid; }

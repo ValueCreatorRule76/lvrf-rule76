@@ -8,6 +8,8 @@ import { FOCUS_RING } from '../components/GovernedForm';
 import { ConfidenceCurve } from '../components/snapshots/ConfidenceCurve';
 import { CaseInputs } from '../components/valueCase/CaseInputs';
 import { num, money } from '../lib/caseFormat';
+import { PrintClose, PrintCover, PrintRecordLine, PrintStats } from '../components/print/PrintFamily';
+import { KICKER_PRINT } from '../components/print/printText';
 
 /**
  * B3 (P6; LVRF_PLAN §19) — /runs/:id/case: one run's value case, read from its sealed payload, through a lens.
@@ -185,6 +187,13 @@ export function ValueCasePage() {
   const allPublished = printedBases.length > 0 && printedBases.every((b) => b === 'published');
   const outsideInText = `OUTSIDE-IN HYPOTHESIS — ${allPublished ? 'built from published sources only; ' : ''}no figure rests on ${d.account.name}’s own records or on a named person at ${d.account.name}`;
   const printedOn = new Date().toISOString().slice(0, 10);
+  const lensWords = d.lens === 'cfo' ? 'CFO lens' : 'general';
+  // The record line, as the print footer read before S3, word for word; now at the foot of every page (Brad, 19 Nov 2026).
+  const recordLine = `${d.account.name} · value case, run ${d.run.run_number} · ${lensWords} · record hash ${d.run.payload_hash} · printed ${printedOn}`;
+  // S3, change 3: the disclaimer as drafted (unverified), and its verified counterpart.
+  const disclaimer = d.banners?.unverified
+    ? `This document renders from sealed run ${d.run.run_number}, record hash ${d.run.payload_hash}. It is unverified until a named person at ${d.account.name} verifies its measured result against their own records. Each figure carries its basis; none is applied beyond it. Rule 76 Consulting LLC · Learning Value Realization Framework.`
+    : `This document renders from sealed run ${d.run.run_number}, record hash ${d.run.payload_hash}. Its measured result was verified by a named person at ${d.account.name} against their own records. Each figure carries its basis; none is applied beyond it. Rule 76 Consulting LLC · Learning Value Realization Framework.`;
 
   const banners = (
     <div data-testid="banners" className="text-[10.5px] tracking-[.03em]">
@@ -218,13 +227,15 @@ export function ValueCasePage() {
   }
 
   return (
-    <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-white" data-testid="value-case" data-lens={d.lens}>
+    <div className="min-h-screen bg-offwhite print:min-h-0 print:bg-transparent" data-testid="value-case" data-lens={d.lens}>
       <div className="print:hidden">{banners}</div>
+      {/* S3 (§22): the record line with the FULL hash at the foot of every page; the ink cover, carrying the same banners. */}
+      <PrintRecordLine lines={[recordLine]} />
+      <PrintCover banners={banners} kicker="Rule 76 · Learning Value Realization" title={d.account.name} doc="Value Case"
+        meta={`${metric} · ${lensWords} · run ${d.run.run_number}${d.run.locked_at ? `, locked ${d.run.locked_at.slice(0, 10)}${d.run.locked_by ? ` by ${d.run.locked_by}` : ''}` : ', not locked'} · computed confidence ${d.run.score} / 100 (${d.run.band})`}
+        lede={hypotheses[0]?.statement} />
       <table className="block w-full border-collapse print:table print:table-fixed">
         <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell">{banners}</td></tr></thead>
-        <tfoot className="hidden print:table-footer-group" data-testid="print-footer"><tr className="print:table-row"><td className="p-0 print:table-cell">
-          <p className="m-0 pt-2 font-mono text-[8.5px] text-ink-45 [overflow-wrap:anywhere]">{d.account.name} · value case, run {d.run.run_number} · {d.lens === 'cfo' ? 'CFO lens' : 'general'} · record hash {d.run.payload_hash} · printed {printedOn}</p>
-        </td></tr></tfoot>
         <tbody className="block print:table-row-group"><tr className="block print:table-row"><td className="block p-0 print:table-cell">
           <div className="mx-auto max-w-4xl px-4 pb-14 pt-6 font-body text-ink sm:px-[30px] print:max-w-none print:px-0 print:pt-3">
             <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden" data-testid="case-controls">
@@ -240,7 +251,7 @@ export function ValueCasePage() {
 
             {/* 1. The executive page. */}
             <section className="mb-8 break-after-page" data-testid="executive-page">
-              <span className="text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45">Value case · {d.lens === 'cfo' ? 'CFO lens' : 'general'}</span>
+              <span className={'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45 ' + KICKER_PRINT}>Value case · {d.lens === 'cfo' ? 'CFO lens' : 'general'}</span>
               <h1 className="m-0 my-1.5 font-display text-[32px] leading-[1.02] tracking-[.012em]">{d.account.name}</h1>
               {(d.banners?.not_shown?.length ?? 0) > 0 && (
                 <p className="m-0 mb-1 text-[12px] text-ink-70" data-testid="not-shown">{d.banners!.not_shown!.length === 1
@@ -248,19 +259,25 @@ export function ValueCasePage() {
                   : `${d.banners!.not_shown!.length} customer-side items are on record but not shown: ${d.banners!.not_shown!.map((x) => `${x.summary}, ${x.why}`).join('; ')}.`}</p>)}
               <p className="m-0 text-[12px] text-ink-45">{metric} · run {d.run.run_number}{d.run.locked_at ? `, locked ${d.run.locked_at.slice(0, 10)}${d.run.locked_by ? ` by ${d.run.locked_by}` : ''}` : ', not locked'} · computed confidence {d.run.score} / 100 ({d.run.band})</p>
 
-              <h2 className="m-0 mb-1 mt-5 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">The hypothesis</h2>
+              <h2 className="m-0 mb-1 mt-5 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45 print:font-condensed print:text-[8.4pt]">The hypothesis</h2>
               {hypotheses.length === 0
                 ? <p className="m-0 text-[13px] text-ink-70" data-testid="exec-no-hypothesis">No hypothesis was sealed with this run.</p>
                 : hypotheses.map((h) => <p key={h.id} className="m-0 mb-1 text-[14px] leading-snug" data-testid="exec-hypothesis">{h.statement}</p>)}
+              {o && <PrintStats stats={[
+                { label: 'Baseline', number: num(o.baseline), unit: o.unit, words: 'not recorded' },
+                { label: 'Target', number: o.target !== null ? num(o.target) : null, unit: o.unit, words: 'not committed' },
+                { label: 'Actual', number: o.actual !== null ? num(o.actual) : null, unit: o.unit, words: 'not measured' },
+                { label: 'Computed confidence', number: String(d.run.score), unit: '/ 100', note: d.run.band },
+              ]} />}
 
-              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">{cfoRefused ? 'Under the CFO lens' : 'The money at stake'}</h2>
+              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45 print:font-condensed print:text-[8.4pt]">{cfoRefused ? 'Under the CFO lens' : 'The money at stake'}</h2>
               {cfoRefused
                 ? <p className="m-0 text-[13px]" data-testid="exec-refused">This case is refused under the CFO lens, for {d.cfo!.reasons.length === 1 ? 'one reason' : `${d.cfo!.reasons.length} reasons`} set out under “Why the CFO lens refuses”, each with the question that clears it. What would meet them is under “What we need from you: the asks”, below.</p>
                 : <p className="m-0 text-[13px]" data-testid="exec-money">{codLine()}</p>}
               {o && <p className="m-0 mt-1 text-[12.5px] text-ink-70" data-testid="exec-baseline">Baseline {baselineText ?? 'not recorded'}{baselineText && cite(sourceNote('Baseline', o.sources.baseline))}; target {o.target !== null ? withUnit(o.target, o.unit) : 'not committed: a hypothesis'}{o.target !== null && cite(targetNote(o))}; actual {o.actual !== null ? withUnit(o.actual, o.unit) : 'not measured'}{o.actual !== null && cite(sourceNote('Actual', o.sources.actual))}.</p>}
               {cfoRefused && <p className="m-0 mt-1 text-[12.5px] text-ink-70">{codLine()}</p>}
 
-              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45" data-testid="asks-title">What we need from you: the asks</h2>
+              <h2 className="m-0 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45 print:font-condensed print:text-[8.4pt]" data-testid="asks-title">What we need from you: the asks</h2>
               <AskList asks={d.asks} testid="exec-asks" />
             </section>
 
@@ -268,7 +285,7 @@ export function ValueCasePage() {
               <Section title="Why the CFO lens refuses" testid="cfo-refusal">
                 <p className="m-0 text-[13px]" data-testid="cfo-refusal-text">{d.cfo.policy ? d.cfo.policy.refusal_text : 'No CFO lens has been ratified yet, so the CFO lens refuses every case and says why.'}</p>
                 {d.cfo.policy && <p className="m-0 mt-1 text-[11px] text-ink-45">The CFO lens: at least {d.cfo.policy.min} computed confidence, ratified by {d.cfo.policy.ratified_by} on {d.cfo.policy.ratified_on}.</p>}
-                <h3 className="m-0 mb-1 mt-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45">The reasons</h3>
+                <h3 className="m-0 mb-1 mt-3 text-[11px] font-semibold uppercase tracking-[.14em] text-ink-45 print:font-condensed print:text-[8.4pt]">The reasons</h3>
                 <AskList asks={d.cfo.reasons} testid="cfo-reasons" />
                 {/* B4 addendum (ruling 1): the outcomes section is not printed under a CFO refusal, so a claimed impact is said
                     to be withheld here, never silently absent. D4's line when no impact-basis source is sealed. */}
@@ -377,6 +394,9 @@ export function ValueCasePage() {
             <Section title="Glossary" testid="case-glossary">
               <dl className="m-0 text-[11.5px]">{GLOSSARY.map(([t, def]) => <div key={t} className="mb-1"><dt className="inline font-semibold">{t}: </dt><dd className="inline m-0 text-ink-70">{def}</dd></div>)}</dl>
             </Section>
+
+            {/* S3, change 3: the disclaimer first, under its heading; the tagline below it, smaller. */}
+            <PrintClose heading="About this document" text={disclaimer} />
 
             <div className="print:hidden"><CaseInputs vc={d} actorIsSteward={Boolean(actor?.is_steward)} stewardName={actor?.steward_name ?? null} actorName={actor?.full_name ?? null} onDone={load} /></div>
           </div>

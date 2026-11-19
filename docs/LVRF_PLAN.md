@@ -5002,6 +5002,20 @@ per field by a person.
 - After S3: one small dependency change, a plain `npm audit fix` (`body-parser`, `qs`) and `"argon2@0.45.1": false` in
   `allowScripts`, with its own regression (3.1 list).
 
+**The mock-up reviewed (Brad, 19 Nov 2026): approved, with C1–C9 as recommended, the cover's thin ink band for "Page 1
+of N", and four changes:**
+1. **Every page carries the same record line with the full record hash.** Gate A checks that the full hash, matching
+   the run's `payload_hash`, is on every page of both PDFs.
+2. **Display-size type is for measured numbers only.** Status words ("CLAIMED", and any other state) print at label
+   size, never in Bebas display. Gate A adds a break: a status word in display size fails.
+3. **C8: the disclaimer comes first on the last page,** its wording as drafted, and the tagline goes below it,
+   smaller than the disclaimer's heading.
+4. **The last page's record line sits at the foot of the page.**
+   - **Named:** today's prints place it after the content, not at the foot; on run 3's default-lens print (15 Nov),
+     page 3's record line sits about two-thirds down.
+   - **As built:** the record line moves into the page's bottom margin box, which always prints at the foot, on every
+   page, the cover's ink band included.
+
 Ruling it builds: "One Rule76 family with CVAF" (Brad, 15 Nov 2026, `docs/LVRF_3.0_CRITICAL_PATH.md`). LVRF's design,
 colours and UX read as the same family as CVAF, with CVAF's `docs/RULE76_DESIGN_SYSTEM.md` as the reference. It is read
 from `cvaf-rule76`, and nothing is copied into CVAF. Tokens stay cited from `CLAUDE.md`; any value where CVAF's system
@@ -5139,3 +5153,31 @@ pilot starts (3.1 build order).
   PDFs, as on 15 Nov.
 - **Gate C (read-only):** the print requests are Brad's; no other row changed; every sealed run is byte-identical.
 - **About 2 days of work after the mock-up is approved.**
+
+### Gate A, as built (19 Nov 2026), and Brad's Gate A rulings
+
+**Brad's rulings (19 Nov 2026):**
+1. **The POV's citation on the cover, under the lede, is approved.** It keeps "Source on page 1" true, with every
+   word unchanged. The Gate A PDF is in `~/lvrf-backups/s3-mockup/s3-gateA-pov-curia.pdf` (`chmod 600`) for Brad
+   before Gate B.
+2. **The case the CFO lens shows may not go untested.** A synthetic fixture on the clone (a fictional account, a
+   measured actual from a system of record, a named verifier, computed confidence at least 55) makes the lens show the
+   case. It is printed and put through the same checks: banners, the full hash on every page, the line structure,
+   fonts, contrast, display size for numbers only. Clone only, never prod.
+   - **Done:** `scripts/lib/s3_cfo_fixture.sh`. Northwind Fabrication (fictional), its actual measured from a system
+     export, verified by its customer-side controller, computed confidence 80. The lens shows it.
+3. **The screen-text comparison reads the rendered lines** (Brad, 19 Nov 2026), with a break for merged lines and
+   one for a moved block, each with its positive control. **Done:** B9a and B9b.
+
+**Gate A: all checks pass.** `verify_s3_print_family` 116/0. The full regression, 52 scripts, all pass. Equivalence
+against `d9b3a80`: 213/213. The full record is in `BUILD_STATUS.md`, "S3: … Gate A". Found and fixed on the way, each
+now under a check:
+- the POV citation's page;
+- a seam on every cover;
+- the clipped POV record line;
+- ink on ink in the refusal box;
+- an empty banner strip on a verified case's cover;
+- long units beside the stats.
+
+**Named for Brad, not changed:** the run page shows a VERIFIED banner where the printed case shows none, because the
+case prints a banner only when there is something to disclose. It is the deployed behaviour, and predates S3.

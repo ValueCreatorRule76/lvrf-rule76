@@ -40,6 +40,8 @@ export default {
     fontFamily: {
       display: ['Bebas Neue', 'sans-serif'],
       body: ['Barlow', 'system-ui', 'sans-serif'],
+      // S3 (CLAUDE.md, the condensed face): kickers, labels, table heads, the printed record line. Self-hosted.
+      condensed: ['Barlow Condensed', 'Barlow', 'sans-serif'],
       mono: ['ui-monospace', 'SF Mono', 'Menlo', 'monospace'],
     },
     extend: {},
