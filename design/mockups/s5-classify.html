@@ -1,0 +1,58 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="mock.css"><link rel="stylesheet" href="s5-frame.css">
+<title>S5 mock-up · Classify as from the frame</title></head><body>
+<div class="mockflag">S5 mock-up · Screen 9 · "Classify as…" from the frame, on an unclassified customer account (D6) · fictional accounts · not the app: no data is read or written</div>
+<header class="hdr">
+  <div class="lockup"><span class="r76">RULE<span class="bar"></span><span class="num">76</span></span><span class="chapel">LVRF</span></div>
+  <nav class="nav" aria-label="Main"><a href="s5-leave.html">Accounts</a><a href="s5-packs.html">Packs</a><a href="s5-runs.html">Runs</a><a href="#">Policies</a></nav>
+  <div class="who"><span>Signed in as <strong>A. Steward</strong> · steward</span><a href="#" style="color:var(--silver)">Sign out</a></div>
+  <button class="menu" type="button">Menu</button>
+</header>
+<div class="frame" role="region" aria-label="Account in focus">
+  <div class="in">
+    <div class="f-acct">
+      <div class="f-top"><span class="f-kicker">In focus</span><a class="f-name" href="s5-workspace.html">Brightwater Health</a></div>
+      <div class="f-meta"><span>Unclassified: no industry pack</span> <button class="f-classify" type="button" aria-expanded="true">Classify as…</button><span class="sep">·</span><span>No run yet: no computed confidence</span><span class="sep">·</span><span class="where">Step 1 of 6 next: research</span></div>
+    </div>
+    <nav class="f-pages" aria-label="Brightwater Health's pages"><a href="s5-workspace.html" aria-current="page">Workspace</a><a href="s5-workspace.html#s1">Research</a><a href="s5-runs.html">Runs (0)</a><span class="off" title="No locked run yet">Value case: none yet, no locked run</span><a href="s5-pov.html">Point of view</a></nav>
+    <a class="f-leave" href="s5-leave.html">Leave the account</a>
+  </div>
+  <details class="f-sm">
+    <summary><span class="f-kicker">In focus</span><span class="f-name">Brightwater Health</span><span class="tog">Pages ▸</span></summary>
+    <div class="panel">
+      
+      <div class="f-meta"><span>Unclassified: no industry pack</span> <button class="f-classify" type="button" aria-expanded="true">Classify as…</button><span class="sep">·</span><span>No run yet: no computed confidence</span><span class="sep">·</span><span class="where">Step 1 of 6 next: research</span></div>
+      <ul><li><a href="s5-workspace.html" aria-current="page">Workspace</a></li><li><a href="s5-workspace.html#s1">Research</a></li><li><a href="s5-runs.html">Runs (0)</a></li><li><span class="off">Value case: none yet, no locked run</span></li><li><a href="s5-pov.html">Point of view</a></li></ul>
+      <a class="f-leave" href="s5-leave.html">Leave the account</a>
+    </div>
+  </details>
+</div>
+<div class="switched"><div class="in" style="display:block">
+    <div class="card" style="max-width:640px"><div class="pad">
+      <div class="kicker" style="color:var(--gold-ink)">Classify Brightwater Health</div>
+      <label class="f" style="margin-top:10px"><span>Classify as (optional)</span><div class="input">Healthcare providers</div></label>
+      <p class="why" style="margin-top:-6px">Classification decides which industry pack applies. It is a judgement, and it is final for this account — a wrong one is corrected by superseding the account, not by editing it. Unclassified is an honest state.</p>
+      <label class="f"><span>Why this classification (required)</span><div class="input" style="min-height:52px">Brightwater's annual report describes it as an operator of acute-care hospitals and outpatient clinics.</div></label>
+      <p class="why" style="margin-top:-6px">Recorded as evidence under your name — an observation, low confidence, unverified. A classification with no stated reasoning is refused.</p>
+      <div class="row" style="margin-top:12px"><button class="btn primary" type="button">Review <span class="arrow">→</span></button><button class="btn" type="button">Cancel</button></div>
+    </div></div></div></div>
+<main class="wrap">
+<div class="annot"><b>Mock-up note.</b> "Classify as…" appears in the frame only on an <b>unclassified customer</b> account: never on a classified one, a reference example or the tenant's own. It opens S1's component as it is, with its route, act and full confirmation unchanged ("Classify this account (…) as …, because: “…”. Final: …"). Once classified, the frame shows the pack and the button is gone. The value case is "none yet" because the account has no locked run; its confidence says "No run yet", never 0.</div>
+  <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:12px 24px">
+    <div><h1>Brightwater Health</h1><div class="muted small">Unclassified: no industry pack applies yet</div></div>
+    <div class="spacer"></div>
+    <div><div class="kicker">Computed confidence</div><div class="muted small">No run yet</div></div>
+  </div>
+  
+  <div class="ws"><ol class="rail" aria-label="The path"><li class="now"><span class="n">1</span><span>Research</span><span class="st">Now</span></li><li class="wait"><span class="n">2</span><span>Outside-in walk</span><span class="st"></span></li><li class="wait"><span class="n">3</span><span>Hypothesis</span><span class="st"></span></li><li class="wait"><span class="n">4</span><span>Summary</span><span class="st"></span></li><li class="wait"><span class="n">5</span><span>Run and lock</span><span class="st"></span></li><li class="wait"><span class="n">6</span><span>Point of view</span><span class="st"></span></li></ol><div>
+    <section class="step now" id="s1"><div class="head"><span class="n">1</span><span class="t">Research</span><span class="badge now">Next</span></div><div class="body"><p class="muted small" style="margin:0 0 10px">The step's form, unchanged by S5.</p><button class="btn primary" type="button">Start the research <span class="arrow">→</span></button></div></section>
+    <section class="step wait" id="s2"><div class="head"><span class="n">2</span><span class="t">Outside-in walk</span><span class="sum">Waiting</span></div></section>
+    <section class="step wait" id="s3"><div class="head"><span class="n">3</span><span class="t">Hypothesis</span><span class="sum">Waiting</span></div></section>
+    <section class="step wait" id="s4"><div class="head"><span class="n">4</span><span class="t">Summary</span><span class="sum">Waiting</span></div></section>
+    <section class="step wait" id="s5"><div class="head"><span class="n">5</span><span class="t">Run and lock</span><span class="sum">Waiting</span></div></section>
+    <section class="step wait" id="s6"><div class="head"><span class="n">6</span><span class="t">Point of view</span><span class="sum">Waiting</span></div></section>
+  </div></div>
+</main></body></html>

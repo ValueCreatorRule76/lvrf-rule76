@@ -1,0 +1,65 @@
+/* S5 mock-up: the account frame (LVRF_PLAN §24). Tokens only (tokens.css); no hex here.
+   On screen only: the frame never prints (S3's printed case and POV are untouched). */
+
+.frame { background: var(--paper); border-bottom: 1px solid var(--ink); }
+.frame .in { max-width: 1120px; margin: 0 auto; padding: 12px 24px 0; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "acct leave" "pages pages"; align-items: center; gap: 6px 28px; }
+.f-acct { grid-area: acct; } .f-leave { grid-area: leave; } .f-pages { grid-area: pages; }
+.f-acct { min-width: 0; }
+.f-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.f-kicker { font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; color: var(--gold-ink); }
+.f-name { font-weight: 600; font-size: 16px; color: var(--ink); text-decoration: none; }
+.f-meta { font-size: 12.5px; color: var(--ink-45); display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+.f-meta .sep { color: var(--ink-45); }
+.f-meta .where { color: var(--ink-70); }
+.f-ref { font-size: 12px; color: var(--ink-70); border: 1px solid var(--ink-70); padding: 1px 8px; }
+.f-pages { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 4px; }
+.f-pages a, .f-pages span { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; text-decoration: none; color: var(--ink-70); padding: 6px 0 8px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.f-pages a:hover { color: var(--ink); }
+.f-pages a[aria-current] { color: var(--ink); border-bottom-color: var(--gold); }
+.f-pages .off { color: var(--ink-45); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.f-leave { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--paper); border: 1px solid var(--ink); padding: 5px 12px; text-decoration: none; white-space: nowrap; }
+.f-classify { font: inherit; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--ink-70); background: var(--paper); border: 1px solid var(--ink-70); padding: 1px 8px; cursor: pointer; }
+
+/* the one-time "you're now in" notice (D2): said once, then gone */
+.switched { border-bottom: 1px solid var(--rule); background: var(--rule-soft); }
+.switched .in { max-width: 1120px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 8px 16px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.switched strong { font-weight: 600; }
+
+/* phone (390): one line, the name then ▸ for its pages; no sideways scroll */
+.f-sm { display: none; }
+.f-sm summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px 16px; }
+.f-sm summary::-webkit-details-marker { display: none; }
+.f-sm summary .f-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.f-sm summary .tog { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--ink-70); white-space: nowrap; }
+.f-sm .panel { padding: 0 16px 14px; border-top: 1px solid var(--rule-soft); }
+.f-sm .panel .f-meta { margin: 10px 0; }
+.f-sm .panel ul { list-style: none; margin: 0 0 12px; padding: 0; }
+.f-sm .panel li a, .f-sm .panel li span { display: block; padding: 9px 0; border-bottom: 1px solid var(--rule-soft); font-size: 14px; text-decoration: none; color: var(--ink); }
+.f-sm .panel li a[aria-current] { font-weight: 600; box-shadow: inset 3px 0 0 var(--gold); padding-left: 10px; }
+.f-sm .panel li .off { color: var(--ink-45); }
+
+/* the filter line on Runs (D3) */
+.filter { display: flex; gap: 8px 16px; align-items: baseline; flex-wrap: wrap; margin: 14px 0 12px; font-size: 13px; }
+.runs { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--paper); border: 1px solid var(--rule); }
+.runs th { text-align: left; font-size: 10px; letter-spacing: .13em; text-transform: uppercase; font-weight: 600; color: var(--ink-45); padding: 9px 12px; border-bottom: 1px solid var(--silver); white-space: nowrap; }
+.runs td { padding: 10px 12px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+.runs tr.mine td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+.tablewrap { overflow-x: auto; }
+
+.packrow { display: grid; grid-template-columns: 1.4fr 2fr auto; gap: 16px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--rule-soft); }
+.packrow.is { box-shadow: inset 3px 0 0 var(--gold); }
+.packrow .name { font-weight: 600; }
+.tag { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--gold-ink); }
+
+.figure { font-family: var(--display); font-size: 30px; line-height: 1; }
+.annot { position: relative; border: 1px dashed var(--ink-45); padding: 8px 12px; font-size: 12.5px; color: var(--ink-70); background: var(--paper); margin: 14px 0; }
+.annot b { color: var(--ink); }
+
+@media (max-width: 720px) {
+  .frame .in { display: none; }
+  .f-sm { display: block; }
+  .switched .in { padding: 10px 16px; }
+  .packrow { grid-template-columns: 1fr; gap: 4px; }
+  .runs th.hide-sm, .runs td.hide-sm { display: none; }
+}
+@media print { .frame, .switched, .annot { display: none; } }
