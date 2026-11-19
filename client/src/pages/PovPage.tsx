@@ -3,6 +3,7 @@ import { NoSourceLine, VerifiedUnopenedLine } from '../components/RecordReadings
 import { useEffect, useState } from 'react';
 import { LineageLink } from '../components/LineageLink';
 import { Link, useParams } from 'react-router-dom';
+import { useFrameAccount } from '../components/AccountFocus';
 import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { ConfidenceBadge } from '../components/workbench/Workspace';
@@ -291,6 +292,8 @@ export function PovPage() {
     if (!id || !actor) return;
     fetchPov(id).then((r) => setState(r.status === 'ok' ? { pov: r.pov } : { message: r.message }));
   }, [id, actor]);
+  // S5 (D2): the point of view is its account's.
+  useFrameAccount(!state ? { kind: 'loading' } : state.pov ? { kind: 'account', id: state.pov.institution.id, belongs: 'this point of view belongs to it' } : { kind: 'none' });
   if (!actor) return <p className="p-8 text-ink-45">Sign in to view this POV.</p>;
   if (!state) return <p className="p-8 text-ink-45">loading</p>;
   if (!state.pov) return <p className="p-8 text-critical">{state.message}</p>;

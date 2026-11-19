@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import {
   fetchInstitutionView,
@@ -22,6 +22,7 @@ import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
 import { EngagementHypotheses, PovAuthoring, type PovStatus } from '../components/PovAuthoring';
 import { ConfidenceBadge, PrimaryLink, StepRail, WorkspaceStep } from '../components/workbench/Workspace';
 import { MARKER_KIND } from '../api/pov';
+import { useFrameAccount } from '../components/AccountFocus';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported
@@ -378,8 +379,12 @@ function Workspace({ view, refresh }: { view: InstitutionView; refresh: () => vo
   // C3: the headline is the latest UNMARKED locked run (a system exercise is never the headline).
   const locked = walk ? [...walk.runs].reverse().find((x) => x.locked_at && !x.system_exercise) : undefined;
   const marker = pov?.marker ? MARKER_KIND[pov.marker.kind] : null;
+  // S5: the frame's "Research" link (#research) opens step 1.
+  const location = useLocation();
+  const researchKey = location.hash === '#research' ? location.key : null;
   const step = (i: number, body: ReactNode) => (
-    <WorkspaceStep key={i} n={i + 1} title={STEP_TITLES[i]} status={steps[i].status} summary={steps[i].summary} testId={`ws-step-${i + 1}`}>{body}</WorkspaceStep>
+    <WorkspaceStep key={i} n={i + 1} title={STEP_TITLES[i]} status={steps[i].status} summary={steps[i].summary} testId={`ws-step-${i + 1}`}
+      openKey={i === 0 ? researchKey : null}>{body}</WorkspaceStep>
   );
   return (
     <>
@@ -501,6 +506,8 @@ export function InstitutionPage() {
     if (!id || !actor) return;
     fetchInstitutionView(id).then(setResult);
   }, [id, actor]);
+  // S5: opening an account sets the focus; another account's page replaces it, and the frame says so once (D2).
+  useFrameAccount(!result ? { kind: 'loading' } : result.status === 'ok' ? { kind: 'account', id: result.view.institution.id } : { kind: 'none' });
 
   if (!actor) {
     return (

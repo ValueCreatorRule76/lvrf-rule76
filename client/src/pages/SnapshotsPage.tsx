@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useFrameAccount } from '../components/AccountFocus';
 import { apiFetch } from '../api/http';
 import { MARKER_KIND, type MarkerKind } from '../api/pov';
 import { FOCUS_RING } from '../components/GovernedForm';
@@ -82,6 +83,8 @@ export function SnapshotsPage() {
     }, () => { if (!cancelled) setD('error'); });
     return () => { cancelled = true; };
   }, [id]);
+  // S5 (D2): an engagement's snapshots are its account's.
+  useFrameAccount(d === null ? { kind: 'loading' } : typeof d === 'string' ? { kind: 'none' } : { kind: 'account', id: d.engagement.institution_id, belongs: 'these runs belong to it' });
   if (d === null) return <p className="p-8 text-ink-45">loading</p>;
   if (d === 'not_found') return <p className="p-8 text-ink-45" data-testid="snapshots-not-found">This engagement was not found.</p>;
   if (d === 'error') return <p className="p-8 text-ink-70">Couldn&apos;t load this engagement&apos;s runs. Reload the page to try again.</p>;

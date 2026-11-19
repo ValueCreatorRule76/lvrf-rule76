@@ -158,15 +158,17 @@ export function CreateAccountCard({ primary = false }: { primary?: boolean } = {
  * The classification fields of "Create account" ("Classify as", and why), shared with "Classify as…" on the tenant's
  * own account (S1, §20 D1; Brad's ruling 2, 15 Nov 2026): one form, the same words, two places.
  */
-export function ClassifyFields({ industries, industriesError, industrySlug, setIndustrySlug, classificationNote, setClassificationNote }: {
+export function ClassifyFields({ industries, industriesError, industrySlug, setIndustrySlug, classificationNote, setClassificationNote, optional = true }: {
   industries: IndustryListItem[] | null; industriesError: string | null;
   industrySlug: string; setIndustrySlug: (v: string) => void; classificationNote: string; setClassificationNote: (v: string) => void;
+  /** S5 (Brad, 19 Nov 2026): "(optional)" only where classifying is optional, on the create form; "Classify as…" requires it. */
+  optional?: boolean;
 }) {
   const classifying = industrySlug !== '';
   return (
     <>
     <label className="mb-3 block">
-      <span className={LABEL_CLASS}>Classify as (optional)</span>
+      <span className={LABEL_CLASS}>{optional ? 'Classify as (optional)' : 'Classify as'}</span>
       <select
         value={industrySlug}
         onChange={(e) => setIndustrySlug(e.target.value)}
@@ -216,9 +218,13 @@ export function ClassifyFields({ industries, industriesError, industrySlug, setI
  * and the existing route, POST /api/institutions/:id/industry, unchanged. On the tenant's own account it is classified
  * only to carry its own value case.
  */
-export function ClassifyAccount({ institutionId, onDone }: { institutionId: string; onDone: () => void }) {
+export function ClassifyAccount({ institutionId, onDone, open: openAtStart = false, onCancel }: {
+  institutionId: string; onDone: () => void;
+  /** S5 (D6): the account frame opens the form from its own "Classify as…" button, and closes it with Cancel. */
+  open?: boolean; onCancel?: () => void;
+}) {
   const { actor } = useActor();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openAtStart);
   const [industrySlug, setIndustrySlug] = useState('');
   const [classificationNote, setClassificationNote] = useState('');
   const [industries, setIndustries] = useState<IndustryListItem[] | null>(null);
@@ -242,13 +248,17 @@ export function ClassifyAccount({ institutionId, onDone }: { institutionId: stri
       <GovernedForm<{ industry_name: string }>
         path={`/api/institutions/${institutionId}/industry`} provenanceLabel="Provenance — how this account's industry was determined"
         provenance={<ClassifyFields industries={industries} industriesError={industriesError} industrySlug={industrySlug}
-          setIndustrySlug={setIndustrySlug} classificationNote={classificationNote} setClassificationNote={setClassificationNote} />}
+          setIndustrySlug={setIndustrySlug} classificationNote={classificationNote} setClassificationNote={setClassificationNote} optional={false} />}
         fields={null}
         canSubmit={industrySlug !== '' && classificationNote.trim() !== ''}
         unmet={[...(industrySlug === '' ? ['choose an industry'] : []), ...(classificationNote.trim() === '' ? ['say why'] : [])]}
         confirm={<span data-testid="confirm-text">Classify this account ({institutionId.slice(0, 8)}) as {chosen?.name ?? industrySlug} ({industrySlug}), because: &ldquo;{classificationNote.trim()}&rdquo;. Final: a wrong classification is corrected by superseding the account.</span>}
         buildBody={() => ({ industry_slug: industrySlug, classification_note: classificationNote })}
         submitLabel="Classify" onSuccess={() => { setOpen(false); onDone(); }} renderSuccess={() => <>Classified.</>} />
+      {onCancel && (
+        <button type="button" onClick={onCancel} data-testid="classify-cancel"
+          className={'mt-2 border border-ink px-3 py-1.5 text-[12.5px] font-semibold text-ink hover:bg-offwhite ' + FOCUS_RING}>Cancel</button>
+      )}
     </div>
   );
 }

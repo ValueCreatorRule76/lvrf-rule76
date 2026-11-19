@@ -4,6 +4,7 @@ import { useActor } from '../actor/ActorContext';
 import { fetchIndustries, type FetchIndustriesResult } from '../api/packs';
 import { Card, Badge } from './workbench/Card';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
+import { useAccountFocus } from './AccountFocus';
 
 // A plain list, not a picker — each row links to /packs/:slug, but nothing
 // here filters or searches. Lives on PacksIndexPage now, as that page's
@@ -15,6 +16,8 @@ export function IndustriesListCard() {
   const { actor } = useActor();
   const [result, setResult] = useState<FetchIndustriesResult | null>(null);
   const [reload, setReload] = useState(0);
+  const { focusId, frame } = useAccountFocus();
+  const inFocus = frame.status === 'ok' && frame.data.id === focusId ? frame.data : null;
 
   useEffect(() => {
     if (!actor) {
@@ -67,14 +70,21 @@ export function IndustriesListCard() {
           {industries.map((ind) => (
             <li
               key={ind.id}
-              className="flex items-center justify-between gap-3 border-b border-rule-soft py-2 last:border-b-0"
+              className={'flex items-center justify-between gap-3 border-b border-rule-soft py-2 last:border-b-0' + (inFocus && inFocus.pack?.slug === ind.slug ? ' pl-2.5 shadow-[inset_3px_0_0_theme(colors.gold)]' : '')}
+              data-testid="pack-row" data-slug={ind.slug}
             >
-              <Link
-                to={`/packs/${ind.slug}`}
-                className={'text-[13px] font-semibold text-ink hover:text-gold-ink ' + FOCUS_RING}
-              >
-                {ind.name}
-              </Link>
+              <span className="min-w-0">
+                <Link
+                  to={`/packs/${ind.slug}`}
+                  className={'text-[13px] font-semibold text-ink hover:text-gold-ink ' + FOCUS_RING}
+                >
+                  {ind.name}
+                </Link>
+                {/* S5: the pack the account in focus is classified into, said in words. */}
+                {inFocus && inFocus.pack?.slug === ind.slug && (
+                  <span className="ml-2.5 text-[11px] font-semibold uppercase tracking-[.1em] text-gold-ink" data-testid="pack-in-focus">{inFocus.name} is classified here</span>
+                )}
+              </span>
               <Badge tone={ind.measure_count === 0 ? 'neutral' : 'watch'}>
                 {ind.measure_count} {ind.measure_count === 1 ? 'measure' : 'measures'}
               </Badge>

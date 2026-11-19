@@ -14,6 +14,8 @@ import { AppHeader } from './components/AppHeader';
 import { SnapshotsPage } from './pages/SnapshotsPage';
 import { ValueCasePage } from './pages/ValueCasePage';
 import { PoliciesPage } from './pages/PoliciesPage';
+import { AccountFocusProvider, useAccountFocus } from './components/AccountFocus';
+import { AccountFrame } from './components/AccountFrame';
 
 // Sign-in P2a. Nobody signed in: the sign-in page, in place of the routes —
 // the URL is kept, so the page asked for opens once signed in. A session
@@ -21,13 +23,17 @@ import { PoliciesPage } from './pages/PoliciesPage';
 // fields) and the sign-in panel opens over them.
 function SignedInRoutes() {
   const { status } = useActor();
+  // S5: a write from the frame itself ("Classify as…") remounts the page, so it reads its record again.
+  const { pagesKey } = useAccountFocus();
   if (status === 'loading') return null;
   if (status === 'signed_out') return <SignInPage />;
   // Band A: a starting password is replaced before anything else is shown.
   if (status === 'must_change') return <ChangePasswordPage forced />;
   return (
     <>
-      <Routes>
+      {/* S5 (LVRF_PLAN §24): the account in focus, under the header, on screen only. */}
+      <AccountFrame />
+      <Routes key={pagesKey}>
         <Route path="/" element={<AccountsIndexPage />} />
         <Route path="/runs" element={<RunsIndexPage />} />
         <Route path="/runs/:id" element={<RunPage />} />
@@ -49,9 +55,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <ActorProvider>
-        {/* UX-1 slice 2: today's row from 640 px up; one "Menu" row below (AppHeader). */}
-        <AppHeader />
-        <SignedInRoutes />
+        <AccountFocusProvider>
+          {/* UX-1 slice 2: today's row from 640 px up; one "Menu" row below (AppHeader). */}
+          <AppHeader />
+          <SignedInRoutes />
+        </AccountFocusProvider>
       </ActorProvider>
     </BrowserRouter>
   );

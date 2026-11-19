@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { fetchRun, type FetchRunResult } from '../api/runs';
 import { fetchPov } from '../api/pov';
 import { Workbench, type AccountRead } from '../components/workbench/Workbench';
+import { useFrameAccount } from '../components/AccountFocus';
 
 export function RunPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +34,10 @@ export function RunPage() {
       cancelled = true;
     };
   }, [id, reload]);
+  // S5 (D2): a run is its account's. A run whose account is retired names none: the frame stands aside on it rather
+  // than show it under the held account.
+  useFrameAccount(!result ? { kind: 'loading' } : result.status !== 'ok' ? { kind: 'none' }
+    : result.run.institution_id ? { kind: 'account', id: result.run.institution_id, belongs: 'this run belongs to it' } : { kind: 'unknown' });
 
   if (!result) return <p className="p-8 text-ink-45">loading</p>;
   if (result.status === 'not_found') return <p className="p-8 text-ink-45">This run was not found.</p>;

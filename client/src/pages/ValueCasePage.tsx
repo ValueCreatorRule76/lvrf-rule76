@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useFrameAccount } from '../components/AccountFocus';
 import { apiFetch } from '../api/http';
 import { postGoverned } from '../api/post';
 import { MARKER_KIND, type MarkerKind } from '../api/pov';
@@ -165,6 +166,8 @@ export function ValueCasePage() {
     }, () => setD('error'));
   }, [id, lens]);
   useEffect(() => { load(); }, [load]);
+  // S5 (D2): a value case is its account's.
+  useFrameAccount(d === null ? { kind: 'loading' } : typeof d === 'string' ? { kind: 'none' } : { kind: 'account', id: d.account.id, belongs: 'this value case belongs to it' });
 
   if (d === null) return <p className="p-8 text-ink-45">loading</p>;
   if (d === 'not_found') return <p className="p-8 text-ink-45" data-testid="case-not-found">This run was not found.</p>;

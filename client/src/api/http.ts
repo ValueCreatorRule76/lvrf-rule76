@@ -24,8 +24,18 @@ export const UNAUTHORIZED_EVENT = 'lvrf:unauthorized';
  */
 export const PASSWORD_CHANGE_EVENT = 'lvrf:password-change-required';
 
+/**
+ * S5 (LVRF_PLAN §24, D4): announced after any write the API accepted, so the account frame reads the account again
+ * (its step, its runs, its classification) without reading it on every navigation. It carries nothing.
+ */
+export const WROTE_EVENT = 'lvrf:wrote';
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const res = await fetch(path, { ...init, credentials: 'same-origin' });
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (res.ok && method !== 'GET' && method !== 'HEAD' && !path.startsWith('/api/auth/')) {
+    window.dispatchEvent(new Event(WROTE_EVENT));
+  }
   if (res.status === 401 && !path.startsWith('/api/auth/')) {
     window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
   }

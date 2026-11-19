@@ -50,7 +50,7 @@ function HealthBandCell({
 
 // run_number repeats across institutions (it's scoped to the engagement, not
 // global) so it is never rendered without institution_name in the row beside it.
-export function RunsTable({ runs }: { runs: RunListItem[] }) {
+export function RunsTable({ runs, focusId = null }: { runs: RunListItem[]; focusId?: string | null }) {
   const navigate = useNavigate();
 
   return (
@@ -58,6 +58,8 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
       {runs.length === 0 ? (
         <p className="m-0 text-[12.5px] text-ink-45">No value runs recorded.</p>
       ) : (
+        // S5: at 390 the table scrolls inside its own box; the page never scrolls sideways (the approved mock-up).
+        <div className="overflow-x-auto" data-testid="runs-table-scroll">
         <table className="w-full border-collapse text-[12.5px]">
           <thead>
             <tr>
@@ -79,8 +81,9 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                 key={r.id}
                 onClick={() => navigate(`/runs/${r.id}`)}
                 className="cursor-pointer hover:bg-offwhite"
+                data-testid="runs-row" data-account={r.institution_id ?? ''}
               >
-                <td className="border-b border-rule-soft px-3 py-[9px] font-semibold">
+                <td className={'border-b border-rule-soft px-3 py-[9px] font-semibold' + (focusId && r.institution_id === focusId ? ' shadow-[inset_3px_0_0_theme(colors.gold)]' : '')}>
                   {/* The account view, not the run — a different destination from the
                       row's own click-through, so this link stops the click from also
                       bubbling into the row's navigate(`/runs/${r.id}`) above. Null only
@@ -100,6 +103,10 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
                   )}
                   {/* L26: the account stays shown for a retired engagement's runs,
                       marked — "retired" is not "unknown account". */}
+                  {/* S5 (D3): with every account's runs shown, the account in focus's are marked, in words. */}
+                  {focusId && r.institution_id === focusId && (
+                    <span className="ml-2 text-[9.5px] font-semibold uppercase tracking-[.12em] text-gold-ink" data-testid="runs-in-focus">In focus</span>
+                  )}
                   {r.engagement_retired && (
                     <span className="ml-2 border border-silver px-1 py-px text-[9px] font-semibold uppercase tracking-[.12em] text-ink-45">
                       retired engagement
@@ -136,6 +143,7 @@ export function RunsTable({ runs }: { runs: RunListItem[] }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </Card>
   );

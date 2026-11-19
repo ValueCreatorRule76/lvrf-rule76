@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { FOCUS_RING } from '../GovernedForm';
 
@@ -36,15 +36,23 @@ export function BandBadge({ band }: { band: string }) {
   return <span className={'inline-block whitespace-nowrap border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[.1em] ' + tone}>{band.charAt(0).toUpperCase() + band.slice(1)}</span>;
 }
 
-export function WorkspaceStep({ n, title, status, summary, children, testId }: {
+export function WorkspaceStep({ n, title, status, summary, children, testId, openKey }: {
   n: number; title: string; status: StepStatus; summary?: ReactNode; children?: ReactNode; testId: string;
+  /** S5: the frame's "Research" link opens this step and brings it into view; each new key does so once. */
+  openKey?: string | null;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
+  const el = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!openKey) return;
+    setOpen(true);
+    el.current?.scrollIntoView({ block: 'start' });
+  }, [openKey]);
   const isOpen = open ?? status === 'now';
   const tone = status === 'done' ? 'text-healthy' : status === 'now' ? 'text-gold' : 'text-ink-25';
   return (
-    <section
-      className={'mb-2.5 border bg-white ' + (status === 'now' ? 'border-ink shadow-[inset_4px_0_0_theme(colors.gold)]' : 'border-rule')}
+    <section ref={el}
+      className={'mb-2.5 scroll-mt-4 border bg-white ' + (status === 'now' ? 'border-ink shadow-[inset_4px_0_0_theme(colors.gold)]' : 'border-rule')}
       data-testid={testId} data-step={n} data-status={status} data-open={isOpen ? 'true' : 'false'}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-[18px] py-3">

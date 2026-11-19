@@ -238,7 +238,7 @@ export interface AccountRow {
   last: { what: string; at: string } | null;
 }
 
-async function fetchWalk(id: string): Promise<WalkState | null> {
+export async function fetchWalk(id: string): Promise<WalkState | null> {
   const r = await apiFetch(`/api/institutions/${encodeURIComponent(id)}/walk`).catch(() => null);
   return r && r.ok ? ((await r.json().catch(() => null)) as WalkState | null) : null;
 }
