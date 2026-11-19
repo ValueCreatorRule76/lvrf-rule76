@@ -267,9 +267,13 @@ cut line applied first.
   forms). Retiring means `deleted_at` and a reason, with a `withdraw` act, never a delete (rule 2), and it is the
   steward's act through the page (rule 10).
 
-- **`npm audit fix` for `body-parser` (high) and `qs` (moderate)** (Brad, 18 Nov 2026), after S2's Gate C: a separate
-  small change, the plain `npm audit fix` only, never `--force`, with its own full regression. The four moderate
-  findings in the dev tooling (`esbuild` through `drizzle-kit`) are fixable only with `--force`, so they stay.
+- **One small dependency change, after S3** (Brad, 18 and 19 Nov 2026), with its own full regression:
+  - the plain `npm audit fix` for `body-parser` (high) and `qs` (moderate), never `--force`;
+  - `"argon2@0.45.1": false` in `allowScripts`, which silences npm's warning on every `npm ci` (argon2 loads from its
+    shipped prebuilds; sign-in P1, 11 Oct 2026).
+
+  The four moderate findings in the dev tooling (`esbuild` through `drizzle-kit`) are fixable only with `--force`, so
+  they stay.
 
 - **Revisit S2's two residual risks when LVRF first holds confidential customer-side data** (Brad, 18 Nov 2026).
   The two: a `brad` process changing the API's code, and one using the API's database login to insert a prompt and a

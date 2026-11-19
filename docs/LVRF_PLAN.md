@@ -4986,7 +4986,21 @@ When Gate C passes, and not before (OWN-1-D3), `CLAUDE.md`'s research seam is am
 Nothing else in the seam changes: a prompt is generated from live rows, a new result names its prompt, and accept is
 per field by a person.
 
-## 22. 3.1 slice S3: the printed case and the POV brought into the CVAF family (planned 19 Nov 2026; **for Brad's approval**)
+## 22. 3.1 slice S3: the printed case and the POV brought into the CVAF family (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1–D9 as recommended and three conditions**)
+
+**Brad's rulings (19 Nov 2026).** §22 is approved with D1–D9 as recommended, and these conditions:
+1. **D2, the banners on the cover.** On the cover, the OUTSIDE-IN and UNVERIFIED banners are at least as prominent as
+   on the body pages, never smaller or muted. Gate A adds a break: a cover whose banner is smaller than the body
+   pages' fails.
+2. **D4, Barlow Condensed is self-hosted** with the app, its OFL licence file included. It is never loaded from Google
+   Fonts or any other outside URL at print time. Gate A adds a check: the printed page makes no outside request for a
+   font, and the PDF embeds the font.
+3. **The 9 disagreements (C1–C9)** go to Brad as a short list, each with a recommendation, alongside the D8 mock-up.
+   He rules on them with the pages in front of him.
+- **First, the D8 mock-up only:** a cover and one body page of each document, printed to PDF in
+  `~/lvrf-backups/s3-mockup/` (`chmod 600`). **No product code changes until Brad approves the mock-up.**
+- After S3: one small dependency change, a plain `npm audit fix` (`body-parser`, `qs`) and `"argon2@0.45.1": false` in
+  `allowScripts`, with its own regression (3.1 list).
 
 Ruling it builds: "One Rule76 family with CVAF" (Brad, 15 Nov 2026, `docs/LVRF_3.0_CRITICAL_PATH.md`). LVRF's design,
 colours and UX read as the same family as CVAF, with CVAF's `docs/RULE76_DESIGN_SYSTEM.md` as the reference. It is read
