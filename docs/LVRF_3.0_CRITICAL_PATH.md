@@ -198,7 +198,7 @@ cut line applied first.
      - the solution catalog page;
      - `/people`;
      - the small items: the pack-basis note correction, retiring a fact, the dependency change, the "Moves first"
-       label, and tenant card 05.
+       label, tenant card 05, and the confidence legend's markers as SVG (Brad, 19 Nov 2026).
 
   S2's Gate B step 8 and its act session stay deferred until Brad funds the API.
 
@@ -300,6 +300,21 @@ cut line applied first.
     example: "VERIFIED: measured result verified by {name, role} on {date} against {system}".
   - **Condition (Brad):** it ships before any verified case is printed for a customer.
   - S3's fixture, a verified case the CFO lens shows (`scripts/lib/s3_cfo_fixture.sh`), is the test bed.
+
+- **The confidence legend's markers as SVG** (Brad, 19 Nov 2026, from S3's Gate C; a small item, not in the fix).
+  - **The problem:** the legend of the "Confidence over time" chart sets four glyphs that no face the app carries
+    has, so the print falls back to system fonts, embedded as Type 3:
+
+    | Glyph | Code point | Fell back to |
+    |---|---|---|
+    | ● | U+25CF | `.SFNS` |
+    | ○ | U+25CB | `.SFNS` |
+    | ◆ | U+25C6 | Lucida Grande |
+    | ┆ | U+2506 | PingFang SC |
+
+    Read from Brad's run 3 default print, 19 Nov 2026.
+  - **The item:** draw them as SVG shapes in the tokens, so a print embeds only Bebas Neue, Barlow, Barlow Condensed
+    and the mono face.
 
 ## 4.0 (recorded so nothing is lost)
 

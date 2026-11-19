@@ -15307,3 +15307,171 @@ modified, re-saved or copied).**
 - no other row changed: no audit row but those two print requests, and no refusal;
 - every sealed run byte-identical (`check_run_hashes`);
 - TOC 969, triggers 226, drift none.
+
+### S3 deployed; Brad's prints; Gate C stage-10 finding: a first print with no record line — 19 Nov 2026 (UTC)
+
+**Gate B was done by Brad** (19 Nov 2026), and **S3 stays deployed** (Brad: fix forward, no rollback). Brad's three
+prints are in `~/lvrf-backups/`:
+- `skillsoft_run3_default_s3.pdf` (4 pages, 09:07);
+- `skillsoft_run3_cfo_s3.pdf` (3 pages, 09:07);
+- `curia_pov_s3.pdf` (7 pages, 09:09).
+
+The CFO print and Curia's POV are correct on every page (Brad). **Brad will not share a default-lens print until the fix
+passes Gate C.**
+
+**The finding (Brad, stage 10), confirmed** read-only, with `pdftotext`, `pdffonts` and `pdftohtml -xml` to stdout; the
+PDF was not modified:
+- **No record line on any page of the default print.** The full hash `fb2917d1…c372c` appears only in "About this
+  document", page 4. On 15 Nov the default print carried it on every page, so this is a regression.
+- **No kicker on the cover, and no tagline in the close.**
+- **No ink foot band on the cover:** the band prints white. "Page 1 of 4", in mono, prints.
+- **`pdffonts`: no Barlow Condensed.** Every missing piece is text set in Barlow Condensed. The CFO print, made next,
+  embeds it.
+- **Type 3 system fallbacks,** all in the confidence chart's legend, page 4:
+
+  | Glyph | Code point | Fell back to |
+  |---|---|---|
+  | ● | U+25CF | `.SFNS` |
+  | ○ | U+25CB | `.SFNS` |
+  | ◆ | U+25C6 | Lucida Grande |
+  | ┆ | U+2506 | PingFang SC |
+
+  No face the app carries (Bebas Neue, Barlow, Menlo) has them. They are named, not changed; the fix would be to
+  draw the legend's markers as SVG shapes.
+
+**The cause: two faults, both of a person's first print.**
+1. **The face.** Barlow Condensed sets only print furniture: the record line, the kicker, the labels and the tagline.
+   Nothing on screen uses it, so the browser first fetched it when the print layout began. S3 declared every face
+   `font-display: block`, under which text in a face still loading is laid out invisible, and the browser's print
+   preview does not wait for it. The first print came out blank where the face should be. The CFO print, second, found
+   the face cached and came out whole; so did the POV. (The old Google Fonts link used `display=swap`.)
+2. **The band.** The cover's ink foot band is the page's own `@page` background. The print dialog paints that only with
+   "Background graphics" on, and its default is off. The cover's ink panel printed regardless, because it is an
+   element marked `print-color-adjust: exact`. So the first print was made with Background graphics off, and with it off
+   the record line would print silver on white, which fails AA.
+
+**Why Gate A passed.**
+- `verify_s3_print_family` checked run 2's default lens (`/runs/98a71a82…/case`, 4 pages), and its every-page hash check
+  passed on that PDF. That check was right; the PDF it read was not a person's print. Before printing, the walk:
+  - emulated print media and read every element's computed style, which loaded Barlow Condensed;
+  - slept 800 ms;
+  - then called `Page.printToPDF`, which waits for web fonts in any case;
+  - and always printed with backgrounds on (`printBackground: true`).
+- **Headless Chrome cannot reproduce the dialog's timing.** A cold print in a fresh profile, with the face's request
+  held, still embedded the face. So the new checks test the invariants that failed, on the page as loaded on screen,
+  before any print.
+
+**The fix** (branch `s3-print-fix` from `main` at `c051755`; client only, no server or database change):
+- **Every face is `font-display: swap`,** never `block`, so a face still loading prints in the fallback, never blank.
+- **The print-only faces load when the app starts** (`client/src/components/print/printFonts.ts`, called from
+  `main.tsx`), so ⌘P on any page finds them ready.
+- **The case's Print button waits for them** (`printFontsReady()`) after recording the print request and before opening
+  the dialog.
+- **The ink prints with Background graphics off:** `print-color-adjust: exact` on the root of a printed document. Set on
+  `@page` it does not work in Chrome; set on the root it does (tested, 19 Nov 2026).
+
+**The new Gate A checks, a person's first print** (`verify_s3_print_family` §3b). They run on run 2's default lens, a
+real-shaped run from the prod copy (4 pages, with the confidence chart), in a fresh Chrome profile, the page as loaded on
+screen:
+- before any print, Barlow Condensed 400 and 600 are loaded;
+- no face is `font-display: block`;
+- printed with Background graphics off, every page carries:
+  - the banners;
+  - the full hash, equal to the stored one;
+  - the record line at the foot, every line whole;
+- the cover's ink is unbroken.
+
+**Breaks, each with its positive control:**
+- **F1:** the start-up load removed. The face is not ready before the print: caught.
+- **F2:** Barlow Condensed back on `block`: caught.
+- **F3:** the root's exact colours removed. With Background graphics off the band prints white: caught.
+
+**Results**
+- **`verify_s3_print_family` 132 passed, 0 failed:** the earlier 116, plus §3b and F1–F3, each with its control.
+- **Full regression on the fix: all 52 verify scripts in one run, 52 passed, 0 failed, 5,057 checks,** every file
+  byte-identical after the run (44 min).
+- **Equivalence against the deployed `c051755`:** 213 GETs, 213 identical, no added keys. There is no server change.
+
+**Stage 10 on Brad's two other S3 prints** (read-only; the hashes read from prod, read-only, 19 Nov 2026):
+
+| Print | Result | Detail |
+|---|---|---|
+| `skillsoft_run3_cfo_s3.pdf` | 8 of 9 pass | run 3's full hash `fb2917d1…c372c` |
+| `curia_pov_s3.pdf` | 9 of 10 pass | the full hashes of its two latest runs, `b32088fb…` (run 1) and `b15dd9b7…` (run 13), and the full citation on page 1 (C1b) |
+
+- **What passes on both, every page:**
+  - the banners;
+  - the full hashes;
+  - the record line at the foot;
+  - "Page n of N";
+  - no browser header;
+  - the kicker;
+  - the close, then the tagline;
+  - Barlow Condensed embedded.
+- **The one failure on both: the cover's ink foot band printed white.** It is the same cause as the default print:
+  all three were printed with Background graphics off, the dialog's default. On a white band the cover's record line
+  is silver on white, which fails AA. The fix's root rule prints the band in ink whatever the setting.
+- **A checker artefact, named:** `pdftotext` joins a line that ends in a hyphen to the next ("ground-" + "up"). The
+  citation check reads page 1 with `-raw`, which keeps the hyphen; the PDF holds the citation whole.
+
+#### Gate B for `s3-print-fix` (not run; Brad's pastes), and Brad's reprint test
+
+Approved as designed by Brad (19 Nov 2026). Deploy only: no migration, no hardening change, no server change. Every
+step is Brad's paste; nothing here was run on the box. Stop at any step whose expectation is not met.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s3-print-fix && git push && git log --oneline -3
+   ```
+   Expect the merge to fast-forward from `c051755`, the branch's base and the box's head, and the head to be the
+   branch's last commit.
+2. **On the box, pull, then a backup before the deploy:**
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s3fix-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the same head as step 1, and the last line **969**. Stop if it differs.
+3. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-DqLkERtu.js`** / **`index-DP5K0nxM.css`** (built from this code on the dev Mac, 19 Nov 2026);
+   - steps 5b, 5c and 5d passed, drift none (52 migrations, newest 0051);
+   - health 200, `actor_header` off, `ai_research` off;
+   - the API fail-closed.
+4. **The fonts on swap, none on block, all served from the bundle:**
+   ```
+   cd /srv/lvrf && find client/dist/fonts -type f | wc -l && grep -o 'font-display:[a-z]*' client/dist/assets/*.css | sort | uniq -c && grep -c 'fonts.googleapis\|fonts.gstatic' client/dist/index.html
+   ```
+   Expect `11`, then `8 …font-display:swap` and no `block` line, then `0`.
+5. **The database is as before** (read-only): the pg_trigger count (`count(DISTINCT t.tgname)`, as in S3's Gate B step
+   5). Expect **226**.
+
+**Brad's reprint test, after Gate B (Brad, 19 Nov 2026).** It is a person's first print, exactly as on 19 Nov, but with
+an empty font cache:
+1. Open **a fresh Incognito window** (⇧⌘N), so the font cache is empty, and sign in.
+2. **Print run 3's default lens first,** before any other print: Runs → Skillsoft's run 3 (`0061c95f`) → its value case
+   (the default lens) → **Print**.
+3. In the dialog: Destination **Save as PDF**, Paper **Letter**, Margins **Default**, Scale **Default**, **Headers and
+   footers off**, and **Background graphics OFF**, the dialog's default. Leaving it off is the test.
+4. **Save over `~/lvrf-backups/skillsoft_run3_default_s3.pdf`** (replace the 09:07 file).
+
+The Print button records a print request, Brad's `record_documents` row, as on 19 Nov.
+
+**Then stage 10 (mine, read-only)** on the new `skillsoft_run3_default_s3.pdf`, and again on `skillsoft_run3_cfo_s3.pdf`
+and `curia_pov_s3.pdf`, with `scripts/lib/stage10_print.py`, which only reads the PDFs. The reprint must pass every check:
+- the banners, the full hash `fb2917d1…c372c` and the record line at the foot, on every page;
+- "Page n of N" on every page;
+- the kicker on the cover;
+- **the cover's ink band in ink, though Background graphics was off;**
+- the close, then the tagline;
+- Barlow Condensed embedded.
+
+The two older prints keep their white band, because they were printed before the fix. Brad may reprint them the same
+way for a clean set.
+
+**Gate C (read-only):**
+- one new `record_documents` row: run 3 `general`, Brad's;
+- no other row changed;
+- every sealed run byte-identical (`check_run_hashes`);
+- TOC 969, triggers 226, drift none.
+
+**Brad shares no default-lens print until this passes Gate C.**
