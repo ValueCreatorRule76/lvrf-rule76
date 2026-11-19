@@ -5187,7 +5187,7 @@ kicker, tagline and ink band: Barlow Condensed under `font-display: block`, and 
 (`s3-print-fix`, deployed at `81cc5d8`): Brad's Incognito reprints, with Background graphics off, pass every check, and
 Gate C is clean. Record: `BUILD_STATUS.md`, "S3 closed".
 
-## 23. 3.1 slice S4: steward forms confirm every field in full, and a field may not repeat another (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1, D3, D4 and D5 as recommended and D2 changed**)
+## 23. 3.1 slice S4: steward forms confirm every field in full, and a field may not repeat another (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1, D3, D4 and D5 as recommended and D2 changed**; **closed 19 Nov 2026**: deployed at `7f889b4`, Gate C clean)
 
 **Brad's rulings (19 Nov 2026):**
 - **D2, changed.** Every pair of evidence fields is refused if identical, **except "What it states" against the
@@ -5396,3 +5396,7 @@ reaches every print.
   corrected by {name}: {citation}" (Brad, 19 Nov 2026).
 - **Gate B is a migration,** with the TOC at 969 → 972.
 - **The full record** is in `BUILD_STATUS.md`, "S4: … Gate A".
+
+**Closed (19 Nov 2026).** S4 is deployed at `7f889b4`, with the TOC at 972 and 227 triggers, and Gate C is clean. The
+deploy script stopped silently at step 7, on a start-up race; the API was healthy. A fix is proposed in
+`BUILD_STATUS.md`, "S4 closed", for Brad's approval.

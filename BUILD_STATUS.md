@@ -15718,3 +15718,56 @@ A migration. Every step is Brad's paste; nothing here was run on the box. Stop a
 
 **Brad's act:** none is needed. S4 records nothing of its own (rule 9), and the forms are exercised the next time a
 source is recorded on prod. **Option (§23):** open each form and back out at its confirmation, recording nothing.
+
+### S4 closed: deployed at `7f889b4`; the deploy script's silent stop; Gate C clean — 19 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- `main` and the box at `7f889b4`.
+- Pre-S4 backup `~/lvrf-pre-s4-20261119T192415Z.dump`, **TOC 969**.
+- Migrate clean; `ownership exit 0`; `hardening exit 0`, with 0 ERROR lines; 53 migrations; **227 triggers**.
+- Post-S4 backup `~/lvrf-post-s4-20261119T193519Z.dump`, **TOC 972**, as Gate A measured.
+- Deploy:
+  - built `index-8gKwKIMx.js` / `index-xp3nTj2A.css`;
+  - drift none (53, newest `0052`); D1, D3 and D4 no findings; ownership clean;
+  - both services active.
+
+**Finding: the deploy's output stopped at "==> lvrf-api is active"** (Brad). There were no health lines, no 401 checks and
+no "deploy OK", unlike the `s3-print-fix` deploy that morning. Brad's own checks afterwards: health 200 with
+`ai_research` off, 401 with no session, the site 401, both services active.
+- **The cause: a start-up race in step 7,** read from `scripts/lvrf-deploy.sh` and the API's start-up, read-only.
+  - Step 6 restarts `lvrf-api` (`Type=simple`, `node dist/server/index.js`), sleeps a fixed 2 seconds, and checks only
+    `systemctl is-active`.
+  - The process is "active" as soon as it is forked, but it listens only after loading every router. On the box today
+    that took about 2–3 seconds every time (journal: started 19:36:06, listening 19:36:08.84). The 00:18, 14:03 and
+    16:09 starts were the same; 16:09's came in under the sleep.
+  - Step 7's first line is `HEALTH_BODY="$(curl -s …)"`. The connection was refused (`curl` exit 7), and under
+    `set -euo pipefail` a failing command substitution in an assignment ends the script on the spot, before its own
+    `die`.
+  - **So it exited non-zero (7), printing nothing.**
+- **What did not run:** the health, 401 and site checks, and step 8's summary. Nothing else follows them, and every step
+  before them (build, 5b, 5c, 5d, the restart) had passed. Brad's manual checks are the step-7 checks, done by hand.
+- **The fix, proposed for Brad's approval (not made):**
+  - **Wait for the API to answer** instead of sleeping 2 seconds: poll `GET /api/health` every 0.5 seconds, up to 30
+    seconds, then `die "lvrf-api did not answer /api/health within 30s"` if it never does.
+  - **Keep each `curl` in step 7 from ending the script silently** (`… || true`), so the existing status comparisons and
+    their `die` lines report the failure.
+  - **An `ERR` trap** that prints the failing line and exit code, so no step of the deploy can ever stop silently again:
+    `trap 'echo "DEPLOY FAILED: line $LINENO exited $?" >&2' ERR`.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **Schema:**
+  - 53 migrations;
+  - **the nine CHECKs on `evidence`, all validated;**
+  - **`business_metrics_basis_note_own` enabled** on `business_metrics` (function `lvrf_basis_note_own`), its two
+    sentences as written;
+  - **158 CHECKs, each with a plain sentence,** 0 stale;
+  - **227 triggers**, none disabled;
+  - drift none (1,353 objects match `0052_snapshot.json`); D1, D3 and D4 no findings; ownership clean;
+  - **TOC 972**.
+- **No prod row refused:** `0052` validated against all 49 evidence rows. No refusal has ever named an S4 rule.
+- **Since the deploy (19:36:06 UTC):** 0 governance acts (still 228, the last at 15 Nov 21:12:17), 0 refusals, 0 audit
+  rows, 0 print requests.
+- `pack_basis_evidence_id`: NULL on all 5 metrics. Evidence still 49 rows.
+- Runs: 27, all locked; `check_run_hashes` 27/27, recomputed and embedded.
+
+**S4 is closed.** The follow-up item (a full confirmation on the other free-text forms) is on the 3.1 list.
