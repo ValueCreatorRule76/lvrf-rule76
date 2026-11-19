@@ -187,8 +187,20 @@ cut line applied first.
     Raised at S1's Gate A (Brad, 15 Nov 2026); not in S1. Until then a customer account is classified when it is created.
 - **3.1 build order (Brad, 15 Nov 2026).** Before the pilot starts on 4 Jan 2027: the case links and the copy fix; the
   hypothesis rule with the tenant's hypothesis path; in-app AI research; the printed case and POV brought into the CVAF
-  family. During the pilot: the account frame, then the War Room, once mock-ups are approved. After: the solution
-  catalog page, `/people`, and the rest of the design-family audit.
+  family. *(Its "during the pilot" and "after" grouping is replaced by the revised order below, Brad, 19 Nov 2026.)*
+- **3.1 build order, revised (Brad, 19 Nov 2026).** After S3's Gate B and Gate C:
+  1. **S4:** the steward-form full-text confirmation and the repeated-value refusal (from the 3.1 list), as a small
+     slice, before the pilot.
+  2. **S5:** the account frame, mock-ups first (as UX-1).
+  3. **S6:** the War Room, mock-ups first. If it has not passed Gate C by 4 Jan 2027, it waits until after the
+     pilot's account-selection weeks (4–15 Jan). No large navigation change deploys in that window.
+  4. **Then:**
+     - the solution catalog page;
+     - `/people`;
+     - the small items: the pack-basis note correction, retiring a fact, the dependency change, the "Moves first"
+       label, and tenant card 05.
+
+  S2's Gate B step 8 and its act session stay deferred until Brad funds the API.
 
 - The full Pack Contract (design §5.2): import, deltas, validation, certification,
   activation, inheritance, the projection drift check, the pack driving every stage
