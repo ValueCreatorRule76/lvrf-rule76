@@ -4986,7 +4986,7 @@ When Gate C passes, and not before (OWN-1-D3), `CLAUDE.md`'s research seam is am
 Nothing else in the seam changes: a prompt is generated from live rows, a new result names its prompt, and accept is
 per field by a person.
 
-## 22. 3.1 slice S3: the printed case and the POV brought into the CVAF family (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1–D9 as recommended and three conditions**)
+## 22. 3.1 slice S3: the printed case and the POV brought into the CVAF family (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1–D9 as recommended and three conditions**; **closed 19 Nov 2026**: deployed at `c051755`, the first-print fix at `81cc5d8`, Gate C clean)
 
 **Brad's rulings (19 Nov 2026).** §22 is approved with D1–D9 as recommended, and these conditions:
 1. **D2, the banners on the cover.** On the cover, the OUTSIDE-IN and UNVERIFIED banners are at least as prominent as
@@ -5181,3 +5181,8 @@ now under a check:
 
 **Named for Brad, not changed:** the run page shows a VERIFIED banner where the printed case shows none, because the
 case prints a banner only when there is something to disclose. It is the deployed behaviour, and predates S3.
+
+**Closed (19 Nov 2026).** S3 deployed at `c051755`. Brad's stage 10 found that a first print lost its record line,
+kicker, tagline and ink band: Barlow Condensed under `font-display: block`, and Background graphics off. Fixed forward
+(`s3-print-fix`, deployed at `81cc5d8`): Brad's Incognito reprints, with Background graphics off, pass every check, and
+Gate C is clean. Record: `BUILD_STATUS.md`, "S3 closed".

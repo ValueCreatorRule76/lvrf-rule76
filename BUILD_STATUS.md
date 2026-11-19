@@ -15475,3 +15475,65 @@ way for a clean set.
 - TOC 969, triggers 226, drift none.
 
 **Brad shares no default-lens print until this passes Gate C.**
+
+### S3 closed: the fix deployed at `81cc5d8`; Brad's reprints; stage 10; Gate C clean — 19 Nov 2026 (UTC)
+
+**Gate B for `s3-print-fix`, run by Brad:**
+- `main` fast-forwarded to `81cc5d8` and pushed; the box is at `81cc5d8`.
+- Pre-fix backup `~/lvrf-pre-s3fix-20261119T160813Z.dump`, **TOC 969**.
+- Deployed; `lvrf-api` started 16:09:51.
+- Bundle **`index-DqLkERtu.js` / `index-DP5K0nxM.css`**, as Gate A built it.
+- All 8 faces on `font-display: swap`, none on `block`; 11 font files in the bundle.
+
+**Brad's reprint test** (11:18:56 and 11:21:37 EST):
+- a fresh Incognito window, so an empty font cache;
+- Background graphics **off**;
+- run 3's default lens printed first, then the CFO lens;
+- each saved over its 09:07 file.
+
+`curia_pov_s3.pdf` is unchanged (09:09, printed before the fix).
+
+**Stage 10, read-only** (`scripts/lib/stage10_print.py`; the hashes and the citation read from prod, read-only):
+
+| Print | Result | Notes |
+|---|---|---|
+| `skillsoft_run3_default_s3.pdf`, 4 pages | **9 of 9 pass** | **the ink band too, though Background graphics was off** |
+| `skillsoft_run3_cfo_s3.pdf`, 3 pages | **9 of 9 pass** | |
+| `curia_pov_s3.pdf`, 7 pages | 9 of 10 pass | its known white band, printed before the fix; the full citation is on page 1 (C1b) |
+
+- **What passed on the two reprints, every page:**
+  - the banners;
+  - the full hash `fb2917d1…c372c` and the record line at the foot;
+  - "Page n of N";
+  - no browser header;
+  - the kicker on the cover;
+  - the close, then the tagline;
+  - Barlow Condensed embedded.
+- **The default reprint still embeds the legend's four Type 3 fallbacks** (●○◆┆). It is on the 3.1 small items, as
+  SVG markers.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **Since the deploy (16:09:51 UTC), 2 new `record_documents` rows, both `print_request`, both Brad's, both run 3
+  (`0061c95f`):**
+  - `general` at 16:18:55;
+  - `cfo` at 16:21:37, naming its lens policy.
+
+  There are 18 rows in all.
+- **No other row changed:**
+  - the audit log since the deploy holds those 2 inserts only, each with its actor;
+  - 0 governance acts (still 228, the last at 15 Nov 21:12:17);
+  - 0 refusals.
+- **Runs:** 27, all locked. `check_run_hashes` 27/27, recomputed and embedded. Run 3 is unchanged (`abcb5444`, as at
+  S1's Gate C).
+- **Schema:**
+  - **226 triggers**, none disabled;
+  - drift none (52 migrations, newest 0051, 1342 objects);
+  - `drift_report` D1, D3, D4: no findings;
+  - ownership clean;
+  - **TOC 969**.
+
+**S3 is closed.** Brad may share a default-lens print: the fix has passed Gate C.
+
+**Carried to the 3.1 list:**
+- a verified case's status line on every page, to ship before any verified case is printed for a customer;
+- the legend's markers as SVG.
