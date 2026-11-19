@@ -34,13 +34,13 @@ command -v pdftotext > /dev/null && command -v pdffonts > /dev/null || { echo "R
 
 VERIFY_DB=lvrf_verifys3
 VERIFY_URL="${LOCAL_URL%/*}/${VERIFY_DB}"
-PORT=3341; VITE_PORT=5341; MAIN_PORT=5342; CDP_PORT=9441
+PORT=3341; VITE_PORT=5341; MAIN_PORT=5342; CDP_PORT=9441; CDP_COLD=9443
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s3.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
 CSS=client/src/index.css; FAM=client/src/components/print/PrintFamily.tsx; TXT=client/src/components/print/printText.ts
-POVP=client/src/pages/PovPage.tsx; CASEP=client/src/pages/ValueCasePage.tsx; HTML=client/index.html
-EDITED=("$CSS" "$FAM" "$TXT" "$POVP" "$CASEP" "$HTML")
+POVP=client/src/pages/PovPage.tsx; CASEP=client/src/pages/ValueCasePage.tsx; HTML=client/index.html; MAIN=client/src/main.tsx
+EDITED=("$CSS" "$FAM" "$TXT" "$POVP" "$CASEP" "$HTML" "$MAIN")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -201,6 +201,32 @@ pdftotext -f 1 -l 1 "$OUT/case_default.pdf" - | tr -s ' \n' ' ' | has -i "VALUE 
 pdftotext "$OUT/case_default.pdf" - | tr -s ' \n' ' ' | has "About this document This document renders from sealed run 2, record hash $H2. It is unverified until a named person at Skillsoft verifies" \
   && ok "the case's disclaimer as drafted, under its heading, naming the full hash" || bad "disclaimer text"
 
+step "3b. A person's first print (S3 Gate C finding, Brad, 19 Nov 2026)"
+# Brad's first print of run 3's default lens had no record line, kicker or tagline (all Barlow Condensed) and a white
+# foot band. The cause: Barlow Condensed, used only in print, was first fetched when the print began; under
+# font-display "block" its text laid out invisible and the browser's print did not wait; and the band is the page's
+# background, which the dialog paints only with "Background graphics" on (its default is off). Gate A missed it: its
+# walk emulated print media and read the DOM before printing (loading the face), headless printToPDF waits for fonts,
+# and it always printed with backgrounds on. Headless Chrome cannot reproduce the dialog's timing, so the walk checks
+# the invariants that failed, on the page as loaded on screen, in a fresh profile, before any print:
+coldwalk() {  # NAME PATH -> $OUT/NAME.pdf (Background graphics off) and $OUT/NAME.json
+  local prof; prof="$(mktemp -d "$W/cold.XXXXXX")"
+  "$CHROME" --headless=new --remote-debugging-port="$CDP_COLD" --user-data-dir="$prof" --no-first-run about:blank > /dev/null 2>&1 & local cp=$!
+  for _ in $(seq 1 40); do /usr/bin/curl -s -o /dev/null "http://127.0.0.1:$CDP_COLD/json/version" && break; sleep 0.25; done
+  VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_COLD" OUT="$OUT" S_EMAIL="$S_EMAIL" PW="$PW" PRINT_BG=0 node scripts/lib/s3_walk.mjs cold "$2" "$1" > /dev/null 2>&1 || true
+  kill "$cp" 2>/dev/null; wait "$cp" 2>/dev/null || true
+}
+coldcheck() {  # NAME HASH — the invariants, then the print's every page
+  node -e "
+const r = require('$OUT/$1.json'); const L = (c, m) => console.log((c ? '  PASS  ' : '  FAIL  ') + '$1: ' + m);
+L(['Barlow Condensed 400', 'Barlow Condensed 600'].every((f) => r.loaded.includes(f)), 'Barlow Condensed (400, 600) loaded on the page as it stands, before any print (loaded: ' + r.loaded.join(', ') + ')');
+const blk = r.displays.filter((d) => / block\$/.test(d));
+L(r.displays.length > 0 && blk.length === 0, 'no face set to font-display block, so a face still loading never prints invisible' + (blk.length ? ': ' + blk.join(', ') : ''));
+" > "$W/cold.out"; cat "$W/cold.out"; tally "$W/cold.out"
+  pdfcheck "$1" "$2" > "$W/coldpdf.out"; grep -E "hash|record line|ink unbroken|banners" "$W/coldpdf.out" | sed 's/^\(  [A-Z]*  \)/\1(Background graphics off) /' > "$W/coldpdf.sel"; cat "$W/coldpdf.sel"; tally "$W/coldpdf.sel"
+}
+coldwalk cold_default "/runs/$R2/case"; coldcheck cold_default "$H2"
+
 step "4. Breaks, each with its positive control"
 # B1: a cover banner smaller than the body pages'.
 printf "\n@media print { [data-testid='cover-banners'] [data-testid='banners'] { font-size: 8px; } }\n" >> "$CSS"; sleep 3
@@ -253,6 +279,31 @@ restore "$CASEP"; walk "inspect /runs/$R2/case b9bc" > "$OUT/b9bc.json"; cp "$OU
 edit "$CASEP" 'print:min-h-0 print:bg-transparent" data-testid="value-case"' 'print:min-h-0 print:bg-white" data-testid="value-case"'; sleep 3
 walk "inspect /runs/$R2/case b10" > "$OUT/b10.json"; pdfcheck b10 "$H2" | grep -q "FAIL  b10.pdf: the cover's ink unbroken" && ok "B10 break: white under the cover is caught as a seam above its ink band" || bad "B10 not caught"
 restore "$CASEP"; walk "inspect /runs/$R2/case b10c" > "$OUT/b10c.json"; pdfcheck b10c "$H2" | grep -q "PASS  b10c.pdf: the cover's ink unbroken" && ok "B10 control: restored, the cover's ink unbroken" || bad "B10 control"
+# F1-F3 (S3 Gate C finding): the default lens of a real-shaped run (run 2), printed as a person's first print.
+edit "$MAIN" "void loadPrintFonts()" "void 0"; sleep 3
+coldwalk f1 "/runs/$R2/case"; coldcheck f1 "$H2" > "$W/f1.out" 2>&1 || true
+grep -q "FAIL  f1: Barlow Condensed (400, 600) loaded" "$W/f1.out" && ok "F1 break: the print faces not loaded at start is caught: the face is not ready before the print" || bad "F1 not caught: $(head -3 "$W/f1.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f1.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f1.out" || true)))
+restore "$MAIN"; coldwalk f1c "/runs/$R2/case"; coldcheck f1c "$H2" > "$W/f1c.out" 2>&1 || true
+grep -q "PASS  f1c: Barlow Condensed (400, 600) loaded" "$W/f1c.out" && ok "F1 control: restored, the face loaded before any print" || bad "F1 control: $(head -3 "$W/f1c.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f1c.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f1c.out" || true)))
+python3 - "$CSS" <<'PY'
+import sys; p = sys.argv[1]; s = open(p).read(); a = "font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap;"
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, a.replace('swap', 'block')))
+PY
+sleep 3; coldwalk f2 "/runs/$R2/case"; coldcheck f2 "$H2" > "$W/f2.out" 2>&1 || true
+grep -q "FAIL  f2: no face set to font-display block" "$W/f2.out" && ok "F2 break: Barlow Condensed back on font-display block is caught" || bad "F2 not caught: $(head -3 "$W/f2.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f2.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f2.out" || true)))
+restore "$CSS"; coldwalk f2c "/runs/$R2/case"; coldcheck f2c "$H2" > "$W/f2c.out" 2>&1 || true
+grep -q "PASS  f2c: no face set to font-display block" "$W/f2c.out" && ok "F2 control: restored, every face on font-display swap" || bad "F2 control: $(head -3 "$W/f2c.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f2c.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f2c.out" || true)))
+edit "$CSS" "  html:has([data-testid='print-cover']) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }" "  html:has([data-testid='print-cover']) { }"; sleep 3
+coldwalk f3 "/runs/$R2/case"; coldcheck f3 "$H2" > "$W/f3.out" 2>&1 || true
+grep -q "FAIL  (Background graphics off) f3.pdf: the cover's ink unbroken" "$W/f3.out" && ok "F3 break: the root's exact colours removed is caught: with Background graphics off the cover's foot band prints white" || bad "F3 not caught: $(grep ink "$W/f3.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f3.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f3.out" || true)))
+restore "$CSS"; coldwalk f3c "/runs/$R2/case"; coldcheck f3c "$H2" > "$W/f3c.out" 2>&1 || true
+grep -q "PASS  (Background graphics off) f3c.pdf: the cover's ink unbroken" "$W/f3c.out" && ok "F3 control: restored, the band prints ink with Background graphics off" || bad "F3 control: $(grep ink "$W/f3c.out")"
+FAIL=$((FAIL - $(grep -c '^  FAIL' "$W/f3c.out" || true))); PASS=$((PASS - $(grep -c '^  PASS' "$W/f3c.out" || true)))
 # B7: a status word in display type.
 edit "$FAM" ': <div className="font-condensed text-[9pt] font-semibold uppercase leading-[25pt] tracking-[.08em] text-ink-70" data-testid="print-stat-words">' ': <div className="font-display text-[25pt] leading-none text-ink" data-testid="print-stat-words">'; sleep 3
 walk "inspect /runs/$R2/case b7" > "$OUT/b7.json"; domcheck b7 | grep -q "FAIL  b7: display type" && ok "B7 break: \"not committed\" in Bebas display is caught" || bad "B7 not caught"

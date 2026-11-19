@@ -1,13 +1,17 @@
 /* S3 (LVRF_PLAN §22; Brad's condition 2, 19 Nov 2026): every face self-hosted, with its OFL licence beside it in
    client/public/fonts/. No page, printed or not, requests a font from an outside URL. */
-@font-face { font-family: 'Bebas Neue'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/bebas-neue/BebasNeue-Regular.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 300; font-display: block; src: url('/fonts/barlow/Barlow-Light.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/barlow/Barlow-Regular.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 500; font-display: block; src: url('/fonts/barlow/Barlow-Medium.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 600; font-display: block; src: url('/fonts/barlow/Barlow-SemiBold.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow'; font-style: italic; font-weight: 400; font-display: block; src: url('/fonts/barlow/Barlow-Italic.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 400; font-display: block; src: url('/fonts/barlow-condensed/BarlowCondensed-Regular.ttf') format('truetype'); }
-@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: block; src: url('/fonts/barlow-condensed/BarlowCondensed-SemiBold.ttf') format('truetype'); }
+/* S3 Gate C finding (Brad, 19 Nov 2026): "swap", never "block". Under "block" a face still loading lays its text out
+   invisible, and the browser's print does not wait for it: Barlow Condensed is used only in print, so a first print
+   lost the record line, the kicker and the tagline. Under "swap" a late face prints in the fallback, never blank; and
+   the print faces are loaded at start (printFonts.ts), so a print normally finds them ready. */
+@font-face { font-family: 'Bebas Neue'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/bebas-neue/BebasNeue-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 300; font-display: swap; src: url('/fonts/barlow/Barlow-Light.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/barlow/Barlow-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/barlow/Barlow-Medium.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/barlow/Barlow-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow'; font-style: italic; font-weight: 400; font-display: swap; src: url('/fonts/barlow/Barlow-Italic.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/barlow-condensed/BarlowCondensed-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Barlow Condensed'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/barlow-condensed/BarlowCondensed-SemiBold.ttf') format('truetype'); }
 
 @tailwind base;
 @tailwind components;
@@ -106,6 +110,9 @@ body {
   /* S3: nothing white under the printed case or POV. Paper is white; under the cover the page's own ink shows, so the
      antialiased edge where the cover meets its ink band blends ink into ink, not into white (the seam, 19 Nov 2026). */
   html:has([data-testid='print-cover']), body:has([data-testid='print-cover']) { background: transparent; }
+  /* The cover's ink foot band is the page's own background, which the print dialog paints only with "Background
+     graphics" on (its default is off), unless the root asks for exact colours (S3 Gate C finding, 19 Nov 2026). */
+  html:has([data-testid='print-cover']) { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   [data-testid^='banner-'] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   /* Keep small units whole; let long sections break, so no page is left half empty. */
   [data-testid='chain'], [data-testid='facts'] tr, [data-testid='outcome'] > div { break-inside: avoid; }

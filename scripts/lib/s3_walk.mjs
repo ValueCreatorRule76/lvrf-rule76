@@ -54,6 +54,29 @@ if (MODE === 'probe') {
 
 requests.length = 0;
 await send('Page.navigate', { url: `${APP}${PATH}` });
+if (MODE === 'cold' && E.HOLD_FONT) {
+  // Hold the named face's requests unanswered, as a slow first fetch is at the moment a person prints.
+  await send('Fetch.enable', { patterns: [{ urlPattern: `*${E.HOLD_FONT}*`, requestStage: 'Request' }] });
+}
+if (MODE === 'cold') {
+  // A person's first print (S3 Gate C finding, Brad, 19 Nov 2026): the page as loaded on screen, then printed at once,
+  // with no print-media emulation or DOM read first (each of which loads the print-only faces and hid the fault).
+  // Run in a fresh Chrome profile. PRINT_BG=0 is the print dialog's default, "Background graphics" off.
+  await waitFor(`!!document.querySelector('[data-testid=value-case],[data-testid=pov]') && document.fonts.status === 'loaded'`, 30000);
+  await waitFor(`![...document.querySelectorAll('[data-testid=value-case] p,[data-testid=pov] p')].some(p=>p.textContent.trim()==='loading')`, 20000);
+  await sleep(1500);
+  // Read BEFORE the print, as the page stands when a person presses Print or ⌘P: which faces have loaded, and each
+  // face's font-display (under "block" a face still loading prints invisible text).
+  const before = await ev(`({ loaded: [...document.fonts].filter(f=>f.status==='loaded').map(f=>f.family.replace(/"/g,'')+' '+f.weight),
+    displays: [...new Set([...document.fonts].map(f=>f.family.replace(/"/g,'')+' '+f.weight+' '+f.display))],
+    record_line: (document.querySelector('[data-testid=print-record-line]')||{getAttribute:()=>null}).getAttribute('data-record-line'),
+    banners: { body: [...document.querySelectorAll('[data-testid=print-header] [data-testid=banners] > div')].map(d=>({ text: d.textContent.trim() })) } })`);
+  const pdf = await send('Page.printToPDF', { preferCSSPageSize: true, printBackground: E.PRINT_BG !== '0', displayHeaderFooter: false });
+  writeFileSync(`${E.OUT}/${NAME}.pdf`, Buffer.from(pdf.result.data, 'base64'));
+  writeFileSync(`${E.OUT}/${NAME}.json`, JSON.stringify(before));
+  console.log(JSON.stringify(before));
+  process.exit(0);
+}
 const ready = await waitFor(`!!document.querySelector('[data-testid=value-case],[data-testid=pov]') && document.fonts.status === 'loaded'`, 30000);
 // Let the parts that load after the document (the confidence curve, the gap register) settle.
 await waitFor(`![...document.querySelectorAll('[data-testid=value-case] p,[data-testid=pov] p')].some(p=>p.textContent.trim()==='loading')`, 20000);

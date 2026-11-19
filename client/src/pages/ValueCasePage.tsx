@@ -9,6 +9,7 @@ import { ConfidenceCurve } from '../components/snapshots/ConfidenceCurve';
 import { CaseInputs } from '../components/valueCase/CaseInputs';
 import { num, money } from '../lib/caseFormat';
 import { PrintClose, PrintCover, PrintRecordLine, PrintStats } from '../components/print/PrintFamily';
+import { printFontsReady } from '../components/print/printFonts';
 import { KICKER_PRINT } from '../components/print/printText';
 
 /**
@@ -223,6 +224,7 @@ export function ValueCasePage() {
     const r = await postGoverned<{ record_document_id: string }>(`/api/value-runs/${d.run.id}/print-request`, { lens: d.lens });
     if (r.status !== 'ok') { setPrintNote('The print request was not recorded, so the page was not printed.'); return; }
     setPrintNote(null);
+    await printFontsReady();  // S3 Gate C finding: never print with a print-only face still loading
     window.print();
   }
 
