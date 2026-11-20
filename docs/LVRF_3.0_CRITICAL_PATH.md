@@ -194,14 +194,19 @@ cut line applied first.
   2. **S5:** the account frame, mock-ups first (as UX-1). **Approved (Brad, 19 Nov 2026), LVRF_PLAN §24.** It must
      pass Gate C by **Fri 18 Dec 2026**; otherwise it waits until after 15 Jan 2027. **Closed 20 Nov 2026:** deployed at
      `5b0edb9`, Gate C clean (`BUILD_STATUS.md`, "S5 closed").
-  3. **S6:** the War Room, mock-ups first. **Planned 20 Nov 2026, LVRF_PLAN §25, for Brad's approval.** **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
+  3. **S6:** the War Room, mock-ups first. **Approved (Brad, 20 Nov 2026), LVRF_PLAN §25, with D1–D8 and D5
+     changed.** **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
      **Fri 18 Dec 2026**, it waits until after the pilot's account-selection weeks (4–15 Jan 2027). No large navigation
      change deploys in that window.
   4. **Then:**
      - the solution catalog page;
      - `/people`;
      - the small items:
-       - **first, right after S5 (Brad, 19 Nov 2026): the provenance band's contrast in S1's form.** In
+       - **first, right after S6 (Brad, 20 Nov 2026), with its own plan: the commit form records a promised
+         measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
+         without it can never be given one afterwards (append-only), so it **ships before the pilot's first
+         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5);
+       - **next (Brad, 19 Nov 2026; after the promised date, 20 Nov): the provenance band's contrast in S1's form.** In
          `GovernedForm`, the provenance block sits on `bg-rule-soft`. On it, the gold-ink label measures 4.39:1 and
          the ink-45 label and help text 4.42:1, under AA (4.5:1). It is found by S5's Gate A, inside the frame's
          "Classify as…" panel, and is pre-existing: the same block is in every governed form. S5 does not change it

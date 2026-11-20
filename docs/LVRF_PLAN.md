@@ -5566,7 +5566,18 @@ account in focus without losing it. It changes how pages are reached, not any ru
   the page.
 - **About half a day for the mock-ups; about 2 days for the build after they are approved.**
 
-## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **for Brad's approval; mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **approved by Brad, 20 Nov 2026, with D1–D8 as recommended and D5 changed; mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+
+**Brad's rulings (20 Nov 2026):**
+- **§25 is approved with D1–D8 as recommended.**
+- **D1 as written:** no money anywhere on the War Room page or in `GET /api/book`, not even per row. Gate A checks both.
+- **D5 changed:** recording the promised measurement date at commit is **not a later 3.1 item.**
+  - It ships before the pilot's first commitment, because a commitment made without it can never be given one
+    afterwards (append-only).
+  - **It is on the build order as the next small item after S6, ahead of the S1 contrast fix, with its own plan.**
+  - In S6 itself, D5 stands: "no promised date on record", never "on time".
+- **Next:** the D8 mock-ups, six screens with fictional accounts only, for Brad's review. The review PDF goes in
+  `~/lvrf-backups/s6-mockup/` (`chmod 600`).
 
 **The ruling it builds:**
 - The 3.1 list, "The War Room and account focus" (Brad, 15 Nov 2026): **the War Room never sums or averages money
@@ -5672,8 +5683,9 @@ stands, and of what is due, refuted or late. It writes nothing.
   - Either way, it is a ratio across outcomes, not money; under D1, it is never in currency.
 - **D5, "late" with no promised dates. Recommended:** show "no promised date on record" where none is, never "on
   time".
-  - Add to the 3.1 list: **the commit form records a promised measurement date** (the column exists, and no route
-    writes it).
+  - ~~Add to the 3.1 list~~ **Ruled (Brad, 20 Nov 2026): the next small item after S6, ahead of the S1 contrast fix,
+    with its own plan:** the commit form records a promised measurement date (the column exists, and no route writes
+    it). It must ship before the pilot's first commitment.
   - Option: leave "late" out of S6 entirely.
 - **D6, the band and `CohortCard` on Accounts home. Recommended:** the band carries the headline (book confidence
   once, in one format), and `CohortCard`'s detail (each industry's cohort) moves to the War Room. So the home page
