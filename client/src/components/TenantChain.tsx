@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiFetch } from '../api/http';
+import { readWalk } from '../lib/sharedWalk';
 import { Card, Badge } from './workbench/Card';
 import { ClassifyAccount } from './CreateAccountCard';
 import { ClaimForm, PackBasisForm } from './OutsideInWalk';
@@ -19,8 +19,9 @@ export function TenantChain({ institutionId, onChanged }: { institutionId: strin
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/walk`)
-      .then(async (r) => { const b = await r.json().catch(() => null); return r.ok ? (b as WalkState) : { error: b?.message ?? `HTTP ${r.status}` }; })
+    // S5: the one shared read of the walk (the account frame reads the same answer).
+    readWalk(institutionId)
+      .then((r) => { const b = r.body as { message?: string } | null; return r.ok ? (r.body as WalkState) : { error: b?.message ?? `HTTP ${r.status}` }; })
       .catch((e) => ({ error: e instanceof Error ? e.message : 'network error' }))
       .then((v) => { if (!cancelled) setW(v); });
     return () => { cancelled = true; };

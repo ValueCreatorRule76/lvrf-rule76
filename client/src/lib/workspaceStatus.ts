@@ -7,7 +7,7 @@ import type { EvidenceFormShown, FigureCheckShown } from '../components/Evidence
  * a new one, and never a second copy of a rule.
  */
 import type { Pov, PovOutcome, ReferenceMarker } from '../api/pov';
-import { apiFetch } from '../api/http';
+import { readWalk } from './sharedWalk';
 import { fetchInstitutionView, type InstitutionView } from '../api/institution';
 import { fetchPov, MARKER_KIND } from '../api/pov';
 import { fetchAccountResearch } from '../api/accountResearch';
@@ -239,8 +239,9 @@ export interface AccountRow {
 }
 
 export async function fetchWalk(id: string): Promise<WalkState | null> {
-  const r = await apiFetch(`/api/institutions/${encodeURIComponent(id)}/walk`).catch(() => null);
-  return r && r.ok ? ((await r.json().catch(() => null)) as WalkState | null) : null;
+  // S5: the one shared read of the walk, with the page and the account frame.
+  const r = await readWalk(id).catch(() => null);
+  return r && r.ok ? (r.body as WalkState | null) : null;
 }
 
 /**

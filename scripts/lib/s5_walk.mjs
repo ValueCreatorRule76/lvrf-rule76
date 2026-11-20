@@ -33,11 +33,13 @@ async function tab() {
   const t = await (await fetch(`http://127.0.0.1:${E.CDP_PORT}/json/new?about:blank`, { method: 'PUT' })).json();
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   await new Promise((r) => ws.addEventListener('open', r));
-  let n = 0; const pend = new Map(); const requests = [];
+  let n = 0; const pend = new Map(); const requests = []; const failures = [];
   ws.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
     if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
     if (m.method === 'Network.requestWillBeSent') requests.push(m.params.request.url);
+    if (m.method === 'Network.loadingFailed') failures.push({ id: m.params.requestId, err: m.params.errorText, blocked: m.params.blockedReason ?? null, canceled: m.params.canceled ?? false, t: Date.now() });
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') failures.push({ console: m.params.args.map((a) => a.value ?? a.description).join(' ').slice(0, 200), t: Date.now() });
   });
   const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
   const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
@@ -58,7 +60,7 @@ async function tab() {
     if (r.result?.data) writeFileSync(`${E.OUT}/${name}.png`, Buffer.from(r.result.data, 'base64'));
     await size(width);
   };
-  return { ws, send, ev, waitFor, size, key, go, shot, requests, close: () => { ws.close(); return fetch(`http://127.0.0.1:${E.CDP_PORT}/json/close/${t.id}`).catch(() => null); } };
+  return { ws, send, ev, waitFor, size, key, go, shot, requests, failures, close: () => { ws.close(); return fetch(`http://127.0.0.1:${E.CDP_PORT}/json/close/${t.id}`).catch(() => null); } };
 }
 
 const T = await tab();
@@ -111,10 +113,8 @@ async function openAccount(X, a) {
 }
 
 // ---- frame ------------------------------------------------------------------------------------------------------------
-if (SECTIONS.includes('frame') || SECTIONS.includes('classified')) {
-  // After D6's act, the account is classified: its pack is the one chosen, and "Classify as…" is no longer offered.
-  const list = SECTIONS.includes('frame') ? EXP.accounts
-    : EXP.accounts.filter((a) => a.id === EXP.classify.id).map((a) => ({ ...a, classifiable: false, industry: EXP.classify.name, slug: EXP.classify.slug, label: 'the account just classified' }));
+// deep: also the account's case, run pages, POV, step 1 and snapshots (the 'frame' section); shallow for 'classified'.
+async function frameSection(list, deep) {
   for (const a of list) {
     const W = `frame, ${a.label}`;
     check(await openAccount(T, a), `${W}: opening the account frames it`, await T.ev(`${FRAME}?.outerHTML.slice(0,200)`));
@@ -144,7 +144,7 @@ if (SECTIONS.includes('frame') || SECTIONS.includes('classified')) {
     check(f.pages.filter((p) => p.current === 'page').map((p) => p.key).join() === 'workspace', `${W}: "${want[0].label}" is the current page`, JSON.stringify(f.pages.map((p) => p.current)));
     check(f.classify === a.classifiable, `${W}: "Classify as…" ${a.classifiable ? 'offered (an unclassified customer account)' : 'not offered'}`, String(f.classify));
     check(!MONEY.test(f.text), `${W}: no money in the frame`, (f.text.match(MONEY) || [''])[0]);
-    if (SECTIONS.includes('classified')) continue;
+    if (!deep) continue;
     await T.shot(`${TAG}_frame_${a.key}_1280`);
     if (a.head) {
       // Its run, its value case: the same account, the right page current.
@@ -181,6 +181,8 @@ if (SECTIONS.includes('frame') || SECTIONS.includes('classified')) {
     }
   }
 }
+
+if (SECTIONS.includes('frame')) await frameSection(EXP.accounts, true);
 
 // ---- held ------------------------------------------------------------------------------------------------------------
 if (SECTIONS.includes('held')) {
@@ -463,6 +465,67 @@ if (SECTIONS.includes('classify')) {
   check(X.requests.filter((u) => u.endsWith(`/api/institutions/${a.id}/industry`)).length === 1, '  ...one request, to S1\'s route, unchanged');
   await X.shot(`${TAG}_classified_1280`);
   await X.close();
+}
+
+// ---- classified: after D6's act (run after 'classify'), the account's pack is the one chosen, and "Classify as…" is
+// no longer offered.
+if (SECTIONS.includes('classified')) {
+  await frameSection(EXP.accounts.filter((a) => a.id === EXP.classify.id)
+    .map((a) => ({ ...a, classifiable: false, industry: EXP.classify.name, slug: EXP.classify.slug, label: 'the account just classified' })), false);
+}
+
+// ---- reads (Brad, 19 Nov 2026) ----------------------------------------------------------------------------------------
+// The frame reuses the page's /walk read; it never waits forever: a stalled or failed read says "Couldn't load this
+// account's status." (the browser's own request interception: nothing on the server is changed).
+if (SECTIONS.includes('reads')) {
+  const a = EXP.accounts.find((x) => x.key === 'curia');
+  const walkUrl = (u) => u.includes(`/api/institutions/${a.id}/walk`);
+  {
+    const X = await tab();
+    await openAccount(X, a); await sleep(2500);
+    const n = X.requests.filter(walkUrl).length;
+    check(n === 1, `reads: opening ${a.name}'s workspace makes ONE /walk read, shared by the page and the frame (${n})`);
+    await X.close();
+  }
+  const UNAVAIL = "Couldn't load this account's status.";
+  // Parenthesised: `x ?? null === y` parses as `x ?? (null === y)`, true for any text (it passed "loading…", 19 Nov 2026).
+  const pendingText = `(document.querySelector('[data-testid=frame-pending-text]')?.textContent ?? null)`;
+  for (const mode of ['stalled', 'failed']) {
+    const X = await tab();
+    await X.go('/packs'); await X.waitFor(`document.querySelectorAll('[data-testid=pack-row]').length>0`);
+    await X.ev(`sessionStorage.setItem('lvrf:account-focus', ${JSON.stringify(a.id)}); true`);
+    const paused = [];
+    X.ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.method === 'Fetch.requestPaused') paused.push(m.params); });
+    await X.send('Fetch.enable', { patterns: [{ urlPattern: `*/api/institutions/${a.id}/walk*`, requestStage: 'Request' }] });
+    const t0 = Date.now();
+    await X.send('Page.reload'); await sleep(300);
+    await X.waitFor(`!!document.querySelector('[data-testid=frame-pending]')`, 10000);
+    if (mode === 'stalled') {
+      await sleep(2500);
+      check(await X.ev(pendingText) === 'loading…' && paused.length > 0, `reads, stalled: while its /walk is unanswered, the frame says "loading…" and names no account`, await X.ev(pendingText));
+      check(await X.ev(`!!document.querySelector('[data-testid=frame-pending] [data-testid=frame-leave]')`), '  ...with "Leave the account" there');
+      X.failures.length = 0;
+      const gaveUp = await X.waitFor(`${pendingText} === ${JSON.stringify(UNAVAIL)}`, 25000);
+      const secs = Math.round((Date.now() - t0) / 1000);
+      console.log(`NOTE  stall: gave up at ${secs} s; failures ${JSON.stringify(X.failures.map((f) => ({ ...f, t: Math.round((f.t - t0) / 100) / 10 })))}; paused ${paused.length}`);
+      // It must be the time limit that ends the wait: not before 14 s (an earlier end is some other failure).
+      check(gaveUp && secs >= 14 && secs <= 22, `reads, stalled: it stops waiting at the 15 s limit and says "${UNAVAIL}" (${secs} s)`, await X.ev(pendingText));
+      await X.shot(`${TAG}_frame_stalled_1280`);
+      await X.ev(`document.querySelector('[data-testid=frame-pending] [data-testid=frame-leave]').click()`);
+      check(await X.waitFor(`location.pathname==='/' && ${noFrame}`, 10000), '  ...and "Leave the account" still leaves, with the read still unanswered');
+      for (const p of paused.splice(0)) await X.send('Fetch.continueRequest', { requestId: p.requestId }).catch(() => null);
+    } else {
+      let answered = 0;
+      for (let i = 0; i < 60 && answered === 0; i++) {
+        await sleep(150);
+        for (const p of paused.splice(0)) { await X.send('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: 500, responseHeaders: [{ name: 'content-type', value: 'application/json' }], body: Buffer.from(JSON.stringify({ message: 'could not be read (simulated)' })).toString('base64') }); answered++; }
+      }
+      const said = await X.waitFor(`${pendingText} === ${JSON.stringify(UNAVAIL)}`, 8000);
+      check(answered > 0 && said, `reads, failed: a 500 on its /walk and the frame says "${UNAVAIL}" at once, not the server's message`, await X.ev(pendingText));
+    }
+    await X.send('Fetch.disable');
+    await X.close();
+  }
 }
 
 console.log(`DONE ${out.filter((l) => l.startsWith('PASS')).length} ${out.filter((l) => l.startsWith('FAIL')).length}`);

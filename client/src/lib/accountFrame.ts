@@ -15,7 +15,7 @@ import { fetchPov, type Pov } from '../api/pov';
 import { fetchAccountResearch, type AccountResearchState } from '../api/accountResearch';
 import { fetchRuns } from '../api/runsIndex';
 import type { RunListItem } from '../types/runsIndex';
-import { deriveSteps, deriveWalk, fetchWalk, povStatus, researchStatus, walkStatus, type WalkState } from './workspaceStatus';
+import { ROW_UNAVAILABLE, deriveSteps, deriveWalk, fetchWalk, povStatus, researchStatus, walkStatus, type WalkState } from './workspaceStatus';
 
 /** The words a reference example carries in the frame, beside its name (approved mock-up, screen 7). */
 export const FRAME_REFERENCE_LABEL = 'Reference example, not a customer engagement';
@@ -93,7 +93,21 @@ export function frameFrom(view: { id: string; name: string; self: boolean; indus
   };
 }
 
-export async function loadAccountFrame(id: string): Promise<FrameResult> {
+/**
+ * The frame never waits forever (Brad, 19 Nov 2026): if its reads have not all answered in FRAME_READ_MS, it stops
+ * waiting and says so in the Accounts home's words. A late answer is ignored; the next write or account reads again.
+ */
+export const FRAME_READ_MS = 15000;
+export const FRAME_UNAVAILABLE = ROW_UNAVAILABLE;
+
+export function loadAccountFrame(id: string): Promise<FrameResult> {
+  return Promise.race([
+    readFrame(id),
+    new Promise<FrameResult>((resolve) => { window.setTimeout(() => resolve({ status: 'error' }), FRAME_READ_MS); }),
+  ]);
+}
+
+async function readFrame(id: string): Promise<FrameResult> {
   const v = await fetchInstitutionView(id).catch(() => null);
   if (v && v.status === 'not_found') return { status: 'not_found' };
   if (!v || v.status !== 'ok') return { status: 'error' };

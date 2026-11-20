@@ -4,7 +4,7 @@ import { useAccountFocus } from './accountFocusContext';
 import { FOCUS_RING } from './GovernedForm';
 import { ConfidenceBadge } from './workbench/Workspace';
 import { ClassifyAccount } from './CreateAccountCard';
-import { FRAME_REFERENCE_LABEL, type FrameData } from '../lib/accountFrame';
+import { FRAME_REFERENCE_LABEL, FRAME_UNAVAILABLE, type FrameData } from '../lib/accountFrame';
 
 /**
  * S5 (LVRF_PLAN §24; the D7 mock-ups as approved by Brad, 19 Nov 2026): the band under the header that carries the
@@ -93,7 +93,7 @@ export function AccountFrame() {
     return shell(
       <div className="mx-auto flex max-w-[1120px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6" data-testid="frame-pending">
         <span className={KICKER}>In focus</span>
-        <span className="flex-1 text-[12.5px] text-ink-45">{frame.status === 'error' ? "Couldn't load the account in focus." : 'loading…'}</span>
+        <span className="flex-1 text-[12.5px] text-ink-45" data-testid="frame-pending-text">{frame.status === 'error' ? FRAME_UNAVAILABLE : 'loading…'}</span>
         <button type="button" onClick={doLeave} className={LEAVE} data-testid="frame-leave">Leave the account</button>
       </div>,
     );

@@ -21,6 +21,8 @@
 #   B5 "Classify as…" offered on a classified account
 #   B6 the confidence without its run named
 #   B7 the "You're now in" notice said on every page, not once
+#   B8 the frame waits forever on a stalled read (no time limit)
+#   B9 the frame makes its own /walk read instead of the page's (nothing shared)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -39,8 +41,8 @@ PORT=3351; VITE_PORT=5351; CDP_PORT=9451
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s5.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-RUNP=client/src/pages/RunPage.tsx; FOCUS=client/src/components/AccountFocus.tsx; FRAMEC=client/src/components/AccountFrame.tsx; LIB=client/src/lib/accountFrame.ts
-EDITED=("$RUNP" "$FOCUS" "$FRAMEC" "$LIB")
+RUNP=client/src/pages/RunPage.tsx; FOCUS=client/src/components/AccountFocus.tsx; FRAMEC=client/src/components/AccountFrame.tsx; LIB=client/src/lib/accountFrame.ts; SHARED=client/src/lib/sharedWalk.ts
+EDITED=("$RUNP" "$FOCUS" "$FRAMEC" "$LIB" "$SHARED")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -80,8 +82,8 @@ broke() {  # SECTIONS TAG EXPECTED_FAILURE_TEXT LABEL
 step "1. Typecheck, build, tokens"
 (cd client && npx tsc -b) > "$W/tsc.log" 2>&1 && ok "client tsc -b" || bad "client tsc: $(head -5 "$W/tsc.log")"
 node scripts/check_design_tokens.mjs > "$W/tokens.log" 2>&1 && ok "check_design_tokens: no hex outside the token files ($(tail -1 "$W/tokens.log"))" || bad "check_design_tokens: $(tail -5 "$W/tokens.log")"
-H="$(grep -nE '#[0-9A-Fa-f]{3,8}\b' client/src/components/AccountFrame.tsx client/src/components/AccountFocus.tsx client/src/components/accountFocusContext.ts client/src/lib/accountFrame.ts || true)"
-[ -z "$H" ] && ok "the frame's four files restate no hex value" || bad "a hex in the frame: $H"
+H="$(grep -nE '#[0-9A-Fa-f]{3,8}\b' client/src/components/AccountFrame.tsx client/src/components/AccountFocus.tsx client/src/components/accountFocusContext.ts client/src/lib/accountFrame.ts client/src/lib/sharedWalk.ts || true)"
+[ -z "$H" ] && ok "the frame's five files restate no hex value" || bad "a hex in the frame: $H"
 
 step "2. Clone the prod copy, migrate, harden; a session; one unclassified customer account (a fixture, by route)"
 dropdb --if-exists "$VERIFY_DB"
@@ -142,8 +144,18 @@ B4_ACTS="$(q "SELECT count(*) FROM governance_acts")"; B4_EVID="$(q "SELECT coun
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 
 step "4. Through the page, as the steward by session"
-walk frame,held,shared,leave,tabs,phone,keys,contrast,print,classify,classified s5 "$W/main.log"
+if [ -n "${S5_ONLY:-}" ]; then  # debugging: one section, no coverage gate and no breaks; the run then fails on purpose
+  walk "$S5_ONLY" s5 "$W/main.log"; tally "$W/main.log"; cat "$W/main.log" | grep NOTE || true; bad "S5_ONLY=$S5_ONLY: a partial run, never a Gate A"
+  echo; echo "==> ${PASS} passed, ${FAIL} failed"; REACHED_TALLY=1; exit 1
+fi
+walk frame,held,shared,leave,tabs,phone,keys,contrast,print,reads,classify,classified s5 "$W/main.log"
 tally "$W/main.log"
+# Coverage: every section's checks ran (a skipped section must not pass by saying nothing; found 19 Nov 2026).
+for want in '"Value case" opens run' 'still names the run' 'its point of view frames' '"Research" opens the workspace' "snapshots frame the same account" \
+            'held: Runs lists' 'shared: it says so' 'leave @390' 'tabs: two tabs' 'phone home' 'keys: Tab reaches' 'contrast: the notice' 'print pov' \
+            'reads: opening' 'reads, stalled: it stops waiting' 'reads, failed:' 'classify: the confirmation' 'the account just classified: "Classify as…" not offered'; do
+  grep -qF "$want" "$W/main.log" && ok "coverage: ran — $want" || bad "coverage: no line for — $want"
+done
 
 step "5. The frame never prints (the PDFs' text), and the printed documents are S3's"
 for f in "$OUT"/s5_print_*.pdf; do
@@ -191,6 +203,14 @@ restore "$FRAMEC"
 edit "$FOCUS" "    notice: notice && notice.at === location.key ? notice : null," "    notice,"
 broke shared b7 'said once' 'B7: the "You'"'"'re now in" notice kept on the next page → caught'
 restore "$FOCUS"
+# B8 — the frame waits forever: no time limit on its reads.
+edit "$LIB" "export const FRAME_READ_MS = 15000;" "export const FRAME_READ_MS = 1e9;"
+broke reads b8 'it stops waiting' 'B8: the frame without its time limit → caught: a stalled read leaves it "loading…"'
+restore "$LIB"
+# B9 — the frame makes its own /walk read: nothing shared.
+edit "$SHARED" "  if (hit && (hit.done === null || now - hit.done < SHARE_MS)) return hit.p;" "  void hit;"
+broke reads b9 'makes ONE /walk read' 'B9: no shared /walk read → caught: the page and the frame each read it'
+restore "$SHARED"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $OUT"
 
