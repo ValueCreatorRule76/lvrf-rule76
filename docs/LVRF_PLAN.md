@@ -5578,6 +5578,15 @@ account in focus without losing it. It changes how pages are reached, not any ru
   - In S6 itself, D5 stands: "no promised date on record", never "on time".
 - **Next:** the D8 mock-ups, six screens with fictional accounts only, for Brad's review. The review PDF goes in
   `~/lvrf-backups/s6-mockup/` (`chmod 600`).
+- **The mock-ups are approved (Brad, 20 Nov 2026; `1fa05f7`, branch `s6-war-room`), with three changes:**
+  1. **D5 confirmed:** "late" only where a promised date has passed with no actual. Otherwise "No promised date on
+     record", never "on time".
+  2. **Hypotheses due, in words** in the headline tile and the Accounts band ("1 in 30 days · 1 in 60 · 1 in 90").
+     The compact numbers stay in the table, under its column header.
+  3. **The Accounts band shows confirmed and refuted together** ("1 confirmed · 1 refuted"), as the War Room tile
+     does, never refuted alone.
+
+  Then S6 is built to Gate A, with D1's money checks on the page and in `GET /api/book`, and the coverage gate.
 
 **The ruling it builds:**
 - The 3.1 list, "The War Room and account focus" (Brad, 15 Nov 2026): **the War Room never sums or averages money
