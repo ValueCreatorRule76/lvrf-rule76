@@ -5565,3 +5565,169 @@ account in focus without losing it. It changes how pages are reached, not any ru
 - **Gate C (read-only):** no row changed by the deploy; under D6, any classification made is Brad's own act, through
   the page.
 - **About half a day for the mock-ups; about 2 days for the build after they are approved.**
+
+## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **for Brad's approval; mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+
+**The ruling it builds:**
+- The 3.1 list, "The War Room and account focus" (Brad, 15 Nov 2026): **the War Room never sums or averages money
+  across accounts** (CVAF's lesson, design §4.3).
+- The design: §4.3 (what the War Room shows), §5.8 (`GET /api/book`, no new table) and P7 (its checks).
+- Q7, ruled 24 Oct 2026: **the War Room at `/book`, with a band on `/`**; the accounts stay the front door.
+- The revised build order: S6 after S5, mock-ups first, with the same cut-off.
+
+**Value spine:** `return`, across the book. It is the value engineering leader's read of where every live engagement
+stands, and of what is due, refuted or late. It writes nothing.
+
+### 1. What the code and the record hold today (read 20 Nov 2026, `14b54b0`; read only)
+
+- **Book confidence already exists:** `GET /api/cohort` (`server/routes/cohort.ts`) and `CohortCard` on the Accounts
+  home.
+  - **Weakest link, never an average.** An unmeasured member has no score, with its reason, never 0.
+  - **Membership** (Q4n): live customer accounts only. Not the tenant's own account, not a reference example (a
+    current marker), not a retired engagement.
+  - It already counts the reference examples it leaves out.
+- **Who is a member on prod today: nobody.**
+  - Curia and Scotts Miracle-Gro both carry a current outside-in-test marker, so they are reference examples.
+  - Skillsoft is the tenant's own account.
+  - **Until the pilot's first customer account (4–15 Jan 2027), the War Room's book is empty.** That shapes D2.
+- **CVAF's War Room** (`cvaf-rule76/apps/web/src/pages/WarRoomPage.jsx`, read only, no client data):
+  - **its fabrication:** a `revenue × 0.1` term that made a $6.6B "portfolio value" out of nothing;
+  - **even after its fix,** it sums NPV across the accounts that have a model, in a "Portfolio Value" tile;
+  - **LVRF takes neither.** From CVAF it takes the per-account next action, and leaving back to the War Room (S5's
+    frame has its own Leave).
+- **What each §4.3 column can be read from:**
+
+  | Column | Source | On prod today |
+  |---|---|---|
+  | Stage reached | the latest locked run's `terminal_value_stage` | Skillsoft only (not a member) |
+  | Confidence, naming its run | the run of record (as `cohort.ts`, as the S5 frame) | — |
+  | Hypotheses due in 30 / 60 / 90 days | `value_hypotheses.falsifier_due`, verdict open | 1 hypothesis in all |
+  | Confirmed and refuted | the hypothesis verdict (computed, never stored, O2-D1) | — |
+  | Outcomes late (distinct from short) | `value_outcomes.promised_measured_at` past, no actual | **no route records a promised date**; 0 of 5 outcomes carry one |
+  | Open asks | the gap register (`gapRegister.ts`), per outcome | per outcome, a read per call today |
+  | Cost of delay, stated or refused | the value case (P6, `lvrf_cost_of_delay`) | — |
+  | Last recorded | the latest dated act (as the Accounts home's row) | — |
+
+- **The confirmation gap is not in the API.** The design says "as already built", but it was built as a Python script
+  (`records/confirmation_gap.py`, 29 July). It refuses below n = 5 admissible (verified) outcomes, and gives
+  dispersion only from n = 12. Prod has 0 admissible outcomes.
+
+### 2. What S6 builds (if approved as recommended)
+
+1. **`/book`, the War Room:** a read-only page, in the main navigation as "War Room", after Accounts.
+   - **One row per member account:**
+     - the name, to its workspace (opening it sets the focus, as S5);
+     - its pack;
+     - the stage reached;
+     - the confidence, naming its run ("Run N: n / 100 · Band", `ConfidenceBadge`'s format);
+     - hypotheses due in 30, 60 and 90 days;
+     - hypotheses confirmed and refuted;
+     - outcomes late, or "no promised date on record";
+     - open asks;
+     - cost of delay, **stated or refused, by word and link only** (D3);
+     - the next step, in the frame's words;
+     - last recorded.
+   - **Across the book, counts only:**
+     - book confidence (the weakest member, `cohort.ts`'s, the same format);
+     - accounts in the book;
+     - hypotheses due, confirmed, refuted and open;
+     - outcomes by realization status;
+     - the confirmation gap's state (D4).
+   - **Below, "Not in the book",** marked and never counted (D2): each reference example and the tenant's own account,
+     each with its reason.
+2. **`GET /api/book`** (design §5.8): server-computed and read-only. It is tenant-scoped by the actor
+   (`actorTenantId`), and its membership comes from `cohort.ts`'s query, **shared, not copied**.
+   - **No money field in it at all.** Its response is checked key by key in Gate A.
+   - It is a new route: named in equivalence as added, and in `list_api_routes.mjs`.
+3. **The band on `/`** (Q7): one line at the top of Accounts home with:
+   - book confidence;
+   - the accounts in the book;
+   - hypotheses due in 30 days;
+   - refuted;
+   - late;
+   - "Open the War Room".
+4. **With an account in focus** (S5), the War Room keeps it (it has no account of its own) and marks that account's
+   row "In focus".
+5. **At 390:** the rows become cards, with no sideways scroll.
+6. **Not printed:** the War Room is a screen, not a document. The frame and the band never print.
+
+### 3. Decisions for Brad
+
+- **D1, the War Room never sums or averages money: how strictly. Recommended: no money anywhere on the page or in
+  its route,** not even per row.
+  - Each figure in money stays in its own value case, with its basis and its banners. CVAF's lesson is that a money
+    figure on a portfolio page invites a total.
+  - Gate A greps the page and the response for any currency symbol, any money word, and any field named for money.
+  - Option: a row's own cost of delay, with its basis (design §4.3 allows it), never totalled.
+- **D2, an empty book on prod until the pilot. Recommended: show "Not in the book"** below the book: the two
+  reference examples and your own account, each with its reason, linked, never counted.
+  - The empty book says "No live customer engagements yet".
+  - Option: the book only, with a count of what it leaves out (as `CohortCard` does today).
+- **D3, cost of delay on a row. Recommended:** "Stated in run N's case" or "Refused: {reason}", linked to that case,
+  with no figure (follows D1).
+- **D4, the confirmation gap. Recommended:** S6 ports only its **admissible count and its refusal**, as "Not
+  reported: n admissible outcomes; it needs 5". Its bias figure (direction-weighted, a ratio of claim, never
+  currency) comes later, as its own item, when the book can reach n = 5.
+  - Option: port the whole engine now.
+  - Either way, it is a ratio across outcomes, not money; under D1, it is never in currency.
+- **D5, "late" with no promised dates. Recommended:** show "no promised date on record" where none is, never "on
+  time".
+  - Add to the 3.1 list: **the commit form records a promised measurement date** (the column exists, and no route
+    writes it).
+  - Option: leave "late" out of S6 entirely.
+- **D6, the band and `CohortCard` on Accounts home. Recommended:** the band carries the headline (book confidence
+  once, in one format), and `CohortCard`'s detail (each industry's cohort) moves to the War Room. So the home page
+  does not show book confidence twice, in two places (S5's Gate B finding 2, the same lesson).
+  - Option: keep `CohortCard` on the home page, below the band.
+- **D7, "Leave the account". Recommended: unchanged, to Accounts home,** the front door (Q7). The War Room is one
+  click away in the navigation.
+  - Option: "Leave" goes to the War Room, as CVAF's "Back to the War Room".
+- **D8, the mock-ups. Recommended:** static pages in the repo's style (`design/mockups/`), **fictional accounts
+  only**, each also printed to PDF in `~/lvrf-backups/s6-mockup/` (`chmod 600`). The screens:
+  1. a populated book (six fictional accounts: one late, one refuted, one due in 30 days, one unmeasured, one with no
+     run, one held in focus);
+  2. today's prod shape: an empty book with "Not in the book";
+  3. the band on Accounts home;
+  4. the War Room at 390;
+  5. a row's cost of delay: stated, and refused;
+  6. the confirmation gap: refused, and (as it would read) reported.
+
+### 4. Conflicts to name (CLAUDE.md wins; each is named, none resolved silently)
+
+- **Design §4.3 lets a row show its own cost of delay, with its basis.** Recommended D1 shows none.
+- **Design §4.3 calls the confirmation gap "as already built".** It is a Python script, not the API (D4).
+- **Design §4.3 lists late outcomes.** Nothing records a promised date (D5).
+- **CVAF's War Room is an anti-pattern here** (design §9), not a model: no portfolio value, in any form.
+
+### 5. Gate A (planned; after the mock-ups are approved)
+
+- **`verify_s6_war_room.sh`, through the page as the steward, by session, on clones of the prod copy,** with fictional
+  member accounts made by route (rule 9: clones only):
+  - every row's figures against SQL;
+  - membership equal to book confidence's, and the tenant's own account and the reference examples absent from the
+    book;
+  - **no money:**
+    - no currency symbol, money word or money-named key in the page, the band or `GET /api/book`;
+    - a fixture whose case states a cost of delay still shows none on the War Room;
+  - the confirmation gap refuses at n = 4 (D4);
+  - "late" vs "no promised date on record" (D5);
+  - focus kept, and the row marked;
+  - 390, keyboard, contrast at AA, no hex;
+  - **a coverage gate:** every section prints a line (S5's lesson).
+- **Breaks, each with its positive control:**
+  - a sum of money added to the page;
+  - a money field added to the route;
+  - a reference example counted;
+  - an average shown in place of the weakest member;
+  - "no promised date" shown as on time;
+  - a sideways scroll at 390;
+  - a row of another tenant (P3).
+- **The full regression; equivalence** on every GET: all identical, `GET /api/book` named as added.
+
+### 6. Gate B, the act and Gate C (planned)
+
+- **Gate B:** deploy only, no migration (no table; the TOC stays 972 and the triggers 227). The bundle is new.
+- **Brad's look:** on prod, the empty book with "Not in the book" (D2), and the band. It records nothing.
+- **Gate C (read-only):** no row changed by the deploy; `GET /api/book`'s response holds no money field.
+- **About half a day for the mock-ups; about 3 days for the build after they are approved.** With the cut-off on
+  Fri 18 Dec 2026, there are four weeks.

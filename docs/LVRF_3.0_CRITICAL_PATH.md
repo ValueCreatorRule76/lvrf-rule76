@@ -194,7 +194,7 @@ cut line applied first.
   2. **S5:** the account frame, mock-ups first (as UX-1). **Approved (Brad, 19 Nov 2026), LVRF_PLAN §24.** It must
      pass Gate C by **Fri 18 Dec 2026**; otherwise it waits until after 15 Jan 2027. **Closed 20 Nov 2026:** deployed at
      `5b0edb9`, Gate C clean (`BUILD_STATUS.md`, "S5 closed").
-  3. **S6:** the War Room, mock-ups first. **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
+  3. **S6:** the War Room, mock-ups first. **Planned 20 Nov 2026, LVRF_PLAN §25, for Brad's approval.** **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
      **Fri 18 Dec 2026**, it waits until after the pilot's account-selection weeks (4–15 Jan 2027). No large navigation
      change deploys in that window.
   4. **Then:**
