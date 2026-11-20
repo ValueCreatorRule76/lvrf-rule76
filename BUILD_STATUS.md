@@ -16156,3 +16156,54 @@ A deploy only, no migration; the TOC stays 972 and the triggers 227.
 - hashes 27/27; TOC 972; 227 triggers; drift none.
 
 **Then S5 closes.**
+
+### S5: the Runs fix deployed; the ops change's argon2 check closed; the run-column links fixed — 20 Nov 2026 (UTC)
+
+**Gate B for `s5-runs-fit`, run by Brad:** deploy OK at `838e3fd`, TOC 972, bundle **`index-qNFbY2Xw.js` /
+`index-Dt0F3qII.css`**. The API started at 03:23:05 UTC.
+- **Brad signed out and back in with his password.**
+- **The Runs table fits, and "Walked" is whole at his width.**
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The sign-in was a password sign-in; the ops change's argon2 check is closed.**
+  - The API's log since the deploy: `POST /api/auth/logout` 200, then `POST /api/auth/login` 200, then one
+    `GET /api/auth/me` 304.
+  - The session of 19 Nov 14:06:03 is revoked, and one session was created at 03:23:49 UTC, Brad's.
+  - `/api/auth/login` is the only route that creates a session, and it does so only after argon2 verifies the
+    password.
+- **Nothing else was written:** 0 governance acts (still 228), 0 refusals, 0 audit rows, 0 print requests.
+- `check_run_hashes` **27/27**; **227 triggers**, none disabled; drift none (53, newest `0052`); ownership clean;
+  TOC 972.
+
+**Brad's second finding (20 Nov 2026):** the fix let the run column's links wrap one word per line ("Value / case /
+under / the CFO / lens"), so every row was tall.
+- **Fixed (branch `s5-runs-links`, `f073e35`):**
+  - in the Runs table only (`CaseLinks` unchanged), each link stays on one line: "Value case", "under the CFO lens";
+  - the line breaks between them, and Provenance and Confidence take the wrapping;
+  - the table still fits its card.
+- **Gate A:** `runsfit` now also checks that **no link in the run column breaks inside itself** (one line box each), at
+  1024, 1280 and 1440, with an account in focus, every account and none (52 links); break **B11** (the one-line
+  rule removed) is caught.
+  - **`verify_s5_account_frame.sh` 279/0**, with B10 and B11 caught.
+  - `verify_runs_list` 10/0, `verify_s1_hypothesis_rule` 207/0, `verify_c3` 202/0, `verify_c3b` 237/0.
+  - **Not run:** the full regression and equivalence. The change is one class in one component, and no API.
+- **Bundle:** **`index-0fEKdZXo.js` / `index-Bvjv4tJp.css`.**
+
+#### Gate B for `s5-runs-links` (not run; Brad's pastes)
+
+A deploy only, no migration; the TOC stays 972 and the triggers 227. No sign-in check is needed this time.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s5-runs-links && git push && git log --oneline -3
+   ```
+2. **Deploy**, on the box: `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-0fEKdZXo.js`** /
+   **`index-Bvjv4tJp.css`**, drift none, "active and answering", health 200, the 401 checks, **`deploy OK`.**
+
+**Brad's look:** Runs at your width, with every account. Each row's links read "Value case" and "under the CFO lens",
+each on one line; the table is whole.
+
+**Gate C (read-only):**
+- no write since the deploy, apart from any session of your own;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+**Then S5 closes.**
