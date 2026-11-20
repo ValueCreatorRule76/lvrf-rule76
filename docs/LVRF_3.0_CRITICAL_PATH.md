@@ -206,6 +206,11 @@ cut line applied first.
          "Classify as…" panel, and is pre-existing: the same block is in every governed form. S5 does not change it
          (D6: S1's component as it is). Likely one class (the band's background); it needs its own Gate A across
          the forms;
+       - **the verify scripts audited for sections that pass with zero checks (Brad, 19 Nov 2026).** All 55
+         `verify_*` scripts, and their walks, read for any section or mode that can end with no PASS or FAIL line and
+         still pass. Then one shared helper, used by every script, under which **a section that prints no lines
+         fails**. Found at S5's Gate A: the walk's deep account checks and the post-classification check never ran in
+         the main pass, and the script still reported 180/0 (`BUILD_STATUS.md`, "S5 … Gate A");
        - the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05, and the confidence
          legend's markers as SVG (Brad, 19 Nov 2026).
      - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script

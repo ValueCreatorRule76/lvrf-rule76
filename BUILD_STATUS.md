@@ -15905,3 +15905,178 @@ the box, above.
 **Added to the 3.1 small items (Brad, 19 Nov 2026), first, right after S5:** the provenance band's contrast in S1's
 form (`GovernedForm`, `bg-rule-soft`: gold-ink 4.39:1, ink-45 4.42:1, under AA), found by S5's Gate A. It is
 pre-existing, in every governed form (`docs/LVRF_3.0_CRITICAL_PATH.md`, 3.1 build order, "the small items").
+
+### S5: the account frame — Gate A, 19 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §24; the D7 mock-ups as approved by Brad, 19 Nov 2026, with his two changes, and his three
+additions after the first regression). Branch `s5-account-frame`, at `560b092`. No migration, route, table, trigger or
+CHECK.
+- **The frame:** a band under the header, two rows from 640 px, on every page while an account is in focus.
+  - **Row 1:** "In focus", the name (to its own page) and, for a reference example, "Reference example, not a customer
+    engagement". Then its pack, or "Unclassified: no industry pack" with "Classify as…" (D6). Then where it stands, and
+    "Leave the account" at the right.
+  - **The confidence names its run (Brad's change 1):** "Latest locked run, run N: n / 100 · Band". It is the
+    workspace's own headline, by the same derivation: the latest locked run with no system-exercise mark, of the
+    engagement the walk works. With none: "No run yet: no computed confidence", "No locked run yet: …", or "No
+    headline run: every locked run is marked a system exercise"; never a 0.
+  - **Where it stands:** "Step n of 6 next: …", the workspace's open step. For the tenant's own account (D5), "Your own
+    account · next: …", from its chain.
+  - **Row 2, its pages:** Workspace (for the tenant's own, "Account"), Research (the workspace with step 1 open), Runs
+    (n), Value case (the headline run's, or "none yet, no locked run") and Point of view. The current page is marked.
+  - **On screen only** (`print:hidden`), and **no money in the frame.**
+  - **Below 640 px:** one line, the name, then "Pages ▸".
+- **Focus (D1, D2):**
+  - **Held per tab** in `sessionStorage`, with the account's name; every access is guarded.
+  - **A page whose own record belongs to an account frames that account,** decided before paint. The frame shows no
+    name until that account's reads arrive.
+  - **Replacing a held account is said once:** "You're now in {account}: this run belongs to it. {held} is no longer in
+    focus.", with "Back to {held}".
+  - **A run whose account is retired:** the frame stands aside on that page.
+  - **Runs, Packs, Policies, the home and lineage rows keep the focus.**
+  - **"Leave the account" and signing out clear it.**
+- **Reads (D4, and Brad's additions):**
+  - **The frame reads `/view`, `/walk`, `/pov` and `/research`** through the workspace's derivations: when the account
+    changes, and after any write the API accepts (`WROTE_EVENT` in `apiFetch`), never on navigation.
+  - **One shared `/walk` read** (`client/src/lib/sharedWalk.ts`, Brad): the workspace walk, the tenant's chain, the
+    Accounts home rows and the frame get the same answer, while it is in flight or within 3 s. Any accepted write
+    forgets it. Opening a workspace makes one `/walk` request, where it made two.
+  - **The frame never waits forever (Brad):** its reads have a 15 s limit. A stalled or failed read says "Couldn't load
+    this account's status." (the Accounts home's words), never the server's message, and "Leave the account" stays
+    usable.
+  - **Departure, named:** "Runs (n)" counts from `GET /api/runs`, the list the Runs page filters. `/view`'s count
+    leaves out a retired engagement's runs (Curia: 1 against 22 listed), so the two would disagree. It is an existing
+    GET; no API change.
+- **Runs (D3):** with an account in focus, "Showing {account}'s n runs." with "Show every account's runs (m)", which
+  marks the account's runs "In focus". The table scrolls in its own box at 390, as in the mock-up; the page had
+  scrolled to 961 px.
+- **Packs:** "{account} is classified here" on the pack it is classified into.
+- **"Classify as…" from the frame (D6):**
+  - offered only on an unclassified customer account that is not a reference example;
+  - S1's `ClassifyAccount`, with its route, act and confirmation unchanged; two optional props: it opens from the
+    frame's button, and has a Cancel;
+  - after it, the page below is remounted and reads its record again.
+- **"(optional)" dropped (Brad's change 2)** wherever classifying is required: from the frame, and on the tenant's own
+  account (the same component). The create form keeps it, because classifying is optional there.
+
+**`verify_s5_account_frame.sh` (new): 253 passed, 0 failed.** Through the page, as the steward signed in by session, on
+a clone of the prod copy. The one fixture is an unclassified customer account, made by route. The frame's facts are read
+from SQL, apart from the client's derivation. A coverage gate fails the script if any section prints no line.
+- **Every account page** (the tenant's own, Curia, Scotts, the new account):
+  - name, pack, reference label, run and score, where it stands, the pages and "Classify as…", each against SQL and
+    against the workspace's own headline and step;
+  - the same account on its value case, run page, another of its runs, POV, step 1 ("Research") and snapshots, with
+    the right page marked current;
+  - on another run's page (Curia's run 2, Scotts' and the tenant's run 1), the frame still names its headline run, so
+    the two never silently disagree;
+  - no money.
+- **Held:**
+  - across Runs, Packs, Policies, the home and a lineage row;
+  - 0 frame reads on in-app navigation;
+  - Runs: Curia's 22, then every account's 26 with the 22 marked;
+  - the pack marked.
+- **A shared link** to Curia's run while Scotts was held:
+  - the frame switches and says so, word for word;
+  - a watcher on every DOM change saw the run 0 times under Scotts' name, opened cold and clicked from Runs;
+  - the notice is gone on the next page;
+  - "Back to Scotts Miracle-Gro" holds Scotts again, with nothing announced.
+- **Leave,** at 1280 and 390: Accounts home, no frame; the focus cleared; Runs unfiltered; none after a reload.
+- **Two tabs hold two accounts,** through a reload; leaving in one leaves the other.
+- **At 390, on 12 pages:**
+  - the frame is one line;
+  - no sideways scroll, closed or open, nor with the notice.
+- **Keyboard:**
+  - Tab reaches the name, Leave, then the five pages, in reading order;
+  - each control shows the gold ring;
+  - Enter on "Runs" opens Runs;
+  - "Pages ▸" opens by Enter.
+- **Contrast:** every text in the frame, its notice and its phone panel is at AA.
+- **Print:** the frame and the notice, both on screen, are not printed (case, CFO case, POV). The PDFs carry none of
+  their words.
+- **Reads:**
+  - one `/walk` request when a workspace opens;
+  - a stalled `/walk` shows "loading…" with no name, then gives up **at 15 s** with the sentence, and Leave works;
+  - a 500 shows the sentence at once.
+- **D6, through the frame:**
+  - the label "Classify as"; Cancel sends nothing;
+  - S1's confirmation word for word, and nothing is sent before Confirm;
+  - one request to S1's route;
+  - the frame shows "Healthcare pack" and offers "Classify as…" no more, and the page reads its record again;
+  - in the database: `healthcare`, one evidence row by the steward, 0 refusals.
+- **No hex:** `check_design_tokens` is clean, and the frame's five files restate no value.
+- **Breaks, each against the clean pass; all caught, every file restored byte-identical:**
+  - **B1** the run page declares no account;
+  - **B2** the focus kept after Leave;
+  - **B3** the frame printing;
+  - **B4** a sideways scroll at 390;
+  - **B5** "Classify as…" on a classified account;
+  - **B6** the confidence without its run;
+  - **B7** the notice kept on the next page;
+  - **B8** no time limit on the frame's reads;
+  - **B9** no shared `/walk` read.
+
+**Found by Gate A and fixed, in the product:**
+- **A cold shared link lost the held account's name** ("The account you were in"). The name is now kept with the
+  focus.
+- **The notice's link was gold-ink on grey, 4.39:1.** It is now ink.
+- **Runs scrolled sideways at 390.**
+- **Two lint warnings:** the focus hooks were exported beside the provider; they moved to `accountFocusContext.ts`.
+
+**Found in the walk itself, and fixed (my errors; each had let the script pass while proving less than it said):**
+- **The deep account checks and the post-classification check were skipped in the main pass.** A guard meant for the
+  classified-only pass did it, and the script still reported 180/0. They run now: no product fault was behind them.
+  B5 had been caught with no clean pass beside it; now it has one. A coverage gate now fails any section that prints
+  nothing.
+- **A precedence bug in the stall check.** `x ?? null === y` is `x ?? (null === y)`, so a frame still reading
+  "loading…" passed as the error message, at 3 s. B8 exposed it. Parenthesised, the stall ends at the 15 s limit.
+- **The 3.1 list now carries the audit of all 55 scripts** for sections that pass with zero checks, and one shared
+  "a section that prints no lines fails" helper (Brad, 19 Nov 2026).
+
+**Found, not S5's (Brad: the first small item after S5):** S1's form's provenance band, 4.39:1 and 4.42:1 under AA. It
+is pre-existing in every governed form, and S5 left it unchanged (D6). The walk reports it as a note.
+
+**The `verify_accounts_home` failure in the first full regression** (a row whose `/walk` was answered with a 500 stayed
+"loading…"):
+- **The likely cause:** the client runs in React's StrictMode, so the dev build reads each row twice, and that test
+  answers only the first paused request.
+- **With the shared read,** the two reads are one request, and the script passed in both later runs (63/0). This is
+  consistent with the cause, but not a proof of it.
+
+**The full regression, on `560b092`: all 55 scripts in one run, 55 passed, 0 failed, 5,422 tallied checks, plus
+`verify_tenant_scope`'s 326 PASS lines and 0 FAIL** (54 min). Every tracked file was byte-identical after the run.
+- `verify_accounts_home` 63/0, `verify_s3_print_family` 132/0, `verify_s4_form_confirmation` 106/0,
+  `verify_s5_account_frame` 253/0.
+- **Equivalence against the deployed `4e5c13b`** (`scripts/equivalence_gets.sh`, the 14 Nov snapshot): **213 GETs,
+  213 identical,** 0 differing, no added keys, no route added or removed.
+- **The bundle,** built from this code: **`index-u8Zo2w9a.js` / `index-zWMdsHGj.css`.**
+- **Left as found:** `scripts/demo/`, untracked.
+
+#### Gate B for S5 (not run; Brad's pastes)
+
+A deploy only: no migration, so no backup for a schema change (rule 8). The TOC stays 972 and the triggers 227.
+Under the ruling, it must pass Gate C by Fri 18 Dec 2026.
+
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s5-account-frame && git push && git log --oneline -3
+   ```
+2. **Deploy**, on the box: `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-u8Zo2w9a.js`** / **`index-zWMdsHGj.css`**;
+   - 5b, 5c and 5d passed, drift none (53 migrations, newest `0052`);
+   - `lvrf-api is active and answering (after N refused tries at 0.5s)`;
+   - health 200, `origin_check=configured`, `actor_header=off`, the API and header checks 401, the vhost 401;
+   - **`deploy OK`.**
+
+**Recorded (Brad, 19 Nov 2026): Brad's next sign-in, at S5's Gate B, is the ops change's argon2 check** (its one open
+check, under "Ops change closed"). Gate C confirms it read-only: a session row created after the deploy, by Brad.
+
+**Brad's act:** none is needed; S5 writes nothing of its own.
+- **Sign in and walk one account through the frame on prod, and look:** open it, its run, its case; then Runs, Packs
+  and Leave.
+- **Under D6,** any classification is your own act, through the page. Curia and Scotts are classified, so none is
+  offered on prod today.
+
+**Gate C (read-only):**
+- your sign-in's session row (the argon2 check);
+- no governed row changed by the deploy: 0 acts, 0 refusals, 0 audit rows since, apart from your sign-in;
+- TOC 972, 227 triggers, drift none, ownership clean;
+- `check_run_hashes` 27/27.

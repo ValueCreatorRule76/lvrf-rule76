@@ -5403,7 +5403,7 @@ deploy script stopped silently at step 7, on a start-up race; the API was health
 change as one ops change (`BUILD_STATUS.md`, "Ops: the deploy script's silent stop fixed"). **Closed (19 Nov 2026):** deployed
 at `4e5c13b`; the deploy waited out the race and ended `deploy OK`; Gate C clean (`BUILD_STATUS.md`, "Ops change closed").
 
-## 24. 3.1 slice S5: the account frame (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1–D7 as recommended; mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+## 24. 3.1 slice S5: the account frame (planned 19 Nov 2026; **approved by Brad, 19 Nov 2026, with D1–D7 as recommended; mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**; **mock-ups approved 19 Nov 2026 with two changes; Gate A 19 Nov 2026 at `560b092`, with Brad's three additions (one shared `/walk` read, a 15 s limit on the frame's reads, the sign-in check at Gate B)** (`BUILD_STATUS.md`, "S5: the account frame — Gate A"))
 
 **Brad's rulings (19 Nov 2026):**
 - **§24 is approved with D1–D7 as recommended.**
