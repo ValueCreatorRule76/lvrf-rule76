@@ -23,6 +23,7 @@
 #   B7 the "You're now in" notice said on every page, not once
 #   B8 the frame waits forever on a stalled read (no time limit)
 #   B9 the frame makes its own /walk read instead of the page's (nothing shared)
+#   B10 the Runs table clipped at 1280 (S5 Gate B finding, Brad 20 Nov 2026)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -41,8 +42,8 @@ PORT=3351; VITE_PORT=5351; CDP_PORT=9451
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s5.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-RUNP=client/src/pages/RunPage.tsx; FOCUS=client/src/components/AccountFocus.tsx; FRAMEC=client/src/components/AccountFrame.tsx; LIB=client/src/lib/accountFrame.ts; SHARED=client/src/lib/sharedWalk.ts
-EDITED=("$RUNP" "$FOCUS" "$FRAMEC" "$LIB" "$SHARED")
+RUNP=client/src/pages/RunPage.tsx; FOCUS=client/src/components/AccountFocus.tsx; FRAMEC=client/src/components/AccountFrame.tsx; LIB=client/src/lib/accountFrame.ts; SHARED=client/src/lib/sharedWalk.ts; RTAB=client/src/components/RunsTable.tsx
+EDITED=("$RUNP" "$FOCUS" "$FRAMEC" "$LIB" "$SHARED" "$RTAB")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -148,12 +149,12 @@ if [ -n "${S5_ONLY:-}" ]; then  # debugging: one section, no coverage gate and n
   walk "$S5_ONLY" s5 "$W/main.log"; tally "$W/main.log"; cat "$W/main.log" | grep NOTE || true; bad "S5_ONLY=$S5_ONLY: a partial run, never a Gate A"
   echo; echo "==> ${PASS} passed, ${FAIL} failed"; REACHED_TALLY=1; exit 1
 fi
-walk frame,held,shared,leave,tabs,phone,keys,contrast,print,reads,classify,classified s5 "$W/main.log"
+walk frame,held,shared,leave,tabs,phone,keys,contrast,print,reads,runsfit,classify,classified s5 "$W/main.log"
 tally "$W/main.log"
 # Coverage: every section's checks ran (a skipped section must not pass by saying nothing; found 19 Nov 2026).
 for want in '"Value case" opens run' 'still names the run' 'its point of view frames' '"Research" opens the workspace' "snapshots frame the same account" \
             'held: Runs lists' 'shared: it says so' 'leave @390' 'tabs: two tabs' 'phone home' 'keys: Tab reaches' 'contrast: the notice' 'print pov' \
-            'reads: opening' 'reads, stalled: it stops waiting' 'reads, failed:' 'classify: the confirmation' 'the account just classified: "Classify as…" not offered'; do
+            'runsfit @1280, every account' 'runsfit @1024, no account' 'reads: opening' 'reads, stalled: it stops waiting' 'reads, failed:' 'classify: the confirmation' 'the account just classified: "Classify as…" not offered'; do
   grep -qF "$want" "$W/main.log" && ok "coverage: ran — $want" || bad "coverage: no line for — $want"
 done
 
@@ -211,6 +212,11 @@ restore "$LIB"
 edit "$SHARED" "  if (hit && (hit.done === null || now - hit.done < SHARE_MS)) return hit.p;" "  void hit;"
 broke reads b9 'makes ONE /walk read' 'B9: no shared /walk read → caught: the page and the frame each read it'
 restore "$SHARED"
+# B10 — the Runs table clipped (S5 Gate B finding): the two cells back on one line.
+edit "$RTAB" '<span className="block font-sans text-[11px]" data-testid="runs-case-links">' '<span className="block whitespace-nowrap font-sans text-[11px]" data-testid="runs-case-links">'
+edit "$RTAB" '<td className="max-w-[220px] border-b border-rule-soft px-3 py-[9px] [&_span]:whitespace-normal">' '<td className="border-b border-rule-soft px-3 py-[9px]">'
+broke runsfit b10 'runsfit @1280, every account: no table on Runs is clipped' 'B10: the Runs table back on one line per cell → caught: clipped at 1280'
+restore "$RTAB"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $OUT"
 

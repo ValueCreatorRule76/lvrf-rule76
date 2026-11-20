@@ -116,9 +116,11 @@ export function RunsTable({ runs, focusId = null }: { runs: RunListItem[]; focus
                 <td className="border-b border-rule-soft px-3 py-[9px] font-mono">
                   {r.run_number}
                   {/* S1 (§20 item 3): the value case, both lenses, per row. */}
-                  <span className="block whitespace-nowrap font-sans text-[11px]" data-testid="runs-case-links"><CaseLinks runId={r.id} testid="runs-case-link" /></span>
+                  {/* S5 Gate B finding (Brad, 20 Nov 2026): the links wrap, so the table fits its card from 1024 px. */}
+                  <span className="block font-sans text-[11px]" data-testid="runs-case-links"><CaseLinks runId={r.id} testid="runs-case-link" /></span>
                 </td>
-                <td className="border-b border-rule-soft px-3 py-[9px]">
+                {/* S5 Gate B finding: a long provenance label wraps in its badge, never widening the table past its card. */}
+                <td className="max-w-[220px] border-b border-rule-soft px-3 py-[9px] [&_span]:whitespace-normal">
                   <ProvenanceCell sourceFixture={r.source_fixture} />
                   {/* C3b (ruling 5): a sealed label is shown as recorded at sealing, with its unsourced-figure erratum beneath. */}
                   {r.unsourced_line && <span className="block text-[11px] text-warning" data-testid="runs-unsourced"><span className="text-ink-45">as recorded at sealing · </span>{r.unsourced_line}</span>}

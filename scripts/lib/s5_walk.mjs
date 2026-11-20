@@ -474,6 +474,35 @@ if (SECTIONS.includes('classified')) {
     .map((a) => ({ ...a, classifiable: false, industry: EXP.classify.name, slug: EXP.classify.slug, label: 'the account just classified' })), false);
 }
 
+// ---- runsfit (S5 Gate B finding, Brad, 20 Nov 2026) --------------------------------------------------------------------
+// No table on Runs is clipped: each fits the box that holds it, and every header is wholly visible, at 1024, 1280 and
+// 1440, with an account in focus (its runs, then every account's) and with none.
+if (SECTIONS.includes('runsfit')) {
+  const a = EXP.accounts.find((x) => x.key === 'self');
+  const X = await tab();
+  const FIT = `(()=>{const r=(e)=>e.getBoundingClientRect();const out=[];
+    for(const tb of document.querySelectorAll('table')){if(!tb.getClientRects().length)continue;
+      let clip=null;for(let e=tb.parentElement;e;e=e.parentElement){if(getComputedStyle(e).overflowX!=='visible'){clip=e;break}}
+      const right=clip?r(clip).right:window.innerWidth;const box=clip?clip.clientWidth:window.innerWidth;
+      const ths=[...tb.querySelectorAll('th')].filter(h=>h.getClientRects().length);
+      out.push({w:Math.round(tb.scrollWidth),box:Math.round(box),hidden:ths.filter(h=>r(h).right>right+0.5||h.scrollWidth>h.clientWidth+1).map(h=>h.textContent)})}
+    return {tables:out,page:document.documentElement.scrollWidth}})()`;
+  for (const [label, focus, path] of [['in focus', a.id, '/runs'], ['every account', a.id, '/runs?all=1'], ['no account', null, '/runs']]) {
+    for (const width of [1024, 1280, 1440]) {
+      await X.size(width);
+      await X.go('/');
+      await X.ev(`(()=>{try{${focus ? `sessionStorage.setItem('lvrf:account-focus',${JSON.stringify(focus)})` : `sessionStorage.removeItem('lvrf:account-focus')`}}catch{};return true})()`);
+      await X.go(path);
+      await X.waitFor(`document.querySelectorAll('[data-testid=runs-row]').length>0 && ${focus ? frameReady(focus) : noFrame}`, 30000); await sleep(800);
+      const f = await X.ev(FIT);
+      const ok = f.tables.length > 0 && f.tables.every((t) => t.w <= t.box && t.hidden.length === 0) && f.page <= width;
+      check(ok, `runsfit @${width}, ${label}: no table on Runs is clipped (${f.tables.map((t) => `${t.w} in ${t.box}`).join(', ')}); every header visible; no sideways scroll`, JSON.stringify(f));
+      if (width === 1280 && label === 'every account') await X.shot(`${TAG}_runs_fit_1280`, 1280);
+    }
+  }
+  await X.close();
+}
+
 // ---- reads (Brad, 19 Nov 2026) ----------------------------------------------------------------------------------------
 // The frame reuses the page's /walk read; it never waits forever: a stalled or failed read says "Couldn't load this
 // account's status." (the browser's own request interception: nothing on the server is changed).
