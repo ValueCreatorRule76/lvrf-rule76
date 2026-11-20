@@ -206,12 +206,15 @@ cut line applied first.
          measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
          without it can never be given one afterwards (append-only), so it **ships before the pilot's first
          commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5);
-       - **next (Brad, 19 Nov 2026; after the promised date, 20 Nov): the provenance band's contrast in S1's form.** In
-         `GovernedForm`, the provenance block sits on `bg-rule-soft`. On it, the gold-ink label measures 4.39:1 and
-         the ink-45 label and help text 4.42:1, under AA (4.5:1). It is found by S5's Gate A, inside the frame's
-         "Classify as…" panel, and is pre-existing: the same block is in every governed form. S5 does not change it
-         (D6: S1's component as it is). Likely one class (the band's background); it needs its own Gate A across
-         the forms;
+       - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
+         - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
+           AA at every size). Two places are known:
+           - **`Card`'s number** (`workbench/Card.tsx`, `text-gold` on white, about 2.4:1), in every card in the
+             app. Found at S6's Gate A.
+           - **S1's form's provenance band** (`GovernedForm`, on `bg-rule-soft`): the gold-ink label at 4.39:1, and the
+             ink-45 label and help text at 4.42:1, under AA. Found at S5's Gate A. Likely the band's background.
+         - **A Gate A check that every page's text meets AA, app-wide,** so it cannot recur: every visible text element
+           on every route, at 1280 and 390, computed against its background.
        - **the verify scripts audited for sections that pass with zero checks (Brad, 19 Nov 2026).** All 55
          `verify_*` scripts, and their walks, read for any section or mode that can end with no PASS or FAIL line and
          still pass. Then one shared helper, used by every script, under which **a section that prints no lines
