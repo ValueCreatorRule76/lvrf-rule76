@@ -15895,3 +15895,13 @@ A deploy only: no migration, so no backup is needed for a schema change (rule 8)
   (no `SELECT` on the migrations sequence), so it was not re-measured from here.
 
 **The ops change is closed.** L27's `body-parser` and `qs` are fixed on prod; `drizzle-kit`'s four remain (rule 7).
+
+**Re-checked read-only (Brad's request, 19 Nov 2026, after S5's regression):** Gate C still clean: since the deploy, 0
+governance acts, 0 refusals, 0 audit rows; 227 triggers. Still **0 sessions** since the deploy: sign-in has not been
+exercised on prod, and cannot be read-only (a sign-in writes a session row; rule 9). **The one open check: Brad's next
+sign-in at `lvrf-rule76.com`, then a read-only look for its session row.** argon2 itself is shown to load and verify on
+the box, above.
+
+**Added to the 3.1 small items (Brad, 19 Nov 2026), first, right after S5:** the provenance band's contrast in S1's
+form (`GovernedForm`, `bg-rule-soft`: gold-ink 4.39:1, ink-45 4.42:1, under AA), found by S5's Gate A. It is
+pre-existing, in every governed form (`docs/LVRF_3.0_CRITICAL_PATH.md`, 3.1 build order, "the small items").

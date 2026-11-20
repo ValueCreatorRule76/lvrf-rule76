@@ -199,8 +199,15 @@ cut line applied first.
   4. **Then:**
      - the solution catalog page;
      - `/people`;
-     - the small items: the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05,
-       and the confidence legend's markers as SVG (Brad, 19 Nov 2026).
+     - the small items:
+       - **first, right after S5 (Brad, 19 Nov 2026): the provenance band's contrast in S1's form.** In
+         `GovernedForm`, the provenance block sits on `bg-rule-soft`. On it, the gold-ink label measures 4.39:1 and
+         the ink-45 label and help text 4.42:1, under AA (4.5:1). It is found by S5's Gate A, inside the frame's
+         "Classify as…" panel, and is pre-existing: the same block is in every governed form. S5 does not change it
+         (D6: S1's component as it is). Likely one class (the band's background); it needs its own Gate A across
+         the forms;
+       - the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05, and the confidence
+         legend's markers as SVG (Brad, 19 Nov 2026).
      - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script
        fix, as one ops change (`BUILD_STATUS.md`, "Ops: the deploy script's silent stop fixed"). **Closed
        (19 Nov 2026):** deployed at `4e5c13b`, Gate C clean.
