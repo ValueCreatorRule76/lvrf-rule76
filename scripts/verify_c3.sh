@@ -417,7 +417,8 @@ COH_SORT() { node -e 'console.log(JSON.stringify(JSON.parse(process.argv[1]).sor
 cohort_of "the book"
 [ "$(COH_SORT "$COH_OUT")" = "$(COH_SORT "$COH_WANT")" ] && ok "  ...its run of record for the role-holder's engagement is run $(q "SELECT run_number FROM value_runs WHERE id = '$R2'"), not the marked one; the analyst's carries \"$LINE\"" || bad "  ...book members: $COH_OUT (want $COH_WANT)"
 # B13 — the book's run of record taking a marked run.
-edit "$COH" "              AND lvrf_system_exercise_mark('value_runs', id) IS NULL
+# S6: computeCohortView's query sits 4 spaces left of the old handler's (the SQL is unchanged).
+edit "$COH" "          AND lvrf_system_exercise_mark('value_runs', id) IS NULL
 " ""
 stop_server; start_server
 cohort_of "B13: the book without the mark filter"

@@ -16236,3 +16236,138 @@ each on one line; the table is whole.
   - the verify-script audit for sections that pass with zero checks;
   - one confidence format everywhere.
 - **The ops change's argon2 check** closed with Brad's password sign-in (above).
+
+### S6: the War Room — Gate A, 20 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §25, approved with D1–D8 and D5 changed; the D8 mock-ups approved with three changes).
+Branch `s6-war-room`. No migration, table, trigger or CHECK; one new read route.
+- **`GET /api/book`** (`server/routes/book.ts`): read-only, tenant-scoped by the actor, recomputed per request.
+  - **No money in it, anywhere (D1):** no amount, rate, currency or impact. A run's cost of delay is its state,
+    "stated" or "refused", with the refusal's reasons, read from the sealed case. The amount, rate and currency are
+    never selected.
+  - **Membership is book confidence's own:** `cohort.ts`'s handler became `computeCohortView()`, which `/api/cohort`
+    returns unchanged (equivalence: SAME) and `/api/book` reads.
+  - Hypotheses use the database's verdict (`lvrf_hypothesis_verdict`). Outcomes carry dates and states, never values.
+  - The confirmation gap's admissible (verified) count, with n = 5 and 12 as constants.
+  - "Not in the book": the tenant's own account and each reference example, with its kind.
+- **`/book`, the War Room:**
+  - **Tiles, counts only:**
+    - in the book;
+    - book confidence (the weakest member, "Not measured" when a member has no locked run, the lowest recorded run as
+      context only);
+    - hypotheses due in words;
+    - confirmed and refuted together, with the open count;
+    - late outcomes, with "no promised date on record";
+    - outcomes by status.
+  - **One row per member** (cards at 390):
+    - the row's run, score, next step and last recorded act, through the account frame's own derivation
+      (`loadBookRow`: the same reads and functions), so the War Room and the frame never say two things;
+    - stage reached, in the plain labels (`STAGE_LABEL`);
+    - hypotheses due 30 · 60 · 90 and confirmed · refuted, as compact numbers;
+    - outcomes: "late" only where a promised date passed with no actual, otherwise "No promised date on record",
+      never "on time";
+    - open asks, from each outcome's own gap-register route;
+    - cost of delay as a linked word, never a figure.
+  - The confirmation gap's count and refusal (D4); book confidence's members and industries (`CohortCard`, `detail`,
+    no second headline); "Not in the book" (D2).
+  - An account in focus is kept, and its row is marked.
+- **The band on Accounts home** (`BookBand`; Q7, D6): the book's headline once, with hypotheses due in words and
+  confirmed and refuted together. Book confidence's card leaves the home page (D6).
+- **"War Room"** sits in the main navigation, after Accounts.
+- **Departures from the mock-ups, named:**
+  - stage reached uses the app's plain stage labels ("Target committed"), not a single word;
+  - the status line counts the record's real statuses (claimed, measured, verified, not realized); the mock-up's
+    "committed" is not a status;
+  - `CohortCard` on the War Room shows no card number (below).
+
+**`verify_s6_war_room.sh` (new): 158 passed, 0 failed.** On a clone of the prod copy, through the page, as the
+steward by session. Every figure is checked against SQL, apart from the client and the route.
+- **P0, prod's shape:**
+  - no member;
+  - book confidence "No live customer engagements yet.", never 0;
+  - the note, and no table;
+  - "Not in the book": Curia, Scotts Miracle-Gro and Skillsoft, each linked, with its reason;
+  - the gap: "Not reported: 0 verified outcomes in the book; it needs 5.";
+  - the band empty;
+  - no money.
+- **P1:** the steward unmarks Curia by its route (a fixture act on the clone). One member; book confidence 10 / 100 ·
+  Low, set by it. Curia's row reads "No promised date on record". The band agrees.
+- **P2:** an unclassified account (route), a hypothesis on Curia's outcome (`state_hypothesis`, routes), and a promised
+  date 20 days past.
+  - **The promised date is set by SQL on the clone: no route writes one** (§25 D5; the next small item).
+  - **Rows equal book confidence's members** (`GET /api/cohort`) and SQL's. Neither the tenant's own account nor a
+    reference example is a row.
+  - **Each row against SQL:** due, confirmed · refuted, outcomes ("1 late: promised …"; "No outcome yet"; never "on
+    time"), run and score, stage and cost-of-delay state.
+  - **Curia, in focus,** is marked; its row and the frame above name the same run, score and next step.
+  - **Tiles:** "Not measured", naming the account with no engagement; due in words; "0 confirmed · 0 refuted",
+    1 open; 1 late; the status line.
+  - **The band:** the same counts; due in words; confirmed and refuted together; its link and the navigation link
+    open `/book`.
+  - **Money (D1):** none in the page or the band text; none in `GET /api/book`'s keys or strings; no amount, rate or
+    currency anywhere in it.
+  - **390:** cards, no sideways scroll, on `/book` and `/`.
+  - **Keyboard:** Tab reaches every row's account with the gold ring; Enter on the band's link.
+  - **Contrast:** AA on the War Room and the band.
+- **A coverage gate** fails any section that prints no line.
+- **No hex;** `GET /api/book`'s SQL reads no money column.
+- **Breaks, each against a clean pass; all caught, files restored byte-identical:**
+  - **B1** a money figure on the page;
+  - **B2** a money field in the route;
+  - **B3** a reference example counted;
+  - **B4** the lowest recorded run shown as the book's score;
+  - **B5** "On time" where nothing was promised (its positive control is P1);
+  - **B6** a sideways scroll at 390;
+  - **B7** the band showing refuted alone.
+
+**Found by Gate A and fixed:**
+- **Contrast:** `CohortCard`'s number "00", gold on white (2.40:1). On the War Room the card shows no number.
+- **The walk's own errors (my errors), each fixed before the record:**
+  - a presence check evaluated outside the page (a node never comes back by value), so it always read as absent;
+  - the detail checks ran before the card's own read;
+  - B5 had no row to break in P2.
+- **Found, not S6's (Brad, 20 Nov 2026: one contrast item on the 3.1 small items):** every `Card`'s gold number on white
+  (about 2.4:1), with S1's provenance band. Small gold text on paper uses `--gold-ink`, with an app-wide AA check.
+
+**Scripts changed by design (D6: book confidence's card moved to `/book`):**
+- `verify_cohort` reads the empty book on `/book`;
+- `c3_walk` and `c3b_walk` read the book's member table on `/book`;
+- `verify_accounts_home` checks the band;
+- `verify_tenant_scope_cases` has `GET /api/book`'s case (both ways pass).
+
+**Found by the regression:** `verify_cohort`'s and `verify_c3`'s breaks edit `cohort.ts` by its exact text. The
+refactor moved that query 4 spaces left, with its SQL unchanged. Both breaks were updated; `verify_c3` (B13) then
+passed, 203/0.
+
+**The full regression:**
+- **All 56 scripts:** 55 passed in one run (58 min), and `verify_c3` passed on its rerun after the break's text fix
+  (a script change only).
+- **5,608 tallied checks,** plus `verify_tenant_scope`'s 329 PASS lines and 0 FAIL.
+- Every tracked file was byte-identical after the run.
+- **Equivalence against the deployed `5b0edb9`** (the 14 Nov snapshot): **213 GETs, 213 identical,** 0 differing, no
+  added keys. **`GET /api/book` is reported as the only added route,** and none was removed. `/api/cohort` is SAME,
+  200/200.
+- **The bundle:** **`index-BCiWcS85.js` / `index-BMv5OQwB.css`.**
+
+#### Gate B for S6 (not run; Brad's pastes)
+
+A deploy only, no migration; the TOC stays 972 and the triggers 227. Under the ruling, it must pass Gate C by Fri 18 Dec 2026.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s6-war-room && git push && git log --oneline -3
+   ```
+2. **Deploy**, on the box: `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-BCiWcS85.js` / `index-BMv5OQwB.css`**;
+   - drift none (53, newest `0052`), "active and answering", health 200;
+   - the 401 checks, **`deploy OK`.**
+
+**Brad's look (records nothing):** prod's book is empty until the pilot.
+- **The War Room:** "No live customer engagements yet", the gap refused at 0, and "Not in the book" with Curia,
+  Scotts Miracle-Gro and Skillsoft.
+- **Accounts home:** the band, "No live customer engagements yet · Open the War Room →".
+- **"War Room"** in the navigation.
+
+**Gate C (read-only):**
+- no write since the deploy;
+- **`GET /api/book`'s response on prod holds no money key or string;**
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
