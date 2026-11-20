@@ -211,6 +211,11 @@ cut line applied first.
          still pass. Then one shared helper, used by every script, under which **a section that prints no lines
          fails**. Found at S5's Gate A: the walk's deep account checks and the post-classification check never ran in
          the main pass, and the script still reported 180/0 (`BUILD_STATUS.md`, "S5 … Gate A");
+       - **one confidence format everywhere (Brad, 20 Nov 2026).** The tenant's own account page shows its headline as a
+         red badge, "25.0 · LOW" (`InstitutionPage`'s plain record view: `view.runs.latest_confidence_score`, unrounded,
+         `CONFIDENCE_TONE` low = critical), while the frame above it shows "25 / 100 · LOW" (`ConfidenceBadge`, UX-1
+         standard 5: "n / 100 · Band", Low never critical red). Found at S5's Gate B walk. One format, `ConfidenceBadge`'s,
+         on every page; the runs table's score and band columns read against it too;
        - the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05, and the confidence
          legend's markers as SVG (Brad, 19 Nov 2026).
      - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script

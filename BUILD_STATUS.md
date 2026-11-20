@@ -16080,3 +16080,79 @@ check, under "Ops change closed"). Gate C confirms it read-only: a session row c
 - no governed row changed by the deploy: 0 acts, 0 refusals, 0 audit rows since, apart from your sign-in;
 - TOC 972, 227 triggers, drift none, ownership clean;
 - `check_run_hashes` 27/27.
+
+### S5: Gate B, Brad's walk, Gate C; a Gate B finding fixed (S5 stays open) — 20 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- `main` and the box at `d1fdf50`.
+- Pre-S5 backup `~/lvrf-pre-s5-20261120T013947Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 3 refused tries)", all checks, bundle **`index-u8Zo2w9a.js` / `index-zWMdsHGj.css`**
+  as Gate A built, "deploy OK". The API started at 01:40:47 UTC.
+
+**Brad's walk (nothing pressed that records):** Skillsoft opened, its run 3 and its case; Runs, filtered to Skillsoft,
+with "Show every account's runs (27)"; Packs, with Skillsoft held and "classified here"; then Leave (Accounts home,
+nothing in focus). All as designed. Two findings:
+1. **On Runs, the table was clipped on the right** at Brad's window width: the last header read "WA…".
+   - **S5 caused it**, measured on a clone of the prod copy, the deployed-before `4e5c13b` against S5, at 1024, 1280
+     and 1440.
+   - **The table is 1077 px in a card 930–962 px wide.** At `4e5c13b` it spilled past the card, unclipped; at 1024 the
+     page scrolled sideways (1124 px).
+   - **S5's sideways-scroll box** (put in for 390) cut it off at every width.
+   - **Fixed before S5 closes,** below.
+2. **Skillsoft's account page shows its confidence twice, in two formats:** the frame's "25 / 100 · LOW", and the
+   page's red "25.0 · LOW" (the tenant's plain record view). It is older than S5. **On the 3.1 small items:** one
+   format everywhere.
+
+**The argon2 check is NOT proven.**
+- **Brad's walk used a session that already existed.** The session was created on 19 Nov at 14:06:03 UTC, before
+  the ops deploy (22:26) and before S5's.
+- **No password sign-in has happened since either deploy:** 0 sessions created since 22:26 on 19 Nov, and no
+  `POST /api/auth/login` in the API's log. The two `GET /api/auth/me` (304) only read that session.
+- **argon2 runs only when a password is checked.** So the ops change's one open check stays open.
+- **To close it:** sign out, then sign in with the password. Gate C then finds a session created after the deploy,
+  read-only.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **Since the deploy (01:40:47 UTC), nothing was written:** 0 sessions, 0 governance acts (still 228, the last
+  15 Nov 21:12:17), 0 refusals, 0 audit rows, 0 print requests. Evidence 49 rows.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean.
+- **TOC 972** (the pre-S5 dump). No migration ran.
+
+**Finding 1, fixed (branch `s5-runs-fit`, `32c6490`):**
+- **What changed:** the table's two one-line cells wrap. The case links, and a long provenance label in its badge
+  (at most 220 px). The table is **930 px in its 930 px box** at 1024, 1280 and 1440, with an account in focus, every
+  account, or none. Every word is kept.
+- **Gate A:**
+  - **`verify_s5_account_frame.sh`, 267 passed, 0 failed.**
+  - **A new section, `runsfit`:** every table on Runs fits its box, every header is wholly visible, and there is no
+    sideways scroll, at the three widths, in the three states.
+  - **Break B10** (the two cells back on one line) is caught at 1280.
+  - **The ten scripts that open Runs pass:** `verify_runs_list` 10/0, `verify_c3` 202/0, `verify_c3b` 237/0,
+    `verify_s1_hypothesis_rule` 207/0, `verify_evidence_final` 181/0, `verify_case_snapshot` 111/0,
+    `verify_commit_measure_verify` 215/0, `verify_steward_safety` 31/0, `verify_supersession` 219/0,
+    `verify_value_case` 198/0.
+  - **Not run:** the full regression, and equivalence. The change is two class names in one component, and no API.
+- **Bundle:** **`index-qNFbY2Xw.js` / `index-Dt0F3qII.css`.**
+
+#### Gate B for the S5 fix (not run; Brad's pastes)
+
+A deploy only, no migration; the TOC stays 972 and the triggers 227.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only s5-runs-fit && git push && git log --oneline -3
+   ```
+2. **Deploy**, on the box: `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-qNFbY2Xw.js`** /
+   **`index-Dt0F3qII.css`**, drift none, "active and answering", health 200, the 401 checks, **`deploy OK`.**
+
+**Brad's act:**
+- **Sign out, then sign in with your password.** This is the ops change's argon2 check.
+- **Then open Runs at your window width,** with an account in focus and with every account. The last column reads
+  "Walked" in full.
+
+**Gate C (read-only):**
+- a session created after the deploy, Brad's: the argon2 check;
+- no other write;
+- hashes 27/27; TOC 972; 227 triggers; drift none.
+
+**Then S5 closes.**
