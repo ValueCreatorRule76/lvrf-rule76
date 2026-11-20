@@ -16207,3 +16207,32 @@ each on one line; the table is whole.
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
 
 **Then S5 closes.**
+
+### S5 closed: the run-column links deployed at `5b0edb9`; Gate C clean — 20 Nov 2026 (UTC)
+
+**Gate B for `s5-runs-links`, run by Brad:**
+- The box at `5b0edb9`.
+- Pre-deploy backup `~/lvrf-pre-s5links-20261120T034720Z.dump`, **TOC 972**.
+- Bundle **`index-0fEKdZXo.js` / `index-Bvjv4tJp.css`**, all checks, "deploy OK". The API started at 03:47:53 UTC.
+- **Brad's look:** on Runs with every account, "Value case" and "under the CFO lens" each sit on one line, the table
+  fits its card, and "Walked" is whole. No sign-in.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **Since the deploy, nothing was written:** 0 sessions, 0 governance acts (still 228, the last 15 Nov), 0 refusals,
+  0 audit rows, 0 print requests. No write request in the API's log.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean.
+- **TOC 972.**
+
+**S5 is closed** (20 Nov 2026), four weeks inside the Fri 18 Dec 2026 cut-off.
+- **What S5 shipped:**
+  - the account frame;
+  - one shared `/walk` read;
+  - a 15 s limit on the frame's reads;
+  - "Classify as…" from the frame;
+  - the Runs table fitting its card, with each case link on one line.
+- **Its findings on the 3.1 small items:**
+  - S1's form's provenance-band contrast (first, after S5);
+  - the verify-script audit for sections that pass with zero checks;
+  - one confidence format everywhere.
+- **The ops change's argon2 check** closed with Brad's password sign-in (above).
