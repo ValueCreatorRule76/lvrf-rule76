@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchRuns, type FetchRunsResult } from '../api/runsIndex';
-import { useAccountFocus } from '../components/AccountFocus';
+import { useAccountFocus } from '../components/accountFocusContext';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { RunsTable } from '../components/RunsTable';
 import { AboutBatch, CreditErrataBatch, MisstatedFindingsBatch, SupersessionBatch, SystemExerciseBatch } from '../components/C3Batches';

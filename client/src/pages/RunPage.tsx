@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { fetchRun, type FetchRunResult } from '../api/runs';
 import { fetchPov } from '../api/pov';
 import { Workbench, type AccountRead } from '../components/workbench/Workbench';
-import { useFrameAccount } from '../components/AccountFocus';
+import { useFrameAccount } from '../components/accountFocusContext';
 
 export function RunPage() {
   const { id } = useParams<{ id: string }>();

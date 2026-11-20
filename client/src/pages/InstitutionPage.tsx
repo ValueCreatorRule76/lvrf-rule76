@@ -22,7 +22,7 @@ import { OutsideInWalk, type WalkStatus } from '../components/OutsideInWalk';
 import { EngagementHypotheses, PovAuthoring, type PovStatus } from '../components/PovAuthoring';
 import { ConfidenceBadge, PrimaryLink, StepRail, WorkspaceStep } from '../components/workbench/Workspace';
 import { MARKER_KIND } from '../api/pov';
-import { useFrameAccount } from '../components/AccountFocus';
+import { useFrameAccount } from '../components/accountFocusContext';
 
 // Same statuses as IndustryPackPage.tsx's STATUS_TONE — not imported,
 // because that constant is that file's own local table, not an exported

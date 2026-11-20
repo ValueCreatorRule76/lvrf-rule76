@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useFrameAccount } from '../components/AccountFocus';
+import { useFrameAccount } from '../components/accountFocusContext';
 import { apiFetch } from '../api/http';
 import { postGoverned } from '../api/post';
 import { MARKER_KIND, type MarkerKind } from '../api/pov';

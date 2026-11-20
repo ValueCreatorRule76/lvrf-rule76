@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAccountFocus } from './AccountFocus';
+import { useAccountFocus } from './accountFocusContext';
 import { FOCUS_RING } from './GovernedForm';
 import { ConfidenceBadge } from './workbench/Workspace';
 import { ClassifyAccount } from './CreateAccountCard';

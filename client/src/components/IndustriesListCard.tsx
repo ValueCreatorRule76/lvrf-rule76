@@ -4,7 +4,7 @@ import { useActor } from '../actor/ActorContext';
 import { fetchIndustries, type FetchIndustriesResult } from '../api/packs';
 import { Card, Badge } from './workbench/Card';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
-import { useAccountFocus } from './AccountFocus';
+import { useAccountFocus } from './accountFocusContext';
 
 // A plain list, not a picker — each row links to /packs/:slug, but nothing
 // here filters or searches. Lives on PacksIndexPage now, as that page's

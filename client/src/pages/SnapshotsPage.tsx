@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useFrameAccount } from '../components/AccountFocus';
+import { useFrameAccount } from '../components/accountFocusContext';
 import { apiFetch } from '../api/http';
 import { MARKER_KIND, type MarkerKind } from '../api/pov';
 import { FOCUS_RING } from '../components/GovernedForm';

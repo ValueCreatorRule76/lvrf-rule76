@@ -3,7 +3,7 @@ import { NoSourceLine, VerifiedUnopenedLine } from '../components/RecordReadings
 import { useEffect, useState } from 'react';
 import { LineageLink } from '../components/LineageLink';
 import { Link, useParams } from 'react-router-dom';
-import { useFrameAccount } from '../components/AccountFocus';
+import { useFrameAccount } from '../components/accountFocusContext';
 import { useActor } from '../actor/ActorContext';
 import { fetchPov, recorded, MARKER_KIND, type Pov, type PovHypothesis, type PovOutcome } from '../api/pov';
 import { ConfidenceBadge } from '../components/workbench/Workspace';

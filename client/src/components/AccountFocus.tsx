@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
 import { WROTE_EVENT } from '../api/http';
-import { loadAccountFrame, type FrameData } from '../lib/accountFrame';
+import { loadAccountFrame } from '../lib/accountFrame';
+import { FocusContext, type FocusValue, type FrameState, type Notice, type PageAccount } from './accountFocusContext';
 
 /**
  * S5 (LVRF_PLAN §24): the account in focus.
@@ -31,36 +32,7 @@ const writeHeld = (id: string | null) => {
   try { if (id) window.sessionStorage.setItem(KEY, id); else { window.sessionStorage.removeItem(KEY); window.sessionStorage.removeItem(NAME_KEY); } } catch { /* storage unavailable: held for this page only */ }
 };
 
-/** What a page says about its own record. */
-export type PageAccount =
-  | { kind: 'loading' }
-  /** No account of its own: the held focus is kept. */
-  | { kind: 'none' }
-  /** Its record belongs to this account; `belongs` names the record ("this run belongs to it"). */
-  | { kind: 'account'; id: string; belongs?: string }
-  /** Its record belongs to an account that cannot be named (a run whose account is retired): no frame on this page. */
-  | { kind: 'unknown' };
 
-export type FrameState = { status: 'none' } | { status: 'loading'; id: string } | { status: 'ok'; data: FrameData } | { status: 'error'; id: string };
-
-interface Notice { name: string; belongs?: string; from: { id: string; name: string } | null; at: string }
-
-interface FocusValue {
-  focusId: string | null;
-  frame: FrameState;
-  /** This page's record belongs to an account that cannot be named: the frame stands aside on this page. */
-  hidden: boolean;
-  notice: Notice | null;
-  /** The account's own page, opened from the frame, or "Back to …": set without a notice. */
-  setFocus: (id: string) => void;
-  leave: () => void;
-  declare: (p: PageAccount) => void;
-  /** Bumped after an act from the frame itself (D6's "Classify as…"), so the page below reads its record again. */
-  pagesKey: number;
-  reloadPages: () => void;
-}
-
-const FocusContext = createContext<FocusValue | null>(null);
 
 export function AccountFocusProvider({ children }: { children: ReactNode }) {
   const { status } = useActor();
@@ -125,26 +97,4 @@ export function AccountFocusProvider({ children }: { children: ReactNode }) {
     setFocus, leave, declare, pagesKey, reloadPages,
   }), [focusId, frame, hiddenAt, notice, location.key, setFocus, leave, declare, pagesKey, reloadPages]);
   return <FocusContext.Provider value={value}>{children}</FocusContext.Provider>;
-}
-
-export function useAccountFocus(): FocusValue {
-  const v = useContext(FocusContext);
-  if (!v) throw new Error('useAccountFocus outside AccountFocusProvider');
-  return v;
-}
-
-/**
- * A page says which account its own record belongs to. Run before paint (a layout effect), so a page's record is never
- * painted under another account's frame: the frame switches in the same frame the record first renders.
- */
-export function useFrameAccount(p: PageAccount) {
-  const { declare } = useAccountFocus();
-  const key = p.kind === 'account' ? `account:${p.id}` : p.kind;
-  const belongs = p.kind === 'account' ? p.belongs : undefined;
-  const location = useLocation();
-  useLayoutEffect(() => {
-    if (p.kind === 'loading') return;
-    declare(p);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, belongs, location.key, declare]);
 }

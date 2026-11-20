@@ -80,8 +80,8 @@ broke() {  # SECTIONS TAG EXPECTED_FAILURE_TEXT LABEL
 step "1. Typecheck, build, tokens"
 (cd client && npx tsc -b) > "$W/tsc.log" 2>&1 && ok "client tsc -b" || bad "client tsc: $(head -5 "$W/tsc.log")"
 node scripts/check_design_tokens.mjs > "$W/tokens.log" 2>&1 && ok "check_design_tokens: no hex outside the token files ($(tail -1 "$W/tokens.log"))" || bad "check_design_tokens: $(tail -5 "$W/tokens.log")"
-H="$(grep -nE '#[0-9A-Fa-f]{3,8}\b' client/src/components/AccountFrame.tsx client/src/components/AccountFocus.tsx client/src/lib/accountFrame.ts || true)"
-[ -z "$H" ] && ok "the frame's three files restate no hex value" || bad "a hex in the frame: $H"
+H="$(grep -nE '#[0-9A-Fa-f]{3,8}\b' client/src/components/AccountFrame.tsx client/src/components/AccountFocus.tsx client/src/components/accountFocusContext.ts client/src/lib/accountFrame.ts || true)"
+[ -z "$H" ] && ok "the frame's four files restate no hex value" || bad "a hex in the frame: $H"
 
 step "2. Clone the prod copy, migrate, harden; a session; one unclassified customer account (a fixture, by route)"
 dropdb --if-exists "$VERIFY_DB"

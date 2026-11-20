@@ -14,7 +14,8 @@ import { AppHeader } from './components/AppHeader';
 import { SnapshotsPage } from './pages/SnapshotsPage';
 import { ValueCasePage } from './pages/ValueCasePage';
 import { PoliciesPage } from './pages/PoliciesPage';
-import { AccountFocusProvider, useAccountFocus } from './components/AccountFocus';
+import { AccountFocusProvider } from './components/AccountFocus';
+import { useAccountFocus } from './components/accountFocusContext';
 import { AccountFrame } from './components/AccountFrame';
 
 // Sign-in P2a. Nobody signed in: the sign-in page, in place of the routes —
