@@ -1,0 +1,13 @@
+{
+  "name": "lvrf-demo-recorder",
+  "private": true,
+  "type": "module",
+  "description": "Read-only, captioned walkthrough of LVRF (Skillsoft value case, Curia POV), recorded to video.",
+  "scripts": {
+    "rehearse": "node record.mjs --rehearse",
+    "record": "node record.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

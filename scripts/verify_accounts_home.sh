@@ -189,7 +189,7 @@ if (MODE !== 'nointercept') {
   check(paused.length > 0 && loading && loading.loading && loading.text === 'loading…' && loading.standing === '', `loading: with its /walk still pending, the row says "loading…" and no status`, JSON.stringify(loading));
   check(loading && loading.tag === 'A' && loading.href === `/accounts/${target}`, `loading: the row is still a working link`);
   check(await ev(`[...document.querySelectorAll('[data-testid=account-row]')].filter(a=>a.getAttribute('href')!=='/accounts/${target}').every(a=>/of 6 · |Not worked as a path/.test(a.querySelector('[data-testid=row-standing]')?.textContent??''))`), `loading: every other row shows its status`);
-  check(await ev(`!!document.querySelector('[data-testid=book-scope]')`), `loading: the Book confidence card still renders`);
+  check(await ev(`!!document.querySelector('[data-testid=book-band]')`), `loading: the book band still renders (S6: book confidence's card moved to the War Room)`);
   for (const p of paused.splice(0)) await send('Fetch.continueRequest', { requestId: p.requestId });
   await sleep(1500);
   check(await ev(`/of 6 · /.test(${rowOf}.querySelector('[data-testid=row-standing]')?.textContent??'')`), `loading: once the read arrives, the row shows its status`);
@@ -209,7 +209,7 @@ if (MODE !== 'nointercept') {
   check(failed && !/[0-9a-f]{8}-[0-9a-f]{4}/.test(failed.text) && !failed.text.includes('simulated'), `failed /walk: in words, no id and not the server's message`, failed?.text);
   check(failed && failed.tag === 'A' && failed.href === `/accounts/${target}`, `failed /walk: the row is still a working link`);
   check(await ev(`[...document.querySelectorAll('[data-testid=account-row]')].filter(a=>a.getAttribute('href')!=='/accounts/${target}').every(a=>/of 6 · |Not worked as a path/.test(a.querySelector('[data-testid=row-standing]')?.textContent??''))`), `failed /walk: every other row shows its status`);
-  check(await ev(`!!document.querySelector('[data-testid=book-scope]') && !!document.querySelector('[data-testid=accounts-home] h1')`), `failed /walk: the rest of the page and the Book confidence card still render`);
+  check(await ev(`!!document.querySelector('[data-testid=book-band]') && !!document.querySelector('[data-testid=accounts-home] h1')`), `failed /walk: the rest of the page and the book band still render`);
   await shot('ux1s2_accounts_row_unavailable_1280', 1280);
   await send('Fetch.disable');
 }

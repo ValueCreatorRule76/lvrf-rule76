@@ -255,95 +255,102 @@ export function buildCohort(rows: Row[]): Cohort {
   };
 }
 
+/**
+ * S6 (LVRF_PLAN §25): the cohort view, callable, so the War Room (GET /api/book) takes its membership from this one
+ * computation and never from a copy of its rule. The route below returns exactly what it returned before.
+ */
+export async function computeCohortView(pool: Pool, tenantId: string) {
+
+  // One row per (customer account, current engagement), or one row
+  // with engagement_id NULL for an account with none. The run of
+  // record is the highest-numbered LOCKED run per engagement.
+  const { rows } = await pool.query<Row>(
+    `WITH run_of_record AS (
+       SELECT DISTINCT ON (engagement_id)
+              id, engagement_id, run_number, confidence_score, confidence_band,
+              locked_at,
+              payload->'confidence'->>'modelVersion'     AS model_version,
+              payload->'confidence'->>'modelFingerprint' AS model_fingerprint,
+              lvrf_run_erratum_line(id) AS erratum_line
+         FROM value_runs
+        WHERE deleted_at IS NULL AND locked_at IS NOT NULL
+          -- C3 (ruling E): a run marked as a system exercise is never the run of record.
+          AND lvrf_system_exercise_mark('value_runs', id) IS NULL
+        ORDER BY engagement_id, run_number DESC
+     ),
+     run_counts AS (
+       SELECT engagement_id, count(*)::int AS run_count
+         FROM value_runs
+        WHERE deleted_at IS NULL
+        GROUP BY engagement_id
+     )
+     SELECT i.id AS institution_id, i.name AS institution_name,
+            ind.slug AS industry_slug, ind.name AS industry_name,
+            e.id AS engagement_id, e.name AS engagement_name,
+            r.id AS run_id, r.run_number, r.confidence_score, r.confidence_band,
+            r.locked_at, r.model_version, r.model_fingerprint,
+            rc.run_count, r.erratum_line
+       FROM institutions i
+       LEFT JOIN industries ind ON ind.id = i.industry_id
+       LEFT JOIN engagements e
+              ON e.institution_id = i.id
+             AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
+       LEFT JOIN run_of_record r ON r.engagement_id = e.id
+       LEFT JOIN run_counts rc ON rc.engagement_id = e.id
+      WHERE i.tenant_id = $1
+        AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL
+        AND i.is_tenant_self = false
+        -- Q4n (O-D3): a reference example is not a customer engagement. An
+        -- account with a CURRENT marker is left out of the book and every
+        -- industry cohort; unmarking it (the steward's act) counts it again.
+        AND NOT EXISTS (SELECT 1 FROM reference_example_markers m
+                         WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)
+      ORDER BY i.name, e.name`,
+    [tenantId],
+  );
+  // How many accounts the book leaves out as reference examples, so an
+  // empty book can say why ("No live customer engagements").
+  const { rows: [{ n: referenceExampleCount }] } = await pool.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM institutions i
+      WHERE i.tenant_id = $1 AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL AND i.is_tenant_self = false
+        AND EXISTS (SELECT 1 FROM reference_example_markers m
+                     WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)`,
+    [tenantId],
+  );
+
+  const industries = new Map<string, { slug: string; name: string; rows: Row[] }>();
+  const unclassified = new Set<string>();
+  for (const r of rows) {
+    if (r.industry_slug === null || r.industry_name === null) {
+      unclassified.add(r.institution_id);
+      continue;
+    }
+    const entry = industries.get(r.industry_slug) ?? { slug: r.industry_slug, name: r.industry_name, rows: [] };
+    entry.rows.push(r);
+    industries.set(r.industry_slug, entry);
+  }
+
+  return {
+    book: buildCohort(rows),
+    by_industry: [...industries.values()]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((ind) => ({
+        industry: { slug: ind.slug, name: ind.name },
+        cohort: buildCohort(ind.rows),
+      })),
+    // Unclassified accounts are in the book but in no industry cohort —
+    // counted here so their absence from by_industry is visible.
+    unclassified_account_count: unclassified.size,
+    reference_example_count: referenceExampleCount,
+  };
+}
+
 export function cohortRouter(pool: Pool): Router {
   const router = Router();
 
   router.get('/', async (req, res) => {
     try {
-      const tenantId = actorTenantId(req);
-
-      // One row per (customer account, current engagement), or one row
-      // with engagement_id NULL for an account with none. The run of
-      // record is the highest-numbered LOCKED run per engagement.
-      const { rows } = await pool.query<Row>(
-        `WITH run_of_record AS (
-           SELECT DISTINCT ON (engagement_id)
-                  id, engagement_id, run_number, confidence_score, confidence_band,
-                  locked_at,
-                  payload->'confidence'->>'modelVersion'     AS model_version,
-                  payload->'confidence'->>'modelFingerprint' AS model_fingerprint,
-                  lvrf_run_erratum_line(id) AS erratum_line
-             FROM value_runs
-            WHERE deleted_at IS NULL AND locked_at IS NOT NULL
-              -- C3 (ruling E): a run marked as a system exercise is never the run of record.
-              AND lvrf_system_exercise_mark('value_runs', id) IS NULL
-            ORDER BY engagement_id, run_number DESC
-         ),
-         run_counts AS (
-           SELECT engagement_id, count(*)::int AS run_count
-             FROM value_runs
-            WHERE deleted_at IS NULL
-            GROUP BY engagement_id
-         )
-         SELECT i.id AS institution_id, i.name AS institution_name,
-                ind.slug AS industry_slug, ind.name AS industry_name,
-                e.id AS engagement_id, e.name AS engagement_name,
-                r.id AS run_id, r.run_number, r.confidence_score, r.confidence_band,
-                r.locked_at, r.model_version, r.model_fingerprint,
-                rc.run_count, r.erratum_line
-           FROM institutions i
-           LEFT JOIN industries ind ON ind.id = i.industry_id
-           LEFT JOIN engagements e
-                  ON e.institution_id = i.id
-                 AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
-           LEFT JOIN run_of_record r ON r.engagement_id = e.id
-           LEFT JOIN run_counts rc ON rc.engagement_id = e.id
-          WHERE i.tenant_id = $1
-            AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL
-            AND i.is_tenant_self = false
-            -- Q4n (O-D3): a reference example is not a customer engagement. An
-            -- account with a CURRENT marker is left out of the book and every
-            -- industry cohort; unmarking it (the steward's act) counts it again.
-            AND NOT EXISTS (SELECT 1 FROM reference_example_markers m
-                             WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)
-          ORDER BY i.name, e.name`,
-        [tenantId],
-      );
-      // How many accounts the book leaves out as reference examples, so an
-      // empty book can say why ("No live customer engagements").
-      const { rows: [{ n: referenceExampleCount }] } = await pool.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM institutions i
-          WHERE i.tenant_id = $1 AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL AND i.is_tenant_self = false
-            AND EXISTS (SELECT 1 FROM reference_example_markers m
-                         WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)`,
-        [tenantId],
-      );
-
-      const industries = new Map<string, { slug: string; name: string; rows: Row[] }>();
-      const unclassified = new Set<string>();
-      for (const r of rows) {
-        if (r.industry_slug === null || r.industry_name === null) {
-          unclassified.add(r.institution_id);
-          continue;
-        }
-        const entry = industries.get(r.industry_slug) ?? { slug: r.industry_slug, name: r.industry_name, rows: [] };
-        entry.rows.push(r);
-        industries.set(r.industry_slug, entry);
-      }
-
-      res.json({
-        book: buildCohort(rows),
-        by_industry: [...industries.values()]
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((ind) => ({
-            industry: { slug: ind.slug, name: ind.name },
-            cohort: buildCohort(ind.rows),
-          })),
-        // Unclassified accounts are in the book but in no industry cohort —
-        // counted here so their absence from by_industry is visible.
-        unclassified_account_count: unclassified.size,
-        reference_example_count: referenceExampleCount,
-      });
+      res.json(await computeCohortView(pool, actorTenantId(req)));
     } catch (err) {
       respondServerError(res, err);
     }

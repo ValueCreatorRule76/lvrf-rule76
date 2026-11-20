@@ -24,6 +24,8 @@ import { FOCUS_RING } from './GovernedForm';
 // decides, this component only renders what it's told.
 const LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: '/', label: 'Accounts', end: true },
+  // S6 (LVRF_PLAN §25): the War Room, after the front door (Q7: the accounts stay the front door).
+  { to: '/book', label: 'War Room' },
   { to: '/packs', label: 'Packs' },
   { to: '/runs', label: 'Runs' },
   { to: '/policies', label: 'Policies' },

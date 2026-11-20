@@ -15,7 +15,7 @@ import { fetchPov, type Pov } from '../api/pov';
 import { fetchAccountResearch, type AccountResearchState } from '../api/accountResearch';
 import { fetchRuns } from '../api/runsIndex';
 import type { RunListItem } from '../types/runsIndex';
-import { ROW_UNAVAILABLE, deriveSteps, deriveWalk, fetchWalk, povStatus, researchStatus, walkStatus, type WalkState } from './workspaceStatus';
+import { ROW_UNAVAILABLE, deriveSteps, deriveWalk, fetchWalk, lastRecorded, povStatus, researchStatus, walkStatus, type WalkState } from './workspaceStatus';
 
 /** The words a reference example carries in the frame, beside its name (approved mock-up, screen 7). */
 export const FRAME_REFERENCE_LABEL = 'Reference example, not a customer engagement';
@@ -107,7 +107,21 @@ export function loadAccountFrame(id: string): Promise<FrameResult> {
   ]);
 }
 
-async function readFrame(id: string): Promise<FrameResult> {
+/**
+ * S6 (LVRF_PLAN §25): one War Room row's frame facts and its last recorded act, from the frame's own reads and
+ * derivation (so the War Room and the frame never say two things about one account). `runs` is the one GET /api/runs
+ * the War Room makes for every row; the walk is the shared read.
+ */
+export async function loadBookRow(id: string, runs: RunListItem[]): Promise<{ status: 'ok'; data: FrameData; last: { what: string; at: string } | null } | { status: 'error' }> {
+  return Promise.race([
+    readFrame(id, runs).then((r) => (r.status === 'ok'
+      ? { status: 'ok' as const, data: r.data, last: lastRecorded(r.walk ?? null, r.pov ?? null) }
+      : { status: 'error' as const })),
+    new Promise<{ status: 'error' }>((resolve) => { window.setTimeout(() => resolve({ status: 'error' }), FRAME_READ_MS); }),
+  ]);
+}
+
+async function readFrame(id: string, knownRuns?: RunListItem[]): Promise<FrameResult & { walk?: WalkState; pov?: Pov | null }> {
   const v = await fetchInstitutionView(id).catch(() => null);
   if (v && v.status === 'not_found') return { status: 'not_found' };
   if (!v || v.status !== 'ok') return { status: 'error' };
@@ -117,12 +131,13 @@ async function readFrame(id: string): Promise<FrameResult> {
     fetchWalk(id).catch(() => null),
     self ? Promise.resolve(null) : fetchPov(id).then((x) => (x.status === 'ok' ? x.pov : undefined), () => undefined),
     self ? Promise.resolve(null) : fetchAccountResearch(id).then((x) => (x.status === 'ok' ? x.research : undefined), () => undefined),
-    fetchRuns().then((x) => (x.status === 'ok' ? x.runs : null), () => null),
+    knownRuns ? Promise.resolve(knownRuns) : fetchRuns().then((x) => (x.status === 'ok' ? x.runs : null), () => null),
   ]);
   if (!walk || pov === undefined || research === undefined || !runs) return { status: 'error' };
   return {
     status: 'ok',
     data: frameFrom({ id: inst.id, name: inst.name, self, industry_id: inst.industry_id, industry_name: inst.industry_name, industry_slug: inst.industry_slug },
       walk, pov, research, runs),
+    walk, pov,
   };
 }

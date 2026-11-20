@@ -169,6 +169,8 @@ if (MODE === 'headlines') {
   check(await open('/', `!!document.querySelector('[data-testid=row-engagement]')`), 'the book opens');
   await waitFor(`[...document.querySelectorAll('[data-testid=headline-erratum]')].some(x=>x.textContent===${JSON.stringify(E.LINE)})`, 15000);
   check(await ev(`[...document.querySelectorAll('[data-testid=headline-erratum]')].some(x=>x.textContent===${JSON.stringify(E.LINE)})`), '  ...and the book, beside the engagement\'s run');
+  // S6 (§25, D6): book confidence's member table is on the War Room now.
+  check(await open('/book', `!!document.querySelector('[data-testid=book-scope]')`), 'the War Room opens, with book confidence\'s detail');
   await waitFor(`!!document.querySelector('[data-testid=book-scope]')`, 15000);
   const rowsE = await ev(`[...document.querySelectorAll('[data-testid=book-member-erratum]')].map(x=>x.textContent)`);
   check(rowsE.includes(E.LINE), `the book's weakest-link table shows "${E.LINE}" beside the credited engagement's score`, JSON.stringify(rowsE));

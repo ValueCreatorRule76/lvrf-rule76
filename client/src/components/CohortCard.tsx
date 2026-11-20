@@ -98,7 +98,11 @@ function Composite({ cohort, book = false }: { cohort: Cohort; book?: boolean })
  * average (server/routes/cohort.ts). An engagement with no locked run
  * counts as 0 and is listed first: unmeasured is not compliant.
  */
-export function CohortCard({ n }: { n: string }) {
+/**
+ * S6 (LVRF_PLAN §25, D6): with `detail`, the card is the War Room's detail of book confidence: the members, weakest
+ * first, and each industry's cohort, with no headline of its own (the War Room's tile carries it, once).
+ */
+export function CohortCard({ n, detail = false }: { n: string; detail?: boolean }) {
   const { actor } = useActor();
   const [result, setResult] = useState<FetchCohortResult | null>(null);
 
@@ -115,7 +119,7 @@ export function CohortCard({ n }: { n: string }) {
   }, [actor]);
 
   return (
-    <Card n={n} title="Book confidence — weakest link">
+    <Card n={n} title={detail ? 'Book confidence: each member and each industry' : 'Book confidence — weakest link'}>
       {!actor ? (
         <p className="m-0 text-[12.5px] text-ink-45">
           Sign in — the roll-up is scoped to the signed-in person's tenant.
@@ -126,7 +130,7 @@ export function CohortCard({ n }: { n: string }) {
         <p className="m-0 text-[12.5px] text-ink-45">{result.message}</p>
       ) : (
         <>
-          <Composite cohort={result.view.book} book />
+          {!detail && <Composite cohort={result.view.book} book />}
           <p className="m-0 mt-3 text-[11px] text-ink-45" data-testid="book-scope">
             The minimum across every customer engagement's latest locked run. Never averaged: an
             average of one weak account and several strong ones describes none of them. Your own

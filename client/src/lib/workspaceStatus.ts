@@ -251,6 +251,19 @@ export async function fetchWalk(id: string): Promise<WalkState | null> {
  */
 export const ROW_UNAVAILABLE = "Couldn't load this account's status.";
 
+/** The last thing recorded: the latest dated act these reads carry. Shared by the Accounts home and the War Room (S6). */
+export function lastRecorded(walk: WalkState | null, pov: Pov | null): { what: string; at: string } | null {
+  const acts: { what: string; at: string }[] = [];
+  for (const e of walk?.engagements ?? []) {
+    for (const r of e.runs) if (r.locked_at) acts.push({ what: `Run ${r.run_number} locked`, at: r.locked_at });
+    for (const o of e.outcomes) for (const ev of o.evidence) if (ev.citation_resolved_at) acts.push({ what: 'Citation opened', at: ev.citation_resolved_at });
+  }
+  for (const h of pov?.hypotheses ?? []) acts.push({ what: 'Hypothesis stated', at: h.created_at });
+  for (const s of pov?.executive_summaries ?? []) acts.push({ what: 'Summary written', at: s.created_at });
+  for (const m of pov?.reference_markers ?? []) acts.push({ what: 'Marked a reference example', at: m.marked_at });
+  return acts.sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+}
+
 export async function loadAccountRow(id: string): Promise<AccountRow | { error: string }> {
   const v = await fetchInstitutionView(id).catch(() => null);
   if (!v || v.status !== 'ok') return { error: ROW_UNAVAILABLE };
@@ -280,15 +293,6 @@ export async function loadAccountRow(id: string): Promise<AccountRow | { error: 
     const n = steps.findIndex((s) => s.status === 'now') + 1;
     standing = `${n} of 6 · ${NOW_LABEL[n - 1]}`;
   }
-  // The last thing recorded: the latest dated act these reads carry.
-  const acts: { what: string; at: string }[] = [];
-  for (const e of walk?.engagements ?? []) {
-    for (const r of e.runs) if (r.locked_at) acts.push({ what: `Run ${r.run_number} locked`, at: r.locked_at });
-    for (const o of e.outcomes) for (const ev of o.evidence) if (ev.citation_resolved_at) acts.push({ what: 'Citation opened', at: ev.citation_resolved_at });
-  }
-  for (const h of pov?.hypotheses ?? []) acts.push({ what: 'Hypothesis stated', at: h.created_at });
-  for (const s of pov?.executive_summaries ?? []) acts.push({ what: 'Summary written', at: s.created_at });
-  for (const m of pov?.reference_markers ?? []) acts.push({ what: 'Marked a reference example', at: m.marked_at });
-  const last = acts.sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
+  const last = lastRecorded(walk, pov);
   return { status, industry: view.institution.industry_name ?? (self ? 'Not classified: your own account' : 'Not classified'), standing, engagements, last };
 }

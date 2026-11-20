@@ -88,6 +88,8 @@ const CASES = [
   // Q4n: INST_A carries MARKER_A (a reference example), which the book leaves out
   // by design (O-D3); an unmarked A account is the one A must see.
   { route: 'GET /api/cohort', kind: 'list', path: '/api/cohort', aIds: [E.INST_A_UNCLASSIFIED], bIds: [E.INST_B] },
+  // S6 (§25): the War Room's read; its membership is book confidence's, so the same accounts.
+  { route: 'GET /api/book', kind: 'list', path: '/api/book', aIds: [E.INST_A_UNCLASSIFIED], bIds: [E.INST_B] },
   { route: 'GET /api/engagements', kind: 'list', path: '/api/engagements', aIds: [E.ENG_A], bIds: [E.ENG_B] },
   { route: 'GET /api/engagements/:id/runs', kind: 'id', path: `/api/engagements/${E.ENG_A}/runs`,
     notFound: [404, `engagement ${E.ENG_A} not found`], target: ['engagements', E.ENG_A] },

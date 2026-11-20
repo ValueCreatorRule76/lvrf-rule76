@@ -18,6 +18,7 @@ import { runsIndexRouter } from './routes/runsIndex.js';
 import { accountInputsRouter } from './routes/accountInputs.js';
 import { institutionFactsRouter } from './routes/institutionFacts.js';
 import { cohortRouter } from './routes/cohort.js';
+import { bookRouter } from './routes/book.js';
 import { engagementRetireRouter } from './routes/engagementRetire.js';
 import { snapshotsRouter } from './routes/snapshots.js';
 import { industryMeasureRetireRouter } from './routes/industryMeasureRetire.js';
@@ -171,6 +172,8 @@ app.use('/api/industries', industryExclusionsRouter(pool));
 app.use('/api/research-results', researchResultsReviewRouter(pool));
 app.use('/api/capabilities', capabilityClaimsRouter(pool));
 app.use('/api/cohort', cohortRouter(pool));
+// S6 (LVRF_PLAN §25): the War Room's read. No money in it (D1).
+app.use('/api/book', bookRouter(pool));
 
 const port = Number(process.env.PORT ?? 3001);
 

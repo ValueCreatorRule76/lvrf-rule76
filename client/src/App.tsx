@@ -14,6 +14,7 @@ import { AppHeader } from './components/AppHeader';
 import { SnapshotsPage } from './pages/SnapshotsPage';
 import { ValueCasePage } from './pages/ValueCasePage';
 import { PoliciesPage } from './pages/PoliciesPage';
+import { WarRoomPage } from './pages/WarRoomPage';
 import { AccountFocusProvider } from './components/AccountFocus';
 import { useAccountFocus } from './components/accountFocusContext';
 import { AccountFrame } from './components/AccountFrame';
@@ -36,6 +37,7 @@ function SignedInRoutes() {
       <AccountFrame />
       <Routes key={pagesKey}>
         <Route path="/" element={<AccountsIndexPage />} />
+        <Route path="/book" element={<WarRoomPage />} />
         <Route path="/runs" element={<RunsIndexPage />} />
         <Route path="/runs/:id" element={<RunPage />} />
         <Route path="/runs/:id/case" element={<ValueCasePage />} />

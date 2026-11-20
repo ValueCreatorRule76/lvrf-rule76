@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchInstitutions, type FetchInstitutionsResult, type InstitutionListItem } from '../api/institutions';
 import { CreateAccountCard } from '../components/CreateAccountCard';
-import { CohortCard } from '../components/CohortCard';
+import { BookBand } from '../components/BookBand';
 import { FOCUS_RING } from '../components/GovernedForm';
 import { ConfidenceBadge } from '../components/workbench/Workspace';
 import { day, loadAccountRow, type AccountRow } from '../lib/workspaceStatus';
@@ -86,6 +86,9 @@ export function AccountsIndexPage() {
   const { institutions } = result;
 
   return (
+    <>
+    {/* S6 (Q7, D6): the book's headline, once, linking to the War Room; book confidence's detail is there now. */}
+    <BookBand />
     <div className="mx-auto max-w-[1120px] px-4 pb-14 pt-6 sm:px-6" data-testid="accounts-home">
       <header className="mb-3 flex flex-wrap items-end gap-3">
         <div className="flex-1">
@@ -123,7 +126,7 @@ export function AccountsIndexPage() {
           : <ul className="m-0 list-none p-0">{institutions.map((inst) => <Row key={inst.id} inst={inst} />)}</ul>}
       </section>
 
-      <CohortCard n="" />
     </div>
+    </>
   );
 }

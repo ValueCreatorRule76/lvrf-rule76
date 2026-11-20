@@ -196,26 +196,28 @@ const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.
 const ev = async (x) => (await send('Runtime.evaluate', { expression: x, returnByValue: true })).result?.result?.value;
 await send('Network.enable');
 await send('Network.setCookie', { name: 'lvrf_session', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true });
-await send('Page.navigate', { url: `http://localhost:${VITE}/` });
-let ok = false; for (let i = 0; i < 75 && !ok; i++) { await sleep(200); ok = await ev("!!document.querySelector('[data-testid=book-empty]')"); }
-const empty = await ev("document.querySelector('[data-testid=book-empty]')?.textContent ?? ''");
+// S6 (LVRF_PLAN §25, D6): book confidence's headline and detail live on the War Room (/book) now.
+await send('Page.navigate', { url: `http://localhost:${VITE}/book` });
+let ok = false; for (let i = 0; i < 75 && !ok; i++) { await sleep(200); ok = await ev("!!document.querySelector('[data-testid=book-confidence][data-floor=empty]') && !!document.querySelector('[data-testid=book-scope]')"); }
+const empty = await ev("document.querySelector('[data-testid=book-confidence] span')?.textContent ?? ''");
 const scope = await ev("document.querySelector('[data-testid=book-scope]')?.textContent.replace(/\\s+/g,' ').trim() ?? ''");
 await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 1400, deviceScaleFactor: 1, mobile: false }); await sleep(400);
 const r = await send('Page.captureScreenshot', { format: 'png' }); writeFileSync(SHOT, Buffer.from(r.result.data, 'base64'));
 console.log(JSON.stringify({ empty, scope })); ws.close(); process.exit(0);
 JS
 CARD="$(node "$W/card.mjs" "$CDP_PORT" "$VITE_PORT" "$TOKEN" "${SHOT_DIR:-$W}/q4n_book_empty.png")"
-node -e "const c=JSON.parse(process.argv[1]);process.exit(c.empty==='No live customer engagements.'?0:1)" "$CARD" && ok "the accounts page says 'No live customer engagements.' (no number)" || bad "card: $CARD"
+node -e "const c=JSON.parse(process.argv[1]);process.exit(c.empty==='No live customer engagements yet.'?0:1)" "$CARD" && ok "the War Room says 'No live customer engagements yet.' (no number)" || bad "card: $CARD"
 node -e "const c=JSON.parse(process.argv[1]);process.exit(c.scope.includes('neither is a reference example ($NACC accounts are marked one)')||c.scope.includes('neither is a reference example ($NACC account is marked one)')?0:1)" "$CARD" && ok "  ...and says why: '$(node -e "console.log(JSON.parse(process.argv[1]).scope.slice(-120))" "$CARD")'" || bad "scope: $CARD"
 echo "  screenshot: ${SHOT_DIR:-$W}/q4n_book_empty.png"
 
 step "7. Deliberate break"
 python3 - "$COHORT" <<'PY2'
 import sys; p = sys.argv[1]; s = open(p).read()
-a = """            AND NOT EXISTS (SELECT 1 FROM reference_example_markers m
-                             WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)
-          ORDER BY i.name, e.name`,"""
-assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "          ORDER BY i.name, e.name`,"))
+# S6: computeCohortView's query is indented 4 spaces less than the old handler's (the SQL is unchanged).
+a = """        AND NOT EXISTS (SELECT 1 FROM reference_example_markers m
+                         WHERE m.institution_id = i.id AND m.deleted_at IS NULL AND m.superseded_by_id IS NULL)
+      ORDER BY i.name, e.name`,"""
+assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "      ORDER BY i.name, e.name`,"))
 PY2
 stop_server; start_server; check > /dev/null
 [ "$(inbook "$TARGET")" = "true" ] && ok "B1: without the marker filter, the marked accounts set the book again — the filter is what keeps them out" || bad "B1: not caught"

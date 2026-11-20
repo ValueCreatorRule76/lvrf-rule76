@@ -132,8 +132,10 @@ if (MODE === 'surfaces') {
   check((await text('[data-testid=w4] [data-testid=no-source-line]')).includes('No source on record'), "  ...the walk's W4: the baseline with its finding");
   await shot('c3b_account_1280', 1280);
   // The book.
-  check(await open('/', `!!document.querySelector('[data-testid=book-scope]')`), 'the book opens');
+  check(await open('/', `!!document.querySelector('[data-testid=row-engagement]')`), 'the book opens');
   check((await text('[data-testid=row-engagement] [data-testid=headline-erratum]')).includes(LINE), '  ...the engagement row carries the line');
+  // S6 (§25, D6): book confidence's member table is on the War Room now.
+  check(await open('/book', `!!document.querySelector('[data-testid=book-scope]')`), 'the War Room opens, with book confidence\'s detail');
   check((await text('[data-testid=book-member-erratum]')).includes(LINE), "  ...and the weakest-link table's row");
   // The Runs list: the sealed provenance label "as recorded at sealing", with the line beneath.
   check(await open('/runs', `!!document.querySelector('[data-testid=runs-unsourced]')`), 'the Runs list shows the unsourced line beneath the sealed label');
