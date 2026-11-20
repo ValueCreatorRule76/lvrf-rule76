@@ -24,6 +24,7 @@
 #   B8 the frame waits forever on a stalled read (no time limit)
 #   B9 the frame makes its own /walk read instead of the page's (nothing shared)
 #   B10 the Runs table clipped at 1280 (S5 Gate B finding, Brad 20 Nov 2026)
+#   B11 a run-column link broken inside itself, one word per line (the second Gate B finding)
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -154,7 +155,7 @@ tally "$W/main.log"
 # Coverage: every section's checks ran (a skipped section must not pass by saying nothing; found 19 Nov 2026).
 for want in '"Value case" opens run' 'still names the run' 'its point of view frames' '"Research" opens the workspace' "snapshots frame the same account" \
             'held: Runs lists' 'shared: it says so' 'leave @390' 'tabs: two tabs' 'phone home' 'keys: Tab reaches' 'contrast: the notice' 'print pov' \
-            'runsfit @1280, every account' 'runsfit @1024, no account' 'reads: opening' 'reads, stalled: it stops waiting' 'reads, failed:' 'classify: the confirmation' 'the account just classified: "Classify as…" not offered'; do
+            'runsfit @1280, every account' 'runsfit @1024, no account' 'no link in the run column breaks inside itself' 'reads: opening' 'reads, stalled: it stops waiting' 'reads, failed:' 'classify: the confirmation' 'the account just classified: "Classify as…" not offered'; do
   grep -qF "$want" "$W/main.log" && ok "coverage: ran — $want" || bad "coverage: no line for — $want"
 done
 
@@ -213,9 +214,13 @@ edit "$SHARED" "  if (hit && (hit.done === null || now - hit.done < SHARE_MS)) r
 broke reads b9 'makes ONE /walk read' 'B9: no shared /walk read → caught: the page and the frame each read it'
 restore "$SHARED"
 # B10 — the Runs table clipped (S5 Gate B finding): the two cells back on one line.
-edit "$RTAB" '<span className="block font-sans text-[11px]" data-testid="runs-case-links">' '<span className="block whitespace-nowrap font-sans text-[11px]" data-testid="runs-case-links">'
+edit "$RTAB" '<span className="block font-sans text-[11px] [&_a]:whitespace-nowrap" data-testid="runs-case-links">' '<span className="block whitespace-nowrap font-sans text-[11px]" data-testid="runs-case-links">'
 edit "$RTAB" '<td className="max-w-[220px] border-b border-rule-soft px-3 py-[9px] [&_span]:whitespace-normal">' '<td className="border-b border-rule-soft px-3 py-[9px]">'
 broke runsfit b10 'runsfit @1280, every account: no table on Runs is clipped' 'B10: the Runs table back on one line per cell → caught: clipped at 1280'
+restore "$RTAB"
+# B11 — a run-column link broken inside itself (S5 Gate B finding 2): the links' one-line rule removed.
+edit "$RTAB" '<span className="block font-sans text-[11px] [&_a]:whitespace-nowrap" data-testid="runs-case-links">' '<span className="block font-sans text-[11px]" data-testid="runs-case-links">'
+broke runsfit b11 'no link in the run column breaks inside itself' 'B11: the run column'"'"'s links allowed to break inside → caught'
 restore "$RTAB"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots and PDFs: $OUT"

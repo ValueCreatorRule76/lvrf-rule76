@@ -486,7 +486,10 @@ if (SECTIONS.includes('runsfit')) {
       const right=clip?r(clip).right:window.innerWidth;const box=clip?clip.clientWidth:window.innerWidth;
       const ths=[...tb.querySelectorAll('th')].filter(h=>h.getClientRects().length);
       out.push({w:Math.round(tb.scrollWidth),box:Math.round(box),hidden:ths.filter(h=>r(h).right>right+0.5||h.scrollWidth>h.clientWidth+1).map(h=>h.textContent)})}
-    return {tables:out,page:document.documentElement.scrollWidth}})()`;
+    // A link in the run column never breaks inside itself: one line box each ("Value case", "under the CFO lens").
+    const links=[...document.querySelectorAll('[data-testid=runs-case-links] a')].filter(a=>a.getClientRects().length);
+    const broken=links.filter(a=>a.getClientRects().length>1).map(a=>a.textContent);
+    return {tables:out,page:document.documentElement.scrollWidth,links:links.length,broken:broken.slice(0,4),brokenN:broken.length}})()`;
   for (const [label, focus, path] of [['in focus', a.id, '/runs'], ['every account', a.id, '/runs?all=1'], ['no account', null, '/runs']]) {
     for (const width of [1024, 1280, 1440]) {
       await X.size(width);
@@ -497,7 +500,9 @@ if (SECTIONS.includes('runsfit')) {
       const f = await X.ev(FIT);
       const ok = f.tables.length > 0 && f.tables.every((t) => t.w <= t.box && t.hidden.length === 0) && f.page <= width;
       check(ok, `runsfit @${width}, ${label}: no table on Runs is clipped (${f.tables.map((t) => `${t.w} in ${t.box}`).join(', ')}); every header visible; no sideways scroll`, JSON.stringify(f));
+      check(f.links > 0 && f.brokenN === 0, `runsfit @${width}, ${label}: no link in the run column breaks inside itself (${f.links} links)`, JSON.stringify(f.broken));
       if (width === 1280 && label === 'every account') await X.shot(`${TAG}_runs_fit_1280`, 1280);
+      if (width === 1024 && label === 'every account') await X.shot(`${TAG}_runs_fit_1024`, 1024);
     }
   }
   await X.close();

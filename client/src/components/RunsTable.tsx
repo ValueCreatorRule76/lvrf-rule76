@@ -116,8 +116,9 @@ export function RunsTable({ runs, focusId = null }: { runs: RunListItem[]; focus
                 <td className="border-b border-rule-soft px-3 py-[9px] font-mono">
                   {r.run_number}
                   {/* S1 (§20 item 3): the value case, both lenses, per row. */}
-                  {/* S5 Gate B finding (Brad, 20 Nov 2026): the links wrap, so the table fits its card from 1024 px. */}
-                  <span className="block font-sans text-[11px]" data-testid="runs-case-links"><CaseLinks runId={r.id} testid="runs-case-link" /></span>
+                  {/* S5 Gate B findings (Brad, 20 Nov 2026): the line may break between the two links, never inside one, so the
+                      table fits its card from 1024 px and each row stays short. */}
+                  <span className="block font-sans text-[11px] [&_a]:whitespace-nowrap" data-testid="runs-case-links"><CaseLinks runId={r.id} testid="runs-case-link" /></span>
                 </td>
                 {/* S5 Gate B finding: a long provenance label wraps in its badge, never widening the table past its card. */}
                 <td className="max-w-[220px] border-b border-rule-soft px-3 py-[9px] [&_span]:whitespace-normal">
