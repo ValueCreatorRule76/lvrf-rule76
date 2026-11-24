@@ -6646,7 +6646,7 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
   - Curia's gap register.
 - **About a day,** most of it the scripts that read the old words.
 
-## 31. 3.1 small item: no walk date in the future (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§31 … Gate A"))
+## 31. 3.1 small item: no walk date in the future (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§31 … Gate A"); **closed 24 Nov 2026**, deployed at `7be9031`, Gate C clean)
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D5 are approved as recommended.**

@@ -17323,13 +17323,22 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
 - `lvrf_block_simulated_attestor` `8f0d371b…`; `e3fb0061` unchanged;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
 
-### §31 deployed at `7be9031`; Gate C clean — 24 Nov 2026 (UTC)
+### §31 closed: no walk date in the future, deployed at `7be9031`; Gate C clean — 24 Nov 2026 (UTC)
 
-**Gate B, run by Brad:** his step results are not yet pasted. On the box (read 24 Nov 2026): head `7be9031`; the
-pre-deploy backup `~/lvrf-pre-p31-20261124T222815Z.dump` and the post-hardening backup
-`~/lvrf-post-p31-20261124T222847Z.dump` are present; the served `index.html` names `index-CL2E3E-8.js` /
-`index-BMv5OQwB.css`; the API started at 22:29:24 UTC. Their TOC counts and the hardening and deploy output are Brad's
-to paste; §31 closes with them.
+**Gate B, run by Brad, with one slip recorded (his):**
+- **The slip:** he ran step 3 (ownership, hardening) before step 2's pull. So hardening first re-applied the old
+  `hardening.sql`, §30's (the hash stayed `4150205e…`, a no-op). He then pulled, backed up, and re-ran step 3.
+- **Read-only, after (Claude):** the no-op changed nothing. Since §30's post-hardening backup (21:02:20 UTC), 0
+  governance acts, refusals, audit rows, record documents, heartbeat events and sessions were written. §30's 22
+  function hashes still match its Gate A record, by diff. The pre-deploy backup below was taken after the no-op run, so
+  §30's post-hardening backup is the state before it.
+- Main and the box at `7be9031`.
+- Pre-deploy backup `~/lvrf-pre-p31-20261124T222815Z.dump`, **TOC 972**.
+- `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **227 triggers**; `lvrf_block_simulated_attestor`
+  **`8f0d371b420e6b51f5f9c3370ee5b4ba`**.
+- Post-hardening backup `~/lvrf-post-p31-20261124T222847Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 3 refused tries)", all checks, bundle **`index-CL2E3E-8.js` /
+  `index-BMv5OQwB.css`**, "deploy OK". The API started at 22:29:24 UTC.
 
 **Brad's look (records nothing):** Committed on's picker offers no day after today (24 Nov). Cancelled.
 
