@@ -124,6 +124,17 @@ For every source the case will rest on, on **card 01c, "The account's evidence"*
 - [ ] **W6** Evidence: the baseline, and any vendor claim. Baseline support must be **about this account**. A vendor
       publication supports the impact basis only.
 
+## 4a. A customer-side person, before any commitment or verification (card 01b)
+
+- [ ] **At least one customer-side person, with a role named from a source** (Brad, 24 Nov 2026; LVRF_PLAN §29), before
+      any commitment or verification on card 01d. On card 01b, "Customer-side roles":
+      - **"Add a person of this account…"** if they are not yet recorded: the customer's own people only, never the
+        analyst of record or anyone at the tenant;
+      - **"Name a customer-side role…"** for them, from a source about this account that has been opened and verified
+        (step 3): their org chart, an email from them, a filing naming them.
+- [ ] **Until then, card 01d offers no one** to commit or verify, and says so. The route and the database refuse anyone
+      who is not customer-side.
+
 ## 5. The hypothesis (workspace step 3)
 
 - [ ] **"State a hypothesis…"** names the outcome, the lever, the statement and the falsifier.

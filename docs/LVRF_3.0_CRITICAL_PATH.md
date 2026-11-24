@@ -217,9 +217,13 @@ cut line applied first.
            entered the same evening.
          **Closed 24 Nov 2026,** deployed at `2dc3f71`, Gate C clean (`BUILD_STATUS.md`, "§28 closed");
        - **next, after §28 and before the pilot (Brad, 24 Nov 2026, from §28's look): only a customer-side person
-         commits** (LVRF_PLAN §29, planned 24 Nov 2026, for Brad's approval). The commit form offers only customer-side
+         commits** (LVRF_PLAN §29, approved by Brad 24 Nov 2026 with D1–D7, the verifier included, and four additions; the roles card adds a person). The commit form offers only customer-side
          people at the account, and the route and the database refuse anyone else with a plain sentence. Curia's
-         `e3fb0061` stays frozen as recorded. Proposed with the verifier in the same slice (§29 D6);
+         `e3fb0061` stays frozen as recorded. The verifier is under the same rule (§29 D6);
+       - **before any Skillsoft commitment (Brad, 24 Nov 2026, §29 addition 4): who commits on the tenant's own
+         account.** A named tenant executive with a role named from a source (e.g. the CFO, named in a filing) may commit
+         and verify; never the steward, an analyst of record, or anyone without a sourced role. Today the role guard
+         treats all tenant staff as vendor-side, so no one can. Not needed before the pilot (the hypothesis is due June 2027);
        - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits

@@ -6377,7 +6377,30 @@ next day records a day the person did not commit on.
 - **Brad's finding from his look:** the commit form offers a person who is not customer-side. Planned as §29, the next
   small item, ahead of the future-date item.
 
-## 29. 3.1 small item: only a customer-side person commits (planned 24 Nov 2026, for Brad's approval)
+## 29. 3.1 small item: only a customer-side person commits (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended, D6 included, and four additions**)
+
+**Brad's rulings (24 Nov 2026):**
+- **D1–D7 are approved as recommended, D6 included:** the verifier is under the same rule, in the same slice.
+- **Addition 1, D2's empty state names the fix and links to it:** "No customer-side person is recorded at this account
+  yet. Add one, with a role named from a source, on the roles card." The link goes to card 01b. Gate A checks the
+  sentence and the link.
+- **Addition 2:** `docs/LVRF_NEW_ACCOUNT_CHECKLIST.md` gains the step: at least one customer-side person, with a role
+  named from a source, before any commitment or verification.
+- **Addition 3 (asked by Claude at the build's start, ruled by Brad), the roles card adds a person.** Card 01b can only
+  name a role for a person already recorded, and W1's "add a person" shows only before W1 is done. Curia's one person
+  is Brad, so the sentence would point at a card with nobody to name. Card 01b therefore gains "Add a person of this
+  account…": a governed form on the existing `POST /api/institutions/:id/inputs` route. It ships in the same deploy.
+- **Addition 4 (asked by Claude, ruled by Brad), the tenant's own account follows the same rule for now.** On the
+  tenant's page, card 01d says no one can commit there yet, with no roles-card link (that page has none).
+  - **Why no one can:** on Skillsoft's own account Skillsoft is its own customer. The right committer for its
+    dollar-retention target is a named Skillsoft executive, such as its CFO, as the case's ask says ("Who at Skillsoft
+    would commit…"). The role guard treats every Skillsoft staff member as vendor-side, so no one qualifies today.
+  - **That is fine for now:** no Skillsoft commitment is expected before the pilot, and its hypothesis is not due until
+    June 2027.
+  - **The ruling still owed, before any Skillsoft commitment:** on the tenant's own account, a named tenant executive
+    with a role named from a source (for example the CFO, named in a filing) may commit and verify; never the steward,
+    an analyst of record, or anyone without a sourced role. It is on the 3.1 list.
+- **Next:** build to Gate A.
 
 **Brad's finding (24 Nov 2026, from §28's look), before the pilot.** On Curia's Lot Acceptance Rate, the commit form's
 "Who commits" offers "Brad Piver (external analyst of record)". He is not customer-side, yet the form says a
