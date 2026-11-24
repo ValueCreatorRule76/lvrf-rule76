@@ -16607,3 +16607,192 @@ here was run on the box. Stop at any step whose expectation is not met.
      committed. The route's "after the commit date" rule then has to be checked for a measure-by date entered the
      same evening. The form sends `${on}T12:00:00Z`, and the route and the guard compare that day's UTC date, so
      the local day the person picked is the commit day. Gate A proves this.
+
+### §28: plain words on screen, the local walk dates, late Anywhere on Earth — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §28; Brad's rulings, 24 Nov 2026: D1–D4 as recommended, D2's wording approved word for
+word, D5 changed). Branch `plain-words` (`1b9a492`), on `d61d009`. **No migration, table or trigger.** Five database
+functions change their message text only.
+- **Plain words (D1, D2):**
+  - **Card 01d:** "(committed before promised dates were recorded, 24 Nov 2026)" and "(committed before attribution was
+    recorded, 6 Nov 2026)".
+  - **The value case's attribution line:** the same sentence.
+  - **Elsewhere, codes dropped or said in words, as the D2 table rules:** the lineage, the POV and the roles card ("no
+    credit: only a customer-side person, with a role named from a source, earns it"); the credit lines ("Under model
+    1.0.2, only a customer-side person earns credit, so none of these does: …"); the asks; the C3 batch page; the two
+    steward messages; the validation messages; the finding message on the heartbeat register.
+  - **Found by the full scan, beyond D2's table, in plain words for Brad to read:**
+    - "AMENDMENT-005 Article I" in an ask: "inadmissible under the rules for a measured actual (…)";
+    - the same in eight database messages: dropped, each sentence already saying its rule;
+    - three "(O2-Dn)" in the hypothesis route's refusals;
+    - "(C3b)" in the calculation-method ask;
+    - "(S2, section 36)" in a drift reason;
+    - the erratum text new credit errata are recorded with, "The seal credited points to a person who is not
+      customer-side." Errata already recorded keep their words.
+  - **`scripts/check_plain_words.mjs` (new):** every client string and JSX text run, every server string a response can
+    carry, and every database literal, refusing "§", plan document names and slice or decision codes.
+    - **Read, not refused:** a query's own text, the server's log lines, and a finding's id (`code: 'F1'`, `'D1'`, …),
+      which is sealed in run payloads and printed as an id.
+- **The local walk dates (D4):** `localToday()` (`client/src/lib/localDate.ts`) is the default for Committed on,
+  Measured on and Verified on. What is sent is unchanged, `${day}T12:00:00Z`.
+- **Late, Anywhere on Earth (D5 as ruled):**
+  - `server/lib/late.ts`'s `isLate()` is the one definition, which `GET /api/book` reads. Its SQL no longer computes
+    late.
+  - An outcome is late from 12:00 UTC on the day after its promised date.
+  - The War Room's tile says "Counted as late: the promised day has ended everywhere."; under the table, "An outcome
+    reads late: the promised day has ended everywhere."; on a row, "1 late: the promised day, {date}, has ended
+    everywhere; no actual yet"; the band, "(late: the promised day has ended everywhere)".
+- **Printed-on dates:** the value case's record line and the run page's printed line say "(UTC)".
+- **Departures, named:**
+  - **D3 corrected:** no sealed run on prod prints the value case's pre-attribution line (Curia's runs are
+    payloadVersion 1; Skillsoft's v5 run 2 has no target). Card 01d is the only place on prod that shows it.
+  - **Finding ids are not plan codes.** They are sealed run content, and old runs keep them.
+  - **The record's own words are listed, never failed** (D1): 32 hits on the copy, among them errata recorded with
+    "under the C3 rule" and Brad's own reasons and notes.
+
+**`verify_plain_words.sh` (new): 37 passed, 0 failed.**
+- **The static check:** 0 hits. Then three breaks, each caught by its file and line, every file restored byte-identical:
+  - **B1** "(committed before §26)" back on card 01d;
+  - **B2** "(C3)" in the committer ask;
+  - **B3** "(D2)" back in a database message.
+- **The words on the page:** card 01d's two sentences on Curia's `e3fb0061`; "(UTC)" on the value case and the run page;
+  the value case's line, in the source.
+- **The rendered sweep:**
+  - **Coverage:** all 51 pages read at 1280, as the steward by session, or the script fails (Brad, 24 Nov 2026: an
+    unread page proves nothing).
+  - **0 plan codes in app text.** 32 hits in the record's own words are listed.
+  - Each page opens in its own tab, with a hard 60 s limit.
+
+**`verify_local_date.sh` (new): 62 passed, 0 failed.**
+- **Late, at fixed instants, for an outcome promised for 23 Nov 2026:**
+
+  | Instant | Late |
+  |---|---|
+  | 19:00 New York, 23 Nov | false |
+  | 06:59 New York, 24 Nov | false |
+  | 07:00 New York, 24 Nov | **true** |
+  | measured, a week later | false |
+  | no promised date | false |
+
+  - `GET /api/book` reads `isLate` only.
+  - **Break L1:** §26's UTC-date rule, caught at 19:00 New York.
+- **New York, 22:28 on 23 Nov 2026** (the browser's time zone set and its clock pinned):
+  - Committed on, Measured on and Verified on each default to 2026-11-23;
+  - measure-by 2026-11-23 is refused by the form in words, by the route (422) and by the database as `lvrf_app`;
+  - 2026-11-24 is admitted, and stored as committed 2026-11-23 12:00 UTC, promised 2026-11-24.
+- **Auckland, 09:00 on 25 Nov 2026:** all three default to 2026-11-25.
+- **Break L2:** the UTC default, caught in New York's evening (it read 2026-11-24).
+
+**Scripts changed by design:**
+- `verify_promised_date` (101/0): P4 uses a date two days back for "late", so it is deterministic at any hour; its B4
+  moved to `verify_local_date`.
+- `verify_s6_war_room`, `s6_walk` and `promised_walk`: the War Room's new words and the AoE rule.
+- `verify_c3`, `c3_walk`, `verify_c3b` and `verify_commit_measure_verify`: the credit and refusal sentences.
+
+**The full regression:**
+- **59 scripts in one run,** 04:42–13:16 UTC. 53 passed outright: 5,798 tallied checks, plus `verify_tenant_scope`'s 329
+  PASS lines and 0 FAIL. Every tracked file was byte-identical after it.
+- **Six failed. All eight affected scripts were rerun after the fixes,** each 0 failed:
+
+  | Script | In the regression | Cause | Rerun |
+  |---|---|---|---|
+  | `verify_c3` | 202/1 | expected "Under the C3 rule": changed by design | 203/0 |
+  | `verify_commit_measure_verify` | 214/1 | expected "(D2)": changed by design | 215/0 |
+  | `verify_s3_print_family` | 131/1 | a new lint warning: `localToday` exported from a component (my error), moved to its own module | 132/0 |
+  | `verify_s4_form_confirmation` | 105/1 | the same lint warning | 106/0 |
+  | `verify_deploy_steps` | 24/3 | **a flake for this slice** (Brad, 24 Nov 2026): section F's positive control is timing-sensitive; neither it nor the deploy script changed | 27/0 |
+  | `verify_plain_words` | 34/5 | the sweep hung on Curia's run pages for 7.5 hours (below) | 37/0 |
+
+  The rerun also took in `verify_local_date` (62/0) and `verify_promised_date` (101/0), which test `localToday`.
+  - No full rerun: the move of `localToday` is a pure move (Brad, 24 Nov 2026).
+- **Equivalence against the deployed `f3e8fe7`:** **213 GETs, 213 identical,** no added keys. The asks' changed words
+  reach no GET on the copy.
+- **The bundle:** **`index-DOQINKTz.js` / `index-BMv5OQwB.css`** (the CSS is unchanged).
+- **The functions' sources (`md5(prosrc)`)**, read from prod read-only on 24 Nov: all five match `f3e8fe7`'s.
+
+  | Function | prod now | after Gate B |
+  |---|---|---|
+  | `lvrf_block_ai_actual` | `450f70b1…` | **`c7a38cb3f1390b9a63d389c49734f8f6`** |
+  | `lvrf_block_simulated_attestor` | `53fd3e0e…` | **`2cdb1e17f62c3dfbd5e9983f9ac3caa0`** |
+  | `lvrf_outcome_spine_guard` | `bd4ddfb7…` | **`ebce0899f794447fc6af1eb9fd761bb8`** |
+  | `lvrf_outcome_verifier_not_author` | `6ee8e388…` | **`942f9f555a55db5c662b4ab87a1c6684`** |
+  | `lvrf_value_hypothesis_guard` | `50056e10…` | **`554d29c48e32296d7095234abf4b4839`** |
+
+  The TOC on a copy is the same before and after (970 on the 14 Nov snapshot), so prod's stays **972**. Triggers stay
+  227.
+
+**Why Curia's run pages hung in the regression (Brad, 24 Nov 2026: time one alone and under load, and read the API's
+request times):**
+- **The API was not slow.**
+  - In the hung run's own server log, 625 requests: the slowest 261 ms (`/api/auth/me`), every run and POV read 0–53 ms.
+  - On a fresh clone, Curia's run reads take 3–32 ms and its POV 12–47 ms, against Skillsoft's 4–18 ms.
+  - **No query per run or per erratum:**
+
+    | Read | Queries |
+    |---|---|
+    | a run, any account | 6 |
+    | the POV, Curia or Skillsoft | 13 |
+    | the walk | 9 (Curia), 8 (Skillsoft) |
+
+- **The page was not slow:**
+  - Curia's run pages settle in about 1.3 s, alone and while `verify_s5_account_frame` ran beside them.
+  - Each page makes 25–40 API requests, none slower than 67 ms. The POV is fetched twice.
+- **What was different in the regression:**
+  - The browser tab stopped answering while the API stood idle.
+  - **20 Vite dev servers were still running,** left by earlier scripts. 27 scripts stop Vite by the subshell's pid,
+    which leaves Vite's own node process running (the equivalence script's 14 Nov lesson). They were stopped on 24 Nov.
+  - The hang did not recur alone or under load, so its cause is not proven.
+  - The sweep's one tab per page and hard limit make a hung page a failure, never a wait.
+- **No pilot-scale finding:** nothing in the page or its API grows with the number of runs or errata.
+- **One finding, for Brad's ruling: the leaked Vite servers.** Proposed as a small item:
+  - every script stops Vite by its port, as `verify_s5`, `s6` and six others already do;
+  - a regression check that no Vite, Chrome or API is left running after each script.
+
+#### Gate B for §28 (not run; Brad's pastes)
+
+No migration. Hardening is re-applied for five functions' message text; the TOC stays 972 and the triggers 227.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only plain-words && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `ae6f67c` (origin) through `d61d009`.
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p28-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**.
+3. **Ownership, then hardening:**
+   ```
+   cd /srv/lvrf && sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p28.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p28.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT proname || ' ' || md5(prosrc) FROM pg_proc WHERE proname IN ('lvrf_block_ai_actual', 'lvrf_block_simulated_attestor', 'lvrf_outcome_spine_guard', 'lvrf_outcome_verifier_not_author', 'lvrf_value_hypothesis_guard') ORDER BY 1"
+   ```
+   Expect:
+   - `ownership exit 0`;
+   - `hardening exit 0`, with `0` ERROR lines;
+   - **227**;
+   - the five hashes in the table above, in the order of the table.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p28-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-DOQINKTz.js` / `index-BMv5OQwB.css`**;
+   - drift none (53, newest `0052`);
+   - "active and answering", health 200, `actor_header` off;
+   - the 401 checks, **`deploy OK`.**
+
+**Brad's look (records nothing):**
+- **Curia's card 01d:** "attribution not stated (committed before attribution was recorded, 6 Nov 2026)" and "no
+  promised date on record (committed before promised dates were recorded, 24 Nov 2026)".
+- **"Commit…" on any outcome:** Committed on reads today's local date (after 19:00 New York time it no longer jumps to
+  tomorrow). Cancel.
+- **A run page's printed line** says "(UTC)" (in its print preview).
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- the five functions' hashes as in step 3;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.

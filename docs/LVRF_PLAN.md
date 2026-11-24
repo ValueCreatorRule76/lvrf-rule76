@@ -6194,7 +6194,7 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 - **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
   are approved.
 
-## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**)
+## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§28 … Gate A"))
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D4 are approved as recommended.** Brad reads D2's wording table before the build.
