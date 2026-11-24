@@ -206,7 +206,7 @@ cut line applied first.
        - **first, right after S6 (Brad, 20 Nov 2026), with its own plan: the commit form records a promised
          measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
          without it can never be given one afterwards (append-only), so it **ships before the pilot's first
-         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Planned 23 Nov 2026, LVRF_PLAN §26, for Brad's approval;**
+         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Approved (Brad, 23 Nov 2026), LVRF_PLAN §26, with D1–D6;**
        - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
          - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
            AA at every size). Two places are known:

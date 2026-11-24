@@ -5753,7 +5753,15 @@ stands, and of what is due, refuted or late. It writes nothing.
 - **About half a day for the mock-ups; about 3 days for the build after they are approved.** With the cut-off on
   Fri 18 Dec 2026, there are four weeks.
 
-## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **for Brad's approval**)
+## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **approved by Brad, 23 Nov 2026, with D1–D6 as recommended, D3's bound and D4's wording ruled**)
+
+**Brad's rulings (23 Nov 2026):**
+- **D1–D6 are approved as recommended.**
+- **D3:** three years is approved as the upper bound. A promised date is later than the commit date and no more than
+  three years after it.
+- **D4:** dates are compared in UTC, and **this is said wherever "late" shows:** an outcome is late once today's UTC
+  date is after its promised date.
+- **Next:** build to Gate A.
 
 **The ruling it builds:** §25 D5 changed (Brad, 20 Nov 2026). The commit form records a promised measurement date. It
 **ships before the pilot's first commitment**, because a commitment made without one can never be given one later
@@ -5799,7 +5807,7 @@ comment). Without the date, nothing can tell the two apart.
     was on time.
 - **D3, what date is admissible. Recommended:** a calendar date, **later than the commit date** and **no more than
   three years after it**. Both rules are in the guard, and the form says them. The upper bound catches a mistyped
-  year. Brad sets the bound; three years is a proposal, not a figure from the design.
+  year. **Ruled (Brad, 23 Nov 2026): three years.**
   - Option: later than the commit date, with no upper bound.
 - **D4, one meaning of "late". Recommended:** the promised date is stored at 12:00 UTC on that day, as `committed_at`
   is, and "late" compares days: **late only once the promised day has passed** with no actual. Today `book.ts` reads
