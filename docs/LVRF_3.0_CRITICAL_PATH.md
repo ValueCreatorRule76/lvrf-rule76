@@ -236,6 +236,10 @@ cut line applied first.
          - "as themself" → "in their own name";
          - "the account or industry is not a current one of your company" → "is not a current account or industry of your
            company";
+         - "(checklist stage 10)" in the share-for-review form ("Check the printed PDF against the record first (checklist
+           stage 10)."; `client/src/components/valueCase/CaseInputs.tsx`), the one "stage <number>" on screen today; and a
+           `check_plain_words` check that refuses "stage" followed by a digit in any string a page can show (Brad,
+           24 Nov 2026, added to this ruling's list at §30's close);
        - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits

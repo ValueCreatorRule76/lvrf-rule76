@@ -6645,3 +6645,81 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
   - a refusal on screen, for example "Name a customer-side role…" by a non-steward. Nothing is recorded.
   - Curia's gap register.
 - **About a day,** most of it the scripts that read the old words.
+
+## 31. 3.1 small item: no walk date in the future (planned 24 Nov 2026, for Brad's approval)
+
+**Brad's ruling (24 Nov 2026, at §28):** a Committed on, Measured on or Verified on date later than one day after today's
+UTC date is refused, by the route and by the database, with a Gate A break. It comes before the pilot, after §30.
+
+### 1. What the code and the record hold today (read 24 Nov 2026, `d77ce56` and prod; read only)
+
+- **Nothing refuses a future walk date.**
+  - **The routes** (`server/routes/outcomeWalk.ts`) read `committed_at`, `actual_measured_at` and `verified_at` with
+    `requireTimestamp`, which checks only that each is a valid timestamp.
+  - **The database:** no guard compares any of the three with today. `lvrf_outcome_spine_guard` (hardening §34, BEFORE
+    UPDATE on `value_outcomes`) checks the commit's fields and the promised date's window, never "not after today".
+  - **The forms** (card 01d) default each date to the person's local today (§28 D4) and set no upper limit. They send
+    the chosen day at a fixed hour: `${day}T12:00:00Z` for a commitment and a measurement, `T13:00:00Z` for a
+    verification.
+- **Why one day's margin:** a person's local date is never more than one day after the UTC date. Auckland at 09:00 on
+  25 Nov is 20:00 UTC on 24 Nov. So "no later than today's UTC date + 1" admits every local today on Earth, and nothing
+  later (§28 D4).
+- **On prod:** 1 commitment, Curia's `e3fb0061`. It is dated 30 Aug 2026 09:00 UTC and was recorded 30 Aug 12:49, so
+  it is not in the future. There are no measurements or verifications. The rule finds nothing to refuse in the record.
+- **Outside this ruling:**
+  - the promised measurement date, which is future by design (§26);
+  - the baseline's `baseline_measured_at` (W4);
+  - evidence's `attested_at` and `evidence_date`;
+  - a role's `granted_at`.
+
+  These are listed for a later ruling only if Brad wants one.
+
+### 2. Decisions (recommendations first)
+
+- **D1. The rule:** a walk date's UTC calendar date may be no later than today's UTC date plus one day. Here "today" is
+  the database's `now()` when the step is written, and the route's clock for its own check.
+  - **What it reads:** the date, not the time. A commitment sent for 25 Nov at 12:00 UTC is admitted all through
+    24 Nov UTC; one for 26 Nov is refused.
+- **D2. Checked when the date is set or changed, never re-read.** The rule fires only when `committed_at`,
+  `actual_measured_at` or `verified_at` goes from empty to a value, or changes. A row already recorded is never read by
+  it, as §29 D1.
+- **D3. The routes refuse it (422)** before writing anything, each in a plain sentence:
+  - "The commit date can't be later than today."
+  - "The measurement date can't be later than today."
+  - "The verification date can't be later than today."
+
+  The words say "today" because to the person the margin is their own today.
+- **D4. The database refuses it, for every caller.** The clause goes in `lvrf_block_simulated_attestor`, beside §29's,
+  on INSERT and UPDATE of `value_outcomes`. The spine guard fires on UPDATE only, and §29's departure 1, accepted, put
+  the walk's people rule in the same trigger for the same reason. The sentences match D3's, with its own constraint
+  names: `value_outcomes_commit_not_future`, `…_measure_not_future`, `…_verify_not_future`. **No new trigger and no
+  migration** (227 and 972 stay).
+- **D5. The forms stop it first.** Each of the three date inputs gets `max` set to the person's local today, so the
+  picker offers no later day. A later day typed in shows the unmet line "make the date today or earlier", and the
+  button stays disabled.
+  - The form is stricter than the rule: the person's own today, not UTC + 1. The margin is for the server, which cannot
+    know the person's time zone.
+
+### 3. Gate A (planned)
+
+- **`verify_future_date` (new),** on a clone, through the routes, each step on its own fixture outcome:
+  - **commit, measure, verify:** dated today's UTC date + 1, admitted (the Auckland morning); dated + 2, refused (422)
+    in D3's sentence with nothing written. The route answers: no database refusal is recorded (as §30's R1).
+  - **The database, as `lvrf_app`, rolled back:** each of the three set to + 2 is refused with D4's constraint; + 1 is
+    accepted; a recorded row with a past date, re-saved by a later step, is not re-read.
+  - **The forms, in the browser** with the clock pinned (as `verify_local_date`): each date's `max` is the local today
+    in New York and in Auckland. A later day typed in shows the unmet line and disables the button.
+  - **Breaks, each caught by its own section:** F1 the route's commit check removed (the database answers, its refusal
+    recorded); F2 the database's clause removed (+ 2 accepted by SQL); F3 the form's `max` removed (the picker offers
+    tomorrow).
+- `check_plain_words` passes over the new sentences.
+- **Scripts that commit, measure or verify with a date later than tomorrow,** if any, updated by design and named.
+- **The full regression, and equivalence against `d77ce56`:** every GET identical.
+- **Hashes:** one function, `lvrf_block_simulated_attestor`; its `md5(prosrc)` is computed at Gate A.
+
+### 4. Gate B and effort
+
+- **Gate B:** deploy, and hardening re-applied for one function. No migration.
+- **Brad's look:** "Commit…" on Lot Acceptance Rate (no one to choose there, §29): the Committed on picker offers no
+  day after today. Cancel.
+- **About half a day.**
