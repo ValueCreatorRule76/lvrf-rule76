@@ -5899,21 +5899,14 @@ through the form.
   - **S7b's Gate A gains a break:** the headline score printed without its adjacent erratum fails. Gate A also checks
     the timeline scores, and that both parts are the same size and weight (computed style).
   - **Shown in the S7 mock-up.**
-  - **Open, for Brad:**
-    - **The problem:** the recorded erratum's own words are "The seal credited points to a person who is not
-      customer-side under the C3 rule." They carry a plan code ("C3"), which D10 and small item 1 keep off the
-      screen.
-    - **The record vs the page:**
-      - The headline's adjacent words, "45 of these points rest on a person who is not customer-side", are the
-        platform's own computed sentence (C3b), not the erratum's text.
-      - The ledger would print the erratum as recorded, so the conflict is in the ledger only.
-    - **Options:**
-      - **(a)** the ledger quotes the erratum as recorded, "C3" included, as a quotation of the record, exempt from
-        the plan-code check;
-      - **(b)** Brad supersedes the erratum with plain words, a steward act with its own reason (the plan proposes
-        "The seal credited points to a person who is not customer-side."). After that the story prints only plain
-        words.
-    - **Recommended: (b).** It corrects the record instead of exempting the page.
+  - **Ruled (Brad, 24 Nov 2026): option (c).** The story never quotes an erratum's recorded text.
+    - **What prints:** everywhere, the ledger included, the platform's plain wording for that erratum's kind:
+      `lvrf_erratum_line()`, the same computed sentence the headline uses.
+    - **How it is cited:** by the erratum's short id, which links to the record.
+    - **No supersession** of the 19 errata whose recorded words say "under the C3 rule".
+    - **No exemption** from the plain-words check.
+    - **The "C3 rule" strings already on screen** (`LineagePage.tsx` lines 59 and 70, `PovPage.tsx` line 178) are
+      replaced by the plain-words small item, as planned.
 
 **What Brad asked (24 Nov 2026):** an LVRF output on CVAF's pattern (`cvaf-rule76/docs/CVAF_Success_Story_Spec.md`,
 ratified 17 Nov 2026, read read-only: its patterns only, no CVAF data, nothing copied into CVAF). It comes **after
@@ -5983,14 +5976,21 @@ writes only its own record, and never a figure.
   never as the headline.
 - No score is averaged or combined across engagements.
 
-**The errata it prints** (D9: each once, naming the runs it applies to; only current errata, never a superseded one):
-- **"The seal credited points to a person who is not customer-side"**, on runs 3, 4, 5 and 13. Under run 13 it adds
-  "45 of these points rest on a person who is not customer-side", computed at read as the headline computes it. The
-  points under runs 3–5 are computed the same way and read from SQL at the mock-up, never typed.
-- **"The seal carries a figure that has no source on record"**, on runs 4, 5 and 13, with the figure finding under the
-  baseline: "the baseline, 214 days, has no source on record" (outcome `e3fb0061`).
-- **"The owner's commitment attestation was sealed as supporting the impact basis; it supports the target
-  commitment"**, on run 13 (its current erratum, `31ae268b`).
+**The errata it prints:** only current errata, never a superseded one. Each prints in the platform's plain wording for
+its kind (`lvrf_erratum_line()`, ruling (c)), beside the sealed score it concerns, and is cited by its short id. Read
+from the prod copy, 24 Nov 2026:
+
+| Run | Sealed | Beside it, same size and weight | Cited |
+|---|---|---|---|
+| 3 | 30 / 100 | 20 of these points rest on a person who is not customer-side | `f54623e4` |
+| 4 | 30 / 100 | 20 of these points rest on a person who is not customer-side · its baseline, 214, has no source on record | `72730e1b`, `3b7a687f` |
+| 5 | 45 / 100 | 35 of these points rest on a person who is not customer-side · its baseline, 214, has no source on record | `f29654e8`, `3d005490` |
+| 13 (headline) | 55 / 100 | 45 of these points rest on a person who is not customer-side · its baseline, 214, has no source on record · a link corrected since sealing; not recomputed | `2ac07720`, `4447bd3b`, `31ae268b` |
+
+- The figure finding prints under the baseline, too: "the baseline, 214 days, has no source on record" (outcome
+  `e3fb0061`).
+- **Runs 1 and 1** (the reference engagement's first run, and lot acceptance's) carry no erratum.
+- **D9's "once, naming the runs"** applies to the ledger. Beside each score, the run's own errata always print.
 
 ### 2. Decisions (recommendations first)
 
