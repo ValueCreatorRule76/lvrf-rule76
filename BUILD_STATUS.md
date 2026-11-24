@@ -17322,3 +17322,29 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
 - nothing written since the deploy, apart from any session of your own;
 - `lvrf_block_simulated_attestor` `8f0d371b…`; `e3fb0061` unchanged;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### §31 deployed at `7be9031`; Gate C clean — 24 Nov 2026 (UTC)
+
+**Gate B, run by Brad:** his step results are not yet pasted. On the box (read 24 Nov 2026): head `7be9031`; the
+pre-deploy backup `~/lvrf-pre-p31-20261124T222815Z.dump` and the post-hardening backup
+`~/lvrf-post-p31-20261124T222847Z.dump` are present; the served `index.html` names `index-CL2E3E-8.js` /
+`index-BMv5OQwB.css`; the API started at 22:29:24 UTC. Their TOC counts and the hardening and deploy output are Brad's
+to paste; §31 closes with them.
+
+**Brad's look (records nothing):** Committed on's picker offers no day after today (24 Nov). Cancelled.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `7be9031`, tree clean.
+- **Since the pre-deploy backup (22:28:15 UTC), nothing was written:** 0 governance acts (still 228, the last 15 Nov
+  21:12:17); 0 refusals, 0 research-process refusals; 0 audit rows, 0 record documents, 0 heartbeat events; 0 sessions.
+- **The function as deployed:** `lvrf_block_simulated_attestor` `8f0d371b420e6b51f5f9c3370ee5b4ba`, as Gate A computed.
+- **1 commitment, 0 verifications;** Curia's `e3fb0061` last updated 30 Aug 2026, unchanged.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean
+  (`lvrf_ownership_violations()` 0).
+
+**Brad's finding from his look, a small item:** the commit form's "Measure by" picker offers the commit day itself,
+though the rule wants a later day (§26 D3). Its earliest day is `min={v.on}` today
+(`client/src/components/OutcomeSpine.tsx`). It should be Committed on + 1, following Committed on when it changes. The
+same-day date is already refused in words by the form, the route and the database (§26, §28's `verify_local_date`), so
+only the picker is wrong.

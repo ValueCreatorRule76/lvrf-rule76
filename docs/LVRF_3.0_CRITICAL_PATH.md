@@ -246,10 +246,13 @@ cut line applied first.
          2. then the baseline's `baseline_measured_at` (W4);
          3. then a role's `granted_at`.
          The promised measurement date stays future by design (§26);
-       - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future** (LVRF_PLAN §31, approved by Brad 24 Nov 2026 with D1–D5). A Committed on,
+       - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future** (LVRF_PLAN §31, approved by Brad 24 Nov 2026 with D1–D5). **Deployed 24 Nov 2026** at `7be9031`, Gate C clean; it closes with Brad's Gate B paste. A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
          every local date on Earth (§28 D4), and nothing later;
+       - **Measure by's earliest day (Brad, 24 Nov 2026, from §31's look).** The picker offers the commit day itself
+         (`min={v.on}`). Its earliest selectable day becomes Committed on + 1, and follows Committed on when it changes.
+         The same day is already refused in words by the form, the route and the database, so this is the picker only;
        - **then, before the pilot (Brad, 24 Nov 2026, from §29's look): a person's email is optional when they are added,**
          required only when they are given sign-in. People named in public sources have none, so today the form blocks
          them or invites a made-up address. What depends on it is read in `BUILD_STATUS.md` ("§29 closed"): the
