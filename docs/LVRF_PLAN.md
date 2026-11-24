@@ -6730,7 +6730,47 @@ UTC date is refused, by the route and by the database, with a Gate A break. It c
   day after today. Cancel.
 - **About half a day.**
 
-## 32. 3.1 small item: a person's email is optional (planned 24 Nov 2026, for Brad's approval)
+## 32. 3.1 small item: a person's email is optional (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended and two additions**)
+
+**Brad's rulings (24 Nov 2026):**
+- **D1–D7 are approved as recommended.**
+- **Addition 1, D4's confirmation is recorded.** A column on `persons` names the person or people the new one was
+  confirmed distinct from. The confirmer and the time come from the existing audit and actor. It is set only by the
+  "This is a different person" path, and Gate A proves it is written then and never otherwise.
+- **Addition 2, email case.** Read-only first: is `persons.email` uniqueness case-sensitive today, is the sign-in lookup,
+  and do any of prod's 6 emails collide ignoring case? If uniqueness is case-sensitive, fold into `0053`:
+  - emails stored lower-cased, normalized at the route;
+  - a case-insensitive unique rule;
+  - sign-in and the six access scripts look up by the normalized form.
+
+  Report before building if anything on prod would collide.
+
+**Addition 2's read (24 Nov 2026, read only, `ba86bc6` and prod):**
+- **Uniqueness is case-sensitive:** `persons_email_key` is `UNIQUE (email)`, a plain btree on the text.
+- **Every lookup already ignores case:**
+  - `POST /api/auth/login`: `lower(p.email) = lower($1)`;
+  - `scripts/lib/cli.ts` (`set_steward`, `grant_access`, `reset_password`, `revoke_access`, `set_password`,
+    `set_email`): `lower(email) = lower($1)`;
+  - `set_password.ts`, `grant_access.ts` and `set_email.ts` likewise.
+- **Prod: no collision.** 6 persons, 6 distinct emails ignoring case; none holds a capital letter or a space. So it
+  folds into `0053` with no row changed, and the build proceeds.
+
+**The build, from the additions:**
+- **`0053`:**
+  - `persons.email` `DROP NOT NULL`;
+  - `persons_email_key` becomes a unique index on `lower(email)`, keeping its name so the refusal's plain sentence still
+    finds it;
+  - a CHECK that a stored email is its own trimmed lower case (`persons_email_normalized`);
+  - a new column `persons.confirmed_distinct_from uuid[]`.
+- **The routes normalize an email** (trimmed, lower-cased) before writing. `set_email.ts` does too.
+- **The lookups compare with the normalized form** (`email = lower(btrim($1))`).
+- **A new database function, `lvrf_person_email_rules`, on two new triggers:**
+  - on `person_credentials` (BEFORE INSERT): D3's rule;
+  - on `persons` (BEFORE INSERT OR UPDATE): `confirmed_distinct_from` is set only when the person is added. Each id it
+    names must be a current person of the same account with the same name, trimmed and case-folded. It never changes
+    after.
+- **Counts, revised from section 4:** **triggers 227 → 229; TOC 972 → 975** (one function, two triggers; the
+  constraint-to-index swap keeps its count). Both are recounted at Gate A.
 
 **Brad's finding (24 Nov 2026, from §29's look):** "Add a person" requires an email. People named in public sources,
 such as a CHRO named in a case study, have none, so the form blocks them or invites a made-up address.
