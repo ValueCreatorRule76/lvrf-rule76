@@ -6498,7 +6498,16 @@ commitment is "the target a named person at the account commits to". Curia's `e3
 - **About half a day.**
 
 
-## 30. 3.1 small item: plain words in server and database strings (planned 24 Nov 2026, for Brad's approval)
+## 30. 3.1 small item: plain words in server and database strings (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended and three of D3's lines changed**)
+
+**Brad's rulings (24 Nov 2026):**
+- **D1–D5 are approved as recommended.**
+- **D3's table is approved word for word, except three lines:**
+  - the lever check becomes "This lever's pack entry (%) is not in your company's record.";
+  - the link check becomes "This link's lever or offering is not in your company's record.";
+  - "of the same key / persona" becomes "of the same key / persona in your company's record" (the scope kept).
+- **The validation messages that name request fields** stay listed for a later ruling.
+- **Next:** build to Gate A.
 
 **Brad's ruling (24 Nov 2026):** the plain-words rule, "tenant" included, extends from client strings to the server and
 database strings that can reach the screen. It is the next small item after §29 and not part of it. It changes
