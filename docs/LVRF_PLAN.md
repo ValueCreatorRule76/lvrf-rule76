@@ -6497,3 +6497,139 @@ commitment is "the target a named person at the account commits to". Curia's `e3
   beside `e3fb0061`'s committer.
 - **About half a day.**
 
+
+## 30. 3.1 small item: plain words in server and database strings (planned 24 Nov 2026, for Brad's approval)
+
+**Brad's ruling (24 Nov 2026):** the plain-words rule, "tenant" included, extends from client strings to the server and
+database strings that can reach the screen. It is the next small item after §29 and not part of it. It changes
+hardening's messages, so it has its own Gate A, function hashes, regression and deploy.
+
+### 1. What the code holds today (read 24 Nov 2026, `467f888`; read only)
+
+- **How a database message reaches the screen.** A hardening `RAISE` reaches the person word for word.
+  `handleGovernanceError` records the raw text in `refusals`, then answers with `plainCheckMessage(err)`, which only
+  rewrites Postgres's own constraint text. A message hardening wrote passes unchanged, **its `LVRF: <table>:` prefix
+  included**. §29's R1 break showed one on screen: "LVRF: value_outcomes: only a customer-side person…". The gap
+  register prints earlier refusals the same way ("Already refused: {refusal_message}", `GapListCard.tsx`).
+- **"tenant" in strings a route can return: 13 server strings and 49 database messages.**
+  - **Server:**
+    - "industry_slug unknown for this tenant";
+    - "…is not an account of this tenant";
+    - "A person belongs to the tenant's staff or to one account, not both";
+    - "…and this tenant has no steward named";
+    - "research call … is not an answered call of this tenant";
+    - "That is not an evidence row of this tenant" and "…not an erratum of this tenant";
+    - two "already exists for this tenant";
+    - "…is not a current member of this tenant's staff…";
+    - "This tenant already has…";
+    - "offering_key not found for this tenant";
+    - "…not a current offering in this tenant's catalog";
+    - "…not the tenant-self institution…".
+  - **Database:**
+    - 23 "only the tenant's steward …";
+    - 12 "… % is not of tenant %" (account, run, outcome, engagement);
+    - 6 "… is not current, non-simulated staff of the tenant";
+    - 2 "… does not exist in tenant %";
+    - 2 tenant-consistency checks on levers and their links;
+    - "this account and tenant";
+    - "tenant staff, a vendor-side role";
+    - "the tenant's own people";
+    - "of the same tenant and key/persona";
+    - "the tenant's current one".
+- **Plan codes the current pattern misses:**
+  - "(D-M21)" in a database message and on the value case's "Share for review (D-M21)" card title;
+  - "(3.0 Band A)" in three client steward messages.
+
+  §28's pattern has no "D-M" or "Band".
+- **Strings that never reach the screen,** and so are left out of the check, each for a reason:
+  - **CLI only:** the seeds (`server/seed/`, "Expected exactly one tenant named 'Skillsoft'").
+  - **Operator-only guards no route reaches:**
+    - `access_grants` (granted and revoked by `scripts/grant_access.ts` and `revoke_access.ts` only);
+    - `lvrf_block_delete`'s messages (no route deletes; "This is tenant-scoped reference data…");
+    - the ownership assertion ("hardening.sql section 24");
+    - the credential and access-grant "never deleted" messages, which name scripts.
+  - **Identifiers:** the scope value `'tenant'` in the confidence models, and table names such as `'tenants'` in
+    hardening's arrays.
+  - **Sealed text:** the confidence models' factor notes, the findings model and the drift reasons. These are sealed
+    into run payloads and recomputed by `check_run_hashes`, and changing a word would break that recompute for every
+    sealed run. Heartbeat ids (`HB-0014`) appear there and as keys: they are record ids, printed as ids, like finding
+    codes (§28).
+- **Seen, not in this ruling:** validation messages name request fields ("industry_slug unknown", "body.person_id …",
+  "offering_key not found"). Listed for a later ruling.
+
+### 2. Decisions (recommendations first)
+
+- **D1. The check covers server and database strings that can reach the screen.** `check_plain_words.mjs` applies the
+  plan-code pattern and "tenant" to:
+  - every server string a route can return: `server/routes`, `server/lib`, `server/research`;
+  - every hardening `RAISE` message on a table a route writes.
+  
+  The exclusions in section 1 are named in the check itself, each with its reason, so a new string is in scope unless
+  it is listed. The client rule is unchanged.
+- **D2. The pattern gains "D-M" followed by digits and "Band A–E"** (with or without "3.0"), for client, server and
+  database strings alike.
+- **D3. The wording:**
+  - **The person's own company is "your company"**, as §29 ruled on screen.
+  - **The steward is "the steward".**
+  - **An id that names your company is dropped from the sentence.** For example, "is not of tenant %" loses its
+    tenant id argument.
+  - **Table of patterns,** for Brad to read word for word. The full old-and-new list is a Gate A file for him to
+    read.
+
+  | Today | Becomes | Count |
+  |---|---|---|
+  | only the tenant's steward {does X} | only the steward {does X} | 23 |
+  | the account % is not of tenant % | the account % is not one of your company's accounts | 7 |
+  | run / outcome / engagement % is not of tenant % | run / outcome / engagement % is not one of your company's runs / outcomes / engagements | 3 |
+  | the act's subject is not of tenant % | the act's subject is not in your company's record | 1 |
+  | the account is not of tenant % | the account is not one of your company's accounts | 1 |
+  | % is not current, non-simulated staff of the tenant | % is not a current, real member of your company's staff | 6 |
+  | … does not exist in tenant % | … is not in your company's record | 2 |
+  | a lever's tenant is its pack entry's (entry % is not of tenant %) | a lever is your company's only when its pack entry is (entry % is not your company's) | 1 |
+  | a link's tenant is its lever's and its offering's (tenant %) | a link is your company's only when its lever and its offering are | 1 |
+  | outcome % is not of this account and tenant | outcome % is not of this account | 1 |
+  | (tenant staff, a vendor-side role, or sign-in credentials) | (your company's staff, a vendor-side role, or sign-in credentials) | 1 |
+  | only the tenant's own people are linked | only your company's own people are linked | 1 |
+  | of the same tenant and key / persona | of the same key / persona | 2 |
+  | the tenant's current one | your company's current one | 1 |
+  | (D-M21) | dropped | 1 database, 1 client |
+  | (3.0 Band A) | dropped | 3 client |
+  | server: "… this tenant" / "this tenant's staff / catalog" | "… your company" / "your company's staff / catalog" | 12 |
+  | server: "not the tenant-self institution" | "not your own company's account" | 1 |
+- **D4. The `LVRF: <table>:` prefix leaves the screen, not the record.**
+  - `plainCheckMessage` drops a leading `LVRF: <name>: ` from a hardening message in the response.
+  - The gap register's "Already refused" line drops it when it prints.
+  - `refusals.message` keeps the raw text, so earlier refusals are never rewritten.
+  - Hardening keeps the prefix, which tells an operator in psql which table refused.
+- **D5. The record is never rewritten.** Earlier refusals, errata and sealed payloads keep their words; the rendered
+  sweep lists them as record (§28 D1). Only new messages change.
+
+### 3. Gate A (planned)
+
+- **`check_plain_words`:** 0 hits under D1 and D2, then each break caught:
+  - B6, "tenant" back in a database `RAISE`;
+  - B7, "tenant" back in a route's response string;
+  - B8, "(D-M21)" back in a client string;
+  - B9, an excluded file's string moved into a route (a new string is in scope).
+- **On the clone, through the routes:**
+  - one refusal per D3 pattern, its response read for no "tenant", no plan code and no `LVRF:` prefix;
+  - `refusals` holds the raw text;
+  - the gap register's line on an earlier refusal prints without the prefix;
+  - B10: D4's strip removed, the response check catches the prefix.
+- **The rendered sweep:** 51 pages, 0 app hits.
+- **Each changed function's `md5(prosrc)`,** computed. No migration, table or trigger (TOC 972, 227 triggers).
+- **The scripts that read the old words,** updated by design, each named. Expected:
+  - `verify_access_grants` is not one of them (its guards are operator-only and unchanged);
+  - `verify_supersession`, `verify_c3`, `verify_c3b`, `verify_c2c`, `verify_corrections`, `verify_value_levers`,
+    `verify_value_case`, `verify_value_hypotheses`, `verify_evidence_final`, `verify_commit_measure_verify` and
+    `verify_outside_in_walk` are.
+- **The full regression, and equivalence against `467f888`:** GETs identical apart from the gap register's
+  refusal lines, each named.
+
+### 4. Gate B and effort
+
+- **Gate B:** deploy, and hardening re-applied, with each changed function's hash. No migration.
+- **Brad's look:**
+  - a refusal on screen, for example "Name a customer-side role…" by a non-steward. Nothing is recorded.
+  - Curia's gap register.
+- **About a day,** most of it the scripts that read the old words.

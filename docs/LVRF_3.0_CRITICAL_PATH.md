@@ -236,7 +236,13 @@ cut line applied first.
          required only when they are given sign-in. People named in public sources have none, so today the form blocks
          them or invites a made-up address. What depends on it is read in `BUILD_STATUS.md` ("§29 closed"): the
          column's NOT NULL, the only duplicate-person guard, sign-in and the access scripts, account inputs' assessment
-         mapping. Then S7a;
+         mapping. **Design notes (Brad, 24 Nov 2026), for its plan:**
+         - a person's email is optional;
+         - a credential is refused for a person with no email (a database rule);
+         - the account-inputs route keeps email required for a person an assessment names;
+         - **the duplicate guard:** the same name on the same account is warned, not refused. The form shows the
+           existing person and asks "choose them" or "this is a different person", in the full-text confirmation.
+         Then S7a;
        - **`verify_deploy_steps`' positive control made deterministic (Brad, 24 Nov 2026).** Section F reruns the deploy
          script from before the fix (`7f889b4`) and expects it to stop silently (exit 7), because the stub API is not up
          on its first try. That depends on a race: in §28's full regression it found the stub already up and failed
