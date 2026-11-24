@@ -5873,3 +5873,250 @@ through the form.
   repo's; hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
 - **The act:** none until the pilot. The first commitment on prod is the steward's own, at the pilot.
 - **About one day for the build.** Gate C is before Fri 18 Dec 2026, well ahead of the pilot's first commitment.
+
+## 27. 3.1 slice S7: the success story of record (planned 24 Nov 2026; **for Brad's approval; mock-ups before code**)
+
+**What Brad asked (24 Nov 2026):** an LVRF output on CVAF's pattern (`cvaf-rule76/docs/CVAF_Success_Story_Spec.md`,
+ratified 17 Nov 2026, read read-only: its patterns only, no CVAF data, nothing copied into CVAF). It comes **after
+the two small items now first on the list** (the plan codes on screen; the local commit date). Mock-ups come before
+code. The first story is Curia's.
+
+**Value spine:** `return`. A story is the account's record told in sequence, for the people who decide on it. It
+writes only its own record, and never a figure.
+
+### 1. What the code and the record hold today (read 24 Nov 2026, `84c3f37` and the prod copy; read only)
+
+- **CVAF's pattern, taken as patterns:**
+  - stages computed, never chosen;
+  - a spine whose headings name the kind of evidence beneath them;
+  - a section with nothing sealed behind it does not render;
+  - the evidence ledger;
+  - rules S1 (sealed only), S2 (a claim never outruns its evidence) and S5 (selection is disclosed);
+  - a story record that is sealed when issued, and withdrawn, never deleted.
+  - **Not taken in v1:** bound drafting (S3), quotes and releases (S4, S7), and the co-sell and public audiences.
+    Brad's v1 scope, items 6 and 7.
+- **The print family (S3)** prints the value case and the POV. Each printed page carries both banners and the full
+  hash. The value case reads only the sealed payload. A run sealed before payloadVersion 5 has no cost of delay,
+  roadmap or solutioning, and it says "not sealed in this run", never filling them from today's record.
+- **Curia on prod** (a reference example; the current marker is `outside_in_test`, 1 Nov 2026, which superseded
+  `published_case_study`):
+  - **Runs:** 22 locked, 14 of them system exercises.
+    - The retired reference engagement has runs 1, 3, 4, 5 and 13 that are not exercises; run 13 is the latest, at
+      55 / 100, and its stage reached is commit.
+    - The current "lot acceptance" engagement has run 1, at 10 / 100, baseline.
+    - Every Curia run is payloadVersion 1.
+  - **No verified actual,** anywhere on the account.
+  - **Errata, 48 rows on the reference engagement's runs:**
+    - "the owner's commitment attestation as supporting the impact basis" (runs 13–21);
+    - "points to a person who is not customer-side": the 30 and 45 points of runs 3–21, which the headline prints as
+      "45 of these points rest on a person who is not customer-side";
+    - "a figure that has no source on record" (runs 4–21).
+  - **A figure finding:** "the baseline, 214 days, has no source on record", on outcome `e3fb0061`.
+  - **Evidence:** 14 current rows. Among them is `092c46b6`, a legacy vendor-publication row: "102,584 total
+    accesses, 8,487 badges earned, 5,282 learning hours…", the three activity figures in one row, with no quote and
+    no locator.
+- **A vendor publication about another account reads basis "inferred"** (`lvrf_evidence_basis`): Skillsoft's own
+  case study is Skillsoft's marketing about Curia, not Curia's record. "Published" applies only on the tenant's own
+  account.
+- **No evidence field states what kind of figure a published figure is.** The kind, the form (quote or located cell,
+  with a scale of units to percent) and the how-read text say where a figure came from, not what it can support.
+- **LVRF has no claim id.** A figure is a sealed run's field or an evidence row, each with its own id.
+- **The asks:** the value case computes them from the sealed run (`askFor`).
+
+### 2. Decisions (recommendations first)
+
+- **D1, what a story reads, and when it is sealed. Recommended:**
+  - **A draft** renders on screen only, marked DRAFT. It reads:
+    - every locked run of the account that is not a system exercise, retired engagements included and labelled so;
+    - each run's sealed errata;
+    - the account's figure findings;
+    - the current head of each evidence row the story cites.
+  - **Issuing a story seals it:** a new `story_records` row (migration) holds the story's payload and its sha256.
+    - Every printed page prints that hash in full, with both banners.
+    - Re-rendering an issued story is byte-identical (S1).
+    - An issued story is withdrawn, never edited or deleted.
+  - **Only an issued story prints.** That answers "sealed only" for evidence rows, which no run seals.
+  - Option: stories are never sealed and print from runs and live evidence. Rule 1 would then be broken for the
+    published-story section.
+- **D2, the stage, computed (Brad's item 2). Recommended:**
+  - **Decision:** a locked run and no verified actual.
+  - **Realization:** a verified actual in a sealed run.
+  - **Compounding:** verified actuals in two or more sealed runs, at different measurement dates.
+  - **What each stage may print:** "Achieved", "realized" and "result" print only at realization and above. Below
+    it, "Results" does not render at all (CVAF's rule: a section with nothing behind it does not render).
+- **D3, a reference example is not a decision story. Recommended:** an account whose current marker makes it a
+  reference example gets **"Reference" as its stage, never Decision.**
+  - Curia took no decision through LVRF (its marker says so), and a decision story would claim one.
+  - **It may print:**
+    - what outside-in research found;
+    - what the published sources say, read against the record (D5);
+    - its sealed runs, as runs of a reference example;
+    - the asks;
+    - the errata.
+  - **It never prints** a decision, a commitment as the client's, or a result.
+  - Its title reads "A reference example, built from published sources: Curia has not engaged through LVRF", as the
+    marker's note says.
+  - Option: compute Decision for Curia and rely on the banner. A reader would see "Decision" on an account that
+    decided nothing.
+- **D4, audiences (Brad's item 7). Recommended:** internal and client. **A reference example renders for the internal
+  audience only.** It has no client engagement, and a "client" copy for Curia would read as Curia's document, which
+  rule 8 forbids.
+- **D5, "The published story, read against the record" (Brad's item 3):**
+  - **Where the class lives. Recommended:** **a new nullable evidence field, `published_figure_class`** (migration).
+    - **Its five values:** license count, activity count, adjective, outcome without baseline, outcome with
+      baseline.
+    - **When it is allowed:** only on a vendor publication or a public filing. The guard requires it once the field
+      exists, when such a row is recorded on an account that is not the tenant's own.
+    - **When it is fixed:** at recording. A correction is a supersession, as for every evidence field.
+    - **Why it does not fit an existing field:** the scale is a number's unit, not its kind, and the how-read text is
+      prose. The rule "what each can support" has to read a value, not a sentence.
+    - Option: no migration, the class encoded in how-read text. That is not checkable, and a story would have to
+      parse prose.
+  - **When the section renders. Recommended:** for any account holding current rows with a class, **not keyed on the
+    marker.**
+    - Curia's current marker is `outside_in_test`, not `published_case_study`, and Brad changed it on 1 Nov 2026. The
+      section should not depend on reopening that.
+    - Option: render only under a `published_case_study` marker, which would need a marker act on Curia first.
+  - **What the story states for each class** (fixed wording; the table is the plan, and the mock-ups show it):
+
+    | Class | It can support | It cannot support |
+    |---|---|---|
+    | License count | how many seats were bought, and when, as the publisher states | use, adoption, or any outcome |
+    | Activity count | that the activity was recorded in the stated period, by the publisher's system | capability change, a business outcome, or a rate per person (no headcount is cited) |
+    | Adjective | that the publisher described it so | any figure |
+    | Outcome without baseline | the after-figure the publisher states | a change, or what caused it |
+    | Outcome with baseline | the change the publisher states, as the publisher's claim | attribution to the learning: no method is stated |
+
+    Every row also prints its basis. For Curia that is **inferred**: the vendor's own publication about another
+    company. Its open state prints too (unverified until Brad opens the source).
+- **D6, the legacy row `092c46b6`. Recommended:** Brad supersedes it with the accesses row (D10's row 4). The reason
+  says the badges and learning hours move to rows of their own. After that, the ledger holds one figure per row and
+  no figure twice.
+- **D7, ids and the ledger (Brad's item 6). Recommended:** no AI drafting.
+  - Every figure in the text is a numbered ledger entry, printed beside it as a superscript.
+  - The ledger at the end gives each entry's source: a sealed run (its number, short id, the field and the run's
+    full hash) or an evidence row (its short id, kind, basis, form, the quote or the located cell, and its open
+    state).
+  - Short ids print in mono in the ledger only, never in the prose.
+- **D8, the asks (Brad's item 4).** "The results story waiting to be earned" prints the asks of each engagement's
+  latest run as the value case prints them (`askFor`, from the seal). For a reference example the heading reads
+  "What a results story would need".
+- **D9, errata (Brad's item 5).** Each erratum and finding prints under the figure it corrects, in the record's own
+  words, with its date:
+  - **Curia's baseline:** "the baseline, 214 days, has no source on record".
+  - **The 45 points:** "45 of these points rest on a person who is not customer-side".
+  - **Repeats:** an erratum repeated across runs prints once, naming the runs it applies to.
+- **D10, the printed form and the words (Brad's items 1 and 8).** The S3 family: a one-page story and the full story,
+  both banners and the full hash on every page, self-hosted fonts.
+  - **On screen and on paper:** plain words only. Small item 1's Gate A check (no "§", no slice code) covers the
+    story too.
+  - **Sources:** public sources only. Quotes are short and verbatim, from a recorded evidence row, never typed into
+    the story.
+  - **Never:** an invented result or quote, a figure without a ledger entry, or any mark, logo or layout that reads
+    as Skillsoft's or Curia's document. Every page carries "Prepared by [tenant] with LVRF".
+- **D11, the order. Recommended:** **two deploys.**
+  - **S7a:** the class field on card 01c's source form, the guard, and its migration. Brad then records Curia's
+    published rows (section 4).
+  - **S7b:** the story, built on S7a's rows.
+  - The first story renders from what Brad recorded, so S7b's Gate A walks Curia's real shape on a prod copy taken
+    after Brad's acts.
+
+### 3. What it does not do
+
+- No AI drafting, no quotes beyond evidence rows, no Story Release, no co-sell or public copy (v1; Brad's items 6
+  and 7).
+- No story across accounts.
+- No change to any sealed run, the value case, the POV or the War Room: output identity holds for every existing
+  output.
+- No staleness hook. An issued story names the evidence heads it sealed. At read it says "Newer evidence exists:
+  re-issue to include it" when a head was superseded since, and it changes nothing.
+
+### 4. Brad's acts after S7a (through the page, rule 10)
+
+**Where:** on Curia's page, card 01c, "Record a source…", **six rows**.
+
+**Why the quotes are blank:** skillsoft.com refused the automated read (403), so the page was not read from here, and
+no quote below is filled in. Paste each quote from the page, word for word, and the page's URL into the citation.
+
+**Every row shares these fields:**
+
+| Field | Text |
+|---|---|
+| Kind | Vendor publication |
+| Where it came from | Skillsoft's customer case study "From the Ground Up: How Curia Built a Popular Learning and Development Program From Scratch", published by Skillsoft on skillsoft.com. Skillsoft's own account of Curia's program, not Curia's records. |
+| Citation, export ID or URL | *[the case study's URL, from your browser's address bar]* |
+| What it is about | This account |
+| What it rests on | A quote |
+
+**Rows 1–3: the license count** (class "License count"):
+
+| Row | What it states | Quote | How it was read |
+|---|---|---|---|
+| 1 | The case study says Curia began with 500 Skillsoft licenses. | *[the page's sentence stating 500 licenses, verbatim, at most 40 words]* | The starting license count, as the quoted sentence states it: seats bought, not people using them. |
+| 2 | The case study says Curia grew to 1,000 Skillsoft licenses. | *[the sentence stating 1,000, verbatim; it may be the same sentence as row 1]* | The second license count the case study states, read from the quoted sentence: seats bought, not use. |
+| 3 | The case study says Curia grew to 2,500 Skillsoft licenses. | *[the sentence stating 2,500, verbatim]* | The latest license count the case study states, read from the quoted sentence: seats bought, not use. |
+
+**Rows 4–6: the activity, January–June 2023** (class "Activity count"):
+
+| Row | What it states | Quote | How it was read |
+|---|---|---|---|
+| 4 | The case study reports 102,584 accesses on Curia's Skillsoft platform from January to June 2023. | *[the sentence or stat block stating 102,584, verbatim]* | The count of platform accesses for January–June 2023, as Skillsoft reports it from its own platform. |
+| 5 | The case study reports 8,487 badges earned at Curia from January to June 2023. | *[the sentence stating 8,487, verbatim]* | The count of badges earned for January–June 2023, as Skillsoft reports it from its own platform. |
+| 6 | The case study reports 5,282 learning hours at Curia from January to June 2023. | *[the sentence stating 5,282, verbatim]* | The hours of learning recorded for January–June 2023, as Skillsoft reports it from its own platform. |
+
+- **The quotes:** if the page shows a figure only in a stat block, with no sentence, paste the block's words exactly
+  as shown (for example "102,584 total accesses"), and say so in the how-read text.
+- **Then, on each row,** "Record that you opened…", with "the source says what it states" once you have checked it
+  on the page.
+- **Row 4 supersedes `092c46b6`** (D6), recorded with "Supersede…" on that row instead of "Record a source…". Its
+  reason: "One figure per row: the accesses figure moves here, with its quote; the badges and learning hours have
+  rows of their own."
+- Each row reads basis "inferred" (D5).
+
+### 5. Gate A (planned, per deploy)
+
+- **S7a:**
+  - the class is required on a vendor publication or public filing about another account, and refused elsewhere,
+    by the database and the route;
+  - it is fixed at recording, and corrected only by supersession;
+  - the confirmation names it;
+  - 390 and contrast.
+  - **Breaks:** the class rule removed; the class made editable; the class missing from the confirmation.
+- **S7b,** on a prod copy taken after Brad's acts, as the steward by session:
+  - **Curia's story:**
+    - stage "Reference", never Decision;
+    - no "achieved", "realized" or "result" anywhere;
+    - each published row with its class, its can and cannot, and its basis;
+    - the 214 finding and the 45 points under the figures they correct;
+    - the asks;
+    - every figure with a ledger entry that matches SQL;
+    - no plan code.
+  - **Issuing:** a re-render is byte-identical; withdrawal is the only change; the hash prints on every page.
+  - **A fixture account on the clone:**
+    - a verified actual opens Realization;
+    - two open Compounding;
+    - "Results" never renders below Realization;
+    - the client audience is refused on a reference example.
+  - **Breaks:**
+    - "achieved" printed below Realization;
+    - a figure with no ledger entry;
+    - a reference example computed as Decision;
+    - a print from a draft;
+    - an erratum dropped;
+    - a plan code on screen.
+  - The full regression, and equivalence: every existing GET identical, with the new routes named.
+
+### 6. Mock-ups, Gate B and the cut-off
+
+- **Mock-ups first, fictional accounts only:**
+  - a reference example and a client account at Decision, each one-page and full, at 1280 and in print;
+  - card 01c's source form with the class, at 1280 and 390.
+  - The review PDF goes in `~/lvrf-backups/s7-mockup/` (`chmod 600`).
+- **Gate B, each a migration:** a backup before migrating (rule 8); the TOC and the triggers move, with the counts
+  named in each plan.
+- **The cut-off:** as for S5 and S6, Gate C by Fri 18 Dec 2026, or after 15 Jan 2027.
+  - S7a is small, so it fits.
+  - S7b is not a navigation change, but it is a new output. **Recommended:** it may still deploy inside the window
+    if Gate A is clean, because it adds a page and changes no existing one.
+- **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
+  are approved.
