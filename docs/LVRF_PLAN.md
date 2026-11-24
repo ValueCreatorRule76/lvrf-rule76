@@ -6729,3 +6729,111 @@ UTC date is refused, by the route and by the database, with a Gate A break. It c
 - **Brad's look:** "Commit…" on Lot Acceptance Rate (no one to choose there, §29): the Committed on picker offers no
   day after today. Cancel.
 - **About half a day.**
+
+## 32. 3.1 small item: a person's email is optional (planned 24 Nov 2026, for Brad's approval)
+
+**Brad's finding (24 Nov 2026, from §29's look):** "Add a person" requires an email. People named in public sources,
+such as a CHRO named in a case study, have none, so the form blocks them or invites a made-up address.
+
+**Brad's design notes (24 Nov 2026):**
+- a person's email is optional;
+- a credential is refused for a person with no email (a database rule);
+- the account-inputs route keeps email required for a person an assessment names;
+- **the duplicate guard:** the same name on the same account is warned, not refused. The form shows the existing person
+  and asks "choose them" or "this is a different person", in the full-text confirmation.
+
+**Riding in this deploy (Brad, 24 Nov 2026, from §31's look):** Measure by's earliest selectable day becomes Committed on
++ 1, and follows Committed on when it changes.
+
+### 1. What the code and the record hold today (read 24 Nov 2026, `ba86bc6` and prod; read only)
+
+- **The column:** `persons.email` is `NOT NULL` with `UNIQUE (persons_email_key)` (migration 0000, `db/schema.ts`).
+  Postgres's `UNIQUE` admits any number of nulls, so the emails present stay unique once the `NOT NULL` goes.
+- **Who requires it:**
+  - `POST /api/institutions/:id/inputs` (W1's "add a person" and card 01b's "Add a person", both "create-only" acts);
+  - `POST /api/account-inputs`, which also maps each assessment to its person by `person_email` within the payload;
+  - both forms ("Email (required by the route)" on W1, "Email" on card 01b).
+- **The duplicate guard today** is `persons_email_key` alone ("{email} is already in LVRF; select them instead",
+  `server/lib/refusal.ts`). Nothing compares names. A person with no email would have no guard at all.
+- **Sign-in and the access scripts find a person by email only:**
+  - `POST /api/auth/login`: `lower(email)`, tenant staff with a current credential and access grant;
+  - `scripts/set_password.ts`, `grant_access.ts`, `reset_password.ts`, `revoke_access.ts`, `set_steward.ts`,
+    `set_email.ts`.
+
+  `person_credentials` has only its no-delete trigger, so nothing in the database stops a credential for a person with
+  no email.
+- **Reads:**
+  - `GET …/walk` (persons, analysts, staff), `GET /api/persons` and the session return the email;
+  - the client types it as `string` (`client/src/lib/workspaceStatus.ts`, `client/src/api/persons.ts`) and shows it
+    nowhere on a page.
+- **Prod:** 6 current persons, all with an email; 1 current credential.
+- **Measure by:** `min={v.on}` (`OutcomeSpine.tsx`) offers the commit day. That day is already refused in words by the
+  form, the route and the database (§26, §28).
+
+### 2. Decisions (recommendations first)
+
+- **D1. The column becomes optional:** migration `0053`, `persons.email` `DROP NOT NULL`. `persons_email_key` stays, so an
+  email given is still unique. No row changes; `db/schema.ts` and the drift snapshot follow. The TOC stays 972: dropping
+  a `NOT NULL` adds no object.
+- **D2. The routes take an email or none:**
+  - `POST …/inputs` takes `email` as optional. When given it is trimmed and must not be empty; an empty string is "no
+    email".
+  - `POST /api/account-inputs` takes it as optional too, except for a person an assessment in the same payload names.
+    That person still needs one (Brad's note): "{name} is named by an assessment, so needs an email: the assessment
+    finds its person by it."
+- **D3. A credential is refused for a person with no email, in the database:** a new `BEFORE INSERT` trigger on
+  `person_credentials`, `lvrf_credential_needs_email`: "A person signs in with their email; {name} has none. Record an
+  email for them first." The triggers go **227 → 228** (counted at Gate A and Gate B). Sign-in, which finds the person by
+  email, is unchanged.
+- **D4. The duplicate guard warns.** On adding a person whose name, trimmed and case-folded, matches a current person of
+  the same account:
+  - **the form** shows the existing person (name, title, roles) before the confirmation, and asks:
+    - "Choose them": the add is cancelled, and on card 01b the role form opens with them chosen;
+    - "This is a different person": the confirmation reads, in full, "Add {name}, {title}, as a person of this account.
+      This is a different person from {existing name}, {existing title}, already recorded here."
+  - **the route** answers 409 when a same-name person exists and the body does not say
+    `different_from: [ids]` naming each of them: "{existing name} is already recorded at this account. Choose them, or
+    confirm this is a different person." Nothing is written.
+  - **Not recorded beyond the person's row** (the route is create-only; no act). For Brad: a column recording "confirmed
+    a different person from {id}" can be added if he wants the confirmation on record.
+- **D5. One "Add a person" form.** W1's and card 01b's forms become one component, `AddPerson`, with the email optional
+  ("Email (optional; needed only to sign in)"), so the two cannot drift.
+- **D6. The reads say `email: string | null`.** Nothing on a page prints an email today, so no page changes.
+- **D7. Measure by's earliest day** is `min={dayAfter(v.on)}`, following Committed on. Client-only.
+
+### 3. Gate A (planned)
+
+- **`verify_person_email` (new),** on a clone, migrated to `0053` and hardened:
+  - **The column:** `email` nullable, `persons_email_key` still `UNIQUE`; every row byte-identical; 228 triggers; drift
+    none at `0053`.
+  - **The routes:**
+    - a person added with no email (201, `email` null), and one with an email;
+    - an email already used, refused (409, the plain sentence);
+    - account inputs with an email-less person no assessment names (201), and with one an assessment names (422, D2's
+      sentence, nothing written).
+  - **The duplicate guard:**
+    - the same name (another case, extra spaces), refused (409) naming the existing person, nothing written;
+    - with `different_from` naming them, admitted;
+    - a same name on another account, admitted with no warning.
+  - **The database:** a credential for the email-less person refused (D3's sentence); for a person with an email,
+    accepted. All rolled back.
+  - **The page, both forms:** the email field optional; the same-name warning shows the existing person; "Choose them"
+    opens the role form with them chosen; "This is a different person" puts D4's sentence in the confirmation.
+  - **Measure by:** its `min` is Committed on + 1, and moves when Committed on changes.
+  - **Breaks:**
+    - B1, the route's same-name check removed: two same-name persons added with no warning;
+    - B2, the credential trigger removed: a credential for the email-less person accepted;
+    - B3, account inputs' assessment rule removed: an assessment's person admitted with no email;
+    - B4, Measure by's `min` back to Committed on: the same day offered.
+- **Scripts that add a person, or read `email` as always present,** updated by design and named. `check_plain_words`
+  over the new sentences.
+- **The full regression, and equivalence against `ba86bc6`:** every GET identical. An email is still present on every
+  existing person.
+
+### 4. Gate B and effort
+
+- **Gate B:** migrate to `0053` (backup first, rule 8), then hardening re-applied (one new function and trigger). **TOC
+  972 → 973** (the trigger) and **triggers 227 → 228**, both counted at Gate A.
+- **Brad's look:** card 01b's "Add a person": the email optional. Typing Curia's own analyst's name shows the same-name
+  warning. Cancel.
+- **About a day.**
