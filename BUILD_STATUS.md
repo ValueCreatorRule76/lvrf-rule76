@@ -17243,3 +17243,82 @@ on any of Curia's outcomes, so the register prints no "Already refused" line the
 - **TOC 972** (Brad's post-hardening dump; `lvrf_app` cannot dump).
 
 **§30 is closed** (24 Nov 2026). **Next (Brad, 24 Nov 2026):** no walk date in the future; then the email item; then S7a.
+
+### §31: no walk date in the future — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §31; Brad's rulings, 24 Nov 2026: D1–D5 as recommended). Branch `future-date`, on
+`740dce3`. **No migration, table or trigger.** One database function changes.
+- **The rule (D1):** a walk date's UTC calendar date is no later than today's UTC date plus one day (every local today
+  on Earth, and nothing later). `server/lib/walkDate.ts` holds it for the routes.
+- **The routes (D3):** `POST …/commit`, `…/measure` and `…/verify` refuse a later date (422) before writing anything:
+  "The commit date can't be later than today.", "The measurement date can't be later than today.", "The verification
+  date can't be later than today."
+- **The database (D2, D4):** `lvrf_block_simulated_attestor`, on INSERT and UPDATE of `value_outcomes`, refuses the same,
+  when `committed_at`, `actual_measured_at` or `verified_at` is set or changed (`value_outcomes_commit_not_future`,
+  `…_measure_not_future`, `…_verify_not_future`). A row recorded earlier is never re-read.
+- **The forms (D5):** Committed on, Measured on and Verified on each take `max` = the person's local today; a later day
+  typed in shows "make the date today or earlier" and the button stays disabled.
+
+**Gate A:**
+- **`verify_future_date` (new): 95 passed, 0 failed.**
+  - **The rule at fixed instants:** today + 1 admitted (at 20:00 UTC, 09:00 on 25 Nov in Auckland, and late in its
+    day); today + 2 refused from its first minute; today admitted.
+  - **The clone:** 227 triggers; drift none; every run byte-identical after hardening; Curia's `e3fb0061`
+    byte-identical.
+  - **The routes:** commit, measure and verify, each dated today + 2, refused (422) in D3's sentence, nothing written
+    and no database refusal recorded (the route answered); each dated today + 1 admitted.
+  - **The database, as `lvrf_app`, rolled back:** each of the three at today + 2 refused, today + 1 accepted; an INSERT
+    carrying a commit date of today + 2 refused; a row already holding a later commit date (a fixture, triggers off),
+    saved again for another column, not re-read.
+  - **The forms, the clock pinned:** in New York at 22:28 on 23 Nov and in Auckland at 09:00 on 25 Nov, each date's
+    latest day is the local today; the next day typed in is refused in words and the button stays disabled.
+  - **Breaks, each caught by its own section:** F1 the route's commit check (the database refused it, its refusal
+    recorded, nothing written); F2 the database's commit clause (today + 2 accepted by SQL); F3 the form's `max` (the
+    picker offers the next day). Every file restored byte-identical. `check_plain_words` clean.
+- **The full regression: 62 scripts, all passed first time, each 0 failed** (no script needed changing: none commits,
+  measures or verifies with a date later than tomorrow). Among them `verify_tenant_scope` **329 passed, 0 failed**
+  (setup 21, cases 308); `verify_plain_server` 113/0; `verify_customer_committer` 111/0; `verify_local_date` 65/0;
+  `verify_plain_words` 43/0 (51 of 51 pages); `verify_deploy_steps` 27/0.
+- **Equivalence against `d77ce56`:** 213 GETs, **213 identical**.
+- **The function as built:** `lvrf_block_simulated_attestor` `md5(prosrc)` `8f0d371b420e6b51f5f9c3370ee5b4ba` (prod
+  now `4150205e2b683a59fbffd09c4772e310`, §29's).
+- **Bundle,** built on the clean tree: **`index-CL2E3E-8.js` / `index-BMv5OQwB.css`.**
+
+#### Gate B for §31 (not run; Brad's pastes)
+
+No migration. Hardening is re-applied for one function; the TOC stays 972 and the triggers 227.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only future-date && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `740dce3`.
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p31-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**.
+3. **Ownership, then hardening:**
+   ```
+   cd /srv/lvrf && sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p31.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p31.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_block_simulated_attestor'"
+   ```
+   Expect `ownership exit 0`; `hardening exit 0`, `0` ERROR lines; **227**; **`8f0d371b420e6b51f5f9c3370ee5b4ba`**.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p31-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-CL2E3E-8.js` / `index-BMv5OQwB.css`**;
+   drift none (53, newest `0052`); "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing; Cancel):**
+- **"Commit…" on Curia's Lot Acceptance Rate:** the Committed on picker offers no day after today (there is no one to
+  choose there, §29, so nothing can be submitted). Cancel.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- `lvrf_block_simulated_attestor` `8f0d371b…`; `e3fb0061` unchanged;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
