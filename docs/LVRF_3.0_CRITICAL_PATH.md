@@ -215,6 +215,10 @@ cut line applied first.
          - **"Committed on" defaults to the person's local date,** not the UTC date (at 22:28 New York time on 23 Nov it
            showed 11/24/2026). Gate A proves that the route's "after the commit date" rule holds for a measure-by date
            entered the same evening;
+       - **next, after §28 and before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
+         Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
+         database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
+         every local date on Earth (§28 D4), and nothing later;
        - **then S7, the success story of record (Brad, 24 Nov 2026), after the two findings above:** LVRF_PLAN §27,
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's

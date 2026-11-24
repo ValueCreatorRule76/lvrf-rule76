@@ -6208,6 +6208,10 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
     - late at 07:00 New York on 24 Nov (12:00 UTC).
 - **Printed-on dates stay UTC, with "(UTC)" beside them.**
 - **Next:** build to Gate A.
+- **D2's wording is approved word for word as in the table** (Brad, 24 Nov 2026).
+- **A new small item, next after this slice and before the pilot** (Brad, 24 Nov 2026): refuse a Committed on,
+  Measured on or Verified on date later than one day after today's UTC date, by the route and the database, with a
+  Gate A break. It is on the 3.1 list (`docs/LVRF_3.0_CRITICAL_PATH.md`).
 
 **The ruling it builds:** §26's two findings (Brad, 24 Nov 2026), first among the small items and before the pilot.
 1. Internal plan codes leave the screen, with a Gate A check that no "§" or slice code appears in any client string.
@@ -6307,7 +6311,10 @@ next day records a day the person did not commit on.
 
   A database message changes in its function's body only, so hardening is re-applied and no migration is needed.
   **"LVRF: value_outcomes:"**, the message's table prefix, stays: it is not a plan code. Option: a later item.
-- **D3, the printed value case changes words, not figures. Recommended:** accept it.
+- **D3, the printed value case changes words, not figures. Recommended:** accept it. **Corrected at the build (24 Nov
+  2026): no sealed run on prod prints this line.** Curia's runs are payloadVersion 1, with no attribution sealed, and
+  the one v5 run (Skillsoft's run 2) has no target. The words change in the source, and Curia's card 01d is the only
+  place on prod that shows the pre-attribution sentence.
   - The value case's "Attribution: not stated (committed before B4)." becomes the D2 wording, on screen and in a new
     print, for a commitment made before attribution was recorded. On prod that is only Curia's.
   - The sealed runs and their hashes do not change; a print request names its run's hash, not the PDF's.
@@ -6322,12 +6329,17 @@ next day records a day the person did not commit on.
     - the form defaults to 23 Nov;
     - a measure-by date of 23 Nov is refused, by the form, the route and the database;
     - 24 Nov is admitted.
-- **D5, what a local date does not change. Recommended:** said, not changed.
-  - **"Late" stays in UTC dates (§26 D4).** An outcome promised for 23 Nov therefore reads late from 19:00 on 23 Nov
-    in New York, which the War Room says ("today's UTC date").
-  - East of UTC+12, a local day can be a day ahead of UTC's. No rule refuses a future date, so nothing is refused.
-  - The value case's "printed on" date stays UTC.
-  - Option: say "(UTC)" beside the printed-on date. One word, no other change.
+- **D5, "late" and the printed-on date. Ruled (Brad, 24 Nov 2026), replacing the recommendation:**
+  - **"Late" is Anywhere on Earth.** An outcome is late only once its promised day has ended everywhere: from 12:00
+    UTC on the day after the promised date.
+    - This replaces §26 D4's UTC-date comparison.
+    - One definition, `server/lib/late.ts`, is read by `GET /api/book`.
+    - Wherever late shows, the page says "late: the promised day has ended everywhere".
+    - **For an outcome promised for 23 Nov:** it is not late at 19:00 New York on 23 Nov, nor at 06:59 on 24 Nov; it
+      is late from 07:00 New York on 24 Nov (12:00 UTC).
+  - **Printed-on dates stay UTC,** with "(UTC)" beside them.
+  - **Unchanged, and said:** east of UTC+12, a local day can be a day ahead of UTC's. No rule refuses a future date
+    yet; the small item after this slice adds one.
 
 ### 3. Gate A (planned)
 
