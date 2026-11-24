@@ -198,6 +198,7 @@ cut line applied first.
      changed.** **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
      **Fri 18 Dec 2026**, it waits until after the pilot's account-selection weeks (4–15 Jan 2027). No large navigation
      change deploys in that window.
+     **Closed 23 Nov 2026:** deployed by Brad (`bf875e9` expected), Gate C clean (`BUILD_STATUS.md`, "S6 closed").
   4. **Then:**
      - the solution catalog page;
      - `/people`;
@@ -205,7 +206,7 @@ cut line applied first.
        - **first, right after S6 (Brad, 20 Nov 2026), with its own plan: the commit form records a promised
          measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
          without it can never be given one afterwards (append-only), so it **ships before the pilot's first
-         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5);
+         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Planned 23 Nov 2026, LVRF_PLAN §26, for Brad's approval;**
        - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
          - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
            AA at every size). Two places are known:
@@ -225,6 +226,8 @@ cut line applied first.
          `CONFIDENCE_TONE` low = critical), while the frame above it shows "25 / 100 · LOW" (`ConfidenceBadge`, UX-1
          standard 5: "n / 100 · Band", Low never critical red). Found at S5's Gate B walk. One format, `ConfidenceBadge`'s,
          on every page; the runs table's score and band columns read against it too;
+       - **the War Room's "Late outcomes" tile (Brad, 23 Nov 2026):** its empty dash is longer than the other tiles'
+         dashes. One dash for every empty tile. Found at S6's Gate B look;
        - the pack-basis note correction, retiring a fact, the "Moves first" label, tenant card 05, and the confidence
          legend's markers as SVG (Brad, 19 Nov 2026).
      - *The dependency change moved ahead (Brad, 19 Nov 2026):* it ships before S5's mock-ups, with the deploy-script

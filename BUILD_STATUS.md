@@ -16371,3 +16371,39 @@ A deploy only, no migration; the TOC stays 972 and the triggers 227. Under the r
 - no write since the deploy;
 - **`GET /api/book`'s response on prod holds no money key or string;**
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### S6 closed: the War Room deployed; Gate C clean — 23 Nov 2026 (UTC)
+
+**Gate B for `s6-war-room`, run by Brad.** A deploy only, no migration. Brad's box output was not pasted.
+- **Not confirmed from here:** the box's head (`bf875e9` expected), the pre-S6 backup's name and its TOC, the served
+  bundle (`index-BCiWcS85.js` / `index-BMv5OQwB.css` expected) and the journal's "deploy OK". The ssh check was refused
+  from this session (the LVRF key is not loaded in the agent), so none of these was read from the box. Brad's look
+  below shows the S6 bundle is the one served.
+
+**Brad's look (records nothing):**
+- **The War Room:** "No live customer engagements yet"; the confirmation gap refused at 0 ("it needs 5"); Curia,
+  Scotts Miracle-Gro and Skillsoft under "Not in the book", each with its reason.
+- **Accounts home:** the band, with "Open the War Room →".
+- **"War Room"** in the main navigation.
+- **One cosmetic finding, for the 3.1 small items:** the "Late outcomes" tile's empty dash is longer than the other
+  tiles' dashes.
+
+**Gate C (read-only, Brad's):**
+- **`GET /api/book` on prod holds no money key or string** (D1).
+- **Nothing written since the deploy:** no governance acts, refusals, audit rows or sessions beyond any sign-in.
+- `check_run_hashes` **27/27**; **TOC 972**; **227 triggers**; drift none.
+- **Not reported: ownership.** It was on Gate C's list. S6 changed nothing in `db/ownership.sql` and ran no migration,
+  and the deploy script refuses to restart on a failed ownership check (OWN-1). The API answers, so the check passed
+  at the deploy, but no read-only ownership check since the deploy is on the record.
+
+**S6 is closed** (23 Nov 2026), within the Fri 18 Dec 2026 cut-off.
+- **What S6 shipped:**
+  - the War Room at `/book`, with counts only and no money anywhere;
+  - `GET /api/book`, read-only, sharing book confidence's membership (`computeCohortView`);
+  - the band on Accounts home;
+  - "War Room" in the navigation.
+- **Its findings on the 3.1 small items:**
+  - `Card`'s gold number on white (the contrast item, with S1's provenance band);
+  - the "Late outcomes" tile's longer empty dash (Brad, 23 Nov 2026).
+- **Next:** the promised measurement date at commit (LVRF_PLAN §26). Planned only, for Brad's approval. It ships
+  before the pilot's first commitment.

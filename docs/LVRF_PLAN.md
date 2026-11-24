@@ -5566,7 +5566,7 @@ account in focus without losing it. It changes how pages are reached, not any ru
   the page.
 - **About half a day for the mock-ups; about 2 days for the build after they are approved.**
 
-## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **approved by Brad, 20 Nov 2026, with D1–D8 as recommended and D5 changed; mock-ups approved with three changes; Gate A 20 Nov 2026** (`BUILD_STATUS.md`, "S6: the War Room — Gate A"); **mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **approved by Brad, 20 Nov 2026, with D1–D8 as recommended and D5 changed; mock-ups approved with three changes; Gate A 20 Nov 2026** (`BUILD_STATUS.md`, "S6: the War Room — Gate A"); **closed 23 Nov 2026**: deployed by Brad (`bf875e9` expected; the box output was not pasted), Gate C clean (`BUILD_STATUS.md`, "S6 closed"); **mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
 
 **Brad's rulings (20 Nov 2026):**
 - **§25 is approved with D1–D8 as recommended.**
@@ -5752,3 +5752,113 @@ stands, and of what is due, refuted or late. It writes nothing.
 - **Gate C (read-only):** no row changed by the deploy; `GET /api/book`'s response holds no money field.
 - **About half a day for the mock-ups; about 3 days for the build after they are approved.** With the cut-off on
   Fri 18 Dec 2026, there are four weeks.
+
+## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **for Brad's approval**)
+
+**The ruling it builds:** §25 D5 changed (Brad, 20 Nov 2026). The commit form records a promised measurement date. It
+**ships before the pilot's first commitment**, because a commitment made without one can never be given one later
+(append-only). It comes first among the small items, ahead of the contrast item.
+
+**Value spine:** `commit`. The customer's named person agrees to the target and also to when it will be measured. A
+practice that delivers late is a different failure from one that delivers short (`db/schema.ts`, the column's own
+comment). Without the date, nothing can tell the two apart.
+
+### 1. What the code and the record hold today (read 23 Nov 2026, `bf875e9`; read only)
+
+- **The column exists:** `value_outcomes.promised_measured_at` (timestamptz, nullable). **No route writes it.**
+  `POST /api/value-outcomes/:id/commit` (`server/routes/outcomeWalk.ts`) sets the target, the committer, the commit
+  date, the attribution method and the measure class.
+- **Its readers already exist:**
+  - **The sealed case** carries it as `roadmap.promised_measured_on` (`lvrf_case_chain`, payloadVersion 5).
+  - **The value case prints it:** "Committed measurement date: … / none committed" (`ValueCasePage`).
+  - **The delta engine** computes punctuality from it once there is an actual (`deltaEngine.ts`).
+  - **The War Room** shows "late" or "not yet due: promised …" from it, otherwise "No promised date on record"
+    (`book.ts`, `WarRoomPage`).
+- **The database holds the commit's rules** in hardening §34 (`lvrf_outcome_spine_guard`): a new commit states its
+  method and class, and both are fixed while the commitment stands. A commitment comes back only with its
+  `outcome_withdrawals` row, whose guard checks that the values it records are the outcome's own.
+- **On prod:** 0 of 5 outcomes carry a promised date, and the book is empty until the pilot (4–15 Jan 2027).
+- **The commit form** (`OutcomeSpine.tsx`, card 01d) uses S4's confirmation: every field is named in full in the
+  confirmation text.
+
+### 2. Decisions (recommendations first)
+
+- **D1, required at commit. Recommended:** every new commitment states a promised measurement date, and a commit
+  without one is refused. This follows the ruling: what is not recorded at commit can never be added afterwards.
+  - Option: optional, with "none promised" stated on the form. This keeps a commitment possible where the client will
+    not give a date, but the War Room would then say "No promised date on record" for a live commitment.
+- **D2, held by the database, fixed while the commitment stands. Recommended:** hardening §34's guard gains two rules,
+  as it did for B4's method and class:
+  - a new commit states `promised_measured_at`;
+  - the date is fixed while the commitment stands; changing it means withdrawing the commitment and committing again
+    (the withdrawal records the old date).
+  - **No migration**, because the column exists. `CREATE OR REPLACE FUNCTION` adds no object and no trigger, so the TOC
+    stays 972 and the triggers 227. Hardening is re-applied as postgres at Gate B, as at S1, S2 and S4.
+  - **A commitment made before this keeps no date** and reads "No promised date on record", as B4's D1 did. A
+    measurement is **not** refused for want of a date: the date does not change what was measured, only whether it
+    was on time.
+- **D3, what date is admissible. Recommended:** a calendar date, **later than the commit date** and **no more than
+  three years after it**. Both rules are in the guard, and the form says them. The upper bound catches a mistyped
+  year. Brad sets the bound; three years is a proposal, not a figure from the design.
+  - Option: later than the commit date, with no upper bound.
+- **D4, one meaning of "late". Recommended:** the promised date is stored at 12:00 UTC on that day, as `committed_at`
+  is, and "late" compares days: **late only once the promised day has passed** with no actual. Today `book.ts` reads
+  `promised_measured_at < now()`, which would call an outcome late from noon UTC on the promised day itself. That one
+  line changes to a day comparison, which is the delta engine's own rule (`dateOnly`).
+- **D5, the withdrawal keeps it. Recommended:** a commitment's withdrawal records `promised_measured_at` in
+  `withdrawn_values` and clears it with the rest of the commitment. The withdrawal guard checks that the recorded date
+  is the outcome's own, as it does for the target.
+- **D6, where it shows. Recommended:**
+  - **the commit form:** a "Measure by" date field, with D3's rules in its help text, named in the confirmation:
+    "… on 2026-12-01; measured by 2027-06-30; attribution: …";
+  - **the outcome card** (01d), once committed: "Measurement promised by 2027-06-30";
+  - **HB-0014** (Value Target Committed): its payload gains `promised_measured_on`;
+  - **nothing else changes.** The sealed case, the printed value case, the delta engine and the War Room already read
+    the column. **No payload version change, and none of the 27 sealed runs changes:** each sealed what it read.
+
+### 3. What it does not do
+
+- No route sets or changes a date on an existing commitment, by design (D2).
+- No backfill on prod. A rule-9 fixture is not needed, because no prod commitment exists to carry one.
+- No reminder or notification as the date nears. The War Room's "Not yet due" and "late" are the read.
+- No change to measure or verify.
+
+### 4. Gate A (planned)
+
+**`verify_promised_date.sh` (new)**, on a clone of the prod copy, as the steward by session. The commit is driven
+through the form.
+- **P1, a commit with a date:** the row holds it; HB-0014's payload names it; the confirmation text names it; the
+  outcome card shows it; a run locked afterwards seals it as `roadmap.promised_measured_on`; the value case prints it.
+- **P2, the database's rules,** each refused by the database itself, not only by the route (a direct UPDATE as
+  `lvrf_app`):
+  - a commit with no date (D1);
+  - a date on or before the commit date, and one more than three years after it (D3);
+  - a date changed while the commitment stands (D2);
+  - a date set on a commitment made before this (D2).
+- **P3, the withdrawal:** the withdrawal records the date, and the outcome's date is cleared. A new commit then takes a
+  new date.
+- **P4, "late" (D4), against SQL:** on the promised day, "Not yet due"; the day after, with no actual, "1 late";
+  with an actual, never late. The War Room's tile and the band agree.
+- **P5, before this:** an outcome committed with no date reads "No promised date on record", never "on time", and can
+  still be measured.
+- `verify_s6_war_room`'s P2 sets its date through the route instead of by SQL.
+- **Breaks, each against a clean pass:**
+  - the guard's date rule removed (a commit with no date is caught by the database check);
+  - the date made changeable;
+  - the withdrawal not recording the date;
+  - "late" back to `< now()` (caught on the promised day);
+  - the date left out of the confirmation text.
+- **The full regression; equivalence** on every GET against the deployed `bf875e9`: all identical, apart from any GET
+  that returns an outcome with a date (none on the prod copy).
+- A coverage gate: every section prints a line.
+
+### 5. Gate B, the act and Gate C (planned)
+
+- **Gate B:** pre-deploy backup; `db/hardening.sql` re-applied as postgres (0 ERROR lines); deploy. No migration; the
+  TOC stays 972 and the triggers 227. A new bundle.
+- **Brad's look (records nothing):** the commit form shows "Measure by" (open it on any outcome, then cancel it). The
+  War Room is unchanged.
+- **Gate C (read-only):** nothing written since the deploy; `lvrf_outcome_spine_guard`'s new source on prod is the
+  repo's; hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+- **The act:** none until the pilot. The first commitment on prod is the steward's own, at the pilot.
+- **About one day for the build.** Gate C is before Fri 18 Dec 2026, well ahead of the pilot's first commitment.
