@@ -229,7 +229,7 @@ async function actualEvidenceAllInadmissible(pool: Pool, outcomeId: string): Pro
 // buildRequirement comment below for the same reasoning applied throughout.
 const STRUCTURAL_ACTUAL_REQUIREMENT: string =
   'Every item currently attached to the actual value is inadmissible under ' +
-  "AMENDMENT-005 Article I (AI-sourced, from an AI-assisted assessment, simulated, or vendor-published). " +
+  "the rules for a measured actual (AI-sourced, from an AI-assisted assessment, simulated, or vendor-published). " +
   'No amount of further attestation or verification on these items closes this — the actual must come ' +
   "from a different source: an export from the customer's own system of record.";
 
@@ -270,7 +270,7 @@ function buildRequirement(factor: string, gap: string): string {
         case 'confirmer_simulated':
           return 'The calculation method must be confirmed by a real person of record — the current confirmation names a simulated identity.';
         case 'not_customer_side':
-          return 'The calculation method must be confirmed by a customer-side person: a person of the account whose customer-side role is named from a source (C3b).';
+          return 'The calculation method must be confirmed by a customer-side person: a person of the account whose customer-side role is named from a source.';
       }
       break;
     case 'baseline_evidence_verified':
@@ -285,7 +285,7 @@ function buildRequirement(factor: string, gap: string): string {
         case 'evidence_unqualified':
           return (
             `The evidence attached to ${subject} must be independently source-verified, ` +
-            'or attested by a customer-side person (a role named from a source, C3) — none currently qualifies.'
+            'or attested by a customer-side person (a role named from a source) — none currently qualifies.'
           );
         case 'attested_only':
           return (
@@ -310,7 +310,7 @@ function buildRequirement(factor: string, gap: string): string {
         case 'simulated':
           return 'The committer of record must be a real person — the person currently named is a simulated identity.';
         case 'not_customer_side':
-          return 'The committer of record must be customer-side: a person of the account whose customer-side role is named from a source (C3).';
+          return 'The committer of record must be customer-side: a person of the account whose customer-side role is named from a source.';
       }
       break;
     case 'human_verifier_of_record':
@@ -320,7 +320,7 @@ function buildRequirement(factor: string, gap: string): string {
         case 'simulated':
           return 'The verifier of record must be a real person — the person currently named is a simulated identity.';
         case 'not_customer_side':
-          return 'The verifier of record must be customer-side: a person of the account whose customer-side role is named from a source (C3).';
+          return 'The verifier of record must be customer-side: a person of the account whose customer-side role is named from a source.';
       }
       break;
   }

@@ -75,7 +75,7 @@ export async function emitHeartbeat(client: PoolClient, opts: EmitHeartbeatOptio
   // the caller would have to remember to check.
   if (!reg) {
     throw new Error(
-      `${opts.heartbeatId} is not in the heartbeat register. HEARTBEAT-REGISTER §1: an ` +
+      `${opts.heartbeatId} is not in the heartbeat register: an ` +
         'unregistered heartbeat is not constitutional. Amend the register through ' +
         'governance before emitting it.',
     );

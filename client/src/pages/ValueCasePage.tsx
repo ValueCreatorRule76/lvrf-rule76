@@ -116,7 +116,7 @@ const ATTRIBUTION: Record<string, string> = {
 };
 const attributionLine = (o: Outcome) => !o.attribution ? null
   : o.attribution.method ? ATTRIBUTION[o.attribution.method] ?? o.attribution.method
-  : o.target !== null ? 'Attribution: not stated (committed before B4).' : null;
+  : o.target !== null ? 'Attribution: not stated (committed before attribution was recorded, 6 Nov 2026).' : null;
 
 function Section({ title, children, testid }: { title: string; children: ReactNode; testid?: string }) {
   return (
@@ -193,7 +193,7 @@ export function ValueCasePage() {
   const printedOn = new Date().toISOString().slice(0, 10);
   const lensWords = d.lens === 'cfo' ? 'CFO lens' : 'general';
   // The record line, as the print footer read before S3, word for word; now at the foot of every page (Brad, 19 Nov 2026).
-  const recordLine = `${d.account.name} · value case, run ${d.run.run_number} · ${lensWords} · record hash ${d.run.payload_hash} · printed ${printedOn}`;
+  const recordLine = `${d.account.name} · value case, run ${d.run.run_number} · ${lensWords} · record hash ${d.run.payload_hash} · printed ${printedOn} (UTC)`;
   // S3, change 3: the disclaimer as drafted (unverified), and its verified counterpart.
   const disclaimer = d.banners?.unverified
     ? `This document renders from sealed run ${d.run.run_number}, record hash ${d.run.payload_hash}. It is unverified until a named person at ${d.account.name} verifies its measured result against their own records. Each figure carries its basis; none is applied beyond it. Rule 76 Consulting LLC · Learning Value Realization Framework.`

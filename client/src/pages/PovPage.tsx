@@ -175,7 +175,7 @@ function CorrectedNote({ e }: { e: PovOutcome['evidence'][number] }) {
  */
 function RoleLine({ roles, not, who, testid }: { roles: string | null; not: string | null; who: string; testid: string }) {
   if (roles) return <span className="block text-[11px] text-ink-45" data-testid={testid}>{who}: {roles}</span>;
-  if (not) return <span className="block text-[11px] text-warning" data-testid={testid}>{who} is not customer-side ({not}): no credit under the C3 rule.</span>;
+  if (not) return <span className="block text-[11px] text-warning" data-testid={testid}>{who} is not customer-side ({not}): no credit: only a customer-side person, with a role named from a source, earns it.</span>;
   return null;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
-import { fetchBook, dueInWords, LATE_RULE_SHORT, type Book } from '../api/book';
+import { fetchBook, dueInWords, LATE_RULE, type Book } from '../api/book';
 import { BookConfidence } from '../pages/WarRoomPage';
 import { FOCUS_RING } from './GovernedForm';
 
@@ -34,7 +34,7 @@ export function BookBand() {
               <span data-testid="band-confidence"><span className={fig}>Book confidence</span> <BookConfidence book={b} members={book.cohort_members} compact /></span>
               <span data-testid="band-due"><span className={fig}>Hypotheses due</span> <b className="font-semibold">{dueInWords(b.hypotheses.due)}</b></span>
               <span data-testid="band-cr"><b className="font-semibold">{b.hypotheses.confirmed}</b> <span className={fig}>confirmed ·</span> <b className="font-semibold">{b.hypotheses.refuted}</b> <span className={fig}>refuted</span></span>
-              <span data-testid="band-late"><b className="font-semibold">{b.outcomes.late}</b> <span className={fig}>late {b.outcomes.late === 1 ? 'outcome' : 'outcomes'} ({LATE_RULE_SHORT})</span></span>
+              <span data-testid="band-late"><b className="font-semibold">{b.outcomes.late}</b> <span className={fig}>late {b.outcomes.late === 1 ? 'outcome' : 'outcomes'} ({LATE_RULE})</span></span>
             </>)}
         <Link to="/book" className={'font-semibold text-gold underline underline-offset-2 sm:ml-auto ' + FOCUS_RING} data-testid="band-open">Open the War Room →</Link>
       </div>

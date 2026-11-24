@@ -49,9 +49,9 @@ const isId = (v: unknown): v is string => typeof v === 'string' && isUuid(v);
 
 /** Why a hypothesis request cannot set a field (O2-D1, D3, D4). */
 const hypothesisFieldExplained = (k: string): string | null => {
-  if (/direction|better/i.test(k)) return `body.${k}: the direction (lower or higher is better) comes only from the pack entry; a hypothesis cannot set it (O2-D4)`;
-  if (/status|verdict|decision|decided|outcome_status|survived|refuted|confirmed/i.test(k)) return `body.${k}: the verdict is computed from the falsifier and the verified actual (O2-D1); nobody sets it`;
-  if (/post_hoc/i.test(k)) return `body.${k}: post hoc is computed by the database (O2-D3)`;
+  if (/direction|better/i.test(k)) return `body.${k}: the direction (lower or higher is better) comes only from the pack entry; a hypothesis cannot set it`;
+  if (/status|verdict|decision|decided|outcome_status|survived|refuted|confirmed/i.test(k)) return `body.${k}: the verdict is computed from the falsifier and the verified actual; nobody sets it`;
+  if (/post_hoc/i.test(k)) return `body.${k}: post hoc is computed by the database`;
   if (/reference_value|reference_recorded|baseline|target/i.test(k)) return `body.${k}: the reference value is quoted from the outcome row by the database; ${NO_NUMBERS}`;
   if (/author/i.test(k)) return `body.${k}: the author is the signed-in person`;
   return null;
@@ -210,7 +210,7 @@ export function hypothesisInstitutionRouter(pool: Pool): Router {
       const text = typeof b.body === 'string' ? b.body.trim() : '';
       if (!['cfo', 'chro', 'board', 'general'].includes(lens)) issues.push('body.lens must be cfo, chro, board or general');
       if (text.length < 40) issues.push('body.body must be the summary, in at least 40 characters');
-      if (typeof b.drafted_with_ai !== 'boolean') issues.push('body.drafted_with_ai must be true or false: an AI-drafted summary says so (O-D6)');
+      if (typeof b.drafted_with_ai !== 'boolean') issues.push('body.drafted_with_ai must be true or false: an AI-drafted summary says so');
       const tool = typeof b.drafting_tool === 'string' && b.drafting_tool.trim() !== '' ? b.drafting_tool.trim() : null;
       if (b.drafted_with_ai === true && !tool) issues.push('body.drafting_tool must name the tool that drafted it');
       if (b.drafted_with_ai === false && tool) issues.push('body.drafting_tool is only for a summary drafted with AI');

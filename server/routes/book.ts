@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { isLate } from '../lib/late.js';
 import type { Pool } from 'pg';
 import { actorTenantId } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
@@ -52,20 +53,20 @@ export function bookRouter(pool: Pool): Router {
           WHERE h.institution_id = ANY($1::uuid[]) AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL`,
         [memberIds],
       );
-      // Outcomes: dates and states only, never a value. Late (§26 D4, Brad 23 Nov 2026): today's UTC date is after the
-      // promised date, and no actual is measured. Dates, not instants: never late on the promised day itself.
+      // Outcomes: dates and states only, never a value. Late (§28 D5, Brad 24 Nov 2026): Anywhere on Earth, read by
+      // isLate (server/lib/late.ts) below: the promised day has ended everywhere, and no actual is measured.
       const { rows: outcomes } = await pool.query<OutcomeRow>(
         `SELECT o.id, o.institution_id, o.realization::text AS realization,
                 to_char(o.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS promised_on,
-                to_char(o.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS measured_on,
-                (o.promised_measured_at IS NOT NULL AND (o.promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date
-                 AND o.actual_measured_at IS NULL) AS late
+                to_char(o.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS measured_on
            FROM value_outcomes o
            JOIN engagements e ON e.id = o.engagement_id AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
           WHERE o.institution_id = ANY($1::uuid[]) AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL
           ORDER BY o.created_at`,
         [memberIds],
       );
+      const now = new Date();
+      for (const o of outcomes) o.late = isLate(o.promised_on, o.measured_on, now);
       // Cost of delay, per locked run that is not a system exercise: its STATE and reasons only (D1, D3). The amount,
       // the rate and the currency in the sealed case are never selected.
       const { rows: delays } = await pool.query<DelayRow>(

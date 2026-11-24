@@ -48,7 +48,7 @@ export function CreditErrataBatch() {
     <section className="mt-8 flex flex-col gap-3" data-testid="credit-errata-batch">
       <h2 className={H2}>Errata the record calls for</h2>
       <p className="m-0 max-w-[90ch] text-[12.5px] text-ink-45">
-        Two kinds, recorded together (C3, C3b): each locked run whose seal credited points to a person who is not customer-side (a role named from a source),
+        Two kinds, recorded together: each locked run whose seal credited points to a person who is not customer-side (a role named from a source),
         and each locked run whose seal carries a figure a steward found to have no source on record. Read from each seal and the record; the sealed scores stand.
         This list writes nothing.
       </p>

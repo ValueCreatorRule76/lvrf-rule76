@@ -191,7 +191,7 @@ if (MODE === 'lineage') {
   check(a.includes(`Attested by ${E.OWNER_NAME}: metric owner per ${E.SOURCE}, named by ${E.STEWARD_NAME}`), '  ...its attested evidence shows the role and its source', a);
   check(await open(`/lineage/value_outcomes/${E.O_ANALYST}?figure=baseline`, `!!document.querySelector('[data-testid=lineage-steps]')`), "the analyst's baseline lineage opens");
   const b = await text('[data-testid=lineage-attester-role]');
-  check(b.includes(`Attested by ${E.ANALYST_NAME}, who is not customer-side (no customer-side role named from a source): no credit under the C3 rule.`), '  ...its attested evidence says the attester is not customer-side, and why', b);
+  check(b.includes(`Attested by ${E.ANALYST_NAME}, who is not customer-side (no customer-side role named from a source): no credit: only a customer-side person, with a role named from a source, earns it.`), '  ...its attested evidence says the attester is not customer-side, and why', b);
   await shot('c3_lineage_analyst_1280', 1280);
 }
 

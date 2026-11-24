@@ -96,7 +96,7 @@ async function loadHeartbeatRegister(db: Db): Promise<Map<string, HeartbeatRegis
       // Mirrors the FK on heartbeat_events.heartbeat_id: an unregistered
       // heartbeat is refused before it can be emitted, not after.
       throw new Error(
-        `${id} is not in the heartbeat register. HEARTBEAT-REGISTER §1: an ` +
+        `${id} is not in the heartbeat register: an ` +
           'unregistered heartbeat is not constitutional. Amend the register ' +
           'through governance before emitting it.',
       );
@@ -297,7 +297,7 @@ function fixtureEvidenceForm(ev: EvidenceFixture): {
   evidenceForm: 'quote' | 'locator' | 'statement'; quoteText: string | null; locator: EvidenceFixture['locator'] | null; howRead: string | null;
 } {
   if (!ev.evidence_form) {
-    throw new Error(`fixture evidence "${ev.summary.slice(0, 60)}" states no evidence_form (P1, 0039): give quote_text or locator with how_read, or statement for an observation citing no source or an attestation`);
+    throw new Error(`fixture evidence "${ev.summary.slice(0, 60)}" states no evidence_form: give quote_text or locator with how_read, or statement for an observation citing no source or an attestation`);
   }
   return {
     evidenceForm: ev.evidence_form,

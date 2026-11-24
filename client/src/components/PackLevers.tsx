@@ -27,7 +27,7 @@ const SMALL_BUTTON = 'border border-silver px-2.5 py-1 text-[9.5px] font-semibol
 
 function useStewardReason(act: string): string | undefined {
   const { actor } = useActor();
-  return actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (O-D2).`;
+  return actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
 }
 
 function Opener({ label, reason, onOpen }: { label: string; reason: string | undefined; onOpen: () => void }) {

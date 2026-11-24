@@ -7,9 +7,9 @@
 //          commit date; one past three years); the confirmation, compared word for word with E.WANT; with E.CONFIRM=1 it
 //          confirms, and the card then reads "measurement promised by E.BY". With E.CONFIRM unset it goes Back.
 //   card   card 01d reads E.CARD_OUT's line: "measurement promised by E.BY", or for a commitment made before §26
-//          "no promised date on record (committed before §26)" (E.CARD_WANT names which).
+//          "no promised date on record (committed before promised dates were recorded, 24 Nov 2026)" (E.CARD_WANT names which).
 //   case   the run E.RUN's value case prints "Committed measurement date: E.BY."
-//   book   the War Room: the late tile counts E.LATE and says the rule in UTC dates (D4), under the table too; the
+//   book   the War Room: the late tile counts E.LATE and says the rule, Anywhere on Earth (§28 D5), under the table too; the
 //          fixture account's row reads E.ROW_WANT (a prefix); the band counts E.LATE late, with the rule.
 // Prints PASS / FAIL lines, then DONE.
 import { writeFileSync } from 'node:fs';
@@ -18,8 +18,8 @@ const SECTIONS = (process.argv[2] ?? 'form').split(',');
 const E = process.env;
 const TAG = E.TAG ?? 'p26';
 const APP = `http://localhost:${E.VITE_PORT}`;
-// §26 D4: the rule, said wherever late shows. Written here, apart from the client.
-const LATE_RULE = "An outcome is late once today's UTC date is after its promised date.";
+// §28 D5: late is Anywhere on Earth, said wherever late shows. Written here, apart from the client.
+const LATE_RULE = 'late: the promised day has ended everywhere';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const out = [];
 const check = (c, m, d = '') => { const line = `${c ? 'PASS' : 'FAIL'}  ${TAG}: ${m}${!c && d ? ` — ${String(d).slice(0, 400)}` : ''}`; out.push(line); console.log(line); };
@@ -113,17 +113,17 @@ if (SECTIONS.includes('book')) {
   await sleep(800);
   const tile = await ev(`document.querySelector('[data-testid=tile-late]')?.textContent ?? ''`);
   check(tile.startsWith(`Late outcomes${E.LATE}`), `book: the late tile counts ${E.LATE}`, tile);
-  check(tile.endsWith(LATE_RULE) && (await ev(`document.querySelector('[data-testid=late-rule]')?.textContent ?? ''`)) === LATE_RULE, 'book: the late tile states the rule in UTC dates (D4)', tile);
+  check(tile.endsWith(`Counted as ${LATE_RULE}.`) && (await ev(`document.querySelector('[data-testid=late-rule]')?.textContent ?? ''`)) === `Counted as ${LATE_RULE}.`, 'book: the late tile states the rule, Anywhere on Earth (§28 D5)', tile);
   const note = await ev(`document.querySelector('[data-testid=late-rule-table]')?.textContent ?? ''`);
-  check(note === `Outcomes: ${LATE_RULE} Where no date was promised, the row says so.`, '  ...and under the table, beside the rows that say late', note);
+  check(note === `An outcome reads ${LATE_RULE}. Where no date was promised, the row says so.`, '  ...and under the table, beside the rows that say late', note);
   const r = await ev(`[...document.querySelectorAll('[data-testid=book-row]')].find(x=>x.textContent.includes(${JSON.stringify(E.ROW_NAME)}))?.textContent ?? ''`);
   check(r.includes(E.ROW_WANT), `book: ${E.ROW_NAME}'s row reads "${E.ROW_WANT}…"`, r.slice(0, 300));
   await shot(`${TAG}_book_1280`);
   await go('/');
   check(await waitFor(`!!document.querySelector('[data-testid=band-late]')`, 20000), 'band: on Accounts home');
   const bl = await ev(`document.querySelector('[data-testid=band-late]')?.textContent ?? ''`);
-  const want = `${E.LATE} late ${E.LATE === '1' ? 'outcome' : 'outcomes'} (today's UTC date after the promised date)`;
-  check(bl === want, `band: "${want}" (D4)`, bl);
+  const want = `${E.LATE} late ${E.LATE === '1' ? 'outcome' : 'outcomes'} (${LATE_RULE})`;
+  check(bl === want, `band: "${want}" (§28 D5)`, bl);
 }
 
 console.log(`DONE ${out.filter((l) => l.startsWith('PASS')).length} ${out.filter((l) => l.startsWith('FAIL')).length}`);

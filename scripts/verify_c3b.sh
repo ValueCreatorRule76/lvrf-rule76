@@ -163,7 +163,7 @@ DP="$(npx tsx -e "import('./$NCC').then(m=>{const f={factor:'metric_definition_c
 
 # Ruling 2 (31 Oct): a run whose only credit rests on an unrecoverable confirmer still gets an erratum, saying the rule cannot be applied.
 CT="$(npx tsx -e "import('./$NCC').then(m=>console.log(m.creditErratumText(['20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it'],'',true,45)))" 2>&1 | tail -1)"
-[ "$CT" = "From this run's seal: 20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it. The C3 rule cannot be applied to credit resting on a confirmer not recoverable from this seal. The sealed score, 45 / 100, stands." ] \
+[ "$CT" = "From this run's seal: 20 of 20 in \"Q?\" rest on a confirmer: the confirmer is not recoverable from this seal, so no points are counted for it. The customer-side rule cannot be applied to credit resting on a confirmer not recoverable from this seal. The sealed score, 45 / 100, stands." ] \
   && ok "a run with only that credit: its erratum says the points rest on a confirmer not recoverable, the rule cannot be applied, and the sealed score stands" || bad "creditErratumText: $CT"
 
 step "3. Clone the prod copy; migrate through 0044; harden; what 0044 orphans"
@@ -397,7 +397,7 @@ PTS() { rj "b.errata.find(x=>x.run_id==='$1')?.points ?? 'none'"; }
 Q_DEF='"Is the metric'"'"'s calculation method known and documented?"'
 [ "$(PTS "$RV1")" = "30" ] && printf '%s' "$(TXT "$RV1")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME; 10 of 10" \
   && ok "the 1.0.0 run: 30 points (definition 20, committer 10), read from its seal and the metric version it sealed" || bad "RV1: $(PTS "$RV1") $(TXT "$RV1")"
-[ "$(PTS "$RV2")" = "20" ] && printf '%s' "$(TXT "$RV2")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME. Under the C3 rule (model 1.0.2) none of these earns credit" \
+[ "$(PTS "$RV2")" = "20" ] && printf '%s' "$(TXT "$RV2")" | grep -qF "From this run's seal: 20 of 20 in $Q_DEF rest on a confirmation by $ANALYST_NAME. Under model 1.0.2, only a customer-side person earns credit, so none of these does" \
   && ok "the 1.0.1 run: 20 points, the definition alone" || bad "RV2: $(PTS "$RV2") $(TXT "$RV2")"
 [ "$(PTS "$RV3")" = "none" ] && ok "the 1.0.2 run: not listed (1.0.2 credited none of it)" || bad "RV3 listed: $(PTS "$RV3")"
 [ "$(PTS "$RW1")" = "none" ] && ok "W run 1: not listed — the version it sealed was confirmed by the customer-side owner, not the analyst who confirmed the next (C3b-D1)" || bad "RW1 listed: $(PTS "$RW1") $(TXT "$RW1")"

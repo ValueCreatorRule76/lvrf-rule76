@@ -38,7 +38,10 @@ const CLASS_LABEL: Record<string, string> = {
 };
 const short = (id: string) => id.slice(0, 8);
 const withUnit = (v: string | null, unit: string | null) => (v === null ? '' : `${num(v)}${unit ? ` ${unit}` : ''}`);
-const today = () => new Date().toISOString().slice(0, 10);
+/** §28 D4 (Brad, 24 Nov 2026): the person's own local date, the day they actually act, never the UTC date. */
+export const localToday = (d: Date = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const today = () => localToday();
 /** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
 const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
 
@@ -190,8 +193,8 @@ export function OutcomeSpine({ institutionId }: { institutionId: string }) {
           </div>
           <p className="m-0 mt-1 text-[11.5px] text-ink-45">{o.engagement}{o.engagement_retired ? ' (retired)' : ''} · baseline {withUnit(o.baseline, o.unit)}
             {' · '}{o.target !== null ? `target ${withUnit(o.target, o.unit)}, committed by ${o.committed_by ?? 'no one on record'}, ${o.committed_on}` : 'no commitment'}
-            {o.target !== null && <span data-testid="outcome-promised">{` · ${o.promised_on ? `measurement promised by ${o.promised_on}` : 'no promised date on record (committed before §26)'}`}</span>}
-            {o.target !== null && ` · attribution ${o.attribution_method ? METHOD_LABEL[o.attribution_method] : 'not stated (committed before B4)'} · class ${o.measure_class ? CLASS_LABEL[o.measure_class] : 'not stated'}`}
+            {o.target !== null && <span data-testid="outcome-promised">{` · ${o.promised_on ? `measurement promised by ${o.promised_on}` : 'no promised date on record (committed before promised dates were recorded, 24 Nov 2026)'}`}</span>}
+            {o.target !== null && ` · attribution ${o.attribution_method ? METHOD_LABEL[o.attribution_method] : 'not stated (committed before attribution was recorded, 6 Nov 2026)'} · class ${o.measure_class ? CLASS_LABEL[o.measure_class] : 'not stated'}`}
             {' · '}{o.actual !== null ? `actual ${withUnit(o.actual, o.unit)}, measured ${o.measured_on}` : 'not measured'}
             {o.verified_by ? ` · verified by ${o.verified_by}, ${o.verified_on}` : ''}</p>
           {o.engagement_retired ? <p className="m-0 mt-1 text-[11.5px] text-ink-70">This engagement is retired: its outcomes are frozen.</p> : (

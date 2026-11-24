@@ -135,10 +135,10 @@ expect() {
           'confirmed', (SELECT count(*) FROM hyp WHERE institution_id = m.id AND v IN ('survived', 'survived_post_hoc')),
           'refuted', (SELECT count(*) FROM hyp WHERE institution_id = m.id AND v IN ('refuted', 'refuted_post_hoc')),
           'outcomes', (SELECT count(*) FROM live_o WHERE institution_id = m.id),
-          'late', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND (promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date AND actual_measured_at IS NULL),
+          'late', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND promised_measured_at IS NOT NULL AND now() >= (((promised_measured_at AT TIME ZONE 'UTC')::date + 1) + time '12:00') AT TIME ZONE 'UTC' AND actual_measured_at IS NULL),
           'no_promise', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND promised_measured_at IS NULL AND actual_measured_at IS NULL),
           'measured', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND actual_measured_at IS NOT NULL),
-          'promised_future', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND (promised_measured_at AT TIME ZONE 'UTC')::date >= (now() AT TIME ZONE 'UTC')::date),
+          'promised_future', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND promised_measured_at IS NOT NULL),
           'head', (SELECT json_build_object('run_number', r.run_number, 'score', r.confidence_score, 'band', r.confidence_band,
                      'stage_label', CASE r.terminal_value_stage WHEN 'baseline' THEN 'Baseline set' WHEN 'attach' THEN 'Capability attached' WHEN 'model' THEN 'Value modelled'
                        WHEN 'commit' THEN 'Target committed' WHEN 'measure' THEN 'Actual measured' WHEN 'verify' THEN 'Verified' ELSE 'Returned to the record' END,
@@ -215,7 +215,7 @@ OUTC="$(q "SELECT id FROM value_outcomes WHERE engagement_id = '$ENG' AND delete
 commit_promised "$OUTC" 20 && ok "that outcome committed by route, its measurement promised 20 days ago (§26)" || bad "commit with a promised date: $(cat "$W/cp.json")"
 FOCUS="$CURIA"; expect
 walk book,band,money,phone,keys,contrast s6 "$W/main.log"; tally "$W/main.log"
-cover "$W/main.log" 'book: book confidence "Not measured"' 'outcomes read "1 late: promised' 'outcomes read "No outcome yet"' 'marked "In focus"' 'the focused row and the frame above it' \
+cover "$W/main.log" 'book: book confidence "Not measured"' 'outcomes read "1 late: the promised day' 'outcomes read "No outcome yet"' 'marked "In focus"' 'the focused row and the frame above it' \
   'hypotheses due in words' 'band: hypotheses due in words' 'money: no money on the War Room' 'money: GET /api/book carries no money field' 'phone: the War Room, no sideways scroll' 'keys: Tab reaches every row' 'contrast: every text on the War Room'
 
 step "6. Deliberate breaks, each against the clean P2 pass"

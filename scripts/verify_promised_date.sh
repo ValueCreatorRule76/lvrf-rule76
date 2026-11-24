@@ -18,12 +18,12 @@
 #       leaving its date; a withdrawal recording another date, or none.
 #   P3  the withdrawal, by route: it records the date (D5) and clears it; committing again takes a new date. A pre-§26
 #       commitment's withdrawal records promised_measured_on null (on the database: Curia's is in a retired engagement).
-#   P4  "late" (D4), against SQL and on the page: promised today, not late; promised yesterday and unmeasured, late;
-#       promised yesterday and measured, never late. The tile and the band say the rule in UTC dates.
+#   P4  "late" (§28 D5, Anywhere on Earth), against SQL and on the page: promised today, not late; promised two days
+#       ago and unmeasured, late; promised two days ago and measured, never late. The tile and the band say the rule.
 # A coverage gate fails any section that prints no line.
 # DELIBERATE BREAKS, each against the clean pass, files restored byte-identical and functions by re-applying hardening:
 #   B1 the guard's date rule removed       B2 the date made changeable          B3 the withdrawal not recording the date
-#   B4 "late" back to `< now()` (an outcome promised today, from 00:00 UTC)      B5 the date left out of the confirmation
+#   B4 moved to verify_local_date (§28: late is Anywhere on Earth, proven at fixed instants)      B5 the date left out of the confirmation
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -174,7 +174,7 @@ CB() {  # COMMITTED_ON PROMISED_ON — a commit body, by the owner
 CBX() { J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T12:00:00Z commitment_note 'Verification: committed without a measure-by date.' attribution_method contribution_only measure_class capability_performance; }
 
 step "4. P0 on the page: Curia's pre-§26 commitment says it has no date"
-walk card p0 "$W/p0.log" CARD_INST="$CURIA" CARD_OUT="$CURIA_O" CARD_WANT=" · no promised date on record (committed before §26)"; tally "$W/p0.log"
+walk card p0 "$W/p0.log" CARD_INST="$CURIA" CARD_OUT="$CURIA_O" CARD_WANT=" · no promised date on record (committed before promised dates were recorded, 24 Nov 2026)"; tally "$W/p0.log"
 
 step "5. P1: a commit through the form"
 ON="$(d -30)"; BY="$(d 150)"; PAST3="$(q "SELECT to_char(('$ON'::date + interval '3 years')::date + 1, 'YYYY-MM-DD')")"
@@ -229,18 +229,18 @@ CWV="$(q "SELECT jsonb_build_object('target_value', trim_scale(target_value)::te
 sqlrefused "  ...one that leaves the key out" "INSERT INTO outcome_withdrawals (tenant_id, value_outcome_id, kind, withdrawn_values, reason, withdrawn_by_person_id) VALUES ('$TEN', '$CURIA_O', 'commitment', '$CWV', 'Verification: no key.', '$S')" "the values recorded are not the outcome's"
 cover "$LOG" 'the row holds the promised date' "HB-0014's payload" 'the sealed case carries' 'no measure-by date (D1)' 'three years to the day' 'a date changed while the commitment stands' 'a withdrawal recording another date' 'the withdrawal records promised_measured_on'
 
-step "9. P4: late, in UTC dates (D4)"
+step "9. P4: late, Anywhere on Earth (§28 D5): the promised day has ended everywhere"
 expect POST "/api/value-outcomes/$O3/commit" "$(CB "$(d -60)" "$(d 0)")" 201 "${O3:0:8} committed, measure by today"
-expect POST "/api/value-outcomes/$O4/commit" "$(CB "$(d -60)" "$(d -1)")" 201 "${O4:0:8} committed, measure by yesterday"
-expect POST "/api/value-outcomes/$O5/commit" "$(CB "$(d -60)" "$(d -1)")" 201 "${O5:0:8} committed, measure by yesterday"
+expect POST "/api/value-outcomes/$O4/commit" "$(CB "$(d -60)" "$(d -2)")" 201 "${O4:0:8} committed, measure by two days ago (its day has ended everywhere at any hour)"
+expect POST "/api/value-outcomes/$O5/commit" "$(CB "$(d -60)" "$(d -2)")" 201 "${O5:0:8} committed, measure by two days ago"
 expect POST "/api/value-outcomes/$O5/evidence" "$(J kind system_export provenance 'Fixture source for: P26 actual (not a source)' summary 'P26 TRIR extract (fixture)' supports actual confidence medium source_verified false ai_sourced false simulated false evidence_form quote quote_text 'Verification fixture quote, not a source.' how_read 'Verification fixture: read from the fixture quote as written.')" 201 "  ...a system export linked to ${O5:0:8} as its actual"
 expect POST "/api/value-outcomes/$O5/measure" "$(J actual_value 1.1 actual_measured_at "$(d 0)T09:00:00Z")" 200 "  ...and ${O5:0:8} measured today"
-LATE_SQL() { q "SELECT o.id FROM value_outcomes o WHERE o.institution_id = '$INST' AND o.promised_measured_at IS NOT NULL AND (o.promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date AND o.actual_measured_at IS NULL ORDER BY o.id"; }
+LATE_SQL() { q "SELECT o.id FROM value_outcomes o WHERE o.institution_id = '$INST' AND o.promised_measured_at IS NOT NULL AND now() >= (((o.promised_measured_at AT TIME ZONE 'UTC')::date + 1) + time '12:00') AT TIME ZONE 'UTC' AND o.actual_measured_at IS NULL ORDER BY o.id"; }
 [ "$(LATE_SQL)" = "$O4" ] && ok "SQL: one late outcome, ${O4:0:8}" || bad "SQL late: $(LATE_SQL)"
 book_late() { req GET /api/book; node -e "const b=require('$W/r.json');const a=b.accounts.find(x=>x.institution_id==='$INST');console.log(a.outcomes.list.filter(o=>o.late).map(o=>o.id).sort().join(' ')+'|'+b.book.outcomes.late)"; }
 [ "$(book_late)" = "$O4|1" ] && ok "GET /api/book: ${O4:0:8} late; ${O3:0:8} (promised today) and ${O5:0:8} (measured) are not" || bad "GET /api/book late: $(book_late)"
-walk book p4 "$W/p4.log" LATE=1 ROW_NAME="$ACCT" ROW_WANT="1 late: promised "; tally "$W/p4.log"
-cover "$W/p4.log" 'the late tile states the rule in UTC dates' 'and under the table' 'band: "1 late outcome'
+walk book p4 "$W/p4.log" LATE=1 ROW_NAME="$ACCT" ROW_WANT="1 late: the promised day, "; tally "$W/p4.log"
+cover "$W/p4.log" 'the late tile states the rule, Anywhere on Earth' 'and under the table' 'band: "1 late outcome'
 
 step "10. Deliberate breaks, each against the clean pass"
 # B1 — the guard's date rule removed: a commit with no date lands in the database.
@@ -259,16 +259,7 @@ restart_server
 req POST "/api/value-outcomes/$O3/commitment/withdraw" "$(J reason 'Verification: B3, the date not recorded.')"
 [ "$CODE" != "200" ] && [ "$(q "SELECT committed_at IS NOT NULL FROM value_outcomes WHERE id = '$O3'")" = "t" ] && ok "B3: the withdrawal without its date → refused ($CODE), the commitment stands" || bad "B3: not caught ($CODE)"
 restore "$WDR"; restart_server
-# B4 — "late" back to an instant: an outcome promised today reads late. The fixture moves O3's promised instant to 00:00
-# UTC today (still today's date) by SQL on the clone, under replica (the guard fixes the date, and this is not a date
-# change): a named fixture for this break only.
-q "BEGIN; SET LOCAL session_replication_role = replica; UPDATE value_outcomes SET promised_measured_at = ((now() AT TIME ZONE 'UTC')::date)::timestamp AT TIME ZONE 'UTC' WHERE id = '$O3'; COMMIT;" > /dev/null
-[ "$(book_late)" = "$O4|1" ] && ok "  ...clean: promised today from 00:00 UTC, still not late" || bad "  ...clean pass after the fixture: $(book_late)"
-edit "$BOOKR" "(o.promised_measured_at IS NOT NULL AND (o.promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date" "(o.promised_measured_at IS NOT NULL AND o.promised_measured_at < now()"
-restart_server
-[ "$(book_late)" != "$O4|1" ] && ok "B4: late by instant → ${O3:0:8}, promised today, reads late (caught: $(book_late | cut -c1-20)…)" || bad "B4: not caught"
-restore "$BOOKR"; restart_server
-[ "$(book_late)" = "$O4|1" ] && ok "  ...with it back, ${O3:0:8} is not late" || bad "  ...after restore: $(book_late)"
+# B4 moved to verify_local_date (§28 D5): "late" is proven there at fixed instants, deterministically.
 # B5 — the date left out of the confirmation.
 edit "$SPINE" "on {v.on}; measured by {v.by}; attribution:" "on {v.on}; attribution:"
 sleep 4
@@ -280,7 +271,7 @@ walk form b5c "$W/b5c.log" INST="$INST" OUT="$O6" COMMITTER='P26 owner (invented
 grep -q '^PASS  b5c: form: the confirmation names the measure-by date' "$W/b5c.log" && ok "  ...with it back, the confirmation names it" || bad "  ...after restore: $(grep -m2 FAIL "$W/b5c.log")"
 [ "$(q "SELECT committed_at IS NULL FROM value_outcomes WHERE id = '$O6'")" = "t" ] && ok "  ...B5's walks went Back: nothing recorded" || bad "B5 recorded a commit"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
-cover "$LOG" 'B1: the date rule removed' 'B2: the date made changeable' 'B3: the withdrawal without its date' 'B4: late by instant' 'B5: the date left out'
+cover "$LOG" 'B1: the date rule removed' 'B2: the date made changeable' 'B3: the withdrawal without its date' 'B5: the date left out'
 echo "  screenshots: $OUT"
 
 echo

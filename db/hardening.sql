@@ -218,25 +218,25 @@ BEGIN
   IF ai THEN
     RAISE EXCEPTION
       'LVRF: AI-sourced evidence may not support a measured actual. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'The actual comes from the customer''s system of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF assisted THEN
     RAISE EXCEPTION
       'LVRF: evidence from an AI-assisted assessment may not support a measured actual. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'The actual comes from the customer''s system of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF sim THEN
     RAISE EXCEPTION
       'LVRF: simulated evidence may not support a measured actual. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'The actual comes from the customer''s system of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF vendor THEN
     RAISE EXCEPTION
       'LVRF: vendor-published evidence may not support a measured actual. '
-      'AMENDMENT-005 Article I. The actual comes from the customer''s system of record.'
+      'The actual comes from the customer''s system of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
@@ -377,25 +377,25 @@ BEGIN
   IF assessor_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not be the assessor of record. '
-      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
+      'Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF attestor_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not attest to evidence. '
-      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
+      'Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF resolver_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not resolve a citation. '
-      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
+      'Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   IF verifier_sim THEN
     RAISE EXCEPTION
       'LVRF: a simulated person may not verify a value outcome. '
-      'AMENDMENT-005 Article I. Attestation requires a real person of record.'
+      'Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
   END IF;
   RETURN NEW;
@@ -1598,7 +1598,7 @@ BEGIN
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
     END IF;
     IF o.verified_by_person_id IS NOT DISTINCT FROM NEW.author_person_id THEN
-      RAISE EXCEPTION 'LVRF: value_hypotheses: % verified this outcome''s actual and cannot author a hypothesis on it; the verifier may not be the author (O2-D1).', NEW.author_person_id
+      RAISE EXCEPTION 'LVRF: value_hypotheses: % verified this outcome''s actual and cannot author a hypothesis on it; the verifier may not be the author.', NEW.author_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_verifier_not_author';
     END IF;
     -- The reference value is QUOTED from the outcome row, here, once.
@@ -1692,7 +1692,7 @@ BEGIN
      AND NEW.verified_by_person_id IS DISTINCT FROM OLD.verified_by_person_id
      AND EXISTS (SELECT 1 FROM value_hypotheses h
                   WHERE h.value_outcome_id = NEW.id AND h.author_person_id = NEW.verified_by_person_id) THEN
-    RAISE EXCEPTION 'LVRF: value_outcomes: % wrote a hypothesis on outcome % and cannot verify its actual; the verifier may not be the hypothesis'' author (O2-D1).', NEW.verified_by_person_id, NEW.id
+    RAISE EXCEPTION 'LVRF: value_outcomes: % wrote a hypothesis on outcome % and cannot verify its actual; the verifier may not be the hypothesis'' author.', NEW.verified_by_person_id, NEW.id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_verifier_not_author';
   END IF;
   RETURN NEW;
@@ -3491,7 +3491,7 @@ BEGIN
   -- A new commit states both.
   IF OLD.committed_at IS NULL AND NEW.committed_at IS NOT NULL
      AND (NEW.attribution_method IS NULL OR NEW.measure_class IS NULL) THEN
-    RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states its attribution method and its measure class (B4, design §3.2).'
+    RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states its attribution method and its measure class.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_commit_states_method';
   END IF;
   -- Fixed while the commitment stands.
@@ -3503,12 +3503,12 @@ BEGIN
   -- §26 D1, D3: a new commit states its promised measurement date, a UTC date after the commit's and within three years.
   IF OLD.committed_at IS NULL AND NEW.committed_at IS NOT NULL THEN
     IF NEW.promised_measured_at IS NULL THEN
-      RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states the date its outcome will be measured by (LVRF_PLAN §26, D1).'
+      RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states the date its outcome will be measured by.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_commit_states_promised_date';
     END IF;
     IF (NEW.promised_measured_at AT TIME ZONE 'UTC')::date <= (NEW.committed_at AT TIME ZONE 'UTC')::date
        OR (NEW.promised_measured_at AT TIME ZONE 'UTC')::date > ((NEW.committed_at AT TIME ZONE 'UTC')::date + interval '3 years')::date THEN
-      RAISE EXCEPTION 'LVRF: value_outcomes: the promised measurement date is after the commit date and no more than three years after it (LVRF_PLAN §26, D3).'
+      RAISE EXCEPTION 'LVRF: value_outcomes: the promised measurement date is after the commit date and no more than three years after it.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_promised_date_window';
     END IF;
   END IF;
@@ -3535,7 +3535,7 @@ BEGIN
                       AND lvrf_evidence_basis(e) IN ('system_of_record', 'client_stated', 'published'))
       INTO admitted;
     IF NOT admitted THEN
-      RAISE EXCEPTION 'LVRF: value_outcomes: a measured actual rests on current evidence from a system of record, stated by the client, or published, and not simulated (D2).'
+      RAISE EXCEPTION 'LVRF: value_outcomes: a measured actual rests on current evidence from a system of record, stated by the client, or published, and not simulated.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_measure_admitted_evidence';
     END IF;
   END IF;

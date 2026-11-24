@@ -46,7 +46,7 @@ const EFFECT_LIKE = /effect|target|impact|uplift|expected|improvement|delta|roi|
 
 // A key that names a size, a target or an expected result.
 const leverFieldExplained = (k: string): string | null => EFFECT_LIKE.test(k)
-  ? `body.${k}: a value lever carries no effect size or target — it is a mechanism, not a promise (LVRF_PLAN §5)`
+  ? `body.${k}: a value lever carries no effect size or target — it is a mechanism, not a promise`
   : null;
 
 function reasonOf(body: unknown, what: string): string {

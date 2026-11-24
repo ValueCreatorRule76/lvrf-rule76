@@ -334,7 +334,7 @@ function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; curr
         path={path} provenanceLabel="What this records" disabledReason={reason}
         provenance={<p className="m-0 text-[12.5px] text-ink">{mode === 'unmark'
           ? 'That this account is no longer a reference example, by you, with your reason. The marker stays on the record.'
-          : 'That this account is a reference example, not an engagement (O-D3): it renders only as one, and never under the CFO lens.'}</p>}
+          : 'That this account is a reference example, not an engagement: it renders only as one, and never under the CFO lens.'}</p>}
         fields={mode === 'unmark'
           ? <label className="block"><span className={LABEL}>Why (required)</span><textarea rows={2} className={INPUT} value={v.why} onChange={(e) => setV({ ...v, why: e.target.value })} /></label>
           : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

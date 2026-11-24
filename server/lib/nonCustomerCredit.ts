@@ -59,8 +59,8 @@ export function definitionPart(def: SealedFactor, who: { full_name: string; cust
  */
 export function creditErratumText(parts: string[], whoNot: string, unrecoverable: boolean, score: number): string {
   return `From this run's seal: ${parts.join('; ')}. `
-    + (whoNot ? `Under the C3 rule (model 1.0.2) none of these earns credit: ${whoNot}. ` : '')
-    + (unrecoverable ? 'The C3 rule cannot be applied to credit resting on a confirmer not recoverable from this seal. ' : '')
+    + (whoNot ? `Under model 1.0.2, only a customer-side person earns credit, so none of these does: ${whoNot}. ` : '')
+    + (unrecoverable ? 'The customer-side rule cannot be applied to credit resting on a confirmer not recoverable from this seal. ' : '')
     + `The sealed score, ${n1(score)} / 100, stands.`;
 }
 

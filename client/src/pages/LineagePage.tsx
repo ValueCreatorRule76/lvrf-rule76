@@ -56,7 +56,7 @@ function What({ s }: { s: Step }) {
           {/* C3: an attester's customer-side role with its source, or why not; the row's system-exercise mark. */}
           {d.attested_by ? (d.attester_roles
             ? <span className="block text-ink-45" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}: {str(d.attester_roles)}</span>
-            : <span className="block text-warning" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}, who is not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule.</span>) : null}
+            : <span className="block text-warning" data-testid="lineage-attester-role">Attested by {str(d.attested_by)}, who is not customer-side ({str(d.attester_not_customer_side)}): no credit: only a customer-side person, with a role named from a source, earns it.</span>) : null}
           {isMark(d.system_exercise) ? <SystemExerciseLine mark={d.system_exercise} className="mt-0.5" /> : null}
           {/* C3b (Brad's condition 2): verified with no citation opened, read from the row as it stands. */}
           {d.verified_unopened === true ? <VerifiedUnopenedLine className="mt-0.5" /> : null}
@@ -67,7 +67,7 @@ function What({ s }: { s: Step }) {
     case 'state_about': return <span data-testid="lineage-about">About {str(d.about)}{d.reason ? ` — ${str(d.reason)}` : ''}</span>;
     case 'attested': return <span data-testid="lineage-attested">{str(d.kind).replace(/_/g, ' ')}: “{str(d.summary)}”{d.attester_roles
       ? <span className="block text-ink-45">{str(d.attester_roles)}</span>
-      : d.attester_not_customer_side ? <span className="block text-warning">not customer-side ({str(d.attester_not_customer_side)}): no credit under the C3 rule</span> : null}</span>;
+      : d.attester_not_customer_side ? <span className="block text-warning">not customer-side ({str(d.attester_not_customer_side)}): no credit: only a customer-side person, with a role named from a source, earns it</span> : null}</span>;
     // C3b: a steward's finding that this figure has no source on record.
     case 'finding': return <span className="text-warning" data-testid="lineage-finding">{str(d.finding_text)} <span className="block text-ink-45">Why: {str(d.reason)}</span></span>;
     case 'open_citation': return <>{d.source_verified ? 'source verified' : 'opened; stays unverified'}{d.reason ? <span className="block text-ink-45">{str(d.reason)}</span> : null}{note ? <span className="block text-ink-45">{note}</span> : null}</>;

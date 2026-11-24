@@ -73,7 +73,7 @@ const NUM = 'font-display text-[30px] leading-[1.05]';
 function outcomeWords(o: BookAccount['outcomes']): { text: string; tone: 'warn' | 'plain' | 'muted' } {
   if (o.total === 0) return { text: 'No outcome yet', tone: 'muted' };
   const late = o.list.filter((x) => x.late);
-  if (late.length > 0) return { text: `${late.length} late: promised ${day(late[0].promised_on!)}, no actual yet`, tone: 'warn' };
+  if (late.length > 0) return { text: `${late.length} late: the promised day, ${day(late[0].promised_on!)}, has ended everywhere; no actual yet`, tone: 'warn' };
   const measured = o.list.filter((x) => x.measured_on).sort((a, b) => b.measured_on!.localeCompare(a.measured_on!));
   if (measured.length > 0) return { text: `Measured ${day(measured[0].measured_on!)}`, tone: 'plain' };
   const promised = o.list.filter((x) => x.promised_on).sort((a, b) => a.promised_on!.localeCompare(b.promised_on!));
@@ -202,7 +202,7 @@ export function WarRoomPage() {
         <Tile k="Confirmed · refuted" testid="tile-cr" sub={b.account_count === 0 ? undefined : `${b.hypotheses.open} open`}>
           <span className="text-[15px] font-semibold">{b.account_count === 0 ? '—' : `${b.hypotheses.confirmed} confirmed · ${b.hypotheses.refuted} refuted`}</span>
         </Tile>
-        <Tile k="Late outcomes" testid="tile-late" sub={b.account_count === 0 ? undefined : <>{b.outcomes.no_promised_date} with no promised date on record.<span className="mt-0.5 block" data-testid="late-rule">{LATE_RULE}</span></>}>
+        <Tile k="Late outcomes" testid="tile-late" sub={b.account_count === 0 ? undefined : <>{b.outcomes.no_promised_date} with no promised date on record.<span className="mt-0.5 block" data-testid="late-rule">Counted as {LATE_RULE}.</span></>}>
           <span className={NUM}>{b.account_count === 0 ? '—' : b.outcomes.late}</span>
         </Tile>
       </div>
@@ -231,7 +231,7 @@ export function WarRoomPage() {
                 {book.accounts.map((a) => <BookRow key={a.institution_id} acct={a} facts={factsOf(a.institution_id)} asks={asksOf(a)} runs={runs} focused={a.institution_id === focusId} />)}
               </tbody>
             </table>
-            <p className="m-0 mt-1.5 text-[12px] text-ink-45" data-testid="late-rule-table">Outcomes: {LATE_RULE} Where no date was promised, the row says so.</p>
+            <p className="m-0 mt-1.5 text-[12px] text-ink-45" data-testid="late-rule-table">An outcome reads {LATE_RULE}. Where no date was promised, the row says so.</p>
           </div>
           <div className="mt-4 sm:hidden" data-testid="book-cards">
             {book.accounts.map((a) => <BookCard key={a.institution_id} acct={a} facts={factsOf(a.institution_id)} asks={asksOf(a)} runs={runs} focused={a.institution_id === focusId} />)}

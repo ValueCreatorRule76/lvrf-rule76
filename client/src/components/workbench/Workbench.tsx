@@ -599,7 +599,7 @@ function PrintFooter({ run }: { run: Run }) {
       {run.locked_at
         ? <p className="m-0 [overflow-wrap:anywhere]" data-testid="print-sealed">{run.payload.engagement}{run.engagement_retired ? ' (retired)' : ''}: run {run.payload.runNumber}, locked {day(run.locked_at)} · record hash <span className="font-mono">{run.payload_hash}</span></p>
         : <p className="m-0" data-testid="print-unsealed">Not locked: nothing on this page is sealed.</p>}
-      <p className="m-0">Printed {day(new Date().toISOString())} · rendered from the record as it stands</p>
+      <p className="m-0">Printed {day(new Date().toISOString())} (UTC) · rendered from the record as it stands</p>
     </div>
   );
 }

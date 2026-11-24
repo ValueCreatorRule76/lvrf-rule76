@@ -71,7 +71,7 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
   const close = () => { setOpen(false); setPersonId(''); setRole(''); setSourceId(''); setReason(''); };
   return (
     <div className="flex flex-col gap-2" data-testid="customer-roles">
-      <p className="m-0 text-[12px] text-ink-45">Only a customer-side person earns credit for an attestation, a commitment or a verification: a person of this account whose role is named here, from a source (C3).</p>
+      <p className="m-0 text-[12px] text-ink-45">Only a customer-side person earns credit for an attestation, a commitment or a verification: a person of this account whose role is named here, from a source.</p>
       {data.grants.length === 0
         ? <p className="m-0 text-[12.5px] text-ink-45" data-testid="customer-roles-none">No customer-side role named yet.</p>
         : <ul className="m-0 list-none p-0">{data.grants.map((g) => (

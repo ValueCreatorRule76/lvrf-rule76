@@ -106,7 +106,7 @@ export function computeFindings(input: FindingsInput): Finding[] {
       subject: 'outcome',
       message:
         `${n} event(s) in category '${category}' have no health dimension and were excluded ` +
-        'from the composite. HEARTBEAT-REGISTER §6 and COMPASS-HEARTBEAT-STATUS §7 have ' +
+        'from the composite. The heartbeat register and the health status have ' +
         'diverged — a category exists with no dimension to receive it. Requires a Cathedral amendment.',
     });
   }
