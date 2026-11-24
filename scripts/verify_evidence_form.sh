@@ -19,6 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 . scripts/lib/acts.sh
 . scripts/lib/raw_text.sh
@@ -121,6 +122,7 @@ SINCE="$(q "SELECT now()")"
 step "5. The eight writers, each with its form"
 expect POST /api/account-inputs "{\"institution\":{\"name\":\"Form check account (fixture) $TS\",\"industry_slug\":\"manufacturing\",\"classification_note\":\"Verification: classified for P1.\"},\"persons\":[{\"full_name\":\"Fixture owner (invented)\",\"email\":\"owner.$TS@form.example\",\"title\":\"Owner\"},{\"full_name\":\"Fixture verifier (invented)\",\"email\":\"verifier.$TS@form.example\",\"title\":\"EHS director\"}]}" 201 "an account, classified, with two customer-side persons"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; VERIFIER="$(rj b.person_ids[1])"
+make_customer_side "$INST" "$OWNER"; make_customer_side "$INST" "$VERIFIER" executive_sponsor  # §29: only a customer-side person commits or verifies
 expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Form safety capability\",\"owner_person_id\":\"$OWNER\",\"is_primary\":false,\"basis\":\"Verification: EHS solution.\"}" 201 "an offering attached"
 CAP="$(rj b.capability_id)"
 expect POST "/api/capabilities/$CAP/industry-measures" "{\"industry_measure_id\":\"$E\",\"claim\":\"Verification: training reduces incidents.\"}" 201 "  ...its claim"

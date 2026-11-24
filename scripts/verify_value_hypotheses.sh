@@ -24,6 +24,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -128,6 +129,7 @@ INST_X="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TEN_X', 'Other
 start_server && ok "API up on $PORT"
 expect POST /api/account-inputs "{\"institution\":{\"name\":\"Hyp account $TS\",\"industry_slug\":\"manufacturing\",\"classification_note\":\"Verification: classified for O2.\"},\"persons\":[{\"full_name\":\"Customer owner (verification)\",\"email\":\"owner.$TS@hyp.example\",\"title\":\"Owner\"},{\"full_name\":\"Customer verifier (verification)\",\"email\":\"verifier.$TS@hyp.example\",\"title\":\"EHS director\"}]}" 201 "an account with two customer-side persons"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; VERIFIER="$(rj b.person_ids[1])"
+make_customer_side "$INST" "$OWNER"; make_customer_side "$INST" "$VERIFIER" executive_sponsor  # §29: only a customer-side person commits or verifies
 expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Hyp safety capability\",\"owner_person_id\":\"$OWNER\",\"is_primary\":false,\"basis\":\"Verification: EHS solution.\"}" 201 "an offering creates the capability"
 CAP="$(rj b.capability_id)"
 expect POST "/api/capabilities/$CAP/industry-measures" "{\"industry_measure_id\":\"$E\",\"claim\":\"Verification: training reduces incidents.\"}" 201 "the capability claims the TRIR entry"
@@ -222,10 +224,14 @@ verify() {  # OUTCOME
 }
 measure "$O1" 1.1
 [ "$(verdict "$H1B")" = "open" ] && ok "outcome one measured (1.1), NOT verified: H1b stays open" || bad "H1b after measure: $(verdict "$H1B")"
+pre_s29_db  # §29 refuses a vendor-side verifier first; this proves the verifier-not-author rule on its own
 sqlrefused "the author recorded as the verifier of the actual" "UPDATE value_outcomes SET verified_by_person_id = '$X', verified_at = now(), source_verified = true, realization = 'verified' WHERE id = '$O1'" "cannot verify its actual; the verifier may not be the hypothesis' author"
+post_s29_db
 verify "$O1"
 [ "$(verdict "$H1B")" = "survived" ] && ok "verified by the customer's verifier: H1b SURVIVED (1.1 beats the baseline 1.4, lower is better)" || bad "H1b: $(verdict "$H1B")"
+pre_s29_db  # §29 refuses a vendor-side verifier first; this proves the verifier-not-author rule on its own
 sqlrefused "a hypothesis by the person who verified its outcome" "UPDATE value_outcomes SET verified_by_person_id = '$S' WHERE id = '$O1'; INSERT INTO value_hypotheses (tenant_id, institution_id, value_outcome_id, value_lever_id, statement, falsifier_reference, falsifier_due, author_person_id) VALUES ('$TEN', '$INST', '$O1', '$L', 'A statement long enough for the CHECK.', 'baseline', DATE '$TODAY', '$S')" "verified this outcome's actual and cannot author a hypothesis on it"
+post_s29_db
 [ "$(q "SELECT lvrf_hypothesis_verdict(jsonb_populate_record(h, '{\"value_lever_id\":\"$L_INC\"}')) FROM value_hypotheses h WHERE id = '$H1B'")" = "refuted" ] \
   && ok "the same numbers through a higher-is-better pack entry read REFUTED: the direction is the pack entry's alone" || bad "direction flip"
 [ "$(q "SELECT lvrf_hypothesis_verdict(jsonb_populate_record(h, '{\"falsifier_due\":\"$LATER\"}')) FROM value_hypotheses h WHERE id = '$H1B'")" = "open" ] \
@@ -328,8 +334,10 @@ open(sys.argv[1], 'w').write(fn.replace(sys.argv[2], sys.argv[3]))
 PY
 }
 # B1 — an author verifies their own actual: without value_outcomes_verifier_not_author it lands.
+pre_s29_db  # §29 refuses a vendor-side verifier first; this proves the verifier-not-author rule on its own
 sqllands "B1: without value_outcomes_verifier_not_author, X — H2's author — is recorded as outcome two's verifier (rolled back): the trigger is what forbids it" \
   "ALTER TABLE value_outcomes DISABLE TRIGGER value_outcomes_verifier_not_author; UPDATE value_outcomes SET verified_by_person_id = '$X' WHERE id = '$O2'" "UPDATE 1"
+post_s29_db
 [ "$(q "SELECT verified_by_person_id FROM value_outcomes WHERE id = '$O2'")" = "$VERIFIER" ] && ok "  ...after B1: the verifier is the customer's, the trigger in place" || bad "  ...B1 left state"
 # B2 — a verdict without a verified actual.
 fn_break b2 "WHEN NOT (o.source_verified AND o.verified_by_person_id IS NOT NULL AND o.actual_value IS NOT NULL" "WHEN NOT (o.actual_value IS NOT NULL"

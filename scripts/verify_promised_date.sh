@@ -28,6 +28,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -160,6 +161,7 @@ for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && 
 ACCT="Larkspur Freight (P26 fixture, invented)"
 expect POST /api/account-inputs "$(J institution "$(J name "$ACCT" industry_slug manufacturing classification_note 'Verification: classified for §26.')" persons "[$(J full_name 'P26 owner (invented)' email "owner.$TS@p26.example" title Owner)]")" 201 "a fixture customer account, with a customer-side owner"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"
+make_customer_side "$INST" "$OWNER"  # §29: only a customer-side person commits
 expect POST "/api/institutions/$INST/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'P26 capability' owner_person_id "$OWNER" is_primary false basis 'Verification: EHS solution.')" 201 "  ...an offering, with its capability"
 outcome() {  # NAME -> stdout: outcome id
   req POST "/api/institutions/$INST/value-outcomes" "$(J engagement_name "P26 engagement $1" engagement_owner_person_id "$OWNER" capability_name 'P26 capability' metric "$(J name "P26 TRIR $1" unit 'incidents per 200,000 hours.' direction decrease source_system 'verification system of record' owner_person_id "$OWNER")" baseline_value 1.4 baseline_measured_at 2025-09-30T00:00:00Z)"

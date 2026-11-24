@@ -19,6 +19,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -36,7 +37,7 @@ SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PAGE=client/src/pages/ValueCasePage.tsx
 INSTPAGE=client/src/pages/InstitutionPage.tsx
 PRODUCE=server/routes/produceRun.ts
-EDITED=("$PAGE" "$INSTPAGE" "$PRODUCE")
+EDITED=("$PAGE" "$INSTPAGE" "$PRODUCE" server/routes/outcomeWalk.ts)
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -336,11 +337,16 @@ CAPF="$(rj b.capability_id)"
 expect POST "/api/capabilities/$CAPF/industry-measures" "$(J industry_measure_id "$E_TRIR" claim 'Verification: training improves safe behaviour.')" 201 "  ...the capability claims the TRIR entry"
 outcome "B4 TRIR control" 1.4; OK="$OC"; ENGK="$ENGO"
 expect POST "/api/value-outcomes/$OK/evidence" "$(EVB public_filing 'TRIR FY25 1.4 (fixture)' baseline)" 201 "  ...a published baseline (its quote does not state 1.4: a figure check flags it)"
+s29_restart() { stop_server; start_server; }
+# §29: B4's rules are proven on commitments by an owner with no role, recorded before the rule (the asks and
+# the OUTSIDE-IN banner read them as Curia's): the pre-§29 code for these commits only.
+pre_s29 s29_restart
 # M1: a commit without the method.
 expect POST "/api/value-outcomes/$OK/commit" "$(J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: no method.' measure_class capability_performance)" 422 "M1: a commit without the method (route)" "attribution_method"
 sqlrefused "M1: a commit without the method (database)" "UPDATE value_outcomes SET target_value = 1.0, committed_by_person_id = '$OWNER', committed_at = now(), measure_class = 'capability_performance' WHERE id = '$OK'" "states its attribution method and its measure class"
 expect POST "/api/value-outcomes/$OK/commit" "$(CM control_group capability_performance)" 201 "a commit with the method (control group) and the class"
 [ "$(q "SELECT attribution_method || '|' || measure_class FROM value_outcomes WHERE id = '$OK'")" = "control_group|capability_performance" ] && ok "  ...both recorded" || bad "  ...method/class"
+post_s29 s29_restart
 sqlrefused "M2: the method changed after commit" "UPDATE value_outcomes SET attribution_method = 'contribution_only' WHERE id = '$OK'" "fixed at commit"
 # M3: a measurement on inferred evidence only; then on a system export.
 expect POST "/api/value-outcomes/$OK/evidence" "$(EVB observation 'TRIR as observed on a site walk (fixture)' actual)" 201 "  ...an observation linked as the actual (inferred)"
@@ -370,7 +376,9 @@ RUN="$RK" LENS=general TAG=control EXPECT_ASKS=skip EXPECT_ATTRIBUTION="Attribut
 # The class rule, the committer ask, the falsifier, the not-shown line, and the unsourced claim.
 outcome "B4 TRIR compliance" 2.1; OCC="$OC"; ENGC="$ENGO"
 expect POST "/api/value-outcomes/$OCC/evidence" "$(EVB public_filing 'TRIR FY25 2.1 (fixture)' baseline)" 201 "  ...a published baseline"
+pre_s29 s29_restart
 expect POST "/api/value-outcomes/$OCC/commit" "$(CM contribution_only compliance_assurance)" 201 "a compliance-class commitment, by a person with no customer-side role"
+post_s29 s29_restart
 expect POST "/api/institutions/$INST/evidence" "$(J about account kind artifact provenance 'Fixture source for: org chart naming the controller (not a source)' summary 'Org chart naming the controller (fixture)' evidence_form quote quote_text 'Named in the fixture org chart.' how_read 'Read from the fixture org chart, finance box.')" 201 "a role source"; SRC="$(rj b.evidence_id)"
 expect POST "/api/evidence/$SRC/open-citation" '{"source_verified":true}' 200 "  ...opened"
 expect POST "/api/institutions/$INST/customer-roles" "$(J person_id "$FIN" role metric_owner source_evidence_id "$SRC" reason 'Verification: named from the customer org chart.')" 201 "  ...the controller named customer-side"

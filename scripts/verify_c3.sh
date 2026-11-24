@@ -35,6 +35,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
+. scripts/lib/customer_side.sh  # §29: commitments recorded as before the rule (C3 tests their credit)
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
 case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exit 1 ;; esac
@@ -52,7 +53,7 @@ SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PRODUCE=server/routes/produceRun.ts; MODELF=server/spine/confidenceModel.ts; SCORERS=server/spine/scorers.ts; M101=server/spine/models/confidence_1_0_1.ts
 C3R=server/routes/creditAndMarks.ts; VH=server/routes/valueHypotheses.ts; POVP=client/src/pages/PovPage.tsx; BENCH=client/src/components/workbench/Workbench.tsx
 COH=server/routes/cohort.ts; CARD=client/src/components/CohortCard.tsx
-EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$VH" "$POVP" "$BENCH" "$COH" "$CARD" "$M101")
+EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$VH" "$POVP" "$BENCH" "$COH" "$CARD" "$M101" server/routes/outcomeWalk.ts)
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PRE_C3=42e7fe4
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
@@ -207,7 +208,9 @@ outcome plain "$OWNER1"; O3="$O"; ENG3="$ENG"
 evid "$O3" public_filing 'C3 TRIR FY25 filing (fixture)' baseline; EV3="$EV"
 outcome analyst "$OWNER1"; O1="$O"; ENG1="$ENG"
 evid "$O1" system_export 'C3 export attested by the analyst (fixture)' baseline "$ANALYST"
-commit "$O1" "$ANALYST" analyst
+s29_restart() { stop_server; start_server; }
+# §29: only a customer-side person commits now; Curia's shape (the analyst commits) is a commitment recorded before the rule.
+pre_s29 s29_restart; commit "$O1" "$ANALYST" analyst; post_s29 s29_restart
 pre_c3; ok "the pre-C3 code ($PRE_C3) in place, for sealing under model 1.0.0"
 seal "$ENG3" "Verification: run 1, under 1.0.0."; R3="$RUN"
 seal "$ENG1" "Verification: the analyst's run, under 1.0.0."; R_OLD="$RUN"
@@ -227,11 +230,13 @@ SOURCE="Fixture source for: C3 org chart naming the owner as metric owner"
 csrc() { expect POST "/api/institutions/$1/evidence" "$(J about account kind artifact provenance "Fixture source for: $2" summary "$2" evidence_form quote quote_text 'Named in the fixture org chart.' how_read 'Read from the fixture org chart, top box.')" 201 "  ...the source, as account evidence (L47)"; EV="$(rj b.evidence_id)"; expect POST "/api/evidence/$EV/open-citation" '{"source_verified":true}' 200 "  ...opened by a person"; }
 csrc "$INST2" 'C3 org chart naming the owner as metric owner'; SRC="$EV"
 evid "$O2" system_export 'C3 export attested by the owner (fixture)' baseline "$OWNER2"
+pre_s29 s29_restart  # §29: C3's commitments, made before roles were named, are recorded as before the rule
 commit "$O2" "$OWNER2" owner
 evid "$O2" observation 'Entered to exercise the accept path (fixture test row)' impact_basis; EV_TEST="$EV"
 outcome norole "$NOROLE"; O4="$O"; ENG4="$ENG"
 evid "$O4" system_export 'C3 export attested by a person with no role (fixture)' baseline "$NOROLE"
 commit "$O4" "$NOROLE" 'a person with no role'
+post_s29 s29_restart
 
 step "5. Naming a customer-side role: the act, its guards, in the database (Brad's guards)"
 CR() { printf '/api/institutions/%s/customer-roles' "$1"; }

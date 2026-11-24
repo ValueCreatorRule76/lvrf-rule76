@@ -28,6 +28,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -45,7 +46,7 @@ W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_c3b.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PRODUCE=server/routes/produceRun.ts; MODELF=server/spine/confidenceModel.ts; SCORERS=server/spine/scorers.ts
 C3R=server/routes/creditAndMarks.ts; NCC=server/lib/nonCustomerCredit.ts; POVP=client/src/pages/PovPage.tsx; BENCH=client/src/components/workbench/Workbench.tsx
-EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$NCC" "$POVP" "$BENCH")
+EDITED=("$PRODUCE" "$MODELF" "$SCORERS" "$C3R" "$NCC" "$POVP" "$BENCH" server/routes/outcomeWalk.ts)
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 V100=42e7fe4; V101=eaf29a3
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
@@ -234,7 +235,11 @@ validate "$MET" "$ANALYST" 214; OV="$O"; METV="$MET"
 # L41: a row verified with no opening cannot be made any more, so V's row is unverified; an opening would block the
 # finding. "verified without the source being opened" is read below from a row of the copy that holds it.
 EVID_VERIFIED=false evid "$OV" system_export 'C3b export attested by the analyst (fixture)' baseline "$ANALYST"; EVV="$EV"
+s29_restart() { stop_server; start_server; }
+# §29: Curia's shape (the analyst commits) is a commitment recorded before the rule.
+pre_s29 s29_restart
 expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: committed by the analyst.' attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by the analyst"
+post_s29 s29_restart
 # The POV shows an outcome's figures and evidence under its hypothesis (C2's fixture shape): a pack entry, its lever, the claim, the basis.
 IND="$(q "SELECT id FROM industries WHERE tenant_id = '$TEN' AND slug = 'manufacturing'")"
 ENTRY="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation) VALUES ('$TEN', '$IND', 'C3b days to productivity entry (fixture) $TS', 'days', 'decrease', 'Fixture definition.', 'w', true, 'r', 'Fixture confounders: cohort mix.', 'Verification fixture, not a source.') RETURNING id" | head -1)"

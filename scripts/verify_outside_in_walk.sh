@@ -16,6 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -169,6 +170,7 @@ expect POST "/api/value-outcomes/$OUT_W1/commit" "{\"attribution_method\":\"cont
 # B4 (§14): a measurement needs a commitment that stated its method, by a person at the account.
 expect POST "/api/institutions/$A_W1/inputs" "{\"persons\":[{\"full_name\":\"W1 customer owner (verification)\",\"email\":\"w1.owner.$TS@walk.example\",\"title\":\"Director of Safety\"}]}" 201 "  ...(a person at the account)"
 W1_OWNER="$(q "SELECT id FROM persons WHERE institution_id = '$A_W1' ORDER BY created_at LIMIT 1")"
+make_customer_side "$A_W1" "$W1_OWNER"  # §29: only a customer-side person commits
 expect POST "/api/value-outcomes/$OUT_W1/commit" "{\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\",\"committed_by_person_id\":\"$W1_OWNER\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"promised_measured_on\":\"2027-04-01\",\"target_value\":1.2,\"commitment_note\":\"Verification: committed by the account's owner.\"}" 201 "  ...(committed by them, with the method)"
 expect POST "/api/value-outcomes/$OUT_W1/evidence" "$(EVB system_export 'TRIR extract (fixture)' actual)" 201 "  ...(actual evidence)"
 expect POST "/api/value-outcomes/$OUT_W1/measure" '{"actual_value":1.1,"actual_measured_at":"2026-10-12T12:00:00Z"}' 200 "  ...(measured)"

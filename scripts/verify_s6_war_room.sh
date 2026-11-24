@@ -23,6 +23,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -38,7 +39,7 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s6.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
 PAGE=client/src/pages/WarRoomPage.tsx; BANDC=client/src/components/BookBand.tsx; ROUTE=server/routes/book.ts; COHORT=server/routes/cohort.ts
-EDITED=("$PAGE" "$BANDC" "$ROUTE" "$COHORT")
+EDITED=("$PAGE" "$BANDC" "$ROUTE" "$COHORT" server/routes/outcomeWalk.ts)
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -212,7 +213,10 @@ state_hypothesis "$ENG" > "$W/hyp.log" 2>&1 && ok "a hypothesis on Curia's live 
 OUTC="$(q "SELECT id FROM value_outcomes WHERE engagement_id = '$ENG' AND deleted_at IS NULL AND superseded_by_id IS NULL AND actual_measured_at IS NULL ORDER BY created_at DESC LIMIT 1")"
 # §26: the promised date is recorded by the commit route (a fixture act on the clone): committed 60 days ago, promised
 # 20 days ago. A commitment already standing (made before §26) is withdrawn by route first: the database fixes its date.
+# §29: the fixture re-commits Curia's outcome by its committer of record, who is not customer-side: as before the rule.
+pre_s29 restart_server
 commit_promised "$OUTC" 20 && ok "that outcome committed by route, its measurement promised 20 days ago (§26)" || bad "commit with a promised date: $(cat "$W/cp.json")"
+post_s29 restart_server
 FOCUS="$CURIA"; expect
 walk book,band,money,phone,keys,contrast s6 "$W/main.log"; tally "$W/main.log"
 cover "$W/main.log" 'book: book confidence "Not measured"' 'outcomes read "1 late: the promised day' 'outcomes read "No outcome yet"' 'marked "In focus"' 'the focused row and the frame above it' \
@@ -244,7 +248,9 @@ withdraw_commitment "$OUTC" > /dev/null || bad "B5: the commitment's withdrawal:
 edit "$PAGE" "  return { text: 'No promised date on record', tone: 'plain' };" "  return { text: 'On time', tone: 'plain' };"
 broke book b5 'never "on time"|outcomes read "No promised date on record' 'B5: "On time" where nothing was promised → caught'
 restore "$PAGE"
+pre_s29 restart_server
 commit_promised "$OUTC" 20 || bad "B5: committed again: $(cat "$W/cp.json")"
+post_s29 restart_server
 # B6 — a sideways scroll at 390.
 edit "$PAGE" '<div className="mt-4 sm:hidden" data-testid="book-cards">' '<div className="mt-4 min-w-[480px] sm:hidden" data-testid="book-cards">'
 broke phone b6 'no sideways scroll' 'B6: a sideways scroll at 390 → caught'

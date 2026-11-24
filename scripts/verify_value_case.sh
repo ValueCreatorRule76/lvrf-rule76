@@ -26,6 +26,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -41,7 +42,7 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_vcase.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 CASE=server/routes/valueCase.ts; ASKS=server/lib/caseQuestions.ts; PAGE=client/src/pages/ValueCasePage.tsx
-EDITED=("$CASE" "$ASKS" "$PAGE")
+EDITED=("$CASE" "$ASKS" "$PAGE" server/routes/outcomeWalk.ts)
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -308,7 +309,11 @@ V="$(in_txn "$(CORR "$RN")" "SELECT jsonb_path_query_array(lvrf_cost_of_delay('$
 printf '%s' "$V" | grep -q '"rate_not_attested"' && ok "C2: a rate attested by a person with no customer-side role → refused" || bad "C2 attester: $V"
 
 step "7. Commit, the seal, and the \$50,000 (C1)"
+s29_restart() { stop_server; start_server; }
+# §29: B3's case is proven on a commitment by an owner with no role, recorded before the rule.
+pre_s29 s29_restart
 expect POST "/api/value-outcomes/$OA/commit" "$(J target_value 1.0 committed_by_person_id "$OWNA" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: committed to 1.0.' attribution_method contribution_only measure_class capability_performance)" 201 "a committed target of 1.0 against 1.4"
+post_s29 s29_restart
 # B4 (§14): the class is stated at commit, so with every input in place the figure computes.
 [ "$(CODC)" = '[]' ] && [ "$(q "SELECT lvrf_cost_of_delay('$OA')->>'status' || '|' || (lvrf_cost_of_delay('$OA')->>'amount') || '|' || (lvrf_cost_of_delay('$OA')->>'basis')")" = "computed|50000|client_stated" ] \
   && ok "every input in place, the class stated at commit: computed 50000, its basis the weaker of its inputs (the client-stated rate, below the published baseline)" || bad "cod: $(q "SELECT lvrf_cost_of_delay('$OA')")"

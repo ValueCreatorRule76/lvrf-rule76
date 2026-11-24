@@ -29,6 +29,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
 case "$LOCAL_URL" in *@localhost:*|*@127.0.0.1:*) ;; *) echo "REFUSING: .env is not localhost"; exit 1 ;; esac
@@ -165,6 +166,9 @@ seal() {  # ENGAGEMENT LABEL -> RUN
 }
 
 step "5. Curia's shape, built by the pre-C2 commit (B2: commit linking impact_basis again)"
+s29_restart() { stop_server; start_server; }
+# §29: Curia's shape (an owner with no role commits) is a commitment recorded before the rule: the pre-§29 code, then C2's line.
+pre_s29 s29_restart
 edit "$WALK" "        [outcomeId, evidence.id, 'target_commitment']," "        [outcomeId, evidence.id, 'impact_basis'],"
 stop_server; start_server
 outcome A; O_A="$O"; ENG_A="$ENG"
@@ -184,6 +188,7 @@ outcome E1; O_E1="$O"; ENG_E1="$ENG"
 expect POST "/api/value-outcomes/$O_E1/evidence" "$(EVB public_filing 'C2b TRIR FY25 (fixture)' baseline true)" 201 "  ...the reference outcome's baseline"
 expect POST "/api/value-outcomes/$O_E1/commit" "$(COMMIT E)" 201 "  ...committed under the pre-C2 code"
 SUM_E="Verification: the owner commits to 1.2 (E)."
+post_s29 s29_restart
 restore "$WALK"; pre_c3; ok "  ...the pre-C3 code ($PRE_C3) in place, for sealing under model 1.0.0"
 seal "$ENG_E1" "E run 1"; R_E1="$RUN"
 seal "$ENG_E1" "E run 2"; R_E2="$RUN"
@@ -207,6 +212,7 @@ step "6. Commit and verify link the new values (C2 rulings 1–2; C2-D3)"
 INST_AB="$INST"; OWNER_AB="$OWNER"; VERIFIER_AB="$VERIFIER"
 expect POST /api/account-inputs "$(J institution "$(J name "C2 fixture account C (invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for C2.')" persons "[$(J full_name 'C2 owner C (invented)' email "ownerc.$TS@c2.example" title Owner),$(J full_name 'C2 verifier C (invented)' email "verifierc.$TS@c2.example" title Verifier)]")" 201 "account C, with its customer-side owner and verifier"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; VERIFIER="$(rj b.person_ids[1])"; INST_C="$INST"
+make_customer_side "$INST" "$OWNER"; make_customer_side "$INST" "$VERIFIER" executive_sponsor  # §29: only a customer-side person commits or verifies
 expect POST "/api/institutions/$INST/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'C2 capability' owner_person_id "$OWNER" is_primary false basis 'Verification: EHS solution.')" 201 "  ...its offering"
 CAP_C="$(rj b.capability_id)"
 outcome C; O_C="$O"; ENG_C="$ENG"; MET_C="$(rj b.business_metric_id)"
@@ -340,6 +346,7 @@ expect GET "/api/runs/$R_B1" "" 200 "GET B's run"
 # B1 — the supports CHECK without the new values (on the clone): commit refuses, in words, and writes nothing.
 q "ALTER TABLE value_outcome_evidence DROP CONSTRAINT value_outcome_evidence_supports_known" > /dev/null
 q "ALTER TABLE value_outcome_evidence ADD CONSTRAINT value_outcome_evidence_supports_known CHECK (supports IN ('baseline', 'actual', 'impact_basis')) NOT VALID" > /dev/null
+make_customer_side "$INST" "$OWNER"  # §29: B1's commit is current-rule plumbing; its committer is named customer-side
 outcome D; O_D="$O"
 expect POST "/api/value-outcomes/$O_D/commit" "$(COMMIT D)" 422 "B1: the CHECK without the new values → commit refused, in words" "Evidence supports the baseline, the actual, the impact basis, the commitment or the verification."
 [ "$(q "SELECT (committed_at IS NULL) || '|' || (SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$O_D' AND supports <> 'baseline') FROM value_outcomes WHERE id = '$O_D'")" = "true|0" ] && ok "  ...nothing written: the outcome uncommitted, no attestation linked" || bad "  ...B1 wrote"

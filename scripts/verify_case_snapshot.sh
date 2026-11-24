@@ -20,6 +20,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/clone.sh
+. scripts/lib/customer_side.sh
 . scripts/lib/hypothesis.sh  # S1 (§20, D4): a hypothesis before every produce
 EXPECT_TRIGGERS="$(grep -oE '^--   Total: [0-9]+ distinct triggers' db/hardening.sql | grep -oE '[0-9]+')"
 LOCAL_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
@@ -163,6 +164,7 @@ INST_X="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TEN_X', 'Other
 start_server && ok "API up on $PORT"
 expect POST /api/account-inputs "{\"institution\":{\"name\":\"Case account $TS\",\"industry_slug\":\"manufacturing\",\"classification_note\":\"Verification: classified for O2.\"},\"persons\":[{\"full_name\":\"Customer owner (verification)\",\"email\":\"owner.$TS@case.example\",\"title\":\"Owner\"},{\"full_name\":\"Customer verifier (verification)\",\"email\":\"verifier.$TS@case.example\",\"title\":\"EHS director\"}]}" 201 "an account with two customer-side persons"
 INST="$(rj b.institution_id)"; OWNER="$(rj b.person_ids[0])"; VERIFIER="$(rj b.person_ids[1])"
+make_customer_side "$INST" "$OWNER"; make_customer_side "$INST" "$VERIFIER" executive_sponsor  # §29: only a customer-side person commits or verifies
 expect POST "/api/institutions/$INST/offerings" "{\"offering_key\":\"skillsoft_compliance_suite\",\"capability_name\":\"Hyp safety capability\",\"owner_person_id\":\"$OWNER\",\"is_primary\":false,\"basis\":\"Verification: EHS solution.\"}" 201 "an offering creates the capability"
 CAP="$(rj b.capability_id)"
 expect POST "/api/capabilities/$CAP/industry-measures" "{\"industry_measure_id\":\"$E\",\"claim\":\"Verification: training reduces incidents.\"}" 201 "the capability claims the TRIR entry"
