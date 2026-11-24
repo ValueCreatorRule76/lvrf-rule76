@@ -240,7 +240,13 @@ cut line applied first.
            stage 10)."; `client/src/components/valueCase/CaseInputs.tsx`), the one "stage <number>" on screen today; and a
            `check_plain_words` check that refuses "stage" followed by a digit in any string a page can show (Brad,
            24 Nov 2026, added to this ruling's list at §30's close);
-       - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
+       - **a later ruling (Brad, 24 Nov 2026, from §31), not in §31: the other dates that must not be in the future,** in
+         this order:
+         1. **evidence dates first** (`attested_at`, `captured_at`): evidence cannot be dated after it was recorded;
+         2. then the baseline's `baseline_measured_at` (W4);
+         3. then a role's `granted_at`.
+         The promised measurement date stays future by design (§26);
+       - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future** (LVRF_PLAN §31, approved by Brad 24 Nov 2026 with D1–D5). A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
          every local date on Earth (§28 D4), and nothing later;

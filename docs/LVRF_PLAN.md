@@ -6646,7 +6646,13 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
   - Curia's gap register.
 - **About a day,** most of it the scripts that read the old words.
 
-## 31. 3.1 small item: no walk date in the future (planned 24 Nov 2026, for Brad's approval)
+## 31. 3.1 small item: no walk date in the future (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended**)
+
+**Brad's rulings (24 Nov 2026):**
+- **D1–D5 are approved as recommended.**
+- **Of the dates outside this ruling,** evidence dates are listed first for the later ruling, because evidence cannot
+  be dated after it was recorded. The baseline and role dates come after.
+- **Next:** build to Gate A.
 
 **Brad's ruling (24 Nov 2026, at §28):** a Committed on, Measured on or Verified on date later than one day after today's
 UTC date is refused, by the route and by the database, with a Gate A break. It comes before the pilot, after §30.
@@ -6669,7 +6675,7 @@ UTC date is refused, by the route and by the database, with a Gate A break. It c
 - **Outside this ruling:**
   - the promised measurement date, which is future by design (§26);
   - the baseline's `baseline_measured_at` (W4);
-  - evidence's `attested_at` and `evidence_date`;
+  - evidence's `attested_at` and `captured_at`;
   - a role's `granted_at`.
 
   These are listed for a later ruling only if Brad wants one.
