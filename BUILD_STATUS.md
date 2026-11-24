@@ -16796,3 +16796,46 @@ No migration. Hardening is re-applied for five functions' message text; the TOC 
 - nothing written since the deploy, apart from any session of your own;
 - the five functions' hashes as in step 3;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### §28 closed: plain words, the local walk dates and late Anywhere on Earth deployed at `2dc3f71`; Gate C clean — 24 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `2dc3f71`.
+- Pre-deploy backup `~/lvrf-pre-p28-20261124T134819Z.dump`, **TOC 972**.
+- `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **227 triggers**; the five functions' hashes as Gate A
+  computed.
+- Post-hardening backup `~/lvrf-post-p28-20261124T134934Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 3 refused tries)", all checks, bundle **`index-DOQINKTz.js` /
+  `index-BMv5OQwB.css`**, "deploy OK". The API started at 13:50:21 UTC.
+
+**Brad's look (records nothing):**
+- **Curia's card 01d** reads "no promised date on record (committed before promised dates were recorded, 24 Nov
+  2026)" and "attribution not stated (committed before attribution was recorded, 6 Nov 2026)".
+- **Committed on** defaults to 11/24/2026. Cancelled.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `2dc3f71`, tree clean. The served `index.html` names `index-DOQINKTz.js` / `index-BMv5OQwB.css`.
+- **Since the pre-deploy backup (13:48:19 UTC), nothing was written:**
+  - 0 governance acts (still 228, the last 15 Nov 21:12:17);
+  - 0 refusals, 0 research-process refusals;
+  - 0 audit rows, 0 record documents, 0 heartbeat events;
+  - 0 sessions (the newest is 03:23:21 UTC, from §26's look; Brad's look used it).
+- **The functions as deployed:**
+  - `lvrf_block_ai_actual` `c7a38cb3f1390b9a63d389c49734f8f6`;
+  - `lvrf_block_simulated_attestor` `2cdb1e17f62c3dfbd5e9983f9ac3caa0`;
+  - `lvrf_outcome_spine_guard` `ebce0899f794447fc6af1eb9fd761bb8`;
+  - `lvrf_outcome_verifier_not_author` `942f9f555a55db5c662b4ab87a1c6684`;
+  - `lvrf_value_hypothesis_guard` `554d29c48e32296d7095234abf4b4839`.
+- **0 outcomes with a promised date; 1 commitment.** Curia's `e3fb0061` is unchanged: committed 30 Aug 2026 09:00 UTC,
+  no method, no class, no date, last updated 30 Aug 2026.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean
+  (`lvrf_ownership_violations()` 0).
+- **TOC 972** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**§28 is closed** (24 Nov 2026).
+- **The leaked Vite servers: approved by Brad as a small item** (on the 3.1 list).
+- **Brad's finding from his look, for his ruling before the pilot:** the commit form offers "Brad Piver (external
+  analyst of record)" on Curia, who is not customer-side. Read-only, on `2dc3f71` and prod: no route and no database
+  rule refuses it; the route checks only account, simulated and deleted. Planned as **LVRF_PLAN §29**, the next small
+  item, ahead of the future-date item.

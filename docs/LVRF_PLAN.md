@@ -6194,7 +6194,7 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 - **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
   are approved.
 
-## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§28 … Gate A"))
+## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§28 … Gate A"); **closed 24 Nov 2026**, deployed at `2dc3f71`, Gate C clean (`BUILD_STATUS.md`, "§28 closed"))
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D4 are approved as recommended.** Brad reads D2's wording table before the build.
@@ -6371,3 +6371,106 @@ next day records a day the person did not commit on.
   - the commit form after 19:00 New York time defaults to today's local date (Cancel).
 - **Gate C:** read-only, as usual.
 - **About a day,** including the sweep.
+
+**Closed (24 Nov 2026).** Brad's Gate B at `2dc3f71`; Gate C clean (`BUILD_STATUS.md`, "§28 closed").
+- **The leaked Vite servers: approved by Brad as a small item** (24 Nov 2026), as proposed above. It is on the 3.1 list.
+- **Brad's finding from his look:** the commit form offers a person who is not customer-side. Planned as §29, the next
+  small item, ahead of the future-date item.
+
+## 29. 3.1 small item: only a customer-side person commits (planned 24 Nov 2026, for Brad's approval)
+
+**Brad's finding (24 Nov 2026, from §28's look), before the pilot.** On Curia's Lot Acceptance Rate, the commit form's
+"Who commits" offers "Brad Piver (external analyst of record)". He is not customer-side, yet the form says a
+commitment is "the target a named person at the account commits to". Curia's `e3fb0061` was committed that way.
+
+### 1. What the code and the record hold today (read 24 Nov 2026, `2dc3f71` and prod; read only)
+
+**Nothing refuses it.** No route and no database rule refuses a commitment by a person who is not customer-side.
+- **The route** (`server/routes/outcomeWalk.ts`, `POST /api/value-outcomes/:id/commit`) refuses only a person who is
+  not of the account, is simulated, or is deleted (422, "committed_by_person_id does not belong to institution …, or
+  is simulated").
+- **The database** has no committer rule:
+  - `lvrf_outcome_spine_guard` checks the commit's date, the promised date and the fields, never who;
+  - `lvrf_block_simulated_attestor` checks only a verifier, and only that the verifier is not simulated.
+- **The form** (`OutcomeSpine.tsx`, `Commit`) lists every person of the account. A person who is not customer-side is
+  marked with a reason, but can still be chosen. The roles card (`CustomerRoles.tsx`) disables the same people.
+- **Two definitions disagree.**
+  - The form's mark comes from the roles card's `ineligible`, a heuristic: simulated, an `analyst_of_record` link,
+    "analyst" or "external" in the title, or sign-in credentials.
+  - The credit rule is `lvrf_customer_side()` (C3): of the account, not simulated, not a current analyst of record,
+    and holding a current customer-side role named from a source.
+  - For Brad on Curia, the form says "an analyst of record or external, not the customer". The rule says "no
+    customer-side role named from a source".
+- **What follows today:**
+  - The confidence model already gives such a committer no credit (model 1.0.2), and Curia's credit errata record the
+    points earlier seals gave.
+  - The commitment itself still stands, and the cost of delay and the falsifier's "target" both read it as a
+    committed target.
+- **On prod:**
+  - **1 commitment:** Curia's `e3fb0061`, by Brad, `lvrf_customer_side` false ("no customer-side role named from a
+    source");
+  - **Curia has one person** (Brad), so under this rule the form would offer no one there;
+  - **0 verified outcomes.**
+- **The verifier has the same gap.** `POST /verify` checks the same three things and no more. The verify form lists
+  people the same way.
+
+### 2. Decisions (recommendations first)
+
+- **D1. One rule: `lvrf_customer_side(person, account)`,** the rule credit already uses, so a commitment and its
+  credit can never disagree. A commitment is checked when it is made: a role revoked later does not undo it, as a
+  credit seal is not undone.
+- **D2. The list offers only customer-side people at the account.** The persons read adds each person's
+  `customer_side` and `side_reason` from `lvrf_customer_side_reason()`, and the form lists only those for whom it holds.
+  - **No one eligible:** the form says "No one at this account is customer-side yet. A person becomes customer-side
+    when the steward names their role from a source, on the roles card." It offers no committer, and Commit stays
+    disabled with that sentence as its unmet line.
+  - The form's mark, for those it still lists, is their roles with sources, as today.
+- **D3. The route refuses anyone else** (422), in one plain sentence: "Only a customer-side person at the account can
+  commit to a target. {Name} is not: {reason}." The reason is the rule's own words, such as "no customer-side role
+  named from a source" or "linked as analyst of record". The existing account, simulated and deleted checks stay
+  ahead of it.
+- **D4. The database refuses anyone else,** whatever the caller. `lvrf_outcome_spine_guard` gains the rule:
+  - **When it fires:** `committed_at` goes from null to set, or `committed_by_person_id` changes;
+  - **What it does:** it raises `check_violation` with the same sentence (constraint `value_outcomes_committer_customer_side`).
+  - **No new trigger** (227 stays) and **no migration** (TOC 972 stays).
+- **D5. `e3fb0061` stays frozen as recorded.** The rule fires only on a new commitment or a changed committer, so it
+  never reads, refuses or rewrites the old row. Its engagement is retired and frozen in any case.
+  - **The card says so in words.** Beside its committer, card 01d prints "not customer-side: committed before only
+    customer-side people could commit, {deploy date}", in the style of §28's two sentences. The sealed runs and their
+    errata are unchanged. Recommended, because the card otherwise reads as a customer's commitment.
+- **D6. The verifier, the same rule, in the same slice** (recommended): the verify form's list, the `/verify` route
+  (422, "Only a customer-side person at the account can verify an actual. …") and the database (the same guard, on
+  `verified_by_person_id`). Prod has no verified outcome, so nothing old is touched. If Brad rules it out, it goes on
+  the 3.1 list instead.
+- **D7. The roles card keeps its own list.** Who may be *given* a role is a different question from who holds one. Its
+  heuristic stays as it is, and only the commit and verify forms move to the rule.
+
+### 3. Gate A (planned)
+
+- **`verify_customer_committer` (new),** on a clone with a fixture account holding one customer-side person, one
+  person with no role named, and one analyst of record:
+  - **the form:** only the customer-side person is listed; on an account with none, the D2 sentence shows and Commit
+    stays disabled;
+  - **the route:** the other two are each refused (422) with D3's sentence and their own reason, with nothing written;
+    the customer-side person commits;
+  - **the database:** a direct `UPDATE` setting each of the other two as committer is refused (`check_violation`,
+    D4's constraint); changing a committed row's committer to one of them is refused too;
+  - **after a commit:** revoking the committer's role leaves the commitment standing;
+  - **`e3fb0061`** on the clone is byte-identical before and after hardening, and card 01d shows D5's sentence;
+  - **with D6:** the same three layers for the verifier.
+  - **Breaks:** each layer removed in turn (the route's check, the guard's clause, the form's filter), and each caught
+    by its own section. The route break is caught by the route section, not hidden by the database.
+- `check_plain_words` passes over the new sentences.
+- The scripts that commit or verify with a non-customer-side fixture are updated by design, each named.
+- The full regression, and equivalence against `2dc3f71`: every GET identical apart from the persons read's new
+  fields, named.
+
+### 4. Gate B and effort
+
+- **Gate B:** deploy, and hardening re-applied (`lvrf_outcome_spine_guard`, and `lvrf_block_simulated_attestor` or the
+  same guard for D6). No migration; the TOC stays 972 and the triggers 227. Each changed function's `md5(prosrc)` is
+  computed at Gate A.
+- **Brad's look:** Curia's commit form shows D2's sentence and no one to choose (Cancel); card 01d shows D5's sentence
+  beside `e3fb0061`'s committer.
+- **About half a day.**
+

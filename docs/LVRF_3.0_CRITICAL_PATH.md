@@ -214,8 +214,13 @@ cut line applied first.
            2026)". A Gate A check: no "§" and no slice code (B1–B4, S1–S7, L-numbers) in any client string.
          - **"Committed on" defaults to the person's local date,** not the UTC date (at 22:28 New York time on 23 Nov it
            showed 11/24/2026). Gate A proves that the route's "after the commit date" rule holds for a measure-by date
-           entered the same evening;
-       - **next, after §28 and before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
+           entered the same evening.
+         **Closed 24 Nov 2026,** deployed at `2dc3f71`, Gate C clean (`BUILD_STATUS.md`, "§28 closed");
+       - **next, after §28 and before the pilot (Brad, 24 Nov 2026, from §28's look): only a customer-side person
+         commits** (LVRF_PLAN §29, planned 24 Nov 2026, for Brad's approval). The commit form offers only customer-side
+         people at the account, and the route and the database refuse anyone else with a plain sentence. Curia's
+         `e3fb0061` stays frozen as recorded. Proposed with the verifier in the same slice (§29 D6);
+       - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
          every local date on Earth (§28 D4), and nothing later;
@@ -224,6 +229,10 @@ cut line applied first.
          on its first try. That depends on a race: in §28's full regression it found the stub already up and failed
          (24/3), then passed alone (27/0). **The stub API starts on a signal the test controls** (it answers only
          after the test says so), never on timing. A red result is then never ignorable;
+       - **The leaked Vite servers (approved by Brad, 24 Nov 2026, from §28's Gate A).** 27 scripts stop Vite by the
+         subshell's pid, which leaves Vite's own node process running; 20 were found in §28's regression. Every script
+         stops Vite by its port, as `verify_s5`, `s6` and six others already do, and the regression checks that no
+         Vite, Chrome or API is left running after each script;
        - **then S7, the success story of record (Brad, 24 Nov 2026), after the two findings above:** LVRF_PLAN §27,
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
