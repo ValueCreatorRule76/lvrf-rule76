@@ -16374,11 +16374,14 @@ A deploy only, no migration; the TOC stays 972 and the triggers 227. Under the r
 
 ### S6 closed: the War Room deployed; Gate C clean — 23 Nov 2026 (UTC)
 
-**Gate B for `s6-war-room`, run by Brad.** A deploy only, no migration. Brad's box output was not pasted.
-- **Not confirmed from here:** the box's head (`bf875e9` expected), the pre-S6 backup's name and its TOC, the served
-  bundle (`index-BCiWcS85.js` / `index-BMv5OQwB.css` expected) and the journal's "deploy OK". The ssh check was refused
-  from this session (the LVRF key is not loaded in the agent), so none of these was read from the box. Brad's look
-  below shows the S6 bundle is the one served.
+**Gate B for `s6-war-room`, run by Brad** (deployed 20 Nov 2026; the API started at 16:23:48 UTC). A deploy only,
+no migration. **Read from the box, read-only (over ssh with the LVRF key alone, 23 Nov 2026):**
+- **Head `bf875e9`**, tree clean.
+- **Pre-S6 backup `~/lvrf-pre-s6-20261120T162243Z.dump`** (`chmod 600`), **TOC 972** (`pg_restore -l`).
+- **The served bundle:** Caddy serves `/srv/lvrf/client/dist`. Its `index.html` (written 16:23:44 UTC) names
+  **`index-BCiWcS85.js` / `index-BMv5OQwB.css`**, and those are the only `index-` assets built.
+- "deploy OK" is the deploy script's own output, not in the journal. The head and the served bundle stand in for it
+  (Brad, 23 Nov 2026).
 
 **Brad's look (records nothing):**
 - **The War Room:** "No live customer engagements yet"; the confirmation gap refused at 0 ("it needs 5"); Curia,
@@ -16392,9 +16395,7 @@ A deploy only, no migration; the TOC stays 972 and the triggers 227. Under the r
 - **`GET /api/book` on prod holds no money key or string** (D1).
 - **Nothing written since the deploy:** no governance acts, refusals, audit rows or sessions beyond any sign-in.
 - `check_run_hashes` **27/27**; **TOC 972**; **227 triggers**; drift none.
-- **Not reported: ownership.** It was on Gate C's list. S6 changed nothing in `db/ownership.sql` and ran no migration,
-  and the deploy script refuses to restart on a failed ownership check (OWN-1). The API answers, so the check passed
-  at the deploy, but no read-only ownership check since the deploy is on the record.
+- **Ownership clean,** read from the box as `lvrf_app`: `lvrf_ownership_violations()` returns 0 rows.
 
 **S6 is closed** (23 Nov 2026), within the Fri 18 Dec 2026 cut-off.
 - **What S6 shipped:**

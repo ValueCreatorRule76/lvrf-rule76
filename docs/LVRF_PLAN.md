@@ -5566,7 +5566,7 @@ account in focus without losing it. It changes how pages are reached, not any ru
   the page.
 - **About half a day for the mock-ups; about 2 days for the build after they are approved.**
 
-## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **approved by Brad, 20 Nov 2026, with D1–D8 as recommended and D5 changed; mock-ups approved with three changes; Gate A 20 Nov 2026** (`BUILD_STATUS.md`, "S6: the War Room — Gate A"); **closed 23 Nov 2026**: deployed by Brad (`bf875e9` expected; the box output was not pasted), Gate C clean (`BUILD_STATUS.md`, "S6 closed"); **mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
+## 25. 3.1 slice S6: the War Room (planned 20 Nov 2026; **approved by Brad, 20 Nov 2026, with D1–D8 as recommended and D5 changed; mock-ups approved with three changes; Gate A 20 Nov 2026** (`BUILD_STATUS.md`, "S6: the War Room — Gate A"); **closed 23 Nov 2026**: deployed at `bf875e9` (20 Nov 2026), Gate C clean (`BUILD_STATUS.md`, "S6 closed"); **mock-ups first, no UI code until Brad approves them; must pass Gate C by Fri 18 Dec 2026, otherwise it waits until after 15 Jan 2027**)
 
 **Brad's rulings (20 Nov 2026):**
 - **§25 is approved with D1–D8 as recommended.**

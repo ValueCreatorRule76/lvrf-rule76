@@ -198,7 +198,7 @@ cut line applied first.
      changed.** **The same cut-off** (Brad, 19 Nov 2026): if it has not passed Gate C by
      **Fri 18 Dec 2026**, it waits until after the pilot's account-selection weeks (4–15 Jan 2027). No large navigation
      change deploys in that window.
-     **Closed 23 Nov 2026:** deployed by Brad (`bf875e9` expected), Gate C clean (`BUILD_STATUS.md`, "S6 closed").
+     **Closed 23 Nov 2026:** deployed at `bf875e9` (20 Nov 2026), Gate C clean (`BUILD_STATUS.md`, "S6 closed").
   4. **Then:**
      - the solution catalog page;
      - `/people`;
