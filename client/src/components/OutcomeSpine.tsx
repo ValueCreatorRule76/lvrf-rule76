@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { apiFetch } from '../api/http';
 import { useActor } from '../actor/ActorContext';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
@@ -18,9 +18,9 @@ interface SpineOutcome {
   baseline: string; target: string | null; committed_by: string | null; committed_on: string | null;
   attribution_method: string | null; measure_class: string | null; promised_on: string | null; actual: string | null; measured_on: string | null;
   realized: string | null; currency: string | null; realization: string; verified_by: string | null; verified_on: string | null;
-  admitted_actual_evidence: boolean;
+  admitted_actual_evidence: boolean; committed_before_rule: boolean; verified_before_rule: boolean;
 }
-interface Person { id: string; full_name: string; title: string; ineligible: string | null; roles: string | null }
+interface Person { id: string; full_name: string; title: string; ineligible: string | null; roles: string | null; customer_side: boolean }
 
 const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
@@ -43,13 +43,26 @@ const today = () => localToday();
 /** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
 const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
 
-function Commit({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; onDone: () => void }) {
+/** §29 D1, D2 (Brad, 24 Nov 2026): only a customer-side person at the account commits or verifies; the lists offer no one else. */
+const NO_CUSTOMER_SIDE = 'No customer-side person is recorded at this account yet.';
+function NoOne({ tenantSelf }: { tenantSelf: boolean }) {
+  if (tenantSelf) return <span className="block text-[12.5px] text-ink" data-testid="no-customer-side">No one can commit to or verify the tenant&apos;s own outcomes yet.</span>;
+  const go = (e: MouseEvent) => {
+    const el = document.getElementById('customer-roles'); if (!el) return;
+    e.preventDefault(); const det = el.closest('details'); if (det) det.open = true; el.scrollIntoView({ block: 'start' });
+  };
+  return <span className="block text-[12.5px] text-ink" data-testid="no-customer-side">{NO_CUSTOMER_SIDE} Add one, with a role named from a source, on{' '}
+    <a href="#customer-roles" onClick={go} className={'underline ' + FOCUS_RING} data-testid="no-customer-side-link">the roles card</a>.</span>;
+}
+const personLabel = (p: Person) => `${p.full_name}${p.title ? `, ${p.title}` : ''}${p.roles ? ` (${p.roles})` : ''}`;
+
+function Commit({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: Person[]; tenantSelf: boolean; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [v, setV] = useState({ target: '', committer: '', on: today(), by: '', note: '', method: '', klass: '' });
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="commit-open">Commit…</button>;
   const t = /^-?\d+(\.\d+)?$/.test(v.target.trim()) ? v.target.trim() : null;
   const who = persons.find((p) => p.id === v.committer);
-  const unmet = [...(t === null ? ['give the target, a number'] : []), ...(who ? [] : ['choose who commits']),
+  const unmet = [...(t === null ? ['give the target, a number'] : []), ...(who ? [] : [persons.length === 0 ? (tenantSelf ? 'no one can commit here yet' : 'record a customer-side person at this account first') : 'choose who commits']),
     ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']),
     ...(!/^\d{4}-\d{2}-\d{2}$/.test(v.by) ? ['give the date it will be measured by']
       : /^\d{4}-\d{2}-\d{2}$/.test(v.on) && (v.by <= v.on || v.by > threeYearsAfter(v.on)) ? ['make the measure-by date after the commit date and within three years of it'] : []), ...(v.note.trim().length < 12 ? ['note the commitment, in at least 12 characters'] : []),
@@ -62,10 +75,10 @@ function Commit({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; on
         fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block"><span className={L}>Target ({o.unit ?? 'unit'})</span><input className={I} inputMode="decimal" value={v.target} onChange={(e) => setV({ ...v, target: e.target.value })} data-testid="commit-target" /></label>
           <label className="block"><span className={L}>Who commits</span>
-            <select className={I} value={v.committer} onChange={(e) => setV({ ...v, committer: e.target.value })} data-testid="commit-committer">
+            {persons.length === 0 ? <NoOne tenantSelf={tenantSelf} /> : <select className={I} value={v.committer} onChange={(e) => setV({ ...v, committer: e.target.value })} data-testid="commit-committer">
               <option value="">Choose…</option>
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.full_name}{p.title ? `, ${p.title}` : ''}{p.ineligible ? ` (${p.ineligible})` : p.roles ? ` (${p.roles})` : ' (no customer-side role named)'}</option>)}
-            </select></label>
+              {persons.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
+            </select>}</label>
           <label className="block"><span className={L}>Committed on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="commit-on" /></label>
           <label className="block"><span className={L}>Measure by</span><input type="date" className={I} value={v.by} min={v.on || undefined} onChange={(e) => setV({ ...v, by: e.target.value })} data-testid="commit-by" />
             <span className="mt-1 block text-[11.5px] text-ink-45">The date the outcome will be measured by: after the commit date, within three years of it.</span></label>
@@ -114,12 +127,12 @@ function Measure({ o, onDone }: { o: SpineOutcome; onDone: () => void }) {
   );
 }
 
-function Verify({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; onDone: () => void }) {
+function Verify({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: Person[]; tenantSelf: boolean; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [v, setV] = useState({ verifier: '', on: today(), note: '' });
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="verify-open">Verify…</button>;
   const who = persons.find((p) => p.id === v.verifier);
-  const unmet = [...(who ? [] : ['choose who verifies']), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']), ...(v.note.trim().length < 12 ? ['note what was checked, in at least 12 characters'] : [])];
+  const unmet = [...(who ? [] : [persons.length === 0 ? (tenantSelf ? 'no one can verify here yet' : 'record a customer-side person at this account first') : 'choose who verifies']), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']), ...(v.note.trim().length < 12 ? ['note what was checked, in at least 12 characters'] : [])];
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="verify">
       <GovernedForm<{ value_outcome_id: string }>
@@ -127,10 +140,10 @@ function Verify({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; on
         provenance={<p className="m-0 text-[12.5px] text-ink">That a named person at the account checked the measured actual against their own records. The author of a hypothesis on this outcome does not verify it.</p>}
         fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block"><span className={L}>Who verifies</span>
-            <select className={I} value={v.verifier} onChange={(e) => setV({ ...v, verifier: e.target.value })} data-testid="verify-verifier">
+            {persons.length === 0 ? <NoOne tenantSelf={tenantSelf} /> : <select className={I} value={v.verifier} onChange={(e) => setV({ ...v, verifier: e.target.value })} data-testid="verify-verifier">
               <option value="">Choose…</option>
-              {persons.map((p) => <option key={p.id} value={p.id}>{p.full_name}{p.title ? `, ${p.title}` : ''}{p.ineligible ? ` (${p.ineligible})` : p.roles ? ` (${p.roles})` : ' (no customer-side role named)'}</option>)}
-            </select></label>
+              {persons.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
+            </select>}</label>
           <label className="block"><span className={L}>Verified on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="verify-on" /></label>
           <label className="block sm:col-span-2"><span className={L}>What was checked</span><textarea rows={2} className={I} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} data-testid="verify-note" /></label>
         </div>}
@@ -168,12 +181,13 @@ function WithdrawStep({ o, kind, notSteward, onDone }: { o: SpineOutcome; kind: 
 
 export function OutcomeSpine({ institutionId }: { institutionId: string }) {
   const { actor } = useActor();
-  const [d, setD] = useState<{ outcomes: SpineOutcome[]; persons: Person[] } | 'error' | null>(null);
+  const [d, setD] = useState<{ outcomes: SpineOutcome[]; persons: Person[]; tenantSelf: boolean } | 'error' | null>(null);
   const load = useCallback(() => {
     Promise.all([
       apiFetch(`/api/institutions/${institutionId}/outcome-spine`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))),
       apiFetch(`/api/institutions/${institutionId}/customer-roles`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))),
-    ]).then(([s, c]) => setD({ outcomes: (s as { outcomes: SpineOutcome[] }).outcomes, persons: ((c as { persons?: Person[] }).persons ?? []) }), () => setD('error'));
+    ]).then(([s, c]) => setD({ outcomes: (s as { outcomes: SpineOutcome[] }).outcomes, tenantSelf: Boolean((s as { tenant_self?: boolean }).tenant_self),
+      persons: ((c as { persons?: Person[] }).persons ?? []).filter((p) => p.customer_side) }), () => setD('error'));
   }, [institutionId]);
   useEffect(load, [load]);
   if (d === null) return <p className="m-0 text-[12.5px] text-ink-45">Reading the outcomes…</p>;
@@ -191,16 +205,18 @@ export function OutcomeSpine({ institutionId }: { institutionId: string }) {
           </div>
           <p className="m-0 mt-1 text-[11.5px] text-ink-45">{o.engagement}{o.engagement_retired ? ' (retired)' : ''} · baseline {withUnit(o.baseline, o.unit)}
             {' · '}{o.target !== null ? `target ${withUnit(o.target, o.unit)}, committed by ${o.committed_by ?? 'no one on record'}, ${o.committed_on}` : 'no commitment'}
+            {o.committed_before_rule && <span data-testid="outcome-committer-side">{' · not customer-side: committed before only customer-side people could commit, 24 Nov 2026'}</span>}
             {o.target !== null && <span data-testid="outcome-promised">{` · ${o.promised_on ? `measurement promised by ${o.promised_on}` : 'no promised date on record (committed before promised dates were recorded, 24 Nov 2026)'}`}</span>}
             {o.target !== null && ` · attribution ${o.attribution_method ? METHOD_LABEL[o.attribution_method] : 'not stated (committed before attribution was recorded, 6 Nov 2026)'} · class ${o.measure_class ? CLASS_LABEL[o.measure_class] : 'not stated'}`}
             {' · '}{o.actual !== null ? `actual ${withUnit(o.actual, o.unit)}, measured ${o.measured_on}` : 'not measured'}
-            {o.verified_by ? ` · verified by ${o.verified_by}, ${o.verified_on}` : ''}</p>
+            {o.verified_by ? ` · verified by ${o.verified_by}, ${o.verified_on}` : ''}
+            {o.verified_before_rule && <span data-testid="outcome-verifier-side">{' · not customer-side: verified before only customer-side people could verify, 24 Nov 2026'}</span>}</p>
           {o.engagement_retired ? <p className="m-0 mt-1 text-[11.5px] text-ink-70">This engagement is retired: its outcomes are frozen.</p> : (
             <div className="mt-1.5 flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                {o.target === null && <Commit o={o} persons={d.persons} onDone={load} />}
+                {o.target === null && <Commit o={o} persons={d.persons} tenantSelf={d.tenantSelf} onDone={load} />}
                 {o.target !== null && o.actual === null && <Measure o={o} onDone={load} />}
-                {o.actual !== null && o.realization === 'measured' && <Verify o={o} persons={d.persons} onDone={load} />}
+                {o.actual !== null && o.realization === 'measured' && <Verify o={o} persons={d.persons} tenantSelf={d.tenantSelf} onDone={load} />}
               </div>
               {(o.target !== null) && o.realization !== 'verified' && (
                 <div className="mt-1 border-l-[3px] border-warning pl-3" data-testid="danger-zone">

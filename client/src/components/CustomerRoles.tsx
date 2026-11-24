@@ -24,6 +24,32 @@ const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-
 const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 const ROLE = (r: string) => r.replace('_', ' ');
 
+/** §29 (Brad, 24 Nov 2026): a person of this account, added here so a role can be named for them (the same route as W1's). */
+function AddPerson({ institutionId, onDone }: { institutionId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [p, setP] = useState({ full_name: '', email: '', title: '' });
+  if (!open) return <button type="button" onClick={() => setOpen(true)} data-testid="person-add-open"
+    className={'self-start border border-silver px-3 py-1.5 text-[12px] font-semibold text-ink-70 hover:border-ink hover:text-ink ' + FOCUS_RING}>Add a person of this account…</button>;
+  const unmet = [...(p.full_name.trim() ? [] : ['give the full name']), ...(p.email.trim() ? [] : ['give the email'])];
+  return (
+    <div className="border-t border-rule-soft pt-3" data-testid="person-add">
+      <GovernedForm<{ person_ids: string[] }>
+        path={`/api/institutions/${institutionId}/inputs`} provenanceLabel="What this records"
+        provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account: the customer&apos;s own people only, never the analyst of record or anyone at the tenant. Adding them names no role: name it below, from a source.</p>}
+        fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block"><span className={L}>Full name</span><input className={I} value={p.full_name} onChange={(e) => setP({ ...p, full_name: e.target.value })} data-testid="person-add-name" /></label>
+          <label className="block"><span className={L}>Email</span><input className={I} value={p.email} onChange={(e) => setP({ ...p, email: e.target.value })} data-testid="person-add-email" /></label>
+          <label className="block sm:col-span-2"><span className={L}>Title at the account</span><input className={I} value={p.title} onChange={(e) => setP({ ...p, title: e.target.value })} data-testid="person-add-title" /></label>
+        </div>}
+        confirm={<span data-testid="confirm-text">Add {p.full_name.trim()}{p.title.trim() ? `, ${p.title.trim()}` : ''}, as a person of this account.</span>}
+        canSubmit={unmet.length === 0} unmet={unmet}
+        buildBody={() => ({ persons: [{ full_name: p.full_name.trim(), email: p.email.trim(), title: p.title.trim() || null }] })}
+        submitLabel="Add the person" onSuccess={() => { setOpen(false); setP({ full_name: '', email: '', title: '' }); onDone(); }} renderSuccess={() => <>Added.</>} />
+      <button type="button" onClick={() => setOpen(false)} className={'mt-2 text-[11.5px] text-ink-45 underline ' + FOCUS_RING}>Cancel</button>
+    </div>
+  );
+}
+
 function Revoke({ g, onDone, notSteward }: { g: Grant; onDone: () => void; notSteward?: string }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
@@ -70,7 +96,7 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
     ...(reason.trim().length < 12 ? ['give the reason, in at least 12 characters'] : [])];
   const close = () => { setOpen(false); setPersonId(''); setRole(''); setSourceId(''); setReason(''); };
   return (
-    <div className="flex flex-col gap-2" data-testid="customer-roles">
+    <div className="flex flex-col gap-2" data-testid="customer-roles" id="customer-roles">
       <p className="m-0 text-[12px] text-ink-45">Only a customer-side person earns credit for an attestation, a commitment or a verification: a person of this account whose role is named here, from a source.</p>
       {data.grants.length === 0
         ? <p className="m-0 text-[12.5px] text-ink-45" data-testid="customer-roles-none">No customer-side role named yet.</p>
@@ -88,6 +114,10 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
               className={'self-start border border-ink px-3 py-1.5 text-[12px] font-semibold text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 ' + FOCUS_RING}>Name a customer-side role…</button>
             {notSteward && <span className="text-[11px] text-ink-45" data-testid="customer-role-reason">{notSteward}</span>}
           </span>
+        : null}
+      {!open && <AddPerson institutionId={institutionId} onDone={() => setReload((n) => n + 1)} />}
+      {!open
+        ? null
         : <div className="border-t border-rule-soft pt-3" data-testid="customer-role-form">
           <GovernedForm<{ customer_role_grant_id: string }>
             path={`/api/institutions/${institutionId}/customer-roles`} provenanceLabel="What this records"

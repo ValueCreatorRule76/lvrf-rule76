@@ -78,7 +78,9 @@ export function customerRoleGrantRouter(pool: Pool): Router {
                           OR coalesce(p.title, '') ~* '(analyst|external)' THEN 'an analyst of record or external, not the customer'
                      WHEN EXISTS (SELECT 1 FROM person_credentials c WHERE c.person_id = p.id) THEN 'has sign-in credentials: vendor-side'
                      ELSE NULL END AS ineligible,
-                lvrf_customer_roles(p.id, $1) AS roles
+                lvrf_customer_roles(p.id, $1) AS roles,
+                -- §29 D1: the one rule credit, the commit and verify routes and the database read.
+                lvrf_customer_side(p.id, $1) AS customer_side
            FROM persons p WHERE p.institution_id = $1 AND p.deleted_at IS NULL ORDER BY p.full_name`, [institutionId]);
       const { rows: grants } = await pool.query(
         `SELECT g.id, g.person_id, pp.full_name AS person, g.role, g.reason, e.id AS source_evidence_id, e.summary AS source_summary, e.provenance AS source,

@@ -118,7 +118,7 @@ export function outcomeSpineRouter(pool: Pool): Router {
     const { institutionId } = req.params;
     if (!isUuid(institutionId)) { res.status(400).json({ message: `invalid institution id: ${institutionId}` }); return; }
     try {
-      const { rows: [inst] } = await pool.query<{ tenant_id: string }>('SELECT tenant_id FROM institutions WHERE id = $1 AND deleted_at IS NULL', [institutionId]);
+      const { rows: [inst] } = await pool.query<{ tenant_id: string; is_tenant_self: boolean }>('SELECT tenant_id, is_tenant_self FROM institutions WHERE id = $1 AND deleted_at IS NULL', [institutionId]);
       if (!inst || isOtherTenant(req, inst.tenant_id, { table: 'institutions', id: institutionId })) {
         res.status(404).json({ message: `institution ${institutionId} not found` }); return;
       }
@@ -131,6 +131,12 @@ export function outcomeSpineRouter(pool: Pool): Router {
                 trim_scale(vo.actual_value)::text AS actual, to_char(vo.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS measured_on,
                 trim_scale(vo.realized_currency_impact)::text AS realized, vo.currency_code AS currency, vo.realization,
                 (SELECT full_name FROM persons WHERE id = vo.verified_by_person_id) AS verified_by,
+                -- §29 D5: a committer or verifier not customer-side who never held a role at the account was recorded
+                -- before the rule (since it, the route and the database refuse them); a role revoked later is not this.
+                (vo.committed_by_person_id IS NOT NULL AND lvrf_customer_side_reason(vo.committed_by_person_id, vo.institution_id) IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM customer_role_grants cg WHERE cg.person_id = vo.committed_by_person_id AND cg.institution_id = vo.institution_id)) AS committed_before_rule,
+                (vo.verified_by_person_id IS NOT NULL AND lvrf_customer_side_reason(vo.verified_by_person_id, vo.institution_id) IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM customer_role_grants cg WHERE cg.person_id = vo.verified_by_person_id AND cg.institution_id = vo.institution_id)) AS verified_before_rule,
                 to_char(vo.verified_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS verified_on,
                 EXISTS (SELECT 1 FROM value_outcome_evidence voe JOIN evidence e ON e.id = voe.evidence_id
                          WHERE voe.value_outcome_id = vo.id AND voe.supports = 'actual' AND voe.withdrawn_at IS NULL
@@ -139,7 +145,7 @@ export function outcomeSpineRouter(pool: Pool): Router {
            FROM value_outcomes vo JOIN business_metrics bm ON bm.id = vo.business_metric_id JOIN engagements g ON g.id = vo.engagement_id
           WHERE vo.institution_id = $1 AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL
           ORDER BY g.created_at, vo.created_at`, [institutionId]);
-      res.json({ outcomes: rows });
+      res.json({ outcomes: rows, tenant_self: inst.is_tenant_self });
     } catch (err) { respondServerError(res, err); }
   });
   return router;

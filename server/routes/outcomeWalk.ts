@@ -1,3 +1,4 @@
+import { customerSideRefusal } from '../lib/customerSide.js';
 import { Router } from 'express';
 import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
@@ -230,6 +231,12 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(422).json({
           message: `committed_by_person_id does not belong to institution ${outcome.institution_id}, or is simulated: ${committedByPersonId}`,
         });
+        return;
+      }
+      // §29 D3/D6 (Brad, 24 Nov 2026): and customer-side, by the one rule credit reads.
+      const sideRefusal = await customerSideRefusal(client, 'commit', committedByPersonId, outcome.institution_id);
+      if (sideRefusal) {
+        res.status(422).json({ message: sideRefusal });
         return;
       }
 
@@ -606,6 +613,12 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(422).json({
           message: `verified_by_person_id does not belong to institution ${outcome.institution_id}, or is simulated: ${verifiedByPersonId}`,
         });
+        return;
+      }
+      // §29 D3/D6 (Brad, 24 Nov 2026): and customer-side, by the one rule credit reads.
+      const sideRefusal = await customerSideRefusal(client, 'verify', verifiedByPersonId, outcome.institution_id);
+      if (sideRefusal) {
+        res.status(422).json({ message: sideRefusal });
         return;
       }
 

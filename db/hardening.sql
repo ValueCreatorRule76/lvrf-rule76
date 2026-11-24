@@ -351,6 +351,7 @@ DECLARE
   attestor_sim boolean;
   resolver_sim boolean;
   verifier_sim boolean;
+  committer_id uuid;
 BEGIN
   IF TG_TABLE_NAME = 'assessments' THEN
     assessor_id := NEW.assessed_by_person_id;
@@ -359,10 +360,11 @@ BEGIN
     resolver_id := NEW.citation_resolved_by_person_id;
   ELSIF TG_TABLE_NAME = 'value_outcomes' THEN
     verifier_id := NEW.verified_by_person_id;
+    committer_id := NEW.committed_by_person_id;
   END IF;
 
   IF assessor_id IS NULL AND attestor_id IS NULL
-     AND resolver_id IS NULL AND verifier_id IS NULL THEN
+     AND resolver_id IS NULL AND verifier_id IS NULL AND committer_id IS NULL THEN
     RETURN NEW;
   END IF;
 
@@ -397,6 +399,30 @@ BEGIN
       'LVRF: a simulated person may not verify a value outcome. '
       'Attestation requires a real person of record.'
       USING ERRCODE = 'check_violation';
+  END IF;
+  IF TG_TABLE_NAME = 'value_outcomes' THEN
+    -- §29 D4, D6 (Brad, 24 Nov 2026): only a customer-side person at the account commits to a target or verifies an
+    -- actual, by the one rule credit reads (lvrf_customer_side_reason). Checked when the commitment or verification
+    -- is made, or its person changes; a role revoked later does not undo it, and a row recorded before this rule is
+    -- never read by it.
+    IF NEW.committed_by_person_id IS NOT NULL
+       AND (TG_OP = 'INSERT' OR NEW.committed_by_person_id IS DISTINCT FROM OLD.committed_by_person_id
+            OR (OLD.committed_at IS NULL AND NEW.committed_at IS NOT NULL))
+       AND lvrf_customer_side_reason(NEW.committed_by_person_id, NEW.institution_id) IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: only a customer-side person at the account can commit to a target. % is not: %.',
+        coalesce((SELECT full_name FROM persons WHERE id = NEW.committed_by_person_id), 'That person'),
+        lvrf_customer_side_reason(NEW.committed_by_person_id, NEW.institution_id)
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_committer_customer_side';
+    END IF;
+    IF NEW.verified_by_person_id IS NOT NULL
+       AND (TG_OP = 'INSERT' OR NEW.verified_by_person_id IS DISTINCT FROM OLD.verified_by_person_id
+            OR (OLD.verified_at IS NULL AND NEW.verified_at IS NOT NULL))
+       AND lvrf_customer_side_reason(NEW.verified_by_person_id, NEW.institution_id) IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: only a customer-side person at the account can verify an actual. % is not: %.',
+        coalesce((SELECT full_name FROM persons WHERE id = NEW.verified_by_person_id), 'That person'),
+        lvrf_customer_side_reason(NEW.verified_by_person_id, NEW.institution_id)
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_verifier_customer_side';
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
