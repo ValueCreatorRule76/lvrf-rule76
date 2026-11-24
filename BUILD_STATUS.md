@@ -16408,3 +16408,157 @@ no migration. **Read from the box, read-only (over ssh with the LVRF key alone, 
   - the "Late outcomes" tile's longer empty dash (Brad, 23 Nov 2026).
 - **Next:** the promised measurement date at commit (LVRF_PLAN §26). Planned only, for Brad's approval. It ships
   before the pilot's first commitment.
+
+### §26: the promised measurement date at commit — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §26; Brad's rulings, 23 Nov 2026: D1–D6 as recommended, D3 three years, D4 UTC dates
+said wherever late shows). Branch `promised-date` (`40dc2de`), on `a870cdf`. **No migration, table, trigger or CHECK.**
+- **The database (hardening §34, two function bodies only):** `lvrf_outcome_spine_guard` and
+  `lvrf_outcome_withdrawal_guard`.
+  - A new commit states `promised_measured_at` (D1). It must be a UTC date after the commit's UTC date and no more than
+    three years after it (D3).
+  - The date is fixed while the commitment stands (D2). So a commitment made before §26 keeps none.
+  - An outcome with no commitment holds no date. A commitment taken back takes its date with it.
+  - A commitment's withdrawal records `promised_measured_on`: the date it takes back, or null before §26 (D5).
+  - New refusals, each in words: `value_outcomes_commit_states_promised_date`, `_promised_date_window`,
+    `_promised_date_fixed`, `_promised_date_needs_commit`.
+- **The routes:**
+  - `POST …/commit` requires `promised_measured_on` (YYYY-MM-DD). It refuses each D3 breach in words, naming the
+    window, and stores the date at 12:00 UTC. HB-0014's payload and the response name the date.
+  - The commitment withdrawal records the date and clears it. Card 01d's read gains `promised_on`.
+  - `GET /api/book`: late compares UTC dates, `(promised AT TIME ZONE 'UTC')::date < today (UTC)` (D4).
+- **The page:**
+  - **Card 01d's commit form:** a "Measure by" field, with D3 in its help text and unmet lines. The confirmation reads
+    "… on {date}; measured by {date}; …".
+  - **The card:** "measurement promised by …", or "no promised date on record (committed before §26)".
+  - **The War Room:** the late tile and a line under the table say "An outcome is late once today's UTC date is after
+    its promised date." The band says "late outcomes (today's UTC date after the promised date)".
+- **Not changed:** the sealed case already carried `roadmap.promised_measured_on`, and the value case already printed
+  it. No payload version change; the 27 sealed runs are byte-identical.
+- **Departures, named:**
+  - **The commitment's withdrawal confirmation names the date only when there is one.** It is B4's ratified sentence
+    (§14), compared word for word, so a pre-§26 commitment's reads exactly as before.
+  - **§26 said no prod commitment exists; one does** (§26 corrected). Curia's `e3fb0061`, 30 Aug 2026, is in a
+    retired engagement (frozen) on a reference example, outside the book. It keeps no date. Read from prod, read-only:
+    1 committed outcome, 0 with a promised date.
+  - **A raw `INSERT` of an outcome with a date is not refused by §34**, whose guard is `BEFORE UPDATE`, as B4's method
+    rule is. No route inserts a committed outcome.
+
+**`verify_promised_date.sh` (new): 106 passed, 0 failed.** On a clone of the prod copy, as the steward by session.
+- **P0:** no migration; 227 triggers; drift none; every run byte-identical after hardening; no outcome carries a
+  date. Curia's pre-§26 commitment stands with none, and card 01d says so.
+- **P1, through the form:**
+  - the Measure-by field and its help text;
+  - the unmet lines: no date; on the commit date; one day past three years;
+  - the confirmation, word for word;
+  - the row at 12:00 UTC on the date;
+  - HB-0014's payload, and one commit act, the steward's;
+  - the card;
+  - a run sealed afterwards carries `roadmap.promised_measured_on`, and its value case prints "Committed measurement
+    date: …".
+- **P1r, the route's refusals in words:** no date; not a calendar date (`2027-02-30`); on the commit date; one day
+  past three years. Three years to the day is admitted.
+- **P2, the database as `lvrf_app`, rolled back, each refused by §34 itself:**
+  - a commit with no date;
+  - a date on the commit date, and one past three years;
+  - a date changed while the commitment stands;
+  - a date set on the pre-§26 commitment;
+  - a date on an uncommitted outcome;
+  - a commitment taken back leaving its date;
+  - a withdrawal recording no date, or another date.
+- **P3, the withdrawal:**
+  - by route, it records the date and clears it; a new commit takes a new date;
+  - a pre-§26 withdrawal recording `promised_measured_on` null is admitted (on the database: Curia's is frozen), and
+    one without the key is refused.
+- **P4, late (D4), against SQL and `GET /api/book`:**
+  - promised today: not late;
+  - promised yesterday and unmeasured: late;
+  - promised yesterday and measured: not late.
+  - On the page: the tile counts 1, with the rule; the rule is under the table; the row reads "1 late: promised …";
+    the band reads "1 late outcome (today's UTC date after the promised date)".
+- **A coverage gate:** every section printed its lines.
+- **Breaks, each against a clean pass; all caught, files restored byte-identical, functions by re-applying hardening:**
+  - **B1** the date rule removed: a commit with no date lands;
+  - **B2** the date made changeable;
+  - **B3** the withdrawal not recording the date: the database refuses the route's withdrawal (422), and the
+    commitment stands;
+  - **B4** "late" back to `< now()`: an outcome promised today, from 00:00 UTC (a named fixture under replica on the
+    clone, for this break only), reads late;
+  - **B5** the date left out of the confirmation.
+
+**Scripts changed by design (D1: every commit states a date):**
+- every scripted commit gains `promised_measured_on`, in `verify_acts_lineage`, `c2`, `c3`, `c3b`, `case_snapshot`,
+  `commit_measure_verify`, `evidence_form`, `frozen_outcomes`, `outside_in_walk`, `value_case`, `value_hypotheses`,
+  `tenant_scope_cases` and `lib/s3_cfo_fixture`;
+- `verify_s6_war_room`'s P2 commits by route, with a date 20 days past, instead of setting one by SQL. Its B5 withdraws
+  the commitment by route and commits again after. Its walk reads the rule in the tile and the band. **158/0.**
+
+**The full regression:**
+- **All 57 scripts passed in one run** (59 min, 01:14–02:13 UTC).
+- **5,714 tallied checks,** plus `verify_tenant_scope`'s 329 PASS lines and 0 FAIL.
+- Every tracked file was byte-identical after the run, apart from the §26 plan correction, written by hand during it.
+- **Equivalence against the deployed `bf875e9`** (`scripts/equivalence_gets.sh`, the 14 Nov snapshot): **213 GETs,
+  210 identical, 3 differing.** The 3 are card 01d's `GET /api/institutions/:id/outcome-spine` for three accounts.
+  Each is byte-identical apart from the added key `promised_on`, null in every row. No route was added or removed.
+- **The bundle:** **`index-DWCdSp5i.js` / `index-BMv5OQwB.css`** (the CSS is unchanged).
+- **The functions' sources (`md5(prosrc)`):**
+
+  | | prod now (= `bf875e9`, read 24 Nov) | after Gate B |
+  |---|---|---|
+  | `lvrf_outcome_spine_guard` | `2caf8e2b…` | **`bd4ddfb7895c53df6a4adfcf262eadda`** |
+  | `lvrf_outcome_withdrawal_guard` | `5c1aaff8…` | **`1d8baf40257a9df2f91009ebff978d2b`** |
+
+#### Gate B for §26 (not run; Brad's pastes)
+
+No migration. Hardening is re-applied, and the TOC stays 972 and the triggers 227. Every step is Brad's paste; nothing
+here was run on the box. Stop at any step whose expectation is not met.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only promised-date && git push && git log --oneline -3
+   ```
+   Expect the merge to fast-forward from `a870cdf`.
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p26-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**.
+3. **Ownership, then hardening (§34's two functions):**
+   ```
+   cd /srv/lvrf && sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p26.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p26.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT proname || ' ' || md5(prosrc) FROM pg_proc WHERE proname IN ('lvrf_outcome_spine_guard', 'lvrf_outcome_withdrawal_guard') ORDER BY 1"
+   ```
+   Expect:
+   - `ownership exit 0`;
+   - `hardening exit 0`, with `0` ERROR lines;
+   - **227**;
+   - `lvrf_outcome_spine_guard bd4ddfb7895c53df6a4adfcf262eadda`;
+   - `lvrf_outcome_withdrawal_guard 1d8baf40257a9df2f91009ebff978d2b`.
+
+   The old API runs against the new guard until step 5. It would refuse a commit (no date), but nothing on prod
+   commits before the pilot.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p26-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**: function bodies change no TOC entry.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-DWCdSp5i.js` / `index-BMv5OQwB.css`**;
+   - drift none (53, newest `0052`);
+   - "active and answering", health 200, `actor_header` off;
+   - the 401 checks, **`deploy OK`.**
+
+**Brad's look (records nothing):**
+- **On any account's card 01d with an outcome:** open "Commit…", see "Measure by" and its help text, then Cancel.
+  Do not submit.
+- **Curia's committed outcome** reads "no promised date on record (committed before §26)".
+- **The War Room is empty as before.** The late tile and the band show their rule only once there is a member, so on
+  prod today nothing about late is visible.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- the two functions' `md5(prosrc)` as in step 3;
+- 0 outcomes with a promised date; Curia's commitment unchanged;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.

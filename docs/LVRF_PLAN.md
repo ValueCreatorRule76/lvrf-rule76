@@ -5753,7 +5753,7 @@ stands, and of what is due, refuted or late. It writes nothing.
 - **About half a day for the mock-ups; about 3 days for the build after they are approved.** With the cut-off on
   Fri 18 Dec 2026, there are four weeks.
 
-## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **approved by Brad, 23 Nov 2026, with D1–D6 as recommended, D3's bound and D4's wording ruled**)
+## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **approved by Brad, 23 Nov 2026, with D1–D6 as recommended, D3's bound and D4's wording ruled**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§26 … Gate A"))
 
 **Brad's rulings (23 Nov 2026):**
 - **D1–D6 are approved as recommended.**
@@ -5827,7 +5827,10 @@ comment). Without the date, nothing can tell the two apart.
 ### 3. What it does not do
 
 - No route sets or changes a date on an existing commitment, by design (D2).
-- No backfill on prod. A rule-9 fixture is not needed, because no prod commitment exists to carry one.
+- No backfill on prod. ~~A rule-9 fixture is not needed, because no prod commitment exists to carry one.~~ **Corrected
+  at the build (23 Nov 2026):** prod holds one commitment, Curia's `e3fb0061` (30 Aug 2026, before B4: no method, no
+  class). Its engagement is retired, so its outcomes are frozen, and Curia is a reference example, outside the book.
+  It keeps no date (D2), and card 01d says "no promised date on record (committed before §26)".
 - No reminder or notification as the date nears. The War Room's "Not yet due" and "late" are the read.
 - No change to measure or verify.
 
