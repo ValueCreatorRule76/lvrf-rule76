@@ -217,8 +217,8 @@ PX="$(printf "BEGIN;\nSET LOCAL session_replication_role = replica;\nINSERT INTO
 RUN0="$(q "SELECT id FROM value_runs WHERE tenant_id = '$TEN' LIMIT 1")"; ENG0="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$O'")"
 LEV="$(q "SELECT id FROM value_levers WHERE tenant_id = '$TEN' AND deleted_at IS NULL LIMIT 1")"; OFF="$(q "SELECT id FROM offerings WHERE tenant_id = '$TEN' LIMIT 1")"
 BM="$(q "SELECT business_metric_id FROM value_outcomes WHERE id = '$O'")"; EV0="$(q "SELECT evidence_id FROM value_outcome_evidence WHERE value_outcome_id = '$O' LIMIT 1")"
-raised() {  # LABEL SQL NEEDLE(raw, after the prefix) -> the raw message and its on-screen form both checked
-  local out; out="$(printf "BEGIN;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\n%s;\nROLLBACK;\n" "$S" "$2" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+raised() {  # LABEL SQL NEEDLE(raw, after the prefix) [ACTOR] -> the raw message and its on-screen form both checked
+  local out; out="$(printf "BEGIN;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\n%s;\nROLLBACK;\n" "${4:-$S}" "$2" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
   local raw; raw="$(printf '%s' "$out" | grep -m1 -o 'ERROR:  .*' | sed 's/^ERROR:  //')"
   if printf '%s' "$raw" | grep -qF -- "$3"; then
     local scr; scr="$(SM "$raw")"
@@ -246,8 +246,39 @@ if cfo_fixture; then
   raised "another company's CFO lens policy (record_documents)" "$(PRQ "$LX")" "a CFO-lens print request names the CFO lens policy it applied, your company's current one."
   raised "a superseded CFO lens policy (record_documents)" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, 'Verification: a newer CFO lens, so the current one is superseded.', '$S', id FROM lens_policies WHERE id = '$CUR'; $(PRQ "$CUR")" "a CFO-lens print request names the CFO lens policy it applied, your company's current one."
 else bad "S3's Northwind fixture could not be built"; fi
+# The steward's acts no other script raises at the database: each by X, current staff of your company who is not the steward.
+X="$(q "INSERT INTO persons (tenant_id, full_name, email) VALUES ('$TEN', 'Staff X (§30 fixture, invented)', 'x.$TS@k30.example') RETURNING id" | head -1)"
+GRANT="$(q "SELECT id FROM customer_role_grants WHERE tenant_id = '$TEN' AND revoked_at IS NULL LIMIT 1")"
+MARK="$(q "SELECT id FROM reference_example_markers WHERE tenant_id = '$TEN' AND retired_by_person_id IS NULL AND deleted_at IS NULL AND superseded_by_id IS NULL LIMIT 1")"
+[ -n "$X" ] && [ -n "$GRANT" ] && [ -n "$MARK" ] && ok "X, and the rows X acts on: a role grant, a marker" || bad "fixtures: X '$X' grant '$GRANT' marker '$MARK'"
+raised "naming a role, by X (customer_role_grants)" "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) SELECT tenant_id, institution_id, person_id, role, source_evidence_id, 'Verification: by X.', '$X' FROM customer_role_grants WHERE id = '$GRANT'" "only the steward names a customer-side role." "$X"
+raised "revoking a role, by X (customer_role_grants)" "UPDATE customer_role_grants SET revoked_at = now(), revoked_by_person_id = '$X', revocation_reason = 'Verification: by X.' WHERE id = '$GRANT'" "only the steward revokes a role." "$X"
+raised "unmarking a reference example, by X (reference_example_markers)" "UPDATE reference_example_markers SET retired_by_person_id = '$X', retirement_reason = 'Verification: by X.' WHERE id = '$MARK'" "only the steward may unmark a reference example." "$X"
+# Two shapes no longer exist (the copy holds none, and their CHECKs are validated): a row from before "about" was
+# recorded, and a row verified without an opening. Each in one transaction, rolled back whole: the CHECK dropped, such a
+# row inserted (a copy of the fixture's actual), then X's act on it.
+gone_shape() {  # LABEL CONSTRAINT ROW_JSON UPDATE_SET NEEDLE
+  local id=aaaaaaaa-0000-4000-8000-000000000030 out raw
+  out="$(printf "BEGIN;\nALTER TABLE evidence DROP CONSTRAINT %s;\nSET LOCAL session_replication_role = replica;\nINSERT INTO evidence SELECT (jsonb_populate_record(NULL::evidence, to_jsonb(e) || jsonb_build_object('id', '%s') || '%s'::jsonb)).* FROM evidence e WHERE e.id = '%s';\nSET LOCAL session_replication_role = origin;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nUPDATE evidence SET %s WHERE id = '%s';\nROLLBACK;\n" "$2" "$id" "$3" "$EV0" "$X" "$4" "$id" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+  raw="$(printf '%s' "$out" | grep -m1 -o 'ERROR:  .*' | sed 's/^ERROR:  //')"
+  printf '%s' "$raw" | grep -qF -- "$5" && ok "$1: \"$(SM "$raw")\"" || bad "$1: raised \"$raw\""
+  [ "$(q "SELECT count(*) FROM pg_constraint WHERE conname = '$2' AND convalidated")" = "1" ] && ok "  ...$2 is back, validated (the drop rolled back with the rest)" || bad "  ...$2 is not back"
+}
+gone_shape "what a row from before is about, by X (evidence)" evidence_about_stated '{"about_institution_id": null, "about_other_party": null}' "about_institution_id = institution_id" "only the steward states what a row from before this field is about."
+gone_shape "withdrawing a verification, by X (evidence)" evidence_verified_opened '{"source_verified": true, "citation_resolved": false}' "source_verified = false" "only the steward withdraws a verification."
+raised "withdrawing a measurement, by X (outcome_withdrawals)" "INSERT INTO outcome_withdrawals (tenant_id, value_outcome_id, kind, withdrawn_values, reason, withdrawn_by_person_id) VALUES ('$TEN', '$O', 'measurement', '{\"actual_value\":\"1.1\"}', 'Verification: by X.', '$X')" "only the steward withdraws a measurement or a commitment" "$X"
+raised "a share for review, by X (record_documents)" "INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, disclosure, content_hash, payload, rendered_by_person_id, value_run_id, kind, shared_with) SELECT '$TEN', r.engagement_id, (r.payload->>'valueOutcomeId')::uuid, 'shared_for_review', r.payload_hash, '{}'::jsonb, '$X', r.id, 'share_for_review', 'Pat Example (fixture)' FROM value_runs r WHERE r.id = '$FX_RUN'" "only the steward shares a run for review." "$X"
+raised "a research clearance, by X (research_clearances)" "INSERT INTO research_clearances (tenant_id, kind, institution_id, model, retention_class, disclosure_text, disclosure_sha256, reason, person_id) VALUES ('$TEN', 'account', '$INST', 'claude', 'standard', 'Verification disclosure.', repeat('0', 64), 'Verification: by X.', '$X')" "only the steward clears an account or an industry for research with Claude" "$X"
+# The rest of D3's rows, each raised by its own guard.
+CUR_O="$(q "SELECT id FROM value_outcomes WHERE id::text LIKE 'e3fb0061%'")"
+raised "the act's subject (governance_acts)" "INSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, actor_person_id, route) VALUES ('$TEN', 'validate', 'lens_policies', '$LX', '$S', 'POST /api/policies/lenses')" "the act's subject is not in your company's record."
+raised "a document by a person not on your company's staff (record_documents)" "$(PRQ "$CUR" | sed "s/'$S', r.id, 'print_request'/'$OWNER', r.id, 'print_request'/")" "a print request is recorded by a current member of your company's staff, as themself." "$OWNER"
+raised "a finding on another account's outcome (figure_findings)" "INSERT INTO figure_findings (tenant_id, institution_id, value_outcome_id, field, value, finding_text, reason, recorded_by_person_id) VALUES ('$TEN', '$INST', '$CUR_O', 'baseline_value', 1, 'The baseline has no source on record: verification.', 'Verification: another account''s outcome.', '$S')" "is not of this account."
+raised "a lever not of your company (value_hypotheses)" "INSERT INTO value_hypotheses (tenant_id, institution_id, value_outcome_id, value_lever_id, statement, falsifier_reference, falsifier_due, falsifier_conditions, author_person_id) VALUES ('$TEN', '$INST', '$O', gen_random_uuid(), 'A statement long enough for the CHECK.', 'baseline', DATE '2027-06-30', 'on the same denominator', '$S')" "is not a current lever of your company."
+raised "a clearance for another company's account (research_clearances)" "INSERT INTO research_clearances (tenant_id, kind, institution_id, model, retention_class, disclosure_text, disclosure_sha256, reason, person_id) VALUES ('$TEN', 'account', '$IX', 'claude', 'standard', 'Verification disclosure.', repeat('0', 64), 'Verification: another company''s account.', '$S')" "the account or industry is not a current one of your company."
+raised "a call naming no prompt of your company (research_calls)" "INSERT INTO research_calls (tenant_id, kind, prompt_id, prompt_sha256, model, retention_class, person_id) VALUES ('$TEN', 'account', gen_random_uuid(), repeat('0', 64), 'claude', 'standard', '$S')" "the call names a prompt of your company, with that prompt's SHA-256."
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
-cover "$LOG" 'the account (executive_summaries)' 'the run (run_errata)' 'the same persona (lens_policies)' 'a superseded CFO lens policy' "another company's CFO lens policy" 'B6: ' 'B7: ' 'B8: ' 'B9: ' 'B10: ' "the seed's own string is not read" 'hardening says: only the steward' 'functions change' 'a refused measurement reads' 'a refused AI-sourced actual reads' "the gap register's line" 'refusals keeps the raw text'
+cover "$LOG" 'the account (executive_summaries)' 'the run (run_errata)' 'the same persona (lens_policies)' 'a superseded CFO lens policy' "another company's CFO lens policy" 'naming a role, by X' 'a research clearance, by X' "the act's subject (governance_acts)" 'a call naming no prompt' 'B6: ' 'B7: ' 'B8: ' 'B9: ' 'B10: ' "the seed's own string is not read" 'hardening says: only the steward' 'functions change' 'a refused measurement reads' 'a refused AI-sourced actual reads' "the gap register's line" 'refusals keeps the raw text'
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"
