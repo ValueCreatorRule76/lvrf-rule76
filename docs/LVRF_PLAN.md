@@ -6377,7 +6377,7 @@ next day records a day the person did not commit on.
 - **Brad's finding from his look:** the commit form offers a person who is not customer-side. Planned as §29, the next
   small item, ahead of the future-date item.
 
-## 29. 3.1 small item: only a customer-side person commits (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended, D6 included, and four additions**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§29 … Gate A"), with five departures: 1, 2, 3 and 5 accepted by Brad, 4 changed to his wording, with "tenant" refused in client strings)
+## 29. 3.1 small item: only a customer-side person commits (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended, D6 included, and four additions**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§29 … Gate A"), with five departures: 1, 2, 3 and 5 accepted by Brad, 4 changed to his wording, with "tenant" refused in client strings); **closed 24 Nov 2026**, deployed at `25e1be0`, Gate C clean (`BUILD_STATUS.md`, "§29 closed")
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D7 are approved as recommended, D6 included:** the verifier is under the same rule, in the same slice.

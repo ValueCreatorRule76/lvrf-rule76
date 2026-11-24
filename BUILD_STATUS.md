@@ -17007,3 +17007,60 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
 - nothing written since the deploy, apart from any session of your own;
 - `lvrf_block_simulated_attestor` `4150205e…`; `e3fb0061` unchanged;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### §29 closed: only a customer-side person commits or verifies, deployed at `25e1be0`; Gate C clean — 24 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `25e1be0`.
+- Pre-deploy backup `~/lvrf-pre-p29-20261124T181810Z.dump`, **TOC 972**.
+- `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **227 triggers**; `lvrf_block_simulated_attestor`
+  `4150205e2b683a59fbffd09c4772e310`, the other four unchanged.
+- Post-hardening backup `~/lvrf-post-p29-20261124T181917Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 6 refused tries)", all checks, bundle **`index-Cx4YL8jk.js` /
+  `index-BMv5OQwB.css`**, "deploy OK". The API started at 18:20:04 UTC.
+
+**Brad's look (records nothing; all cancelled):**
+- `e3fb0061` on card 01d reads "not customer-side: committed before only customer-side people could commit, 24 Nov 2026".
+- Lot Acceptance Rate's commit form: no one to choose, the sentence with its link to the roles card, Commit disabled.
+- Card 01b's "Add a person of this account…" opens its form.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `25e1be0`, tree clean. The served `index.html` names `index-Cx4YL8jk.js` / `index-BMv5OQwB.css`.
+- **Since the pre-deploy backup (18:18:10 UTC), nothing was written:** 0 governance acts (still 228, the last 15 Nov
+  21:12:17); 0 refusals, 0 research-process refusals; 0 audit rows, 0 record documents, 0 heartbeat events; 0 sessions;
+  0 persons; 0 role grants.
+- **The functions as deployed:** `lvrf_block_simulated_attestor` `4150205e2b683a59fbffd09c4772e310`;
+  `lvrf_block_ai_actual` `c7a38cb3…`, `lvrf_outcome_spine_guard` `ebce0899…`, `lvrf_outcome_verifier_not_author`
+  `942f9f55…`, `lvrf_value_hypothesis_guard` `554d29c4…`, as §28 deployed them.
+- **1 commitment, 0 verifications.** Curia's `e3fb0061` is unchanged: committed 30 Aug 2026 09:00 UTC, no method, no
+  class, no date, last updated 30 Aug 2026.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean
+  (`lvrf_ownership_violations()` 0).
+- **TOC 972** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**§29 is closed** (24 Nov 2026).
+- **Order (Brad, 24 Nov 2026):** the plain-words rule for server and database strings; then no walk date in the future;
+  then the email item below; then S7a.
+- **Brad's finding from his look, a small item before the pilot: "Add a person" requires an email.** People named in
+  public sources (a CHRO named in a case study) have none, so it blocks them or invites a made-up address. Proposed:
+  email optional when adding a person, required only when that person is given sign-in. **What depends on a person's
+  email (read 24 Nov 2026, `25e1be0` and prod; read only):**
+  - **The column:** `persons.email` is `NOT NULL` with `UNIQUE (persons_email_key)` (migration 0000). A migration would
+    drop the `NOT NULL`; a `UNIQUE` allows any number of nulls in Postgres, so emails present stay unique.
+  - **Duplicate people:** `persons_email_key` is today's only guard against adding a person twice ("{email} is already
+    in LVRF; select them instead", `server/lib/refusal.ts`). A person with no email has none, so the item needs its own
+    rule (for example the same name and account refused, or asked about).
+  - **Sign-in, by email only:** `POST /api/auth/login` finds the person by `lower(email)`, and only a tenant person with
+    a current credential and access grant. `scripts/set_password.ts`, `grant_access.ts`, `reset_password.ts`,
+    `revoke_access.ts`, `set_steward.ts` and `set_email.ts` all find the person by email. The rule "required when given
+    sign-in" belongs in `person_credentials` (no credential for a person with no email), in the database.
+  - **Account inputs:** `POST /api/account-inputs` maps each assessment to its person by `person_email` within the same
+    payload. A person with no email could not be named by an assessment there; that route keeps email required for a
+    person an assessment names, or maps by position.
+  - **Reads:** the walk (`GET …/walk`: analysts, persons, staff) and `GET /api/persons` return the email; the session
+    returns the signed-in person's. A null shows as nothing.
+  - **The seed** (`server/seed/seedCustomerZero.ts`) keys its fixture people by email; unchanged (they keep theirs).
+  - **Prod:** 6 current persons, 5 of them customer-side records (no tenant); 1 current credential.
+  - **Forms:** W1's "Add a person" and card 01b's "Add a person" both require it, and the route
+    (`POST /api/institutions/:id/inputs`) does too.

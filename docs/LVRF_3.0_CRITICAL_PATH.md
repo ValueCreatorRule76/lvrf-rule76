@@ -217,7 +217,7 @@ cut line applied first.
            entered the same evening.
          **Closed 24 Nov 2026,** deployed at `2dc3f71`, Gate C clean (`BUILD_STATUS.md`, "§28 closed");
        - **next, after §28 and before the pilot (Brad, 24 Nov 2026, from §28's look): only a customer-side person
-         commits** (LVRF_PLAN §29, approved by Brad 24 Nov 2026 with D1–D7, the verifier included, and four additions; the roles card adds a person). The commit form offers only customer-side
+         commits** (LVRF_PLAN §29, approved by Brad 24 Nov 2026 with D1–D7, the verifier included, and four additions; the roles card adds a person). **Closed 24 Nov 2026,** deployed at `25e1be0`, Gate C clean (`BUILD_STATUS.md`, "§29 closed"). The commit form offers only customer-side
          people at the account, and the route and the database refuse anyone else with a plain sentence. Curia's
          `e3fb0061` stays frozen as recorded. The verifier is under the same rule (§29 D6);
        - **before any Skillsoft commitment (Brad, 24 Nov 2026, §29 addition 4): who commits on the tenant's own
@@ -232,6 +232,11 @@ cut line applied first.
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
          every local date on Earth (§28 D4), and nothing later;
+       - **then, before the pilot (Brad, 24 Nov 2026, from §29's look): a person's email is optional when they are added,**
+         required only when they are given sign-in. People named in public sources have none, so today the form blocks
+         them or invites a made-up address. What depends on it is read in `BUILD_STATUS.md` ("§29 closed"): the
+         column's NOT NULL, the only duplicate-person guard, sign-in and the access scripts, account inputs' assessment
+         mapping. Then S7a;
        - **`verify_deploy_steps`' positive control made deterministic (Brad, 24 Nov 2026).** Section F reruns the deploy
          script from before the fix (`7f889b4`) and expects it to stop silently (exit 7), because the stub API is not up
          on its first try. That depends on a race: in §28's full regression it found the stub already up and failed
