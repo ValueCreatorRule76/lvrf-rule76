@@ -6511,7 +6511,8 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
   rewrites Postgres's own constraint text. A message hardening wrote passes unchanged, **its `LVRF: <table>:` prefix
   included**. §29's R1 break showed one on screen: "LVRF: value_outcomes: only a customer-side person…". The gap
   register prints earlier refusals the same way ("Already refused: {refusal_message}", `GapListCard.tsx`).
-- **"tenant" in strings a route can return: 13 server strings and 49 database messages.**
+- **"tenant" in strings a route can return: 13 server strings and 50 database messages.** Hardening holds 54; the
+  other 4 are `access_grants`' operator-only messages.
   - **Server:**
     - "industry_slug unknown for this tenant";
     - "…is not an account of this tenant";
@@ -6526,11 +6527,12 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
     - "…not a current offering in this tenant's catalog";
     - "…not the tenant-self institution…".
   - **Database:**
-    - 23 "only the tenant's steward …";
-    - 12 "… % is not of tenant %" (account, run, outcome, engagement);
-    - 6 "… is not current, non-simulated staff of the tenant";
+    - 21 "only the tenant's steward …" (2 more are `access_grants`', out);
+    - 11 "… is not of tenant %" (5 accounts, a run, an outcome, an engagement, an act's subject, a role's account, a
+      lever's entry);
+    - 5 "… is not current, non-simulated staff of the tenant", and 2 "current staff of the tenant";
     - 2 "… does not exist in tenant %";
-    - 2 tenant-consistency checks on levers and their links;
+    - the tenant-consistency check on a lever's links;
     - "this account and tenant";
     - "tenant staff, a vendor-side role";
     - "the tenant's own people";
@@ -6578,12 +6580,13 @@ hardening's messages, so it has its own Gate A, function hashes, regression and 
 
   | Today | Becomes | Count |
   |---|---|---|
-  | only the tenant's steward {does X} | only the steward {does X} | 23 |
-  | the account % is not of tenant % | the account % is not one of your company's accounts | 7 |
+  | only the tenant's steward {does X} | only the steward {does X} | 21 |
+  | the account % is not of tenant % | the account % is not one of your company's accounts | 5 |
   | run / outcome / engagement % is not of tenant % | run / outcome / engagement % is not one of your company's runs / outcomes / engagements | 3 |
   | the act's subject is not of tenant % | the act's subject is not in your company's record | 1 |
   | the account is not of tenant % | the account is not one of your company's accounts | 1 |
-  | % is not current, non-simulated staff of the tenant | % is not a current, real member of your company's staff | 6 |
+  | % is not current, non-simulated staff of the tenant | % is not a current, real member of your company's staff | 5 |
+  | … current staff of the tenant | … a current member of your company's staff | 2 |
   | … does not exist in tenant % | … is not in your company's record | 2 |
   | a lever's tenant is its pack entry's (entry % is not of tenant %) | a lever is your company's only when its pack entry is (entry % is not your company's) | 1 |
   | a link's tenant is its lever's and its offering's (tenant %) | a link is your company's only when its lever and its offering are | 1 |
