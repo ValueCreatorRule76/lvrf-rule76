@@ -198,7 +198,7 @@ evid() {  # OUTCOME KIND SUMMARY SUPPORTS [ATTESTER] -> EV
   else expect POST "/api/value-outcomes/$1/evidence" "$(J kind "$2" provenance "Fixture source for: $3" summary "$3" supports "$4" source_verified true ai_sourced false simulated false evidence_form quote quote_text 'TRIR 1.4 for FY25.' how_read 'The FY25 TRIR, read as published.')" 201 "  ...evidence: $3"; fi
   EV="$(rj b.evidence_id)"
 }
-commit() { expect POST "/api/value-outcomes/$1/commit" "$(J target_value 1.2 committed_by_person_id "$2" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: committed to 1.2 ($3)." attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by $3"; }
+commit() { expect POST "/api/value-outcomes/$1/commit" "$(J target_value 1.2 committed_by_person_id "$2" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note "Verification: committed to 1.2 ($3)." attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by $3"; }
 seal() { state_hypothesis "$1" || bad "S1: no hypothesis stated on $1"; expect POST "/api/engagements/$1/produce-run" "$(J banner_title 'OUTSIDE-IN HYPOTHESIS' note "$2" source_fixture c3)" 201 "  ...produced: $2"; RUN="$(rj b.value_run_id)"; expect POST "/api/value-runs/$RUN/lock" "$(J lock_reason 'Verification: sealed.')" 200 "  ...locked"; }
 # Account 1: the analyst of record's case (Curia's shape), sealed under the pre-C3 code.
 acct "C3 account one (invented)" "[$(J full_name "$OWNER_NAME 1" email "owner1.$TS@c3.example" title Owner),$(J full_name "$ANALYST_NAME" email "analyst.$TS@c3.example" title 'External analyst of record — not an employee')]"

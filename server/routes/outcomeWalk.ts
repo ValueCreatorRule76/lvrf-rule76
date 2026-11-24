@@ -127,6 +127,26 @@ export function outcomeWalkRouter(pool: Pool): Router {
         res.status(422).json({ message: 'Choose the measure class: capability and performance, or compliance and risk.' });
         return;
       }
+      // §26 (Brad, 23 Nov 2026): the promised measurement date, stated at commit (D1) and fixed after it (D2, hardening
+      // §34). A calendar date, stored at 12:00 UTC as committed_at is from the form; after the commit's UTC date and no
+      // more than three years after it (D3). The database holds every one of these rules too.
+      if (typeof body.promised_measured_on !== 'string' || body.promised_measured_on.trim() === '') {
+        res.status(422).json({ message: 'State the date the outcome will be measured by: a commitment states it, and it cannot be added afterwards.' });
+        return;
+      }
+      const promisedOn = body.promised_measured_on.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(promisedOn) || Number.isNaN(Date.parse(`${promisedOn}T12:00:00Z`))
+          || new Date(`${promisedOn}T12:00:00Z`).toISOString().slice(0, 10) !== promisedOn) {
+        res.status(422).json({ message: 'Give the promised measurement date as a calendar date (YYYY-MM-DD).' });
+        return;
+      }
+      const committedOn = committedAt.toISOString().slice(0, 10);
+      const latestOn = (() => { const d = new Date(`${committedOn}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); })();
+      if (promisedOn <= committedOn || promisedOn > latestOn) {
+        res.status(422).json({ message: `The promised measurement date is after the commit date (${committedOn}) and no more than three years after it (by ${latestOn}).` });
+        return;
+      }
+      const promisedAt = new Date(`${promisedOn}T12:00:00Z`);
 
       const actorPersonId = req.actor?.personId;
       if (!actorPersonId) {
@@ -249,10 +269,11 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const { rows: [updated] } = await client.query<{ committed_at: Date; value_stage: string }>(
         `UPDATE value_outcomes
             SET target_value = $1, committed_by_person_id = $2,
-                committed_at = $3, value_stage = 'commit', attribution_method = $5, measure_class = $6
+                committed_at = $3, value_stage = 'commit', attribution_method = $5, measure_class = $6,
+                promised_measured_at = $7
           WHERE id = $4 AND committed_at IS NULL
           RETURNING committed_at, value_stage`,
-        [targetValue, committedByPersonId, committedAt, outcomeId, attributionMethodIn, measureClassIn],
+        [targetValue, committedByPersonId, committedAt, outcomeId, attributionMethodIn, measureClassIn, promisedAt],
       );
       if (!updated) {
         res.status(409).json({
@@ -286,6 +307,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         payload: {
           target_value: targetValue,
           committed_at: committedAt.toISOString(),
+          promised_measured_on: promisedOn,
         },
       });
 
@@ -293,6 +315,7 @@ export function outcomeWalkRouter(pool: Pool): Router {
         outcome_id: outcomeId,
         target_value: targetValue,
         committed_at: updated.committed_at,
+        promised_measured_on: promisedOn,
         committer_name: committer.full_name,
         evidence_id: evidence.id,
       });

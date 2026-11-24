@@ -234,7 +234,7 @@ validate "$MET" "$ANALYST" 214; OV="$O"; METV="$MET"
 # L41: a row verified with no opening cannot be made any more, so V's row is unverified; an opening would block the
 # finding. "verified without the source being opened" is read below from a row of the copy that holds it.
 EVID_VERIFIED=false evid "$OV" system_export 'C3b export attested by the analyst (fixture)' baseline "$ANALYST"; EVV="$EV"
-expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed by the analyst.' attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by the analyst"
+expect POST "/api/value-outcomes/$OV/commit" "$(J target_value 150 committed_by_person_id "$ANALYST" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: committed by the analyst.' attribution_method contribution_only measure_class capability_performance)" 201 "  ...committed by the analyst"
 # The POV shows an outcome's figures and evidence under its hypothesis (C2's fixture shape): a pack entry, its lever, the claim, the basis.
 IND="$(q "SELECT id FROM industries WHERE tenant_id = '$TEN' AND slug = 'manufacturing'")"
 ENTRY="$(q "INSERT INTO industry_measures (tenant_id, industry_id, name, unit, direction, definition, why_it_pays, addressable, addressable_reasoning, confounders, citation) VALUES ('$TEN', '$IND', 'C3b days to productivity entry (fixture) $TS', 'days', 'decrease', 'Fixture definition.', 'w', true, 'r', 'Fixture confounders: cohort mix.', 'Verification fixture, not a source.') RETURNING id" | head -1)"

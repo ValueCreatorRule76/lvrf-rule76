@@ -323,7 +323,7 @@ const CASES = [
     body: { review_note: note('P3 verification') },
     notFound: [404, `research result ${E.RR_A2} not found`], target: ['research_results', E.RR_A2] },
   { route: 'POST /api/value-outcomes/:outcomeId/commit', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/commit`,
-    body: { committed_by_person_id: E.CUST_A, committed_at: T0, target_value: 1, commitment_note: note('P3'), attribution_method: 'contribution_only', measure_class: 'capability_performance' },
+    body: { committed_by_person_id: E.CUST_A, committed_at: T0, promised_measured_on: '2026-07-01', target_value: 1, commitment_note: note('P3'), attribution_method: 'contribution_only', measure_class: 'capability_performance' },
     notFound: [404, `value outcome ${E.OUTCOME_A} not found`], target: ['value_outcomes', E.OUTCOME_A] },
   { route: 'POST /api/value-outcomes/:outcomeId/evidence', kind: 'id', path: `/api/value-outcomes/${E.OUTCOME_A}/evidence`,
     body: { kind: 'observation', summary: note('P3'), provenance: 'Verification run, not a real source', supports: 'baseline', confidence: 'low' },

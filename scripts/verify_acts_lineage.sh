@@ -296,7 +296,7 @@ F_HC2="$(rj b.fact_id)"
 act_is "supersede (fact)" "supersede:institution_facts:institution_facts:true:POST /api/institutions/:institutionId/facts/:factId/supersede"
 expect POST "/api/value-outcomes/$O1/evidence" '{"kind":"system_export","provenance":"Fixture extract (not a source)","summary":"TRIR extract (fixture)","supports":"actual","source_verified":false,"ai_sourced":false,"simulated":false,"evidence_form":"locator","locator":{"document":"Fixture safety extract (not a source)","table":"Monthly TRIR","row":"Sep 2026","column":"Plant total","value":1.1,"scale":"units"},"how_read":"The plant-total TRIR cell for September 2026, read as published."}' 201 "actual evidence (create-only)"
 acts_new
-expect POST "/api/value-outcomes/$O1/commit" "{\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\",\"target_value\":1.2,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"commitment_note\":\"Verification: the owner commits to 1.2.\"}" 201 "commit"
+expect POST "/api/value-outcomes/$O1/commit" "{\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\",\"target_value\":1.2,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"2026-10-01T00:00:00Z\",\"promised_measured_on\":\"2027-04-01\",\"commitment_note\":\"Verification: the owner commits to 1.2.\"}" 201 "commit"
 act_is "commit" "commit:value_outcomes:-:true:POST /api/value-outcomes/:outcomeId/commit"
 expect POST "/api/value-outcomes/$O1/measure" '{"actual_value":1.1,"actual_measured_at":"2026-10-12T12:00:00Z"}' 200 "measure"
 act_is "measure" "measure:value_outcomes:-:true:POST /api/value-outcomes/:outcomeId/measure"

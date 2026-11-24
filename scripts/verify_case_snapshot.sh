@@ -139,6 +139,7 @@ printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 53 migrations" && ok
 step "3. Fixtures, through the routes"
 TS="$(date +%s)"
 TODAY="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD')")"
+PROMISED_ON="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 180, 'YYYY-MM-DD')")"  # §26: a commit states its measure-by date
 LATER="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date + 60, 'YYYY-MM-DD')")"
 S="$(q "SELECT id FROM persons WHERE tenant_id IS NOT NULL AND simulated = false AND deleted_at IS NULL AND superseded_by_id IS NULL ORDER BY created_at LIMIT 1")"
 TEN="$(q "SELECT tenant_id FROM persons WHERE id = '$S'")"
@@ -191,7 +192,7 @@ HB() {  # OUTCOME LEVER [REFERENCE] [DUE] [CONDITIONS] [EXTRA]
 }
 measure() {  # OUTCOME ACTUAL — B4 (§14): committed first, with its method, unless it already is
   if [ "$(q "SELECT committed_at IS NULL FROM value_outcomes WHERE id = '$1'")" = "t" ]; then
-    req POST "/api/value-outcomes/$1/commit" "{\"target_value\":1.0,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"${TODAY}T11:00:00Z\",\"commitment_note\":\"Verification: committed before measuring.\",\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\"}"; [ "$CODE" = "201" ] || bad "commit $1: $CODE $(said)"
+    req POST "/api/value-outcomes/$1/commit" "{\"target_value\":1.0,\"committed_by_person_id\":\"$OWNER\",\"committed_at\":\"${TODAY}T11:00:00Z\",\"promised_measured_on\":\"$PROMISED_ON\",\"commitment_note\":\"Verification: committed before measuring.\",\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\"}"; [ "$CODE" = "201" ] || bad "commit $1: $CODE $(said)"
   fi
   req POST "/api/value-outcomes/$1/evidence" "$(EVB system_export "TRIR extract (fixture)" actual)"; [ "$CODE" = "201" ] || bad "actual evidence $1: $CODE $(said)"
   req POST "/api/value-outcomes/$1/measure" "{\"actual_value\":$2,\"actual_measured_at\":\"${TODAY}T12:00:00Z\"}"; [ "$CODE" = "200" ] || bad "measure $1: $CODE $(said)"

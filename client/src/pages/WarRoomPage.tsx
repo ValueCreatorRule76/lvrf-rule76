@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useActor } from '../actor/ActorContext';
-import { fetchBook, dueInWords, type Book, type BookAccount } from '../api/book';
+import { fetchBook, dueInWords, LATE_RULE, type Book, type BookAccount } from '../api/book';
 import { fetchRuns } from '../api/runsIndex';
 import { fetchGaps } from '../api/gaps';
 import type { RunListItem } from '../types/runsIndex';
@@ -202,7 +202,7 @@ export function WarRoomPage() {
         <Tile k="Confirmed · refuted" testid="tile-cr" sub={b.account_count === 0 ? undefined : `${b.hypotheses.open} open`}>
           <span className="text-[15px] font-semibold">{b.account_count === 0 ? '—' : `${b.hypotheses.confirmed} confirmed · ${b.hypotheses.refuted} refuted`}</span>
         </Tile>
-        <Tile k="Late outcomes" testid="tile-late" sub={b.account_count === 0 ? undefined : `${b.outcomes.no_promised_date} with no promised date on record`}>
+        <Tile k="Late outcomes" testid="tile-late" sub={b.account_count === 0 ? undefined : <>{b.outcomes.no_promised_date} with no promised date on record.<span className="mt-0.5 block" data-testid="late-rule">{LATE_RULE}</span></>}>
           <span className={NUM}>{b.account_count === 0 ? '—' : b.outcomes.late}</span>
         </Tile>
       </div>
@@ -231,6 +231,7 @@ export function WarRoomPage() {
                 {book.accounts.map((a) => <BookRow key={a.institution_id} acct={a} facts={factsOf(a.institution_id)} asks={asksOf(a)} runs={runs} focused={a.institution_id === focusId} />)}
               </tbody>
             </table>
+            <p className="m-0 mt-1.5 text-[12px] text-ink-45" data-testid="late-rule-table">Outcomes: {LATE_RULE} Where no date was promised, the row says so.</p>
           </div>
           <div className="mt-4 sm:hidden" data-testid="book-cards">
             {book.accounts.map((a) => <BookCard key={a.institution_id} acct={a} facts={factsOf(a.institution_id)} asks={asksOf(a)} runs={runs} focused={a.institution_id === focusId} />)}

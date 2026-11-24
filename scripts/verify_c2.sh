@@ -152,7 +152,7 @@ EVB() {  # KIND SUMMARY SUPPORTS VERIFIED [ATTESTED_BY]
   if [ -n "${5:-}" ]; then J kind "$1" provenance 'Fixture extract (not a source)' summary "$2" supports "$3" source_verified "$4" ai_sourced false simulated false evidence_form quote quote_text 'TRIR 1.4 for FY25, from the fixture extract.' how_read 'The FY25 TRIR, read as exported.' attested_by_person_id "$5" attested_at 2025-10-01T00:00:00Z
   else J kind "$1" provenance 'Fixture filing (not a source)' summary "$2" supports "$3" source_verified "$4" ai_sourced false simulated false evidence_form quote quote_text 'Our total recordable incident rate was 1.4 in FY25.' how_read 'The FY25 TRIR, from the fixture report, read as published.'; fi
 }
-COMMIT() { J target_value 1.2 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z commitment_note "Verification: the owner commits to 1.2 ($1)." attribution_method contribution_only measure_class capability_performance; }
+COMMIT() { J target_value 1.2 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note "Verification: the owner commits to 1.2 ($1)." attribution_method contribution_only measure_class capability_performance; }
 outcome() {  # NAME -> O, ENG
   expect POST "/api/institutions/$INST/value-outcomes" "$(OUTC "$1")" 201 "outcome $1"
   O="$(rj b.value_outcome_id)"; ENG="$(rj b.engagement_id)"

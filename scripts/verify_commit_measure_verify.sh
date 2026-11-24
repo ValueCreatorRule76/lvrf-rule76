@@ -330,14 +330,14 @@ EVB() {  # KIND SUMMARY SUPPORTS [ATTESTER]
   if [ -n "${4:-}" ]; then J kind "$1" provenance "Fixture source for: $2 (not a source)" summary "$2" supports "$3" confidence medium source_verified false ai_sourced false simulated false evidence_form quote quote_text 'Verification fixture quote, not a source.' how_read 'Verification fixture: read from the fixture quote as written.' attested_by_person_id "$4" attested_at 2026-10-01T00:00:00Z
   else J kind "$1" provenance "Fixture source for: $2 (not a source)" summary "$2" supports "$3" confidence medium source_verified false ai_sourced false simulated false evidence_form quote quote_text 'Verification fixture quote, not a source.' how_read 'Verification fixture: read from the fixture quote as written.'; fi
 }
-CM() { J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed to 1.0.' attribution_method "$1" measure_class "$2"; }
+CM() { J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: committed to 1.0.' attribution_method "$1" measure_class "$2"; }
 expect POST "/api/institutions/$INST/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'B4 safety capability' owner_person_id "$OWNER" is_primary false basis 'Verification: EHS solution.')" 201 "an offering and its capability"
 CAPF="$(rj b.capability_id)"
 expect POST "/api/capabilities/$CAPF/industry-measures" "$(J industry_measure_id "$E_TRIR" claim 'Verification: training improves safe behaviour.')" 201 "  ...the capability claims the TRIR entry"
 outcome "B4 TRIR control" 1.4; OK="$OC"; ENGK="$ENGO"
 expect POST "/api/value-outcomes/$OK/evidence" "$(EVB public_filing 'TRIR FY25 1.4 (fixture)' baseline)" 201 "  ...a published baseline (its quote does not state 1.4: a figure check flags it)"
 # M1: a commit without the method.
-expect POST "/api/value-outcomes/$OK/commit" "$(J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: no method.' measure_class capability_performance)" 422 "M1: a commit without the method (route)" "attribution_method"
+expect POST "/api/value-outcomes/$OK/commit" "$(J target_value 1.0 committed_by_person_id "$OWNER" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: no method.' measure_class capability_performance)" 422 "M1: a commit without the method (route)" "attribution_method"
 sqlrefused "M1: a commit without the method (database)" "UPDATE value_outcomes SET target_value = 1.0, committed_by_person_id = '$OWNER', committed_at = now(), measure_class = 'capability_performance' WHERE id = '$OK'" "states its attribution method and its measure class"
 expect POST "/api/value-outcomes/$OK/commit" "$(CM control_group capability_performance)" 201 "a commit with the method (control group) and the class"
 [ "$(q "SELECT attribution_method || '|' || measure_class FROM value_outcomes WHERE id = '$OK'")" = "control_group|capability_performance" ] && ok "  ...both recorded" || bad "  ...method/class"

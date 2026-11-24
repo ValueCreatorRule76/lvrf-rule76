@@ -10,8 +10,8 @@
 #   P1  the steward unmarks Curia, by its route (POST /api/reference-examples/:id/retire, a fixture act on the clone):
 #       one member, book confidence its run.
 #   P2  one unclassified customer account (by route), a hypothesis on Curia's live outcome (state_hypothesis, by
-#       route), and a promised measurement date on that outcome, in the past. NO ROUTE WRITES A PROMISED DATE (§25 D5,
-#       the next small item), so it is set by SQL on the clone and named here. Curia held in focus.
+#       route), and that outcome committed BY ROUTE with a promised measurement date in the past (§26: the commit
+#       states it; a standing commitment is withdrawn by route first, as the database fixes the date). Curia in focus.
 # Every figure the page shows is read here from SQL, apart from the client and the route (EXP).
 # D1: no money on the page, in the band or in GET /api/book (every key, every string). A coverage gate fails any section
 # that prints no line (S5's lesson).
@@ -84,6 +84,25 @@ broke() {  # SECTIONS TAG EXPECTED_FAILURE_TEXT LABEL
   grep -Eq "^FAIL  $2: .*($3)" "$W/$2.log" && ok "$4" || bad "$2: not caught: $(grep -m3 '^FAIL' "$W/$2.log" | tr '\n' ' ')"
 }
 
+# §26: commit an outcome by route with its measurement promised DAYS_AGO days ago (committed 60 days ago), by its
+# account's customer-side committer of record; a standing commitment is withdrawn by route first.
+withdraw_commitment() {  # OUTCOME
+  curl -s -o "$W/cp.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $S" \
+    -d '{"reason":"Verification: withdrawn to commit with a promised date (S6 fixture, §26)."}' "$BASE/api/value-outcomes/$1/commitment/withdraw" | grep -q '^200$'
+}
+commit_promised() {  # OUTCOME DAYS_AGO
+  local o="$1" ago="$2" who on by
+  # the committer: a customer-side person who committed on this account (Curia's of record), else the first named
+  who="$(q "SELECT p.id FROM persons p JOIN value_outcomes o ON o.id = '$o' AND p.institution_id = o.institution_id
+             WHERE p.deleted_at IS NULL AND NOT p.simulated
+             ORDER BY EXISTS (SELECT 1 FROM value_outcomes c WHERE c.committed_by_person_id = p.id) DESC, p.created_at LIMIT 1")"
+  [ "$(q "SELECT committed_at IS NOT NULL FROM value_outcomes WHERE id = '$o'")" = "t" ] && { withdraw_commitment "$o" || return 1; }
+  on="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date - 60, 'YYYY-MM-DD')")"; by="$(q "SELECT to_char((now() AT TIME ZONE 'UTC')::date - $ago, 'YYYY-MM-DD')")"
+  curl -s -o "$W/cp.json" -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-actor-person-id: $S" \
+    -d "{\"target_value\":1.0,\"committed_by_person_id\":\"$who\",\"committed_at\":\"${on}T12:00:00Z\",\"promised_measured_on\":\"$by\",\"commitment_note\":\"Verification: S6 fixture commitment (§26).\",\"attribution_method\":\"contribution_only\",\"measure_class\":\"capability_performance\"}" \
+    "$BASE/api/value-outcomes/$o/commit" | grep -q '^201$'
+}
+
 # What the War Room must show, from SQL alone (FOCUS: the account held in focus, or empty).
 expect() {
   q "WITH mem AS (
@@ -116,10 +135,10 @@ expect() {
           'confirmed', (SELECT count(*) FROM hyp WHERE institution_id = m.id AND v IN ('survived', 'survived_post_hoc')),
           'refuted', (SELECT count(*) FROM hyp WHERE institution_id = m.id AND v IN ('refuted', 'refuted_post_hoc')),
           'outcomes', (SELECT count(*) FROM live_o WHERE institution_id = m.id),
-          'late', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND promised_measured_at < now() AND actual_measured_at IS NULL),
+          'late', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND (promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date AND actual_measured_at IS NULL),
           'no_promise', (SELECT count(*) FROM live_o WHERE institution_id = m.id AND promised_measured_at IS NULL AND actual_measured_at IS NULL),
           'measured', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND actual_measured_at IS NOT NULL),
-          'promised_future', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND promised_measured_at >= now()),
+          'promised_future', EXISTS (SELECT 1 FROM live_o WHERE institution_id = m.id AND (promised_measured_at AT TIME ZONE 'UTC')::date >= (now() AT TIME ZONE 'UTC')::date),
           'head', (SELECT json_build_object('run_number', r.run_number, 'score', r.confidence_score, 'band', r.confidence_band,
                      'stage_label', CASE r.terminal_value_stage WHEN 'baseline' THEN 'Baseline set' WHEN 'attach' THEN 'Capability attached' WHEN 'model' THEN 'Value modelled'
                        WHEN 'commit' THEN 'Target committed' WHEN 'measure' THEN 'Actual measured' WHEN 'verify' THEN 'Verified' ELSE 'Returned to the record' END,
@@ -191,8 +210,9 @@ CODE="$(curl -s -o "$W/r2.json" -w '%{http_code}' -X POST -H 'content-type: appl
 ENG="$(q "SELECT e.id FROM engagements e WHERE e.institution_id = '$CURIA' AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND EXISTS (SELECT 1 FROM value_outcomes vo WHERE vo.engagement_id = e.id AND vo.deleted_at IS NULL AND vo.superseded_by_id IS NULL) ORDER BY e.created_at DESC LIMIT 1")"
 state_hypothesis "$ENG" > "$W/hyp.log" 2>&1 && ok "a hypothesis on Curia's live outcome, by the routes (state_hypothesis), due in 90 days" || bad "state_hypothesis: $(tail -3 "$W/hyp.log")"
 OUTC="$(q "SELECT id FROM value_outcomes WHERE engagement_id = '$ENG' AND deleted_at IS NULL AND superseded_by_id IS NULL AND actual_measured_at IS NULL ORDER BY created_at DESC LIMIT 1")"
-# Named fixture (§25 D5): no route records a promised measurement date yet, so it is set here, on the clone only.
-q "UPDATE value_outcomes SET promised_measured_at = now() - interval '20 days' WHERE id = '$OUTC'" > /dev/null && ok "a promised measurement date 20 days ago on that outcome (SQL on the clone: no route writes one yet)" || bad "promised date fixture"
+# §26: the promised date is recorded by the commit route (a fixture act on the clone): committed 60 days ago, promised
+# 20 days ago. A commitment already standing (made before §26) is withdrawn by route first: the database fixes its date.
+commit_promised "$OUTC" 20 && ok "that outcome committed by route, its measurement promised 20 days ago (§26)" || bad "commit with a promised date: $(cat "$W/cp.json")"
 FOCUS="$CURIA"; expect
 walk book,band,money,phone,keys,contrast s6 "$W/main.log"; tally "$W/main.log"
 cover "$W/main.log" 'book: book confidence "Not measured"' 'outcomes read "1 late: promised' 'outcomes read "No outcome yet"' 'marked "In focus"' 'the focused row and the frame above it' \
@@ -218,12 +238,13 @@ edit "$PAGE" "        <span className={compact ? 'font-semibold' : 'block text-[
 broke book b4 'book confidence "Not measured"' 'B4: the lowest recorded run shown as the book'"'"'s score → caught'
 restore "$PAGE"
 # B5 — "on time" where no date was promised. Its positive control is P1 (Curia's row: "No promised date on record");
-# for the break, the promised date is cleared on the clone, so a row reaches that branch, and set back after.
-q "UPDATE value_outcomes SET promised_measured_at = NULL WHERE id = '$OUTC'" > /dev/null
+# for the break, the commitment is withdrawn by route (its date goes with it), so a row reaches that branch, and the
+# outcome is committed again by route after.
+withdraw_commitment "$OUTC" > /dev/null || bad "B5: the commitment's withdrawal: $(cat "$W/cp.json")"
 edit "$PAGE" "  return { text: 'No promised date on record', tone: 'plain' };" "  return { text: 'On time', tone: 'plain' };"
 broke book b5 'never "on time"|outcomes read "No promised date on record' 'B5: "On time" where nothing was promised → caught'
 restore "$PAGE"
-q "UPDATE value_outcomes SET promised_measured_at = now() - interval '20 days' WHERE id = '$OUTC'" > /dev/null
+commit_promised "$OUTC" 20 || bad "B5: committed again: $(cat "$W/cp.json")"
 # B6 — a sideways scroll at 390.
 edit "$PAGE" '<div className="mt-4 sm:hidden" data-testid="book-cards">' '<div className="mt-4 min-w-[480px] sm:hidden" data-testid="book-cards">'
 broke phone b6 'no sideways scroll' 'B6: a sideways scroll at 390 → caught'

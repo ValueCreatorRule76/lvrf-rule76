@@ -3474,7 +3474,14 @@ CREATE TRIGGER industries_steward_only
 --     (D3); a verified measurement is never withdrawn; a commitment is withdrawn only once nothing is measured.
 --   outcome_withdrawals: the steward's, insert-only; _audit, _no_delete, _guard, _act_present.
 --
--- CONSEQUENCE: 204 -> 209 (value_outcomes_spine_guard; outcome_withdrawals audit, no_delete, guard, act_present).
+--   §26 (the promised measurement date; Brad's rulings, 23 Nov 2026, D1-D5), in the same two functions, no new object:
+--     a new commit states promised_measured_at (D1), a UTC date after the commit's UTC date and no more than three years
+--     after it (D3); it is fixed while the commitment stands, so a commitment made before §26 keeps none (D2); an outcome
+--     with no commitment holds none, and a withdrawn commitment takes its date with it; the commitment's withdrawal
+--     records the date it takes back (D5).
+--
+-- CONSEQUENCE: 204 -> 209 (value_outcomes_spine_guard; outcome_withdrawals audit, no_delete, guard, act_present). §26
+-- replaces both functions' bodies only: no trigger, no object, the count and the TOC unchanged.
 
 CREATE OR REPLACE FUNCTION lvrf_outcome_spine_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -3492,6 +3499,29 @@ BEGIN
      AND (NEW.attribution_method IS DISTINCT FROM OLD.attribution_method OR NEW.measure_class IS DISTINCT FROM OLD.measure_class) THEN
     RAISE EXCEPTION 'LVRF: value_outcomes: the attribution method and the measure class are fixed at commit; withdraw the commitment to change them.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_method_fixed';
+  END IF;
+  -- §26 D1, D3: a new commit states its promised measurement date, a UTC date after the commit's and within three years.
+  IF OLD.committed_at IS NULL AND NEW.committed_at IS NOT NULL THEN
+    IF NEW.promised_measured_at IS NULL THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: a commitment states the date its outcome will be measured by (LVRF_PLAN §26, D1).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_commit_states_promised_date';
+    END IF;
+    IF (NEW.promised_measured_at AT TIME ZONE 'UTC')::date <= (NEW.committed_at AT TIME ZONE 'UTC')::date
+       OR (NEW.promised_measured_at AT TIME ZONE 'UTC')::date > ((NEW.committed_at AT TIME ZONE 'UTC')::date + interval '3 years')::date THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: the promised measurement date is after the commit date and no more than three years after it (LVRF_PLAN §26, D3).'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_promised_date_window';
+    END IF;
+  END IF;
+  -- §26 D2: fixed while the commitment stands (so a commitment made before §26 keeps none).
+  IF OLD.committed_at IS NOT NULL AND NEW.committed_at IS NOT NULL
+     AND NEW.promised_measured_at IS DISTINCT FROM OLD.promised_measured_at THEN
+    RAISE EXCEPTION 'LVRF: value_outcomes: the promised measurement date is fixed at commit; withdraw the commitment to change it.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_promised_date_fixed';
+  END IF;
+  -- §26: an outcome with no commitment holds no promised date; a withdrawn commitment takes its date with it.
+  IF NEW.committed_at IS NULL AND NEW.promised_measured_at IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: value_outcomes: a promised measurement date belongs to a commitment; there is none on this outcome.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_promised_date_needs_commit';
   END IF;
   -- A measurement needs the method and admitted evidence.
   IF OLD.actual_value IS NULL AND NEW.actual_value IS NOT NULL THEN
@@ -3561,8 +3591,11 @@ BEGIN
     RAISE EXCEPTION 'LVRF: outcome_withdrawals: there is no measurement to withdraw, or the values recorded are not the outcome''s.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_values_kept';
   END IF;
+  -- §26 D5: the commitment's withdrawal records the promised date it takes back, as its UTC date (null before §26).
   IF NEW.kind = 'commitment' AND (o.committed_at IS NULL
-     OR (NEW.withdrawn_values->>'target_value')::numeric IS DISTINCT FROM o.target_value) THEN
+     OR (NEW.withdrawn_values->>'target_value')::numeric IS DISTINCT FROM o.target_value
+     OR NOT (NEW.withdrawn_values ? 'promised_measured_on')
+     OR (NEW.withdrawn_values->>'promised_measured_on') IS DISTINCT FROM to_char(o.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')) THEN
     RAISE EXCEPTION 'LVRF: outcome_withdrawals: there is no commitment to withdraw, or the values recorded are not the outcome''s.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_values_kept';
   END IF;

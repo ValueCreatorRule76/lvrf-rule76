@@ -18,6 +18,8 @@ const SECTIONS = (process.argv[2] ?? 'book').split(',');
 const E = process.env;
 const EXP = JSON.parse(readFileSync(E.EXP, 'utf8'));
 const TAG = E.TAG ?? 's6';
+// §26 D4 (Brad, 23 Nov 2026): the rule, said wherever late shows. Written here, apart from the client.
+const LATE_RULE = "An outcome is late once today's UTC date is after its promised date.";
 const APP = `http://localhost:${E.VITE_PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const out = [];
@@ -132,7 +134,7 @@ if (SECTIONS.includes('book')) {
   const sum = (k) => EXP.members.reduce((a, m) => a + m[k], 0);
   check(tiles.due === `Hypotheses due${sum('due30')} in 30 days · ${sum('due60')} in 60 · ${sum('due90')} in 90` || tiles.due.startsWith(`Hypotheses due${sum('due30')} in 30 days · ${sum('due60')} in 60 · ${sum('due90')} in 90`), `book: hypotheses due in words: "${sum('due30')} in 30 days · ${sum('due60')} in 60 · ${sum('due90')} in 90"`, tiles.due);
   check(tiles.cr === `Confirmed · refuted${sum('confirmed')} confirmed · ${sum('refuted')} refuted${sum('open')} open`, `book: "${sum('confirmed')} confirmed · ${sum('refuted')} refuted", ${sum('open')} open`, tiles.cr);
-  check(tiles.late === `Late outcomes${sum('late')}${sum('no_promise')} with no promised date on record`, `book: late outcomes ${sum('late')}, ${sum('no_promise')} with no promised date on record`, tiles.late);
+  check(tiles.late === `Late outcomes${sum('late')}${sum('no_promise')} with no promised date on record.${LATE_RULE}`, `book: late outcomes ${sum('late')}, ${sum('no_promise')} with no promised date on record, and the rule in UTC dates (§26 D4)`, tiles.late);
   check(tiles.status === `Outcomes by status: ${EXP.status_line}. Counts only: the War Room never sums or averages money across accounts.`, `book: outcomes by status "${EXP.status_line}", counts only`, tiles.status);
   check((await ev(T('[data-testid=confirmation-gap-state]'))) === `Not reported: ${EXP.verified} verified ${EXP.verified === 1 ? 'outcome' : 'outcomes'} in the book; it needs 5.`, `book: the confirmation gap refuses at ${EXP.verified} verified (it needs 5)`, await ev(T('[data-testid=confirmation-gap-state]')));
   await waitFor(`!!document.querySelector('[data-testid=book-scope]')`, 20000);
@@ -150,7 +152,7 @@ if (SECTIONS.includes('band')) {
   check(EXP.floor === 'unmeasured' ? b.conf === 'Book confidence Not measured' : b.conf === `Book confidence ${Number(EXP.floor_score)} / 100 · ${BAND(EXP.floor_band)}`, 'band: book confidence once, in the one format', b.conf);
   check(b.due === `Hypotheses due ${sum('due30')} in 30 days · ${sum('due60')} in 60 · ${sum('due90')} in 90`, 'band: hypotheses due in words (Brad, 20 Nov 2026)', b.due);
   check(b.cr === `${sum('confirmed')} confirmed · ${sum('refuted')} refuted`, 'band: confirmed and refuted together, never refuted alone (Brad, 20 Nov 2026)', b.cr);
-  check(b.late === `${sum('late')} late ${sum('late') === 1 ? 'outcome' : 'outcomes'}`, `band: ${sum('late')} late`, b.late);
+  check(b.late === `${sum('late')} late ${sum('late') === 1 ? 'outcome' : 'outcomes'} (today's UTC date after the promised date)`, `band: ${sum('late')} late, with the rule in UTC dates (§26 D4)`, b.late);
   check(b.href === '/book', 'band: "Open the War Room" links to /book');
   check(!(await ev(`!!document.querySelector('[data-testid=accounts-home] [data-testid=book-scope]')`)), "band: book confidence's card is no longer on Accounts home (D6)");
   await shot(`${TAG}_home_band_1280`);

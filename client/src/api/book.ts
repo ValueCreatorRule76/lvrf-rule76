@@ -5,6 +5,10 @@ import type { Cohort, CohortMember } from './cohort';
  * S6 (LVRF_PLAN §25): GET /api/book, the War Room's read. NO MONEY in it, anywhere (D1): counts, dates and states only.
  * A row's cost of delay is its state, never its figure.
  */
+/** §26 D4 (Brad, 23 Nov 2026): one meaning of "late", in UTC dates, said wherever late shows. */
+export const LATE_RULE = "An outcome is late once today's UTC date is after its promised date.";
+export const LATE_RULE_SHORT = "today's UTC date after the promised date";
+
 export interface HypothesisTally { due: { in30: number; in60: number; in90: number }; past_due_open: number; open: number; confirmed: number; refuted: number }
 export interface OutcomeTally { total: number; late: number; no_promised_date: number; by_status: Record<string, number> }
 export interface BookOutcome { id: string; realization: string; promised_on: string | null; measured_on: string | null; late: boolean }

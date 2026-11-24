@@ -42,6 +42,7 @@ export function outcomeWithdrawalsRouter(pool: Pool): Router {
           tenant_id: string; institution_id: string; engagement_retired: boolean; actual_value: string | null; actual_measured_at: string | null;
           realized_currency_impact: string | null; verified_at: string | null; target_value: string | null; committed_at: string | null;
           committed_by: string | null; committed_by_person_id: string | null; attribution_method: string | null; measure_class: string | null;
+          promised_measured_on: string | null;
           realization: string; value_stage: string;
         }>(
           `SELECT i.tenant_id, vo.institution_id, (g.deleted_at IS NOT NULL) AS engagement_retired,
@@ -49,7 +50,8 @@ export function outcomeWithdrawalsRouter(pool: Pool): Router {
                   trim_scale(vo.realized_currency_impact)::text AS realized_currency_impact, vo.verified_at,
                   trim_scale(vo.target_value)::text AS target_value, to_char(vo.committed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS committed_at,
                   (SELECT full_name FROM persons WHERE id = vo.committed_by_person_id) AS committed_by, vo.committed_by_person_id,
-                  vo.attribution_method, vo.measure_class, vo.realization, vo.value_stage
+                  vo.attribution_method, vo.measure_class, vo.realization, vo.value_stage,
+                  to_char(vo.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS promised_measured_on
              FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id JOIN engagements g ON g.id = vo.engagement_id
             WHERE vo.id = $1 AND vo.deleted_at IS NULL`, [outcomeId]);
         if (!o || isOtherTenant(req, o.tenant_id, { table: 'value_outcomes', id: outcomeId })) {
@@ -70,7 +72,9 @@ export function outcomeWithdrawalsRouter(pool: Pool): Router {
           if (o.committed_at === null) throw new Refusal(409, 'There is no commitment to withdraw.');
           if (o.actual_value !== null) throw new Refusal(409, 'Withdraw the measurement first: a commitment is withdrawn only once nothing is measured.');
           values = { target_value: o.target_value, committed_at: o.committed_at, committed_by: o.committed_by, committed_by_person_id: o.committed_by_person_id,
-                     attribution_method: o.attribution_method, measure_class: o.measure_class, value_stage: o.value_stage };
+                     attribution_method: o.attribution_method, measure_class: o.measure_class,
+                     // §26 D5: the promised date it takes back (null on a commitment made before §26).
+                     promised_measured_on: o.promised_measured_on, value_stage: o.value_stage };
         }
         const { rows: [w] } = await client.query<{ id: string }>(
           `INSERT INTO outcome_withdrawals (tenant_id, value_outcome_id, kind, withdrawn_values, reason, withdrawn_by_person_id)
@@ -84,7 +88,7 @@ export function outcomeWithdrawalsRouter(pool: Pool): Router {
         } else {
           await client.query(
             `UPDATE value_outcomes SET target_value = NULL, committed_by_person_id = NULL, committed_at = NULL, attribution_method = NULL, measure_class = NULL,
-                    value_stage = 'attach' WHERE id = $1`, [outcomeId]);
+                    promised_measured_at = NULL, value_stage = 'attach' WHERE id = $1`, [outcomeId]);
           await recordAct(client, req, 'POST /api/value-outcomes/:outcomeId/commitment/withdraw', { act: 'withdraw', tenantId, subjectTable: 'value_outcomes', subjectId: outcomeId, resultTable: 'outcome_withdrawals', resultId: w.id, reason });
         }
         res.status(200).json({ outcome_withdrawal_id: w.id, kind, withdrawn: values });
@@ -123,6 +127,7 @@ export function outcomeSpineRouter(pool: Pool): Router {
                 trim_scale(vo.baseline_value)::text AS baseline, trim_scale(vo.target_value)::text AS target,
                 (SELECT full_name FROM persons WHERE id = vo.committed_by_person_id) AS committed_by,
                 to_char(vo.committed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS committed_on, vo.attribution_method, vo.measure_class,
+                to_char(vo.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS promised_on,
                 trim_scale(vo.actual_value)::text AS actual, to_char(vo.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS measured_on,
                 trim_scale(vo.realized_currency_impact)::text AS realized, vo.currency_code AS currency, vo.realization,
                 (SELECT full_name FROM persons WHERE id = vo.verified_by_person_id) AS verified_by,

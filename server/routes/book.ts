@@ -52,12 +52,14 @@ export function bookRouter(pool: Pool): Router {
           WHERE h.institution_id = ANY($1::uuid[]) AND h.deleted_at IS NULL AND h.superseded_by_id IS NULL`,
         [memberIds],
       );
-      // Outcomes: dates and states only, never a value. Late: a promised date has passed and no actual is measured.
+      // Outcomes: dates and states only, never a value. Late (§26 D4, Brad 23 Nov 2026): today's UTC date is after the
+      // promised date, and no actual is measured. Dates, not instants: never late on the promised day itself.
       const { rows: outcomes } = await pool.query<OutcomeRow>(
         `SELECT o.id, o.institution_id, o.realization::text AS realization,
                 to_char(o.promised_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS promised_on,
                 to_char(o.actual_measured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS measured_on,
-                (o.promised_measured_at IS NOT NULL AND o.promised_measured_at < now() AND o.actual_measured_at IS NULL) AS late
+                (o.promised_measured_at IS NOT NULL AND (o.promised_measured_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date
+                 AND o.actual_measured_at IS NULL) AS late
            FROM value_outcomes o
            JOIN engagements e ON e.id = o.engagement_id AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL
           WHERE o.institution_id = ANY($1::uuid[]) AND o.deleted_at IS NULL AND o.superseded_by_id IS NULL

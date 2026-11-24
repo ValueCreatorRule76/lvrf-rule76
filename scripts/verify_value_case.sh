@@ -308,7 +308,7 @@ V="$(in_txn "$(CORR "$RN")" "SELECT jsonb_path_query_array(lvrf_cost_of_delay('$
 printf '%s' "$V" | grep -q '"rate_not_attested"' && ok "C2: a rate attested by a person with no customer-side role → refused" || bad "C2 attester: $V"
 
 step "7. Commit, the seal, and the \$50,000 (C1)"
-expect POST "/api/value-outcomes/$OA/commit" "$(J target_value 1.0 committed_by_person_id "$OWNA" committed_at 2026-10-01T00:00:00Z commitment_note 'Verification: committed to 1.0.' attribution_method contribution_only measure_class capability_performance)" 201 "a committed target of 1.0 against 1.4"
+expect POST "/api/value-outcomes/$OA/commit" "$(J target_value 1.0 committed_by_person_id "$OWNA" committed_at 2026-10-01T00:00:00Z promised_measured_on 2027-04-01 commitment_note 'Verification: committed to 1.0.' attribution_method contribution_only measure_class capability_performance)" 201 "a committed target of 1.0 against 1.4"
 # B4 (§14): the class is stated at commit, so with every input in place the figure computes.
 [ "$(CODC)" = '[]' ] && [ "$(q "SELECT lvrf_cost_of_delay('$OA')->>'status' || '|' || (lvrf_cost_of_delay('$OA')->>'amount') || '|' || (lvrf_cost_of_delay('$OA')->>'basis')")" = "computed|50000|client_stated" ] \
   && ok "every input in place, the class stated at commit: computed 50000, its basis the weaker of its inputs (the client-stated rate, below the published baseline)" || bad "cod: $(q "SELECT lvrf_cost_of_delay('$OA')")"

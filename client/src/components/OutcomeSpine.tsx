@@ -9,12 +9,13 @@ import { num } from '../lib/caseFormat';
  * B4 (LVRF_PLAN §14; design §3.2; D1–D3) — card 01d: commit, measure and verify each outcome, and the steward's
  * withdrawals. Every confirmation names the outcome's short id. The database holds each rule (hardening §34): a commit
  * states the method and the class, fixed while it stands; a measurement needs the method and admitted actual evidence;
- * a withdrawal keeps what it withdraws.
+ * a withdrawal keeps what it withdraws. §26 (Brad, 23 Nov 2026): a commit states the promised measurement date, after the
+ * commit date and within three years, fixed while it stands.
  */
 interface SpineOutcome {
   id: string; metric: string; unit: string | null; direction: string; engagement: string; engagement_retired: boolean;
   baseline: string; target: string | null; committed_by: string | null; committed_on: string | null;
-  attribution_method: string | null; measure_class: string | null; actual: string | null; measured_on: string | null;
+  attribution_method: string | null; measure_class: string | null; promised_on: string | null; actual: string | null; measured_on: string | null;
   realized: string | null; currency: string | null; realization: string; verified_by: string | null; verified_on: string | null;
   admitted_actual_evidence: boolean;
 }
@@ -38,21 +39,25 @@ const CLASS_LABEL: Record<string, string> = {
 const short = (id: string) => id.slice(0, 8);
 const withUnit = (v: string | null, unit: string | null) => (v === null ? '' : `${num(v)}${unit ? ` ${unit}` : ''}`);
 const today = () => new Date().toISOString().slice(0, 10);
+/** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
+const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
 
 function Commit({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState({ target: '', committer: '', on: today(), note: '', method: '', klass: '' });
+  const [v, setV] = useState({ target: '', committer: '', on: today(), by: '', note: '', method: '', klass: '' });
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="commit-open">Commit…</button>;
   const t = /^-?\d+(\.\d+)?$/.test(v.target.trim()) ? v.target.trim() : null;
   const who = persons.find((p) => p.id === v.committer);
   const unmet = [...(t === null ? ['give the target, a number'] : []), ...(who ? [] : ['choose who commits']),
-    ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']), ...(v.note.trim().length < 12 ? ['note the commitment, in at least 12 characters'] : []),
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']),
+    ...(!/^\d{4}-\d{2}-\d{2}$/.test(v.by) ? ['give the date it will be measured by']
+      : /^\d{4}-\d{2}-\d{2}$/.test(v.on) && (v.by <= v.on || v.by > threeYearsAfter(v.on)) ? ['make the measure-by date after the commit date and within three years of it'] : []), ...(v.note.trim().length < 12 ? ['note the commitment, in at least 12 characters'] : []),
     ...(v.method ? [] : ['choose the attribution method']), ...(v.klass ? [] : ['choose the measure class'])];
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="commit">
       <GovernedForm<{ value_outcome_id: string }>
         path={`/api/value-outcomes/${o.id}/commit`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">The target a named person at the account commits to, with the attribution method and the measure class. <strong>The method and the class are fixed while the commitment stands</strong>; changing them means withdrawing it and committing again.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">The target a named person at the account commits to, with the attribution method and the measure class. <strong>The method, the class and the measure-by date are fixed while the commitment stands</strong>; changing them means withdrawing it and committing again.</p>}
         fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block"><span className={L}>Target ({o.unit ?? 'unit'})</span><input className={I} inputMode="decimal" value={v.target} onChange={(e) => setV({ ...v, target: e.target.value })} data-testid="commit-target" /></label>
           <label className="block"><span className={L}>Who commits</span>
@@ -61,6 +66,8 @@ function Commit({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; on
               {persons.map((p) => <option key={p.id} value={p.id}>{p.full_name}{p.title ? `, ${p.title}` : ''}{p.ineligible ? ` (${p.ineligible})` : p.roles ? ` (${p.roles})` : ' (no customer-side role named)'}</option>)}
             </select></label>
           <label className="block"><span className={L}>Committed on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="commit-on" /></label>
+          <label className="block"><span className={L}>Measure by</span><input type="date" className={I} value={v.by} min={v.on || undefined} onChange={(e) => setV({ ...v, by: e.target.value })} data-testid="commit-by" />
+            <span className="mt-1 block text-[11.5px] text-ink-45">The date the outcome will be measured by: after the commit date, within three years of it.</span></label>
           <label className="block"><span className={L}>Attribution method</span>
             <select className={I} value={v.method} onChange={(e) => setV({ ...v, method: e.target.value })} data-testid="commit-method">
               <option value="">Choose…</option>{Object.entries(METHOD_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -71,9 +78,9 @@ function Commit({ o, persons, onDone }: { o: SpineOutcome; persons: Person[]; on
             </select></label>
           <label className="block sm:col-span-2"><span className={L}>Note</span><textarea rows={2} className={I} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} data-testid="commit-note" /></label>
         </div>}
-        confirm={<span data-testid="confirm-text">Commit {short(o.id)}, {o.metric}: target {withUnit(t, o.unit)}, by {who?.full_name ?? ''}, on {v.on}; attribution: {METHOD_LABEL[v.method] ?? ''}; class: {CLASS_LABEL[v.klass] ?? ''}. The method and the class are fixed while the commitment stands.</span>}
+        confirm={<span data-testid="confirm-text">Commit {short(o.id)}, {o.metric}: target {withUnit(t, o.unit)}, by {who?.full_name ?? ''}, on {v.on}; measured by {v.by}; attribution: {METHOD_LABEL[v.method] ?? ''}; class: {CLASS_LABEL[v.klass] ?? ''}. The method, the class and the measure-by date are fixed while the commitment stands.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
-        buildBody={() => ({ target_value: Number(t), committed_by_person_id: v.committer, committed_at: `${v.on}T12:00:00Z`, commitment_note: v.note.trim(), attribution_method: v.method, measure_class: v.klass })}
+        buildBody={() => ({ target_value: Number(t), committed_by_person_id: v.committer, committed_at: `${v.on}T12:00:00Z`, promised_measured_on: v.by, commitment_note: v.note.trim(), attribution_method: v.method, measure_class: v.klass })}
         submitLabel="Commit" onSuccess={onDone} renderSuccess={() => <>Committed.</>} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
     </div>
@@ -142,7 +149,7 @@ function WithdrawStep({ o, kind, notSteward, onDone }: { o: SpineOutcome; kind: 
   const unmet = why.trim().length < 12 ? ['say why, in at least 12 characters'] : [];
   const what = kind === 'measurement'
     ? `actual ${withUnit(o.actual, o.unit)}, measured ${o.measured_on ?? ''}${o.realized !== null ? `, realized ${num(o.realized)} ${o.currency ?? '(currency not recorded)'}` : ''}. The outcome reads committed again`
-    : `target ${withUnit(o.target, o.unit)}, committed by ${o.committed_by ?? 'no one on record'}. The outcome reads claimed`;
+    : `target ${withUnit(o.target, o.unit)}, committed by ${o.committed_by ?? 'no one on record'}${o.promised_on ? `, measurement promised by ${o.promised_on}` : ''}. The outcome reads claimed`;
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid={`withdraw-${kind}`}>
       <GovernedForm<{ outcome_withdrawal_id: string }>
@@ -183,6 +190,7 @@ export function OutcomeSpine({ institutionId }: { institutionId: string }) {
           </div>
           <p className="m-0 mt-1 text-[11.5px] text-ink-45">{o.engagement}{o.engagement_retired ? ' (retired)' : ''} · baseline {withUnit(o.baseline, o.unit)}
             {' · '}{o.target !== null ? `target ${withUnit(o.target, o.unit)}, committed by ${o.committed_by ?? 'no one on record'}, ${o.committed_on}` : 'no commitment'}
+            {o.target !== null && <span data-testid="outcome-promised">{` · ${o.promised_on ? `measurement promised by ${o.promised_on}` : 'no promised date on record (committed before §26)'}`}</span>}
             {o.target !== null && ` · attribution ${o.attribution_method ? METHOD_LABEL[o.attribution_method] : 'not stated (committed before B4)'} · class ${o.measure_class ? CLASS_LABEL[o.measure_class] : 'not stated'}`}
             {' · '}{o.actual !== null ? `actual ${withUnit(o.actual, o.unit)}, measured ${o.measured_on}` : 'not measured'}
             {o.verified_by ? ` · verified by ${o.verified_by}, ${o.verified_on}` : ''}</p>
