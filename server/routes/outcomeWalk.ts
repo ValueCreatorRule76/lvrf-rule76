@@ -1,4 +1,5 @@
 import { customerSideRefusal } from '../lib/customerSide.js';
+import { laterThanToday, NOT_FUTURE } from '../lib/walkDate.js';
 import { Router } from 'express';
 import { recordAct } from '../lib/governanceAct.js';
 import type { Pool } from 'pg';
@@ -115,6 +116,11 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const targetValue = requireNumber(body, 'target_value', 'body');
       const committedByPersonId = requireUuidString(body, 'committed_by_person_id', 'body');
       const committedAt = requireTimestamp(body, 'committed_at', 'body');
+      // §31 D3: not later than today (the person's today; the server allows one day for time zones).
+      if (laterThanToday(committedAt)) {
+        res.status(422).json({ message: NOT_FUTURE.commit });
+        return;
+      }
       const commitmentNote = requireString(body, 'commitment_note', 'body');
       // B4 (LVRF_PLAN §14; design §3.2, ruling 2): the attribution method and the measure class, stated at commit and fixed
       // after it (hardening §34 holds both). Neither has a default.
@@ -376,6 +382,11 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const body = requireObject(req.body, 'body');
       const actualValue = requireNumber(body, 'actual_value', 'body');
       const actualMeasuredAt = requireTimestamp(body, 'actual_measured_at', 'body');
+      // §31 D3: not later than today (the person's today; the server allows one day for time zones).
+      if (laterThanToday(actualMeasuredAt)) {
+        res.status(422).json({ message: NOT_FUTURE.measure });
+        return;
+      }
       // Accepted and type-checked, but not persisted: value_outcomes has no
       // column for it and nothing downstream reads it yet. Not silently
       // dropped without acknowledgment — this comment is that acknowledgment.
@@ -548,6 +559,11 @@ export function outcomeWalkRouter(pool: Pool): Router {
       const body = requireObject(req.body, 'body');
       const verifiedByPersonId = requireUuidString(body, 'verified_by_person_id', 'body');
       const verifiedAt = requireTimestamp(body, 'verified_at', 'body');
+      // §31 D3: not later than today (the person's today; the server allows one day for time zones).
+      if (laterThanToday(verifiedAt)) {
+        res.status(422).json({ message: NOT_FUTURE.verify });
+        return;
+      }
       const attestationNote = requireString(body, 'attestation_note', 'body');
 
       const actorPersonId = req.actor?.personId;

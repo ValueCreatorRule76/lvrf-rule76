@@ -361,6 +361,24 @@ BEGIN
   ELSIF TG_TABLE_NAME = 'value_outcomes' THEN
     verifier_id := NEW.verified_by_person_id;
     committer_id := NEW.committed_by_person_id;
+    -- §31 D1, D2, D4 (Brad, 24 Nov 2026): a walk date's UTC date is no later than today's UTC date plus one day (every
+    -- local today on Earth, and nothing later). Checked when the date is set or changed; a row recorded earlier is
+    -- never re-read.
+    IF NEW.committed_at IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.committed_at IS DISTINCT FROM OLD.committed_at)
+       AND (NEW.committed_at AT TIME ZONE 'UTC')::date > (now() AT TIME ZONE 'UTC')::date + 1 THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: The commit date can''t be later than today.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_commit_not_future';
+    END IF;
+    IF NEW.actual_measured_at IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.actual_measured_at IS DISTINCT FROM OLD.actual_measured_at)
+       AND (NEW.actual_measured_at AT TIME ZONE 'UTC')::date > (now() AT TIME ZONE 'UTC')::date + 1 THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: The measurement date can''t be later than today.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_measure_not_future';
+    END IF;
+    IF NEW.verified_at IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.verified_at IS DISTINCT FROM OLD.verified_at)
+       AND (NEW.verified_at AT TIME ZONE 'UTC')::date > (now() AT TIME ZONE 'UTC')::date + 1 THEN
+      RAISE EXCEPTION 'LVRF: value_outcomes: The verification date can''t be later than today.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcomes_verify_not_future';
+    END IF;
   END IF;
 
   IF assessor_id IS NULL AND attestor_id IS NULL

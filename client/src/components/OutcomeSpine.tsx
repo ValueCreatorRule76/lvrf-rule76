@@ -39,6 +39,7 @@ const CLASS_LABEL: Record<string, string> = {
 };
 const short = (id: string) => id.slice(0, 8);
 const withUnit = (v: string | null, unit: string | null) => (v === null ? '' : `${num(v)}${unit ? ` ${unit}` : ''}`);
+// §31 D5: the walk dates' default, and their latest day: the person's own today.
 const today = () => localToday();
 /** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
 const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
@@ -63,7 +64,7 @@ function Commit({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: 
   const t = /^-?\d+(\.\d+)?$/.test(v.target.trim()) ? v.target.trim() : null;
   const who = persons.find((p) => p.id === v.committer);
   const unmet = [...(t === null ? ['give the target, a number'] : []), ...(who ? [] : [persons.length === 0 ? (tenantSelf ? 'no one can commit here yet' : 'record a customer-side person at this account first') : 'choose who commits']),
-    ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']),
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? (v.on > today() ? ['make the date today or earlier'] : []) : ['give the date']),
     ...(!/^\d{4}-\d{2}-\d{2}$/.test(v.by) ? ['give the date it will be measured by']
       : /^\d{4}-\d{2}-\d{2}$/.test(v.on) && (v.by <= v.on || v.by > threeYearsAfter(v.on)) ? ['make the measure-by date after the commit date and within three years of it'] : []), ...(v.note.trim().length < 12 ? ['note the commitment, in at least 12 characters'] : []),
     ...(v.method ? [] : ['choose the attribution method']), ...(v.klass ? [] : ['choose the measure class'])];
@@ -79,7 +80,7 @@ function Commit({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: 
               <option value="">Choose…</option>
               {persons.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
             </select>}</label>
-          <label className="block"><span className={L}>Committed on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="commit-on" /></label>
+          <label className="block"><span className={L}>Committed on</span><input type="date" className={I} value={v.on} max={today()} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="commit-on" /></label>
           <label className="block"><span className={L}>Measure by</span><input type="date" className={I} value={v.by} min={v.on || undefined} onChange={(e) => setV({ ...v, by: e.target.value })} data-testid="commit-by" />
             <span className="mt-1 block text-[11.5px] text-ink-45">The date the outcome will be measured by: after the commit date, within three years of it.</span></label>
           <label className="block"><span className={L}>Attribution method</span>
@@ -108,7 +109,7 @@ function Measure({ o, onDone }: { o: SpineOutcome; onDone: () => void }) {
   if (!o.admitted_actual_evidence) return <p className="m-0 text-[11.5px] text-ink-70" data-testid="measure-blocked">No measurement yet: link evidence of the actual from a system of record, the client or a published source, on the run page or card 01c, first.</p>;
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="measure-open">Measure…</button>;
   const a = /^-?\d+(\.\d+)?$/.test(v.actual.trim()) ? v.actual.trim() : null;
-  const unmet = [...(a === null ? ['give the actual, a number'] : []), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date'])];
+  const unmet = [...(a === null ? ['give the actual, a number'] : []), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? (v.on > today() ? ['make the date today or earlier'] : []) : ['give the date'])];
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="measure">
       <GovernedForm<{ value_outcome_id: string }>
@@ -116,7 +117,7 @@ function Measure({ o, onDone }: { o: SpineOutcome; onDone: () => void }) {
         provenance={<p className="m-0 text-[12.5px] text-ink">The measured actual, resting on the outcome&apos;s linked evidence of it. Measured is not verified: a named person at the account verifies it next.</p>}
         fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block"><span className={L}>Actual ({o.unit ?? 'unit'})</span><input className={I} inputMode="decimal" value={v.actual} onChange={(e) => setV({ ...v, actual: e.target.value })} data-testid="measure-actual" /></label>
-          <label className="block"><span className={L}>Measured on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="measure-on" /></label>
+          <label className="block"><span className={L}>Measured on</span><input type="date" className={I} value={v.on} max={today()} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="measure-on" /></label>
         </div>}
         confirm={<span data-testid="confirm-text">Measure {short(o.id)}, {o.metric}: actual {withUnit(a, o.unit)}, measured {v.on}, attribution {METHOD_LABEL[o.attribution_method] ?? o.attribution_method}.</span>}
         canSubmit={unmet.length === 0} unmet={unmet}
@@ -132,7 +133,7 @@ function Verify({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: 
   const [v, setV] = useState({ verifier: '', on: today(), note: '' });
   if (!open) return <button type="button" onClick={() => setOpen(true)} className={SMALL} data-testid="verify-open">Verify…</button>;
   const who = persons.find((p) => p.id === v.verifier);
-  const unmet = [...(who ? [] : [persons.length === 0 ? (tenantSelf ? 'no one can verify here yet' : 'record a customer-side person at this account first') : 'choose who verifies']), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? [] : ['give the date']), ...(v.note.trim().length < 12 ? ['note what was checked, in at least 12 characters'] : [])];
+  const unmet = [...(who ? [] : [persons.length === 0 ? (tenantSelf ? 'no one can verify here yet' : 'record a customer-side person at this account first') : 'choose who verifies']), ...(/^\d{4}-\d{2}-\d{2}$/.test(v.on) ? (v.on > today() ? ['make the date today or earlier'] : []) : ['give the date']), ...(v.note.trim().length < 12 ? ['note what was checked, in at least 12 characters'] : [])];
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="verify">
       <GovernedForm<{ value_outcome_id: string }>
@@ -144,7 +145,7 @@ function Verify({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: 
               <option value="">Choose…</option>
               {persons.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
             </select>}</label>
-          <label className="block"><span className={L}>Verified on</span><input type="date" className={I} value={v.on} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="verify-on" /></label>
+          <label className="block"><span className={L}>Verified on</span><input type="date" className={I} value={v.on} max={today()} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="verify-on" /></label>
           <label className="block sm:col-span-2"><span className={L}>What was checked</span><textarea rows={2} className={I} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} data-testid="verify-note" /></label>
         </div>}
         confirm={<span data-testid="confirm-text">Verify {short(o.id)}, {o.metric}: actual {withUnit(o.actual, o.unit)}, verified by {who?.full_name ?? ''} on {v.on}.</span>}

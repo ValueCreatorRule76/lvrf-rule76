@@ -5,6 +5,7 @@
 //   TZ_ID=America/New_York EPOCH=<ms> node scripts/lib/local_date_walk.mjs SECTION[,SECTION]
 //
 //   defaults  Committed on (E.OC), Measured on (E.OM) and Verified on (E.OV) each default to E.WANT_DAY
+//   future    §31: each date's max is E.WANT_DAY; E.NEXT_DAY typed in shows the unmet line and the button stays disabled
 //   commit    on E.OC: measure-by E.WANT_DAY is refused in words; E.BY admitted; confirm; the card shows the date
 import { readFileSync } from 'node:fs';
 
@@ -79,6 +80,24 @@ if (SECTIONS.includes('commit')) {
   check(ct.includes(`, on ${E.WANT_DAY}; measured by ${E.BY};`), `commit: the confirmation names the local date and the measure-by date`, ct);
   await ev(`${f}.querySelector('[data-testid=form-confirm-yes]').click()`);
   check(await waitFor(`(${row(E.OC)}?.querySelector('[data-testid=outcome-promised]')?.textContent ?? '') === ' · measurement promised by ${E.BY}'`, 20000), 'commit: confirmed; the card shows the measure-by date');
+}
+
+// §31 D5: each walk date's latest day is the person's own today; a later day typed in is refused by the form, in words.
+if (SECTIONS.includes('future')) {
+  check(await openCard(), 'future: card 01d lists the three fixture outcomes');
+  for (const [o, open, form, field, name] of [[E.OC, 'commit-open', 'commit', 'commit-on', 'Committed on'], [E.OM, 'measure-open', 'measure', 'measure-on', 'Measured on'], [E.OV, 'verify-open', 'verify', 'verify-on', 'Verified on']]) {
+    await ev(`${row(o)}.querySelector('[data-testid=${open}]')?.click()`); await sleep(300);
+    const f = `${row(o)}?.querySelector('[data-testid=${form}]')`;
+    const max = await ev(`${f}?.querySelector('[data-testid=${field}]')?.getAttribute('max') ?? null`);
+    check(max === E.WANT_DAY, `future: "${name}" offers no day after ${E.WANT_DAY}, the local today in ${E.TZ_ID} (max)`, max);
+    await set(f, field, E.NEXT_DAY); await sleep(250);
+    const u = await ev(`${f}?.querySelector('[data-testid=form-unmet]')?.textContent ?? ''`);
+    check(u.includes('make the date today or earlier'), `future: "${name}" ${E.NEXT_DAY}, typed in, is refused by the form in words`, u);
+    check((await ev(`${f}?.querySelector('button[type=submit]')?.disabled`)) === true, `future: "${name}" ${E.NEXT_DAY}: the button stays disabled`);
+    await set(f, field, E.WANT_DAY); await sleep(250);
+    const u2 = await ev(`${f}?.querySelector('[data-testid=form-unmet]')?.textContent ?? ''`);
+    check(!u2.includes('make the date today or earlier'), `future: "${name}" ${E.WANT_DAY} is not refused for its date`, u2);
+  }
 }
 
 console.log(`DONE ${out.filter((l) => l.startsWith('PASS')).length} ${out.filter((l) => l.startsWith('FAIL')).length}`);
