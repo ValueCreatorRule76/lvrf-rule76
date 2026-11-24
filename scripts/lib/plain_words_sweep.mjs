@@ -68,6 +68,6 @@ for (const path of PATHS) {
   pages++;
   for (const h of hits) console.log(`HIT ${JSON.stringify({ path, ...h })}`);
 }
-console.log(`PASS  sweep: ${pages} pages read at 1280`);
+console.log(`${pages === PATHS.length ? 'PASS' : 'FAIL'}  sweep: ${pages} pages read at 1280, of ${PATHS.length}`);
 console.log('DONE');
 process.exit(0);

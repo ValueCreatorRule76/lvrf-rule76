@@ -176,6 +176,10 @@ env VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_PORT" S_EMAIL="$S_EMAIL" PW="$PW" PATH
 grep -E '^(PASS|FAIL|NOTE)' "$W/sweep.log" | while IFS= read -r l; do echo "$l"; done
 PASS=$((PASS + $(grep -c '^PASS' "$W/sweep.log" || true))); FAIL=$((FAIL + $(grep -c '^FAIL' "$W/sweep.log" || true)))
 grep -q '^DONE' "$W/sweep.log" || bad "the sweep did not finish"
+# Brad (24 Nov 2026): an unread page proves nothing. Every page is read, or the script fails (a page that hit the
+# limit or did not answer has already failed above, by its own FAIL line).
+NPATHS="$(grep -c . "$W/paths.txt")"; NREAD="$(grep -oE '^PASS  sweep: [0-9]+ pages read' "$W/sweep.log" | grep -oE '[0-9]+' || echo 0)"
+[ "$NREAD" = "$NPATHS" ] && ok "coverage: all $NPATHS pages read" || bad "coverage: $NREAD of $NPATHS pages read: an unread page proves nothing"
 # Classify: a hit whose text is in the record (the clone's data) is the record's own words; anything else is app text.
 pg_dump -a -X -d "$VERIFY_DB" 2>/dev/null > "$W/data.sql" || pg_dump -a -d "$VERIFY_DB" > "$W/data.sql"
 python3 - "$W/sweep.log" "$W/data.sql" > "$W/classified.txt" <<'PY'
@@ -193,7 +197,7 @@ APPN="$(grep -c '^APP' "$W/classified.txt" || true)"; RECN="$(grep -c '^RECORD' 
 [ "$APPN" = "0" ] && ok "the sweep: 0 plan codes in app text" || { bad "the sweep: $APPN plan code(s) in app text"; grep '^APP' "$W/classified.txt" | sort -u | head -20; }
 echo "  listed, not failed: $RECN hit(s) in the record's own words (people's text, sealed text, ids), by code and text:"
 grep '^RECORD' "$W/classified.txt" | cut -f3,4 | sort | uniq -c | sort -rn | head -30 | sed 's/^/    /'
-cover "$LOG" 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'pages to read' 'the sweep: 0 plan codes'
+cover "$LOG" 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'pages to read' 'coverage: all' 'the sweep: 0 plan codes'
 
 echo "  screenshots: $OUT"
 

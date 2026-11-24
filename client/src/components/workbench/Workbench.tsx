@@ -576,7 +576,7 @@ function Fold({ title, testid, children }: { title: string; testid: string; chil
         className={'w-full px-4 py-3 text-left text-[13px] font-semibold text-ink print:hidden ' + FOCUS_RING} data-testid={`${testid}-toggle`}>
         {title} {open ? '▾' : '▸'}
       </button>
-      <div id={id} className={'border-t border-rule px-4 pb-1 pt-4 print:border-0 print:px-0 ' + (open ? '' : 'hidden print:block')} inert={!open}>
+      <div id={id} className={'border-t border-rule px-4 pb-1 pt-4 print:border-0 print:px-0 ' + ''} inert={!open}>
         {children}
       </div>
     </section>
