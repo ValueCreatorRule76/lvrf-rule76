@@ -6833,7 +6833,8 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
 ### 4. Gate B and effort
 
 - **Gate B:** migrate to `0053` (backup first, rule 8), then hardening re-applied (one new function and trigger). **TOC
-  972 → 973** (the trigger) and **triggers 227 → 228**, both counted at Gate A.
+  972 → 974** (the new function and its trigger; dropping the `NOT NULL` adds none) and **triggers 227 → 228**,
+  both counted at Gate A.
 - **Brad's look:** card 01b's "Add a person": the email optional. Typing Curia's own analyst's name shows the same-name
   warning. Cancel.
 - **About a day.**
