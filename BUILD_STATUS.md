@@ -16919,8 +16919,8 @@ changes.
   - **`verify_acts_lineage`:** act routes exercised 29 → 30, the other act routes 23 → 22 (naming a customer-side role
     is now exercised there); one check added, that the two grants and their source openings are recorded acts.
   - **`verify_steward_safety`:** the new-person confirmation added to those that name a new row in words (as
-    "Name {person}" and "Add the industry"): 28 → 29 confirmations name a short id is unchanged, 12 → 13 name a new row
-    or batch in words.
+    "Name {person}" and "Add the industry"): 29 confirmations name a short id, unchanged; 12 → 13 name a new row or
+    batch in words.
 - **The full regression: 60 scripts, 59 passed first time**; `verify_steward_safety` failed one check (the confirmation
   above) and passed 31/0 after. `verify_plain_words` 37/0 (51 of 51 pages); `verify_deploy_steps` 27/0;
   `verify_tenant_scope` "cases passed".
