@@ -17064,3 +17064,153 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
   - **Prod:** 6 current persons, 5 of them customer-side records (no tenant); 1 current credential.
   - **Forms:** W1's "Add a person" and card 01b's "Add a person" both require it, and the route
     (`POST /api/institutions/:id/inputs`) does too.
+
+### §30: plain words in server and database strings — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §30; Brad's rulings, 24 Nov 2026: D1–D5 as recommended, three of D3's lines in his
+wording; the wording file read and approved for this slice). Branch `plain-server`, on `c4669c7`. **No migration, table
+or trigger.** 22 database functions change their message text only.
+- **The database:** 50 hardening messages say "your company" and "the steward", as D3's table and Brad's three lines rule.
+  Only `access_grants`' 4 messages, which only scripts reach, still say "tenant".
+- **The server:** 13 strings a route can return say "your company"; the research route's "not the tenant-self
+  institution" reads "not your own company's account".
+- **The client:** "(D-M21)" and "(3.0 Band A)" are off the screen (4 strings).
+- **The prefix (D4):** `server/lib/screenMessage.ts` drops a hardening message's `LVRF: <table>:` (or bare `LVRF: `) from
+  every JSON response's `message`, `blockers` and `issues`, and from the gap register's "Already refused" line, and
+  capitalizes the sentence's first word. `refusals.message` keeps the raw text.
+- **The check (D1, D2):** `check_plain_words.mjs` reads route-reachable server strings and every hardening `RAISE`
+  message for the plan-code pattern (now with "D-M" and "Band A–E") and the word "tenant". Out, named in the file with
+  their reasons: the seeds, sealed text (`server/spine/`), identifier literals, and `access_grants`' operator-only
+  messages. JSX text with an HTML entity was already read (§29).
+- **`docs/LVRF_P30_WORDING.md`:** every change, old beside new (read and approved by Brad, 24 Nov 2026).
+
+**Departures, for Brad to read:**
+1. **The bare `LVRF: ` prefix** (`lvrf_block_ai_actual`'s messages name no table) is dropped too.
+2. **The first word is capitalized** after the prefix goes ("Only the steward adds an industry."); a message that
+   begins with an id or a name is left as it is.
+3. **Three database messages not in D3's table** ("this tenant": a lever, research clearances, a research prompt) follow
+   D3's rule, "your company"; all three are in the wording file.
+
+**Gate A:**
+- **`verify_plain_server` (new): 113 passed, 0 failed.**
+  - **The check and its breaks:** 0 hits; B6 "tenant" back in a database `RAISE` (including one written over two
+    lines), B7 "tenant" in a route's string, B8 "(D-M21)" back in a client string, B9 a seed's string moved into a
+    route, each caught; the seed's own string not read.
+  - **The clone:** 227 triggers; drift none; every run byte-identical after hardening; the 22 functions' `md5(prosrc)`
+    as computed against `467f888`.
+  - **Through the routes (D4):** a refused measurement and a refused AI-sourced actual answer without the prefix;
+    `refusals` keeps it; the gap register's line prints without it. **B10:** the strip removed, caught.
+  - **Every D3 row raised at its guard** (as `lvrf_app`, rolled back), its raw message and its on-screen form read for
+    no prefix and no "tenant". Fixture rows of another company, by the superuser on the clone only. Two shapes that no
+    longer exist (a row from before "about", a row verified without an opening) were raised in one transaction rolled
+    back whole, the CHECK dropped and back validated after.
+- **Each D3 row and the script that proves it** (the message raised and its new words asserted):
+
+  | D3 row | Proved by |
+  |---|---|
+  | only the steward … (21) | adds an industry: `verify_supersession`, `verify_plain_server`; withdraws a link: `verify_c2c`, `verify_corrections`; corrects what a link supports, records an erratum: `verify_corrections`; records a finding: `verify_c3b`; marks a system exercise: `verify_c3`; may mark a reference example: `verify_value_hypotheses`; may propose and withdraw a lever, link a solution, withdraw a link: `verify_value_levers`; sets a policy value, ratifies a lens policy: `verify_value_case`; names a role, revokes a role, may unmark a reference example, states what a row from before is about, withdraws a verification, withdraws a measurement or a commitment, shares a run for review, clears for research: `verify_plain_server` |
+  | the account % is not one of your company's accounts (5) | `verify_plain_server` (summaries, rates); the same sentence in the hypothesis, marker and person-link guards is not raised one by one |
+  | run / outcome / engagement % is not one of your company's … (3) | `verify_plain_server` |
+  | the act's subject is not in your company's record | `verify_plain_server` |
+  | the account is not one of your company's accounts (role grants) | `verify_plain_server` |
+  | % is not a current, real member of your company's staff (5) | `verify_value_hypotheses` (a summary's author); the same sentence in the other four guards is not raised one by one |
+  | … a current member of your company's staff (2) | `verify_plain_server` (a print request); the person-link guard's linker is not raised |
+  | … is not in your company's record (2) | `verify_plain_server` (a mark's subject); the act's result is not raised |
+  | This lever's pack entry (%) is not in your company's record. | `verify_value_levers` |
+  | This link's lever or offering is not in your company's record. | `verify_plain_server` |
+  | outcome % is not of this account | `verify_plain_server` |
+  | (your company's staff, a vendor-side role, or sign-in credentials) | `verify_c3` |
+  | only your company's own people are linked | `verify_outside_in_walk` |
+  | the same key / persona in your company's record | `verify_plain_server` |
+  | your company's current one (the CFO lens) | `verify_plain_server`, on S3's Northwind fixture: another company's policy and a superseded one refused, the current one accepted |
+  | (D-M21) dropped | database: `verify_plain_server` (the share); client: `check_plain_words` B8, and `verify_s3_print_family`'s declared change |
+  | (3.0 Band A) dropped | `check_plain_words` (D2's pattern) |
+  | server "this tenant" … (12) and "not the tenant-self institution" | `check_plain_words` (every server string a route can return); raised: `verify_outside_in_walk` (staff), `verify_value_levers` (catalog), equivalence (the research prompt) |
+  | D3's general rule: a lever, a clearance, a prompt "of your company" | `verify_plain_server` |
+  | D4, the prefix off the screen | `verify_plain_server` (section 4, B10); `verify_customer_committer` R1–R2 and `verify_s4_form_confirmation` B3 tell who answered by the record |
+- **The scripts that read the old words, updated by design:**
+  - needles that named the old messages: `verify_c2c`, `verify_c3`, `verify_c3b`, `verify_corrections`,
+    `verify_evidence_final`, `verify_outside_in_walk`, `verify_supersession`, `verify_value_case`,
+    `verify_value_hypotheses`, `verify_value_levers`;
+  - route needles that begin a database sentence, now capitalized: 15, in 8 scripts. Two from a route's own sentence
+    were left as they were;
+  - `verify_customer_committer` R1, R2 and `verify_s4_form_confirmation` B3 told the route from the database by the
+    prefix. They now tell by the record: only a database refusal is recorded in `refusals`;
+  - `verify_s1_hypothesis_rule`'s needle without the prefix;
+  - `verify_s3_print_family` declares the one screen change, "Share for review (D-M21)" → "Share for review", counted (3
+    lines); every other line still word for word;
+  - `scripts/list_api_routes.mjs` accepts the new `app.use(screenMessages())`.
+  - `verify_access_grants` is unchanged: its messages are operator-only.
+- **The full regression: 60 scripts. 50 passed first time; the 10 that read the old words (and equivalence) failed, were
+  updated, and passed on rerun, each 0 failed:** `verify_acts_lineage` 197/0, `verify_c2c` 79/0, `verify_c3` 208/0,
+  `verify_case_snapshot` 117/0, `verify_customer_committer` 111/0, `verify_outside_in_walk` 128/0,
+  `verify_s1_hypothesis_rule` 207/0, `verify_s3_print_family` 133/0, `verify_s4_form_confirmation` 106/0, and
+  `verify_plain_server` 113/0. Among the 50: `verify_tenant_scope` **329 passed, 0 failed** (setup 21, cases 308);
+  `verify_plain_words` 43/0 (51 of 51 pages); `verify_deploy_steps` 27/0.
+- **Equivalence against `467f888`:** 213 GETs, 210 identical; 3 differ, each the research-prompt refusal (422) on a
+  customer metric, its words only: "…not the tenant-self institution." → "…not your own company's account."
+- **The functions as built** (`md5(prosrc)`; prod has `467f888`'s):
+  - `lvrf_account_person_link_guard` `48e7a23cca915df691f10e7b88288a22`;
+  - `lvrf_customer_role_grant_guard` `03fd827b1e8b80767545b1e18dbdba8e`;
+  - `lvrf_evidence_final` `06db34f0f083a37b63df1374ac284658`;
+  - `lvrf_executive_summary_guard` `3fef4346d8303f1a4c8f4f287df1794e`;
+  - `lvrf_figure_finding_guard` `db52e8eb82c88ca26e3b9fd4f199a931`;
+  - `lvrf_governance_act_guard` `ced5616fe577f1a99d5adaf8ecfb7f2d`;
+  - `lvrf_industry_steward_only` `9c5d5cac806a1389549ed4671317de7c`;
+  - `lvrf_lens_policy_guard` `8691f8dd5b42fc14fbd27286e6080420`;
+  - `lvrf_lever_offering_steward_only` `fedc5b7579259efb6b0052557611956f`;
+  - `lvrf_monetization_rate_guard` `339f199a6e258d257a80d035d4a7c1cd`;
+  - `lvrf_outcome_evidence_link_guard` `98fc69f8c4c86b59048fb16fd2d91eaf`;
+  - `lvrf_outcome_withdrawal_guard` `741f6731d4bf3d6938ad4a28687397d8`;
+  - `lvrf_policy_value_guard` `3d9489535dd1170deee3a1784615e3b5`;
+  - `lvrf_record_document_guard` `4dd0e0e3536f74a6ea261d63a1e8788e`;
+  - `lvrf_reference_marker_steward_only` `38ae8f69a90954f43d4a0a2a128a4de3`;
+  - `lvrf_research_call_guard` `844940c8a52b7ce6a769916c2e10be12`;
+  - `lvrf_research_clearance_guard` `6b79f2758e8d54753d98ccbea9deb2b1`;
+  - `lvrf_roadmap_milestone_guard` `f370cb1c47256f910ddfc8c680ccde4a`;
+  - `lvrf_run_erratum_steward_only` `69a0db3b29b0228bfe75d1a0cc31cb07`;
+  - `lvrf_system_exercise_mark_guard` `b88d01092f403e5366e2c21ec8d5fbac`;
+  - `lvrf_value_hypothesis_guard` `ec52b3f32ddcbed370bb414964b07029`;
+  - `lvrf_value_lever_steward_only` `9d0f30210607dc9a1833ac8af4fdc7d5`;
+- **Bundle,** built on the clean tree: **`index-CIdD8sI3.js` / `index-BMv5OQwB.css`.**
+
+#### Gate B for §30 (not run; Brad's pastes)
+
+No migration. Hardening is re-applied for 22 functions' message text; the TOC stays 972 and the triggers 227.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only plain-server && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `c4669c7`.
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p30-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**.
+3. **Ownership, then hardening:**
+   ```
+   cd /srv/lvrf && sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p30.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p30.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT proname || ' ' || md5(prosrc) FROM pg_proc WHERE proname IN ('lvrf_account_person_link_guard','lvrf_customer_role_grant_guard','lvrf_evidence_final','lvrf_executive_summary_guard','lvrf_figure_finding_guard','lvrf_governance_act_guard','lvrf_industry_steward_only','lvrf_lens_policy_guard','lvrf_lever_offering_steward_only','lvrf_monetization_rate_guard','lvrf_outcome_evidence_link_guard','lvrf_outcome_withdrawal_guard','lvrf_policy_value_guard','lvrf_record_document_guard','lvrf_reference_marker_steward_only','lvrf_research_call_guard','lvrf_research_clearance_guard','lvrf_roadmap_milestone_guard','lvrf_run_erratum_steward_only','lvrf_system_exercise_mark_guard','lvrf_value_hypothesis_guard','lvrf_value_lever_steward_only') ORDER BY 1"
+   ```
+   Expect `ownership exit 0`; `hardening exit 0`, `0` ERROR lines; **227**; the 22 hashes above, in that order.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p30-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-CIdD8sI3.js` / `index-BMv5OQwB.css`**;
+   drift none (53, newest `0052`); "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing; Cancel everything):**
+- **The value case of any run:** the card reads "Share for review", no "(D-M21)".
+- **Curia's gap register** ("What would raise this score"): any "Already refused" line has no `LVRF:` prefix.
+- **A steward's act seen as not the steward is not needed:** the box has one user. The refusal sentences are proven at
+  Gate A.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- the 22 functions' hashes as in step 3;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.

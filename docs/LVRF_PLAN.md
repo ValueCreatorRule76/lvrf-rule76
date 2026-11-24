@@ -6498,7 +6498,7 @@ commitment is "the target a named person at the account commits to". Curia's `e3
 - **About half a day.**
 
 
-## 30. 3.1 small item: plain words in server and database strings (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended and three of D3's lines changed**)
+## 30. 3.1 small item: plain words in server and database strings (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D5 as recommended and three of D3's lines changed**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§30 … Gate A"), with three departures for Brad to read)
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D5 are approved as recommended.**
