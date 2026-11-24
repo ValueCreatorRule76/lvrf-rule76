@@ -4,6 +4,7 @@ import { useActor } from '../actor/ActorContext';
 import { FOCUS_RING, GovernedForm } from './GovernedForm';
 import { Badge } from './workbench/Card';
 import { num } from '../lib/caseFormat';
+import { localToday } from '../lib/localDate';
 
 /**
  * B4 (LVRF_PLAN §14; design §3.2; D1–D3) — card 01d: commit, measure and verify each outcome, and the steward's
@@ -38,9 +39,6 @@ const CLASS_LABEL: Record<string, string> = {
 };
 const short = (id: string) => id.slice(0, 8);
 const withUnit = (v: string | null, unit: string | null) => (v === null ? '' : `${num(v)}${unit ? ` ${unit}` : ''}`);
-/** §28 D4 (Brad, 24 Nov 2026): the person's own local date, the day they actually act, never the UTC date. */
-export const localToday = (d: Date = new Date()) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = () => localToday();
 /** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
 const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
