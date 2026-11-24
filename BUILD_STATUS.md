@@ -16852,8 +16852,9 @@ changes.
   - **An account with none** prints "No customer-side person is recorded at this account yet. Add one, with a role named
     from a source, on the roles card." "The roles card" links to card 01b and brings it into view. Commit stays
     disabled; its unmet line reads "record a customer-side person at this account first".
-  - **The tenant's own page** (addition 4) prints "No one can commit to or verify the tenant's own outcomes yet.", with
-    no link (that page has no roles card); its unmet line reads "no one can commit here yet".
+  - **The tenant's own page** (addition 4) prints "No one can commit to or verify your own company's outcomes yet: that
+    needs a named executive with a role named from a source, a rule still to be set." (Brad's wording, 24 Nov 2026),
+    with no link (that page has no roles card); its unmet line reads "no one can commit here yet".
 - **The routes (D3, D6):** `POST …/commit` and `POST …/verify` refuse anyone else (422) after the existing account,
   simulated and deleted checks: "Only a customer-side person at the account can commit to a target. {Name} is not:
   {reason}." (and "…can verify an actual."). `server/lib/customerSide.ts` holds the sentence.
@@ -16869,7 +16870,11 @@ changes.
 - **The reads:** `GET …/customer-roles` adds `customer_side` per person; `GET …/outcome-spine` adds
   `committed_before_rule`, `verified_before_rule` and `tenant_self`.
 
-**Departures from the plan, for Brad to read:**
+**Brad's rulings on the departures (24 Nov 2026):** 1, 2, 3 and 5 accepted; 3: the date is the deploy date, and Gate B
+runs today, 24 Nov UTC. **4 changed:** "tenant" is an internal word on screen. The sentence is Brad's (above), the unmet
+line kept, and "tenant" is refused in client strings (below).
+
+**Departures from the plan, as Gate A first recorded them:**
 1. **The database rule is in `lvrf_block_simulated_attestor`, not `lvrf_outcome_spine_guard`** (D4 named the spine
    guard). The spine guard fires on UPDATE only; the simulated-attestor trigger already fires on INSERT and UPDATE of
    `value_outcomes` and already checks the verifier, so the rule covers an INSERT carrying a committer too, with no
@@ -16928,9 +16933,30 @@ changes.
   accounts' roles reads, `committed_before_rule`, `verified_before_rule` and `tenant_self` on three outcome reads.
 - **The function as built:** `lvrf_block_simulated_attestor` `md5(prosrc)` `4150205e2b683a59fbffd09c4772e310` (prod now
   `2cdb1e17f62c3dfbd5e9983f9ac3caa0`, as `2dc3f71`).
-- **Bundle,** built on the clean tree: **`index-Dh8vkOZ9.js` / `index-BMv5OQwB.css`.**
+- **Bundle,** built on the clean tree: **`index-Cx4YL8jk.js` / `index-BMv5OQwB.css`.**
 - **The leaked Vite servers** appeared again after the batches and were stopped before the full run (the approved small
   item).
+
+**After Brad's ruling on departure 4 (24 Nov 2026):**
+- **`check_plain_words` refuses "tenant" in client strings** (client only, as ruled; server and database messages are
+  not read for it). Its 32 hits now say, in plain words:
+  - "the tenant's steward" → "the steward", the fallback in 21 steward-act messages (shown only when the steward's
+    name cannot be read);
+  - the tenant itself → "your own company": the about option ("Skillsoft (your own company)"), the customer-zero note,
+    "No pack applies", the industries card's three lines, the analyst-of-record line, the roll-up line, the account-name
+    label ("unique among your company's accounts"), the two sign-in lines, and card 01b's "Add a person" text.
+- **A gap closed in the check:** JSX text holding an HTML entity (`&apos;`, `&ldquo;`) was skipped, the entity's `;`
+  read as code. It hid card 01b's new "anyone at the tenant". Entities are now read as text; the rescan found no plan
+  code, only the "tenant" lines above.
+- **`verify_plain_words` gains B4** ("tenant" in JSX text with an entity) **and B5** ("tenant" in the steward fallback),
+  each caught.
+- **Rerun after the change, each 0 failed:** `verify_customer_committer` 110/0; `verify_plain_words` 43/0 (51 of 51
+  pages); the six whose walk reads the about option (`scripts/lib/l41_walk.mjs`, updated by design):
+  `verify_evidence_final` 181/0, `verify_steward_safety` 31/0, `verify_supersession` 219/0, `verify_case_snapshot`
+  117/0, `verify_value_case` 201/0, `verify_commit_measure_verify` 220/0.
+- **Bundle,** rebuilt on the clean tree: **`index-Cx4YL8jk.js` / `index-BMv5OQwB.css`** (replaces `index-Dh8vkOZ9.js`).
+- **Open, for Brad:** server and database refusal messages still say "tenant" (e.g. "only the tenant's steward records
+  a finding"), and some reach the screen. Not in this ruling's scope.
 
 #### Gate B for §29 (not run; Brad's pastes)
 
@@ -16959,7 +16985,7 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
    F2=~/lvrf-post-p29-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
    ```
    Expect **972**.
-5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-Dh8vkOZ9.js` / `index-BMv5OQwB.css`**;
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-Cx4YL8jk.js` / `index-BMv5OQwB.css`**;
    drift none (53, newest `0052`); "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
 
 **Brad's look (records nothing; Cancel everything):**
@@ -16969,6 +16995,8 @@ No migration. Hardening is re-applied for one function; the TOC stays 972 and th
   role named from a source, on the roles card." No one to choose; Commit disabled. "the roles card" brings card 01b
   into view. Cancel.
 - **Card 01b:** "Add a person of this account…" opens its form. Cancel.
+- **Skillsoft's own page, card 01d, "Commit…":** "No one can commit to or verify your own company's outcomes yet: that needs
+  a named executive with a role named from a source, a rule still to be set." No link. Cancel.
 
 **Gate C (read-only, as `lvrf_app`):**
 - nothing written since the deploy, apart from any session of your own;
