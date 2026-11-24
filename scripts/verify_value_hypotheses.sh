@@ -362,7 +362,7 @@ a = "  else if (/[0-9]/.test(conditions)) issues.push(`body.falsifier_conditions
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, ""))
 PY
 stop_server; start_server
-expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O2" "$L" baseline "$LATER" 'within 2 quarters')" 422 "B4a: without the route's digit check, the DATABASE refuses the digit, in the same words" "numbers belong in recorded values, not falsifier conditions" "$X"
+expect POST "/api/institutions/$INST/hypotheses" "$(HB "$O2" "$L" baseline "$LATER" 'within 2 quarters')" 422 "B4a: without the route's digit check, the DATABASE refuses the digit, in the same words" "Numbers belong in recorded values, not falsifier conditions" "$X"
 restore "$ROUTE"; stop_server; start_server
 # (b) the CHECK dropped and the guard disabled (rolled back): the digit lands.
 sqllands "B4b: without value_hypotheses_conditions_no_digits and the guard, 'by 3 percent' lands in the conditions (rolled back): they are what keep numbers out" \
@@ -386,7 +386,7 @@ a = "if (f.kind === m.kind && f.sourceCitation === m.source_citation.trim() && f
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "if (false as boolean) {"))
 PY2
 stop_server; start_server
-expect POST "/api/reference-examples/$M4/supersede" "$NOOP" 422 "B7a: without the route's check, the DATABASE refuses it" "this correction changes nothing"
+expect POST "/api/reference-examples/$M4/supersede" "$NOOP" 422 "B7a: without the route's check, the DATABASE refuses it" "This correction changes nothing"
 [ "$(q "SELECT count(*) FROM reference_example_markers WHERE id = '$M4' AND superseded_by_id IS NULL")" = "1" ] && ok "  ...and the marker stands: the new row went back with it" || bad "  ...B7a left state"
 # (b) the guard's branch taken out as well: the no-op lands, so the two checks are what stop it.
 python3 - "$W/b7.sql" <<'PY2'

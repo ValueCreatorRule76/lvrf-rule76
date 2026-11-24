@@ -179,6 +179,7 @@ step "3. The route (D3, D6)"
 A0="$(acts)"
 expect POST "/api/value-outcomes/$O_C/commit" "$(CB "$NOROLE")" 422 "a commit by $NOROLE_NAME (no role)" "$SENT_C $NOROLE_NAME is not: no customer-side role named from a source."
 [ "$(state "$O_C")" = "-|-|claimed" ] && [ "$(acts)" = "$A0" ] && ok "  ...nothing written: no commitment, no act, no evidence row" || bad "  ...wrote: $(state "$O_C") $(acts) vs $A0"
+[ "$(q "SELECT count(*) FROM refusals WHERE message LIKE 'LVRF: value_outcomes: only a customer-side person%'")" = "0" ] && ok "  ...and it was the route that answered: no database refusal recorded" || bad "  ...a database refusal was recorded"
 expect POST "/api/value-outcomes/$O_C/commit" "$(CB "$S")" 422 "a commit by the steward (tenant staff): the account check stays ahead" "does not belong to institution"
 expect POST "/api/value-outcomes/$O_C/commit" "$(CB "$EP")" 422 "a commit by a person of another account: the account check stays ahead" "does not belong to institution"
 expect POST "/api/value-outcomes/$O_V/commit" "$(CB "$OWNER")" 201 "a commit by $OWNER_NAME (customer-side)"
@@ -223,15 +224,20 @@ step "7. Breaks, each caught by its own section"
 # R1 — the route's commit check removed: the database still refuses, so the route section reads the database's words, not D3's.
 edit "$WALKR" "      const sideRefusal = await customerSideRefusal(client, 'commit', committedByPersonId, outcome.institution_id);" "      const sideRefusal = null as string | null;"
 restart_server
+# §30: with the prefix off the screen, the database's sentence reads as the route's; who answered is told by the record:
+# only a database refusal is recorded in refusals (handleGovernanceError), the route's own 422 is not.
+DBR() { q "SELECT count(*) FROM refusals WHERE message LIKE 'LVRF: value_outcomes: only a customer-side person at the account can $1%'"; }
+N0="$(DBR commit)"
 req POST "/api/value-outcomes/$O_C/commit" "$(CB "$NOROLE")"; M="$(said)"
-printf '%s' "$M" | grep -qF "$SENT_C" && bad "R1: not caught: $M" || ok "R1: the route's commit check removed → caught: D3's sentence is gone ($CODE: $(printf '%s' "$M" | head -c 120))"
+[ "$CODE" = "422" ] && [ "$(DBR commit)" -gt "$N0" ] && ok "R1: the route's commit check removed → caught: the database answered, its refusal recorded ($CODE: $(printf '%s' "$M" | head -c 100))" || bad "R1: not caught: $CODE $M"
 [ "$(state "$O_C")" = "-|-|claimed" ] && ok "  ...and the database still refused it: nothing written" || bad "  ...R1 wrote: $(state "$O_C")"
 restore "$WALKR"
 # R2 — the route's verify check removed.
 edit "$WALKR" "      const sideRefusal = await customerSideRefusal(client, 'verify', verifiedByPersonId, outcome.institution_id);" "      const sideRefusal = null as string | null;"
 restart_server
+N0="$(DBR verify)"
 req POST "/api/value-outcomes/$O_V/verify" "$(VB "$NOROLE")"; M="$(said)"
-printf '%s' "$M" | grep -qF "$SENT_V" && bad "R2: not caught: $M" || ok "R2: the route's verify check removed → caught: D3's sentence is gone ($CODE)"
+[ "$CODE" = "422" ] && [ "$(DBR verify)" -gt "$N0" ] && ok "R2: the route's verify check removed → caught: the database answered, its refusal recorded ($CODE)" || bad "R2: not caught: $CODE $M"
 [ "$(state "$O_V")" = "$OWNER|-|measured" ] && ok "  ...and the database still refused it" || bad "  ...R2 wrote: $(state "$O_V")"
 restore "$WALKR"; restart_server
 # D1, D2 — the database's clauses removed: the same writes are accepted.

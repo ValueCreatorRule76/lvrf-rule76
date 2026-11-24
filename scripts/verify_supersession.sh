@@ -491,7 +491,7 @@ AUTHSLUG="break-$TS"
 # B7 — the route's steward check removed: the database refuses.
 edit "$IND" "router.post('/', requireSteward(pool), async (req, res) => {" "router.post('/', async (req, res) => {"
 stop_server; start_server
-expect POST /api/industries "$(IB 'Break industry' "$AUTHSLUG")" 422 "B7: the route's check removed → the database refuses a non-steward" "only the steward" "$X"
+expect POST /api/industries "$(IB 'Break industry' "$AUTHSLUG")" 422 "B7: the route's check removed → the database refuses a non-steward" "Only the steward" "$X"
 [ "$(q "SELECT count(*) FROM industries")" = "$I0" ] && ok "  ...nothing written" || bad "  ...B7 wrote"
 restore "$IND"; stop_server; start_server
 IND_SLUG=utilities; IND_NAME=Utilities

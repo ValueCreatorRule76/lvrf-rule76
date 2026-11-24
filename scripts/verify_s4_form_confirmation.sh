@@ -203,12 +203,16 @@ MO3="$(rj b.business_metric_id)"
 # B3: the route's basis check removed: the trigger still refuses.
 edit "$PB" "      if (repeats) {" "      if (repeats && false) {"
 stop_server; start_server
+# §30: with the prefix off the screen, who answered is told by the record: only the database's refusal is recorded so.
+DBR3() { q "SELECT count(*) FROM refusals WHERE message LIKE 'LVRF: business_metrics: the pack basis note repeats%'"; }
+N3="$(DBR3)"
 post "/api/business-metrics/$MO3/pack-basis" "$(J industry_measure_id "$E_TRIR" basis_note "$CLAIM")"
-[ "$CODE" = "422" ] && rj b.message | has "LVRF: business_metrics: the pack basis note repeats the capability's claim" && [ "$(q "SELECT count(*) FROM business_metrics WHERE id = '$MO3' AND industry_measure_id IS NULL")" = "1" ] \
+[ "$CODE" = "422" ] && rj b.message | has "The pack basis note repeats the capability's claim" && [ "$(DBR3)" -gt "$N3" ] && [ "$(q "SELECT count(*) FROM business_metrics WHERE id = '$MO3' AND industry_measure_id IS NULL")" = "1" ] \
   && ok "B3 break: the route's basis check removed is caught: the trigger refused it (business_metrics_basis_note_own), and no basis was set" || bad "B3: $CODE $(rj b.message)"
 restore "$PB"; stop_server; start_server
+N3="$(DBR3)"
 post "/api/business-metrics/$MO3/pack-basis" "$(J industry_measure_id "$E_TRIR" basis_note "$CLAIM")"
-[ "$CODE" = "422" ] && ! rj b.message | has "LVRF:" && ok "B3 control: restored, the route refuses first" || bad "B3 control: $(rj b.message)"
+[ "$CODE" = "422" ] && [ "$(DBR3)" = "$N3" ] && ok "B3 control: restored, the route refuses first (no database refusal recorded)" || bad "B3 control: $(rj b.message)"
 # B4: a CHECK dropped.
 q "ALTER TABLE evidence DROP CONSTRAINT evidence_quote_not_how_read" > /dev/null
 P4="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 || true)"; D4="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 || true)"

@@ -247,10 +247,10 @@ expect POST "$(CR "$INST2")" "$(GR "$OWNER2" chief_of_staff)" 422 "an unknown ro
 expect POST "$(CR "$INST1")" "$(GR "$ANALYST" metric_owner "$EV3")" 422 "the analyst of record (titled external analyst)" "is an analyst of record or external"
 expect POST "$(CR "$INST2")" "$(GR "$X")" 422 "tenant staff (X)" "is vendor-side"
 expect POST "$(CR "$INST2")" "$(GR "$SIGNER")" 422 "a person with sign-in credentials" "is vendor-side (your company's staff, a vendor-side role, or sign-in credentials)"
-expect POST "$(CR "$INST2")" "$(GR "$S")" 422 "the steward themself" "the steward does not name a customer-side role for themself"
-expect POST "$(CR "$INST2")" "$(GR "$SIMP")" 422 "a simulated person" "a simulated person holds no customer-side role"
+expect POST "$(CR "$INST2")" "$(GR "$S")" 422 "the steward themself" "The steward does not name a customer-side role for themself"
+expect POST "$(CR "$INST2")" "$(GR "$SIMP")" 422 "a simulated person" "A simulated person holds no customer-side role"
 expect POST "$(CR "$INST2")" "$(GR "$OWNER1")" 422 "a person of another account" "is not a person of this account"
-expect POST "$(CR "$INST2")" "$(GR "$OWNER2" metric_owner "$EV3")" 422 "a source from another account" "a role is named from a source: current evidence about this account"
+expect POST "$(CR "$INST2")" "$(GR "$OWNER2" metric_owner "$EV3")" 422 "a source from another account" "A role is named from a source: current evidence about this account"
 [ "$(q "SELECT count(*) FROM customer_role_grants")" = "0" ] && ok "  ...none of them wrote" || bad "  ...a refused grant wrote"
 GSQL() { printf "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) VALUES ('%s', '%s', '%s', 'metric_owner', '%s', 'Verification: a break.', '%s')" "$TEN" "$1" "$2" "$3" "$S"; }
 fnbreak lvrf_customer_role_grant_guard "  IF EXISTS (SELECT 1 FROM account_person_links l WHERE l.person_id = p.id AND l.role = 'analyst_of_record')

@@ -246,7 +246,7 @@ SEALS0="$(seals)"
 
 step "5. The vendor trigger: a vendor publication about another company supports the impact basis only"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' baseline)" 422 "a vendor publication on a customer account as the baseline, at the route" "it may support the impact basis only"
-expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' actual)" 422 "  ...as the actual" "vendor-published evidence may not support a measured actual"
+expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' actual)" 422 "  ...as the actual" "Vendor-published evidence may not support a measured actual"
 expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' impact_basis)" 201 "  ...as the impact basis: accepted"
 EV_VEN="$(rj b.evidence_id)"
 VEN_SQL() { printf "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read, about_institution_id) VALUES ('%s', 'vendor_publication', 'v', 'Verification vendor fixture', '%s', 'quote', 'Customers cut incidents by 75%%.', 'The vendor fixture headline, read as written.', '%s') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '%s', id, '%s' FROM e" "$1" "$S" "$1" "$2" "$3"; }
@@ -475,7 +475,7 @@ step "15. Deliberate breaks"
 edit "$CORR" "router.post('/:runId/errata', requireSteward(pool), async" "router.post('/:runId/errata', async"
 stop_server; start_server
 # (X supersedes run 1's current erratum, so the request passes every route check but the steward's.)
-expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1B" "Verification: B1, X superseding it.")")" 422 "B1: without the route's check, X's erratum → the database refuses" "only the steward records an erratum" "$X"
+expect POST "/api/value-runs/$R1/errata" "$(ERR "$EV_V" "$(SUP "$E1B" "Verification: B1, X superseding it.")")" 422 "B1: without the route's check, X's erratum → the database refuses" "Only the steward records an erratum" "$X"
 restore "$CORR"
 # B12 (C1 review) — the route's one-erratum-per-correction check removed: the database refuses.
 edit "$CORR" "  if (supersedes === undefined && current) {" "  if (supersedes === undefined && current && false) {"
@@ -498,7 +498,7 @@ restore "$CORR"
 edit "$PRODUCE" "        WHERE voe.value_outcome_id = \$1 AND voe.withdrawn_at IS NULL  -- C1: a withdrawn link supports nothing" "        WHERE voe.value_outcome_id = \$1"
 stop_server; start_server
 # §16: the account was marked a reference example after RF1 was produced, so RF1's case has moved and its lock is refused.
-expect POST "/api/value-runs/$RF1/lock" '{"lock_reason":"Verification: locked for B5."}' 422 "§16: RF1 not locked: the account's marker changed after it was produced" "the case changed after this run was produced"
+expect POST "/api/value-runs/$RF1/lock" '{"lock_reason":"Verification: locked for B5."}' 422 "§16: RF1 not locked: the account's marker changed after it was produced" "The case changed after this run was produced"
 state_hypothesis "$ENG_F" || bad "S1: no hypothesis stated on $ENG_F"
 expect POST "/api/engagements/$ENG_F/produce-run" '{"note":"Verification: B5.","source_fixture":"corrections_b5"}' 201 "B5: a run with produce-run's filter removed"
 [ "$(q "SELECT string_agg(x->>'supports', ',' ORDER BY x->>'supports') FROM value_runs r, jsonb_array_elements(r.payload->'evidence') x WHERE r.id = '$(rj b.value_run_id)' AND x->>'summary' = 'TRIR FY25 (fixture)'")" = "baseline,impact_basis" ] \

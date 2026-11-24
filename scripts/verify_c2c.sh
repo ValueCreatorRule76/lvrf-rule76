@@ -170,7 +170,7 @@ expect POST "$(WD "$O" "$(q "SELECT gen_random_uuid()")")" "$(J reason 'Verifica
 # B8 — the route's steward check removed: the database refuses X.
 edit "$CORR" "  router.post('/:outcomeId/evidence/:evidenceId/withdraw', requireSteward(pool), async" "  router.post('/:outcomeId/evidence/:evidenceId/withdraw', async"
 stop_server; start_server
-expect POST "$(WD "$O" "$EV_T")" "$(J reason 'Verification: B8, X withdraws it.')" 422 "B8: without the route's check, X's withdrawal → the database refuses" "only the steward withdraws a link" "$X"
+expect POST "$(WD "$O" "$EV_T")" "$(J reason 'Verification: B8, X withdraws it.')" 422 "B8: without the route's check, X's withdrawal → the database refuses" "Only the steward withdraws a link" "$X"
 restore "$CORR"
 # B9 — the route's act removed: the deferred act check refuses the commit.
 python3 - "$CORR" <<'PY'
@@ -228,7 +228,7 @@ expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: the same words, 
 # B13 — the route's check removed: the database refuses.
 edit "$CORR" "    if ([texts.wrong, texts.right, texts.reason, prev?.what_was_wrong, prev?.what_is_right, prev?.reason].some((t) => sameText(supersessionReason, t))) {" "    if (false) {"
 stop_server; start_server
-expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: a second erratum, for C2c.' "$OWN_REASON")" 422 "B13: without the route's check → the database refuses" "the reason for superseding repeats the erratum's own text"
+expect POST "/api/value-runs/$R1/errata" "$(SUPB 'Verification: a second erratum, for C2c.' "$OWN_REASON")" 422 "B13: without the route's check → the database refuses" "The reason for superseding repeats the erratum's own text"
 restore "$CORR"; stop_server; start_server
 # B14 — the database's check removed too (on the clone): the repeating reason is accepted.
 SUP_SQL="INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, supersedes_id, supersession_reason, what_was_wrong, what_is_right, reason, model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id) SELECT tenant_id, value_run_id, value_outcome_id, evidence_id, corrected_to_supports, id, reason, what_was_wrong, what_is_right, 'Verification: a later erratum.', model_version, model_fingerprint, sealed_score, sealed_band, recomputed_score, recomputed_band, recompute_method, recorded_by_person_id FROM run_errata WHERE id = '$E1'"

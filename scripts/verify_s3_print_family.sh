@@ -194,6 +194,10 @@ walk "text /runs/$R2/case case_default.main" "$MAIN_PORT" > /dev/null; mv "$OUT/
 walk "text /runs/$R2/case?lens=cfo case_cfo_refused.main" "$MAIN_PORT" > /dev/null; mv "$OUT/case_cfo_refused.main.screen.txt" "$OUT/case_cfo_refused.main.txt"
 walk "text /accounts/$CU/pov pov_curia.main" "$MAIN_PORT" > /dev/null; mv "$OUT/pov_curia.main.screen.txt" "$OUT/pov_curia.main.txt"
 walk "text /runs/$FX_RUN/case?lens=cfo case_cfo_shown.main" "$MAIN_PORT" > /dev/null; mv "$OUT/case_cfo_shown.main.screen.txt" "$OUT/case_cfo_shown.main.txt"
+# §30 (Brad, 24 Nov 2026), declared: the card title "Share for review (D-M21)" reads "Share for review". The deployed
+# code's text gets that one substitution, counted; every other line must still match word for word.
+NDM=0; for t in case_default case_cfo_refused pov_curia case_cfo_shown; do c="$(grep -c '^Share for review (D-M21)$' "$OUT/$t.main.txt" || true)"; NDM=$((NDM + c)); sed -i '' 's/^Share for review (D-M21)$/Share for review/' "$OUT/$t.main.txt"; done
+[ "$NDM" -ge 1 ] && ok "§30's declared change: \"Share for review (D-M21)\" → \"Share for review\" in the deployed code's text ($NDM line(s)); nothing else is allowed to differ" || ok "§30's wording is already the deployed code's (no substitution made)"
 for n in case_default case_cfo_refused case_cfo_shown pov_curia; do textcheck "$n"; done
 pdftotext "$OUT/case_cfo_shown.pdf" - | has "Why the CFO lens refuses" && bad "the shown case prints a refusal box" || ok "the case the CFO lens shows prints no refusal box"
 [ "$(grep -c 'testid="cfo-refusal"' "$CASEP")" -ge 1 ] && pdftotext "$OUT/case_cfo_refused.pdf" - | has "Why the CFO lens refuses" && ok "the CFO lens's refusal prints, in its ink box" || bad "refusal box"

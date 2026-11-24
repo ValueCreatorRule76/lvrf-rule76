@@ -386,7 +386,7 @@ import sys; p = sys.argv[1]; s = open(p).read(); a = "if (!m || isOtherTenant(re
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "if (!m) {"))
 PY
 start_server
-expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3)')" 422 "B3: without the route's tenant check, the DATABASE refuses the cross-tenant lever (a 422 that names the other tenant's entry, where the route answers 404)" "only the steward may propose a lever"
+expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3)')" 422 "B3: without the route's tenant check, the DATABASE refuses the cross-tenant lever (a 422 that names the other tenant's entry, where the route answers 404)" "Only the steward may propose a lever"
 [ "$(q "SELECT count(*) FROM value_levers WHERE industry_measure_id = '$M_X' AND name LIKE 'Cross-tenant%'")" = "0" ] && ok "  ...nothing written" || bad "  ...a cross-tenant lever was written"
 restore "$ROUTE"; stop_server; start_server
 expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3, again)')" 404 "  ...restored: 404 again"

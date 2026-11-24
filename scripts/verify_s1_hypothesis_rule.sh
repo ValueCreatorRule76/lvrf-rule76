@@ -217,7 +217,7 @@ step "6. The breaks"
 edit "$PRODUCE" "      if (hypothesesCurrent === 0) {" "      if (hypothesesCurrent === -1) {"
 start_server
 N="$(count_runs "$E_CUR")"
-produce "$E_CUR" "Verification: H1." 422 "H1: the route check removed → caught by the trigger (422, its own sentence)" "LVRF: value_runs: outcome $C8 has no current hypothesis"
+produce "$E_CUR" "Verification: H1." 422 "H1: the route check removed → caught by the trigger (422, its own sentence; §30: on screen without its prefix)" "Outcome $C8 has no current hypothesis"
 [ "$(count_runs "$E_CUR")" = "$N" ] && [ "$(q "SELECT source || '|' || constraint_name FROM refusals ORDER BY refused_at DESC LIMIT 1")" = "database|value_runs_hypothesis_current" ] && ok "  ...nothing sealed; the refusal recorded with the trigger's constraint name" || bad "  ...H1 record: $(q "SELECT source, constraint_name FROM refusals ORDER BY refused_at DESC LIMIT 1")"
 state_hypothesis "$E_CUR" && H_D="$HYP_ID" || bad "  ...H1 control: no hypothesis stated"
 produce "$E_CUR" "Verification: H1 control." 201 "  ...positive control under the break: with a hypothesis stated, the run is produced"

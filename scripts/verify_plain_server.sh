@@ -205,8 +205,49 @@ req POST "/api/value-outcomes/$O/measure" "$(J actual_value 1.1 actual_measured_
 [ "${CODE}" = "422" ] && [ "$(said | cut -c1-5)" = "LVRF:" ] && ok "B10: the strip removed → caught: the response reads \"$(said | cut -c1-60)…\"" || bad "B10: not caught: $(said)"
 restore "$SCREEN"; restart_server
 screen_checks "  ...with it back"
+step "5. Each D3 message no other script raises, raised here (as lvrf_app, rolled back), raw and as the screen reads it"
+# Fixture rows of another company, by the superuser with triggers off (the clone only, rule 9): its tenant, an account, a
+# lens policy and a policy value, so the database can be asked about rows that are not your company's.
+TEN="$(q "SELECT tenant_id FROM persons WHERE id = '$S'")"
+TX="$(q "INSERT INTO tenants (name) VALUES ('Other company (§30 fixture, $TS)') RETURNING id" | head -1)"
+IX="$(q "INSERT INTO institutions (tenant_id, name) VALUES ('$TX', 'Other account (§30 fixture, $TS)') RETURNING id" | head -1)"
+LX="$(printf "BEGIN;\nSET LOCAL session_replication_role = replica;\nINSERT INTO lens_policies SELECT (jsonb_populate_record(NULL::lens_policies, to_jsonb(l) || jsonb_build_object('id', gen_random_uuid(), 'tenant_id', '%s', 'supersedes_id', NULL))).* FROM lens_policies l LIMIT 1 RETURNING id;\nCOMMIT;\n" "$TX" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | head -1)"
+PX="$(printf "BEGIN;\nSET LOCAL session_replication_role = replica;\nINSERT INTO policy_values SELECT (jsonb_populate_record(NULL::policy_values, to_jsonb(v) || jsonb_build_object('id', gen_random_uuid(), 'tenant_id', '%s', 'supersedes_id', NULL))).* FROM policy_values v WHERE key = 'cost_of_delay_months' LIMIT 1 RETURNING id;\nCOMMIT;\n" "$TX" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | head -1)"
+[ -n "$TX" ] && [ -n "$IX" ] && [ -n "$LX" ] && [ -n "$PX" ] && ok "another company's fixture rows: its tenant, an account, a lens policy, a policy value" || bad "fixtures: '$TX' '$IX' '$LX' '$PX'"
+RUN0="$(q "SELECT id FROM value_runs WHERE tenant_id = '$TEN' LIMIT 1")"; ENG0="$(q "SELECT engagement_id FROM value_outcomes WHERE id = '$O'")"
+LEV="$(q "SELECT id FROM value_levers WHERE tenant_id = '$TEN' AND deleted_at IS NULL LIMIT 1")"; OFF="$(q "SELECT id FROM offerings WHERE tenant_id = '$TEN' LIMIT 1")"
+BM="$(q "SELECT business_metric_id FROM value_outcomes WHERE id = '$O'")"; EV0="$(q "SELECT evidence_id FROM value_outcome_evidence WHERE value_outcome_id = '$O' LIMIT 1")"
+raised() {  # LABEL SQL NEEDLE(raw, after the prefix) -> the raw message and its on-screen form both checked
+  local out; out="$(printf "BEGIN;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\n%s;\nROLLBACK;\n" "$S" "$2" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+  local raw; raw="$(printf '%s' "$out" | grep -m1 -o 'ERROR:  .*' | sed 's/^ERROR:  //')"
+  if printf '%s' "$raw" | grep -qF -- "$3"; then
+    local scr; scr="$(SM "$raw")"
+    if [ "${scr#LVRF:}" = "$scr" ] && ! printf '%s' "$scr" | grep -qiE '\btenants?\b'; then ok "$1: \"$scr\""; else bad "$1: on screen \"$scr\""; fi
+  else bad "$1: raised \"$raw\", wanted \"$3\""; fi
+}
+raised "the account (executive_summaries)" "INSERT INTO executive_summaries (tenant_id, institution_id, lens, body, author_person_id, drafted_with_ai) VALUES ('$TEN', '$IX', 'cfo', 'A summary for another company''s account, long enough.', '$S', false)" "the account $IX is not one of your company's accounts."
+raised "the account (customer_role_grants)" "INSERT INTO customer_role_grants (tenant_id, institution_id, person_id, role, source_evidence_id, reason, granted_by_person_id) VALUES ('$TEN', '$IX', '$OWNER', 'metric_owner', '$EV0', 'Verification: another company''s account.', '$S')" "the account is not one of your company's accounts."
+raised "the account (monetization_rates)" "INSERT INTO monetization_rates (tenant_id, institution_id, business_metric_id, rate, currency, per_unit, rate_kind, how_read, evidence_id, recorded_by_person_id) VALUES ('$TEN', '$IX', '$BM', 1, 'USD', 'unit', 'performance', 'Verification: read.', '$EV0', '$S')" "is not one of your company's accounts."
+raised "the run (run_errata)" "INSERT INTO run_errata (tenant_id, value_run_id, value_outcome_id, what_was_wrong, what_is_right, reason, sealed_score, sealed_band, recompute_method, recorded_by_person_id) VALUES ('$TX', '$RUN0', '$O', 'Verification: wrong.', 'Verification: right.', 'Verification: another company.', 0, 'low', 'Verification: method.', '$S')" "is not one of your company's runs."
+raised "the outcome (outcome_withdrawals)" "INSERT INTO outcome_withdrawals (tenant_id, value_outcome_id, kind, withdrawn_values, reason, withdrawn_by_person_id) VALUES ('$TX', '$O', 'measurement', '{\"actual_value\":\"1.1\"}', 'Verification: another company.', '$S')" "is not one of your company's outcomes."
+raised "the engagement (roadmap_milestones)" "INSERT INTO roadmap_milestones (tenant_id, engagement_id, title, due_on, owner_stated, planned_by_person_id) VALUES ('$TX', '$ENG0', 'Verification milestone', '2027-01-01', 'Verification owner', '$S')" "is not one of your company's engagements."
+raised "a subject not in the record (system_exercise_marks)" "INSERT INTO system_exercise_marks (tenant_id, subject_table, subject_id, reason, marked_by_person_id) VALUES ('$TEN', 'value_runs', gen_random_uuid(), 'Verification: no such run.', '$S')" "is not in your company's record."
+raised "a link's lever or offering (lever_offerings)" "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id) VALUES ('$TX', '$LEV', '$OFF', 'Verification: another company.', '$S')" "This link's lever or offering is not in your company's record."
+raised "the same key (policy_values)" "INSERT INTO policy_values (tenant_id, key, value, reason, set_by_person_id, supersedes_id) VALUES ('$TEN', 'cost_of_delay_months', 9, 'Verification: supersedes another company''s value.', '$S', '$PX')" "a value of the same key in your company's record."
+raised "the same persona (lens_policies)" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT '$TEN', persona, min_confidence_score, admitted_bases, suppresses, refusal_text, 'Verification: supersedes another company''s policy.', '$S', '$LX' FROM lens_policies WHERE id = '$LX'" "a policy of the same persona in your company's record."
+# "your company's current one": a CFO-lens print request on S3's Northwind fixture (a locked run the CFO lens shows),
+# naming another company's CFO lens policy, then a superseded one of your company's; the current one is accepted.
+. scripts/lib/s3_cfo_fixture.sh
+if cfo_fixture; then
+  ok "S3's Northwind fixture: run ${FX_RUN:0:8} locked, a case the CFO lens shows"
+  CUR="$(q "SELECT l.id FROM lens_policies l WHERE l.tenant_id = '$TEN' AND l.persona = 'cfo' AND NOT EXISTS (SELECT 1 FROM lens_policies s WHERE s.supersedes_id = l.id)")"
+  PRQ() { printf "INSERT INTO record_documents (tenant_id, engagement_id, value_outcome_id, disclosure, content_hash, payload, rendered_by_person_id, value_run_id, kind, lens, lens_policy_id) SELECT '%s', r.engagement_id, (r.payload->>'valueOutcomeId')::uuid, 'internal', r.payload_hash, '{}'::jsonb, '%s', r.id, 'print_request', 'cfo', '%s' FROM value_runs r WHERE r.id = '%s'" "$TEN" "$S" "$1" "$FX_RUN"; }
+  [ "$(sqlaccepted "$(PRQ "$CUR")")" = "ACCEPTED" ] && ok "  ...a print request naming your company's current CFO lens policy is accepted (the control)" || bad "  ...the control: $(sqlaccepted "$(PRQ "$CUR")")"
+  raised "another company's CFO lens policy (record_documents)" "$(PRQ "$LX")" "a CFO-lens print request names the CFO lens policy it applied, your company's current one."
+  raised "a superseded CFO lens policy (record_documents)" "INSERT INTO lens_policies (tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, reason, ratified_by_person_id, supersedes_id) SELECT tenant_id, persona, min_confidence_score, admitted_bases, suppresses, refusal_text, 'Verification: a newer CFO lens, so the current one is superseded.', '$S', id FROM lens_policies WHERE id = '$CUR'; $(PRQ "$CUR")" "a CFO-lens print request names the CFO lens policy it applied, your company's current one."
+else bad "S3's Northwind fixture could not be built"; fi
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
-cover "$LOG" 'B6: ' 'B7: ' 'B8: ' 'B9: ' 'B10: ' "the seed's own string is not read" 'hardening says: only the steward' 'functions change' 'a refused measurement reads' 'a refused AI-sourced actual reads' "the gap register's line" 'refusals keeps the raw text'
+cover "$LOG" 'the account (executive_summaries)' 'the run (run_errata)' 'the same persona (lens_policies)' 'a superseded CFO lens policy' "another company's CFO lens policy" 'B6: ' 'B7: ' 'B8: ' 'B9: ' 'B10: ' "the seed's own string is not read" 'hardening says: only the steward' 'functions change' 'a refused measurement reads' 'a refused AI-sourced actual reads' "the gap register's line" 'refusals keeps the raw text'
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"

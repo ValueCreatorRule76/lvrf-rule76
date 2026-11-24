@@ -228,6 +228,14 @@ cut line applied first.
          The plain-words rule, "tenant" included, extended from client strings to the server's response strings
          (refusals, asks, credit lines, findings) and hardening's messages and computed lines. Not in §29. It changes
          hardening messages, so it has its own plan, Gate A (each changed function's hash), regression and deploy;
+       - **a later ruling (Brad, 24 Nov 2026, from §30), not in §30: words a person should not have to read.**
+         - validation messages that name request fields ("industry_slug unknown", "body.person_id …", "offering_key not
+           found"), and one route message naming a function ("…refused by lvrf_block_ai_actual…");
+         - database column names in brackets, "(proposed_by % is not the steward)", "(linked_by …)", "(marked_by …)",
+           "(retired_by …)": dropped, the sentence already says it;
+         - "as themself" → "in their own name";
+         - "the account or industry is not a current one of your company" → "is not a current account or industry of your
+           company";
        - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
