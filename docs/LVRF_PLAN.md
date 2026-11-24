@@ -6193,3 +6193,156 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
     if Gate A is clean, because it adds a page and changes no existing one.
 - **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
   are approved.
+
+## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **for Brad's approval**)
+
+**The ruling it builds:** §26's two findings (Brad, 24 Nov 2026), first among the small items and before the pilot.
+1. Internal plan codes leave the screen, with a Gate A check that no "§" or slice code appears in any client string.
+2. "Committed on" defaults to the person's local date, and the route's "after the commit date" rule is proven for a
+   measure-by date entered the same evening.
+
+They ship as **one slice, one deploy**: both are small, and both touch card 01d. It comes before S7a, as the order
+ruled.
+
+**Value spine:** `commit`, and every page. A plan code on screen is a word the reader cannot check. A commit dated the
+next day records a day the person did not commit on.
+
+### 1. What the code holds today (read 24 Nov 2026, `50c82c9`; read only)
+
+**Plan codes that reach a page, found by scanning every string outside comments:**
+
+- **Client text (11 strings):**
+
+  | Where | Today |
+  |---|---|
+  | `OutcomeSpine.tsx` 193 (card 01d) | "no promised date on record (committed before §26)" |
+  | `OutcomeSpine.tsx` 194 (card 01d) | "attribution not stated (committed before B4)" |
+  | `ValueCasePage.tsx` 119 (the value case, on screen and printed) | "Attribution: not stated (committed before B4)." |
+  | `LineagePage.tsx` 59, 70 | "… is not customer-side (…): no credit under the C3 rule." |
+  | `PovPage.tsx` 178 (the POV) | "… is not customer-side (…): no credit under the C3 rule." |
+  | `CustomerRoles.tsx` 74 | "Only a customer-side person earns credit … (C3)" |
+  | `C3Batches.tsx` 51 (the steward's batch page) | "Two kinds, recorded together (C3, C3b): …" |
+  | `PovAuthoring.tsx` 337 | "… a reference example, not an engagement (O-D3): …" |
+  | `PackLevers.tsx` 30 | "… the steward's act — …'s alone (O-D2)." |
+
+- **Server text a page shows:**
+  - **`nonCustomerCredit.ts` 62–63**, the credit line on the POV and the lineage: "Under the C3 rule (model 1.0.2) none
+    of these earns credit: …" and "The C3 rule cannot be applied …".
+  - **`gapRegister.ts` 288, 313, 323**, the asks on the value case and card 01d: "… (a role named from a source, C3)",
+    twice "… named from a source (C3)."
+  - **`valueHypotheses.ts` 213:** "… an AI-drafted summary says so (O-D6)".
+  - **`valueLevers.ts` 49:** "… not a promise (LVRF_PLAN §5)".
+- **Database refusals a form shows verbatim.** `plainCheckMessage` rewrites CHECK violations only; a trigger's
+  message passes through. **6 of the 196** carry a code:
+  - two "(O2-D1)";
+  - "(B4, design §3.2)";
+  - "(LVRF_PLAN §26, D1)" and "(LVRF_PLAN §26, D3)", mine at §26;
+  - "(D2)".
+- **Not on any page,** so out of scope: heartbeat-register errors (500s, a programming fault) and the drift checks'
+  codes (ops only).
+- **`findingsModel.ts` 109** writes "HEARTBEAT-REGISTER §6 …" into a finding that a run seals. It is in scope for
+  future seals only.
+- **Sealed payloads hold no plan code:** the 10 real runs on the prod copy were scanned. **Nothing sealed changes,**
+  and no sealed text is ever rewritten.
+- **Scripts that read the coded strings, and change by design:** `c3_walk`, `l41_walk`, `pov_walk`, `promised_walk`,
+  `report_c3.sql`, and `verify_c3`, `c3b`, `cohort`, `corrections`, `promised_date`, `steward_acts`,
+  `tenant_scope_cases`, `value_hypotheses` and `value_levers`.
+
+**The commit date:**
+- **The bug:** `OutcomeSpine.tsx` 41's `today()` is `new Date().toISOString().slice(0, 10)`, the UTC date. It is the
+  default for **Committed on, Measured on and Verified on** alike.
+- **What is sent:** each form sends `${date}T12:00:00Z` (verify sends `T13:00:00Z`).
+- **What compares it:** the route and §34's guard compare that instant's UTC date. That is the picked day.
+- **No rule** refuses a commit, measurement or verification dated in the future.
+
+### 2. Decisions (recommendations first)
+
+- **D1, what the check covers. Recommended:** **`scripts/check_plain_words.mjs`** (new), run by Gate A and by the
+  regression.
+  - **What it reads:**
+    - every client source string outside comments;
+    - every server string a response can carry: messages, refusals, asks, credit lines, finding messages;
+    - every `RAISE EXCEPTION` message in `db/hardening.sql`.
+  - **What it refuses:**
+    - "§";
+    - `LVRF_PLAN`;
+    - "design §";
+    - `AMENDMENT-`;
+    - slice and decision codes: B, S or SS with a digit; L with digits; C with a digit (and "C3b"); O-D, O2-D or D
+      with a digit; P with digits.
+  - **It allows:** `data-testid` values, imports and code identifiers. They never print.
+  - **A rendered sweep, too:** on a clone of the prod copy, every route at 1280, the page's visible text scanned with
+    the same pattern.
+    - A hit in app text fails.
+    - A hit in the record (a person's own words in evidence, a note, a reason, sealed text) is listed, never failed:
+      the record is never rewritten.
+  - Option: the static check only.
+- **D2, the new words, for Brad's approval word for word:**
+
+  | Today | Plain words |
+  |---|---|
+  | "(committed before §26)" | "(committed before promised dates were recorded, 24 Nov 2026)" (Brad) |
+  | "(committed before B4)", on card 01d and the value case | "(committed before attribution was recorded, 6 Nov 2026)" (Brad; B4 deployed 6 Nov 2026) |
+  | "no credit under the C3 rule." (lineage, POV) | "no credit: only a customer-side person, with a role named from a source, earns it." |
+  | "(C3)" and ", C3)" in the asks and on the roles card | dropped; the sentence already says "a role named from a source" |
+  | "Under the C3 rule (model 1.0.2) none of these earns credit: …" | "Under model 1.0.2, only a customer-side person earns credit, so none of these does: …" |
+  | "The C3 rule cannot be applied …" | "The customer-side rule cannot be applied …" |
+  | "Two kinds, recorded together (C3, C3b): …" | "Two kinds, recorded together: …" |
+  | "(O-D3)", "(O-D2)", "(O-D6)", "(O2-D1)", "(D2)" | dropped; each sentence already says its rule |
+  | "(LVRF_PLAN §5)", "(B4, design §3.2)", "(LVRF_PLAN §26, D1)", "(LVRF_PLAN §26, D3)" | dropped |
+  | "HEARTBEAT-REGISTER §6 and COMPASS-HEARTBEAT-STATUS §7 have diverged" | "the heartbeat register and the health status have diverged" |
+
+  A database message changes in its function's body only, so hardening is re-applied and no migration is needed.
+  **"LVRF: value_outcomes:"**, the message's table prefix, stays: it is not a plan code. Option: a later item.
+- **D3, the printed value case changes words, not figures. Recommended:** accept it.
+  - The value case's "Attribution: not stated (committed before B4)." becomes the D2 wording, on screen and in a new
+    print, for a commitment made before attribution was recorded. On prod that is only Curia's.
+  - The sealed runs and their hashes do not change; a print request names its run's hash, not the PDF's.
+  - Equivalence names the GETs whose strings change: the asks; nothing else.
+- **D4, the local date. Recommended:**
+  - **The change:** one function, `localToday()`, from the browser's own date (year, month, day in local time), for
+    Committed on, Measured on and Verified on.
+  - **Unchanged:** what is sent (`${day}T12:00:00Z`) and every rule.
+  - **The consequence:** the stored commit day is the day the person picked, and the route and the guard judge
+    "after the commit date" against that same day.
+  - **At 22:28 New York time on 23 Nov:**
+    - the form defaults to 23 Nov;
+    - a measure-by date of 23 Nov is refused, by the form, the route and the database;
+    - 24 Nov is admitted.
+- **D5, what a local date does not change. Recommended:** said, not changed.
+  - **"Late" stays in UTC dates (§26 D4).** An outcome promised for 23 Nov therefore reads late from 19:00 on 23 Nov
+    in New York, which the War Room says ("today's UTC date").
+  - East of UTC+12, a local day can be a day ahead of UTC's. No rule refuses a future date, so nothing is refused.
+  - The value case's "printed on" date stays UTC.
+  - Option: say "(UTC)" beside the printed-on date. One word, no other change.
+
+### 3. Gate A (planned)
+
+- **`check_plain_words.mjs`:** 0 hits, then each break caught:
+  - a "§" added to a client string;
+  - "(C3)" added to an ask;
+  - "(D2)" added back to a database message.
+- **The rendered sweep:** every route at 1280 on the clone, 0 hits in app text, with hits in the record listed.
+- **The words, on the page:**
+  - card 01d reads both D2 sentences for Curia's pre-B4, pre-§26 commitment;
+  - the value case and the lineage read theirs.
+- **`verify_local_date` (new),** in the browser with its time zone set (`Emulation.setTimezoneOverride`) and its clock
+  pinned:
+  - **New York, 22:28 on 23 Nov:**
+    - Committed on, Measured on and Verified on each default to 2026-11-23;
+    - measure-by 2026-11-23 is refused by the form in words, by the route (422) and by the database;
+    - 2026-11-24 is admitted, and `committed_at` is stored at 2026-11-23 12:00 UTC.
+  - **Auckland, 09:00 on 25 Nov (24 Nov UTC):** the default is 2026-11-25.
+  - **Break:** `today()` back to the UTC date, caught under New York's evening.
+- The scripts named above are updated by design. Then the full regression, and equivalence against `84c3f37`'s
+  deploy (`f3e8fe7`): every GET identical apart from the asks' and credit lines' strings, each named.
+
+### 4. Gate B and effort
+
+- **Gate B:** deploy, and hardening re-applied (six function bodies). No migration; the TOC stays 972 and the
+  triggers 227. Each changed function's `md5(prosrc)` is computed at Gate A.
+- **Brad's look:**
+  - card 01d on Curia, both sentences;
+  - the commit form after 19:00 New York time defaults to today's local date (Cancel).
+- **Gate C:** read-only, as usual.
+- **About a day,** including the sweep.

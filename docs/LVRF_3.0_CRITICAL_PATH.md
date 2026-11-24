@@ -207,7 +207,8 @@ cut line applied first.
          measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
          without it can never be given one afterwards (append-only), so it **ships before the pilot's first
          commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Approved (Brad, 23 Nov 2026), LVRF_PLAN §26, with D1–D6; closed 24 Nov 2026,** deployed at `f3e8fe7`, Gate C clean;
-       - **first now, before the pilot (Brad, 24 Nov 2026): §26's two findings.**
+       - **first now, before the pilot (Brad, 24 Nov 2026): §26's two findings** (LVRF_PLAN §28, planned 24 Nov 2026,
+         for Brad's approval; one slice, one deploy).
          - **Plan codes on screen:** card 01d's "(committed before §26)" and "(committed before B4)" become "committed
            before promised dates were recorded (24 Nov 2026)" and "committed before attribution was recorded (6 Nov
            2026)". A Gate A check: no "§" and no slice code (B1–B4, S1–S7, L-numbers) in any client string.
