@@ -227,7 +227,7 @@ cut line applied first.
        - **next, after §29 (Brad, 24 Nov 2026): plain words in server and database strings that can reach the screen.**
          The plain-words rule, "tenant" included, extended from client strings to the server's response strings
          (refusals, asks, credit lines, findings) and hardening's messages and computed lines. Not in §29. It changes
-         hardening messages, so it has its own plan, Gate A (each changed function's hash), regression and deploy;
+         hardening messages, so it has its own plan, Gate A (each changed function's hash), regression and deploy. **Closed 24 Nov 2026** (LVRF_PLAN §30), deployed at `843ce6d`, Gate C clean;
        - **a later ruling (Brad, 24 Nov 2026, from §30), not in §30: words a person should not have to read.**
          - validation messages that name request fields ("industry_slug unknown", "body.person_id …", "offering_key not
            found"), and one route message naming a function ("…refused by lvrf_block_ai_actual…");

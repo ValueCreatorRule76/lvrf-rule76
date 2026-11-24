@@ -17214,3 +17214,32 @@ No migration. Hardening is re-applied for 22 functions' message text; the TOC st
 - nothing written since the deploy, apart from any session of your own;
 - the 22 functions' hashes as in step 3;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### §30 closed: plain words in server and database strings deployed at `843ce6d`; Gate C clean — 24 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `843ce6d`.
+- Pre-deploy backup `~/lvrf-pre-p30-20261124T210048Z.dump`, **TOC 972**.
+- `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **227 triggers**.
+- **All 22 function hashes match**, checked by diff against the record (the file confirmed 22 lines, the last six re-read).
+- Post-hardening backup `~/lvrf-post-p30-20261124T210220Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 5 refused tries)", all checks, bundle **`index-CIdD8sI3.js` /
+  `index-BMv5OQwB.css`**, "deploy OK". The API started at 21:03:05 UTC.
+
+**Brad's look (records nothing):** the value case's card reads "Share for review". Curia's gap register: "Already
+refused" lines without "LVRF:", or none present. **Gate C reads none present:** no refused evidence attempt is recorded
+on any of Curia's outcomes, so the register prints no "Already refused" line there.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `843ce6d`, tree clean. The served `index.html` names `index-CIdD8sI3.js` / `index-BMv5OQwB.css`.
+- **Since the pre-deploy backup (21:00:48 UTC), nothing was written:** 0 governance acts (still 228, the last 15 Nov
+  21:12:17); 0 refusals, 0 research-process refusals; 0 audit rows, 0 record documents, 0 heartbeat events; 0 sessions.
+- **The functions as deployed:** the 22 `md5(prosrc)` read on the box match the Gate A record, by diff (22 lines).
+  `lvrf_block_simulated_attestor` is §29's, `4150205e…`.
+- **1 commitment, 0 verifications;** Curia's `e3fb0061` last updated 30 Aug 2026, unchanged.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean
+  (`lvrf_ownership_violations()` 0).
+- **TOC 972** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**§30 is closed** (24 Nov 2026). **Next (Brad, 24 Nov 2026):** no walk date in the future; then the email item; then S7a.
