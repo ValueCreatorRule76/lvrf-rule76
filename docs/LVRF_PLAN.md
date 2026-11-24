@@ -5889,6 +5889,31 @@ through the form.
   2. S7a;
   3. Brad's six rows;
   4. S7b.
+- **A sealed confidence never prints without its points erratum (Brad, 24 Nov 2026):**
+  - Wherever a sealed confidence prints in a story, and an erratum on that run concerns its points, the erratum
+    prints **beside it, at the same size and weight.** It never prints only on the timeline or under the baseline.
+  - **Curia's headline:** "55 / 100 as sealed · 45 of these points rest on a person who is not customer-side". The
+    wording matches the recorded erratum (open question below).
+  - The same holds for runs 3, 4 and 5 on the timeline, each beside its own sealed score.
+  - **The sealed figure is never recomputed or hidden.**
+  - **S7b's Gate A gains a break:** the headline score printed without its adjacent erratum fails. Gate A also checks
+    the timeline scores, and that both parts are the same size and weight (computed style).
+  - **Shown in the S7 mock-up.**
+  - **Open, for Brad:**
+    - **The problem:** the recorded erratum's own words are "The seal credited points to a person who is not
+      customer-side under the C3 rule." They carry a plan code ("C3"), which D10 and small item 1 keep off the
+      screen.
+    - **The record vs the page:**
+      - The headline's adjacent words, "45 of these points rest on a person who is not customer-side", are the
+        platform's own computed sentence (C3b), not the erratum's text.
+      - The ledger would print the erratum as recorded, so the conflict is in the ledger only.
+    - **Options:**
+      - **(a)** the ledger quotes the erratum as recorded, "C3" included, as a quotation of the record, exempt from
+        the plan-code check;
+      - **(b)** Brad supersedes the erratum with plain words, a steward act with its own reason (the plan proposes
+        "The seal credited points to a person who is not customer-side."). After that the story prints only plain
+        words.
+    - **Recommended: (b).** It corrects the record instead of exempting the page.
 
 **What Brad asked (24 Nov 2026):** an LVRF output on CVAF's pattern (`cvaf-rule76/docs/CVAF_Success_Story_Spec.md`,
 ratified 17 Nov 2026, read read-only: its patterns only, no CVAF data, nothing copied into CVAF). It comes **after
@@ -6143,6 +6168,7 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
     - "Results" never renders below Realization;
     - the client audience is refused on a reference example.
   - **Breaks:**
+    - **the headline score printed without its adjacent points erratum** (Brad, 24 Nov 2026);
     - "achieved" printed below Realization;
     - a figure with no ledger entry;
     - a reference example computed as Decision;
@@ -6155,6 +6181,8 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 
 - **Mock-ups first, fictional accounts only:**
   - a reference example and a client account at Decision, each one-page and full, at 1280 and in print;
+  - the headline "55 / 100 as sealed · 45 of these points rest on a person who is not customer-side" (in a
+    fictional account's figures), and each timeline score beside its erratum, at the same size and weight;
   - card 01c's source form with the class, at 1280 and 390.
   - The review PDF goes in `~/lvrf-backups/s7-mockup/` (`chmod 600`).
 - **Gate B, each a migration:** a backup before migrating (rule 8); the TOC and the triggers move, with the counts
