@@ -219,6 +219,11 @@ cut line applied first.
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
          every local date on Earth (§28 D4), and nothing later;
+       - **`verify_deploy_steps`' positive control made deterministic (Brad, 24 Nov 2026).** Section F reruns the deploy
+         script from before the fix (`7f889b4`) and expects it to stop silently (exit 7), because the stub API is not up
+         on its first try. That depends on a race: in §28's full regression it found the stub already up and failed
+         (24/3), then passed alone (27/0). **The stub API starts on a signal the test controls** (it answers only
+         after the test says so), never on timing. A red result is then never ignorable;
        - **then S7, the success story of record (Brad, 24 Nov 2026), after the two findings above:** LVRF_PLAN §27,
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's

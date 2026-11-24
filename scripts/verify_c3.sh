@@ -407,7 +407,7 @@ pages() {  # PDF NEEDLE_EVERY NEEDLE_PAGE1 LABEL [no]
 }
 pages "$SHOTS/c3_run_marked.pdf" "SYSTEMEXERCISE—enteredtoexercisethesystem,notascaseevidence.Fulltextonpage1." "itsownnotereads:" "the marked run printed: every page says \"SYSTEM EXERCISE — … Full text on page 1.\" beside the disclosure; page 1 the full reason"
 RUN="$R_OLD" PDF=c3_run_credit.pdf EXPECT_TEXT="$EXPECT_TEXT" cw run_credit
-pages "$SHOTS/c3_run_credit.pdf" "ERRATUM:credittoapersonnotcustomer-side(sealed35/100).Fulltextonpage1." "UndertheC3rule" "the credited run printed: every page's header reads \"ERRATUM: credit to a person not customer-side (sealed 35 / 100). Full text on page 1.\""
+pages "$SHOTS/c3_run_credit.pdf" "ERRATUM:credittoapersonnotcustomer-side(sealed35/100).Fulltextonpage1." "Undermodel1.0.2,onlyacustomer-sidepersonearnscredit" "the credited run printed: every page's header reads \"ERRATUM: credit to a person not customer-side (sealed 35 / 100). Full text on page 1.\""
 RUN="$R2" MARKED_SUMMARY='Entered to exercise the accept path (fixture test row)' cw run_roles
 LINE="erratum: 25 of these points rest on a person who is not customer-side"
 # The book (GET /api/cohort): the run of record is the latest unmarked locked run, with its erratum line.

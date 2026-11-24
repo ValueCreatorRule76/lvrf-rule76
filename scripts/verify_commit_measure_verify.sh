@@ -344,7 +344,7 @@ expect POST "/api/value-outcomes/$OK/commit" "$(CM control_group capability_perf
 sqlrefused "M2: the method changed after commit" "UPDATE value_outcomes SET attribution_method = 'contribution_only' WHERE id = '$OK'" "fixed at commit"
 # M3: a measurement on inferred evidence only; then on a system export.
 expect POST "/api/value-outcomes/$OK/evidence" "$(EVB observation 'TRIR as observed on a site walk (fixture)' actual)" 201 "  ...an observation linked as the actual (inferred)"
-expect POST "/api/value-outcomes/$OK/measure" "$(J actual_value 1.1 actual_measured_at 2026-11-01T12:00:00Z)" 422 "M3: a measurement resting on inferred evidence only" "D2"
+expect POST "/api/value-outcomes/$OK/measure" "$(J actual_value 1.1 actual_measured_at 2026-11-01T12:00:00Z)" 422 "M3: a measurement resting on inferred evidence only" "or published, and not simulated."
 expect POST "/api/value-outcomes/$OK/evidence" "$(EVB system_export 'TRIR extract FY26 (fixture)' actual)" 201 "  ...a system export linked as the actual"
 expect POST "/api/value-outcomes/$OK/measure" "$(J actual_value 1.1 actual_measured_at 2026-11-01T12:00:00Z)" 200 "  ...then measured"
 expect POST "/api/value-outcomes/$OK/commitment/withdraw" "$(J reason 'Verification: commitment while measured.')" 409 "  ...a commitment is not withdrawn while measured" "Withdraw the measurement first"
