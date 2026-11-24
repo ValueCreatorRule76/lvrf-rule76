@@ -6194,7 +6194,20 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 - **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
   are approved.
 
-## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **for Brad's approval**)
+## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**)
+
+**Brad's rulings (24 Nov 2026):**
+- **D1–D4 are approved as recommended.** Brad reads D2's wording table before the build.
+- **D5 changed. "Late" uses Anywhere on Earth:** an outcome is late only once its promised day has ended everywhere,
+  that is, from 12:00 UTC on the day after the promised date.
+  - This **replaces §26 D4's** UTC-date comparison.
+  - Where "late" shows, it says **"late: the promised day has ended everywhere"**.
+  - **`verify_local_date` adds the three instants** for an outcome promised for 23 Nov:
+    - not late at 19:00 New York on 23 Nov;
+    - not late at 06:59 New York on 24 Nov;
+    - late at 07:00 New York on 24 Nov (12:00 UTC).
+- **Printed-on dates stay UTC, with "(UTC)" beside them.**
+- **Next:** build to Gate A.
 
 **The ruling it builds:** §26's two findings (Brad, 24 Nov 2026), first among the small items and before the pilot.
 1. Internal plan codes leave the screen, with a Gate A check that no "§" or slice code appears in any client string.
