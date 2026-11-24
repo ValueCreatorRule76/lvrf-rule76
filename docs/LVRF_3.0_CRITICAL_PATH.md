@@ -224,6 +224,10 @@ cut line applied first.
          account.** A named tenant executive with a role named from a source (e.g. the CFO, named in a filing) may commit
          and verify; never the steward, an analyst of record, or anyone without a sourced role. Today the role guard
          treats all tenant staff as vendor-side, so no one can. Not needed before the pilot (the hypothesis is due June 2027);
+       - **next, after §29 (Brad, 24 Nov 2026): plain words in server and database strings that can reach the screen.**
+         The plain-words rule, "tenant" included, extended from client strings to the server's response strings
+         (refusals, asks, credit lines, findings) and hardening's messages and computed lines. Not in §29. It changes
+         hardening messages, so it has its own plan, Gate A (each changed function's hash), regression and deploy;
        - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future.** A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits

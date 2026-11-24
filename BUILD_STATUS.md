@@ -16955,8 +16955,13 @@ line kept, and "tenant" is refused in client strings (below).
   `verify_evidence_final` 181/0, `verify_steward_safety` 31/0, `verify_supersession` 219/0, `verify_case_snapshot`
   117/0, `verify_value_case` 201/0, `verify_commit_measure_verify` 220/0.
 - **Bundle,** rebuilt on the clean tree: **`index-Cx4YL8jk.js` / `index-BMv5OQwB.css`** (replaces `index-Dh8vkOZ9.js`).
-- **Open, for Brad:** server and database refusal messages still say "tenant" (e.g. "only the tenant's steward records
-  a finding"), and some reach the screen. Not in this ruling's scope.
+- **Server and database strings (Brad, 24 Nov 2026):** they still say "tenant" in places (e.g. "only the tenant's steward
+  records a finding"). Ruled the next small item after §29, with its own Gate A, hashes and regression; not in §29.
+- **The about option is the label only (confirmed before Gate B, 24 Nov 2026):** `AboutSelect.tsx` changes the option's
+  text, "(the tenant)" → "(your own company)"; its value is the account's id, as before (`value={a.id}`). The routes
+  store `about_institution_id` from that value, and the record's "about" reads the account's own name
+  (`lvrf_evidence_about()`, unchanged; no server or database file in the change). Old and new evidence rows record
+  "about" the same way.
 
 #### Gate B for §29 (not run; Brad's pastes)
 
