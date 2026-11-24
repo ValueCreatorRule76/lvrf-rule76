@@ -5874,7 +5874,21 @@ through the form.
 - **The act:** none until the pilot. The first commitment on prod is the steward's own, at the pilot.
 - **About one day for the build.** Gate C is before Fri 18 Dec 2026, well ahead of the pilot's first commitment.
 
-## 27. 3.1 slice S7: the success story of record (planned 24 Nov 2026; **for Brad's approval; mock-ups before code**)
+## 27. 3.1 slice S7: the success story of record (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D11 as recommended and four conditions; mock-ups before code; target Gate C for S7b by Fri 18 Dec 2026**)
+
+**Brad's rulings (24 Nov 2026):**
+- **§27 is approved with D1–D11 as recommended.**
+- **D4 confirmed:** "internal" is the tenant's people (Skillsoft, including its CRO). A reference example's story stays
+  internal only.
+- **Runs:** a story reads only real runs, never system exercises. Curia's are named below (section 1a).
+- **The "can support / cannot support" wording** for each figure class goes in the mock-up, for Brad's approval word
+  for word, **before S7a's form ships.**
+- **Timing:** S7b's Gate C targets Fri 18 Dec 2026. The January window is the fallback only.
+- **Order:**
+  1. the two small items (the plan codes on screen; the local commit date);
+  2. S7a;
+  3. Brad's six rows;
+  4. S7b.
 
 **What Brad asked (24 Nov 2026):** an LVRF output on CVAF's pattern (`cvaf-rule76/docs/CVAF_Success_Story_Spec.md`,
 ratified 17 Nov 2026, read read-only: its patterns only, no CVAF data, nothing copied into CVAF). It comes **after
@@ -5923,11 +5937,42 @@ writes only its own record, and never a figure.
 - **LVRF has no claim id.** A figure is a sealed run's field or an evidence row, each with its own id.
 - **The asks:** the value case computes them from the sealed run (`askFor`).
 
+### 1a. Curia's story: the runs it reads, and what it prints (Brad's condition 2; read from the prod copy, 24 Nov 2026)
+
+**It reads Curia's six real runs, never its 16 system exercises:**
+
+| Engagement | Run | Locked | Confidence | Hash (first 12) | Errata on it |
+|---|---|---|---|---|---|
+| Reference example (retired) | 1 | 29 Aug 2026 | 10 / 100 · Low | `e8306254ed8a` | none |
+| Reference example (retired) | 3 | 29 Aug 2026 | 30 / 100 · Low | `69188ede1765` | the customer-side credit |
+| Reference example (retired) | 4 | 29 Aug 2026 | 30 / 100 · Low | `57dd002e1d74` | the customer-side credit; the unsourced figure |
+| Reference example (retired) | 5 | 29 Aug 2026 | 45 / 100 · Low | `6de649ce55c7` | the customer-side credit; the unsourced figure |
+| Reference example (retired) | 13 | 30 Aug 2026 | 55 / 100 · Medium | `b15dd9b7209e` | the link correction (its current erratum, which superseded an earlier one); the customer-side credit; the unsourced figure |
+| Lot acceptance (current) | 1 | 5 Sep 2026 | 10 / 100 · Low | `b32088fb9671` | none |
+
+**The confidence it prints:** each engagement's latest real run, as sealed.
+- **Run 13, 55 / 100 · Medium,** for the retired reference engagement, with its errata beneath it. The book's own
+  line reads "45 of these points rest on a person who is not customer-side".
+- **Run 1, 10 / 100 · Low,** for the lot-acceptance engagement.
+- **Runs 1, 3, 4 and 5** of the reference engagement print on "How it went" with their sealed scores, as earlier runs,
+  never as the headline.
+- No score is averaged or combined across engagements.
+
+**The errata it prints** (D9: each once, naming the runs it applies to; only current errata, never a superseded one):
+- **"The seal credited points to a person who is not customer-side"**, on runs 3, 4, 5 and 13. Under run 13 it adds
+  "45 of these points rest on a person who is not customer-side", computed at read as the headline computes it. The
+  points under runs 3–5 are computed the same way and read from SQL at the mock-up, never typed.
+- **"The seal carries a figure that has no source on record"**, on runs 4, 5 and 13, with the figure finding under the
+  baseline: "the baseline, 214 days, has no source on record" (outcome `e3fb0061`).
+- **"The owner's commitment attestation was sealed as supporting the impact basis; it supports the target
+  commitment"**, on run 13 (its current erratum, `31ae268b`).
+
 ### 2. Decisions (recommendations first)
 
 - **D1, what a story reads, and when it is sealed. Recommended:**
   - **A draft** renders on screen only, marked DRAFT. It reads:
-    - every locked run of the account that is not a system exercise, retired engagements included and labelled so;
+    - every locked run of the account that is not a system exercise (Brad: real runs only), retired engagements
+      included and labelled so;
     - each run's sealed errata;
     - the account's figure findings;
     - the current head of each evidence row the story cites.

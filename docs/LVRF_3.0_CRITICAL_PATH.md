@@ -215,7 +215,8 @@ cut line applied first.
            showed 11/24/2026). Gate A proves that the route's "after the commit date" rule holds for a measure-by date
            entered the same evening;
        - **then S7, the success story of record (Brad, 24 Nov 2026), after the two findings above:** LVRF_PLAN §27,
-         planned for Brad's approval, mock-ups before code; two deploys (S7a the published-figure class, then Brad's
+         approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
+         2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
        - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
          - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
