@@ -4437,6 +4437,59 @@ CREATE TRIGGER business_metrics_basis_note_own
   BEFORE UPDATE OF industry_measure_id, pack_basis_evidence_id ON business_metrics
   FOR EACH ROW EXECUTE FUNCTION lvrf_basis_note_own();
 
+-- 38. §32 (3.1; LVRF_PLAN §32, approved by Brad 24 Nov 2026, with two additions) — a person's email is optional (0053).
+-- ------------------------------------------------------------------
+-- One function on two triggers:
+--   person_credentials_needs_email (BEFORE INSERT on person_credentials): a person signs in with their email, so a
+--     credential is refused for a person with none (D3).
+--   persons_email_rules (BEFORE INSERT OR UPDATE on persons): confirmed_distinct_from (addition 1) is set only when a
+--     person is added, each id naming a current person of the same account with the same name (trimmed, case-folded),
+--     and never changes after. Who confirmed it and when are persons_audit's.
+CREATE OR REPLACE FUNCTION lvrf_person_email_rules() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  p record;
+  bad uuid;
+BEGIN
+  IF TG_TABLE_NAME = 'person_credentials' THEN
+    SELECT full_name, email INTO p FROM persons WHERE id = NEW.person_id;
+    IF p.email IS NULL OR btrim(p.email) = '' THEN
+      RAISE EXCEPTION 'LVRF: person_credentials: A person signs in with their email; % has none. Record an email for them first.', coalesce(p.full_name, 'that person')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'person_credentials_needs_email';
+    END IF;
+    RETURN NEW;
+  END IF;
+  -- persons
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.confirmed_distinct_from IS DISTINCT FROM OLD.confirmed_distinct_from THEN
+      RAISE EXCEPTION 'LVRF: persons: Who a person was confirmed distinct from is recorded when they are added, and never changes.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'persons_distinct_from_fixed';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.confirmed_distinct_from IS NOT NULL THEN
+    IF cardinality(NEW.confirmed_distinct_from) = 0 OR NEW.institution_id IS NULL THEN
+      RAISE EXCEPTION 'LVRF: persons: A person is confirmed distinct from someone of the same account with the same name.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'persons_distinct_from_same_name';
+    END IF;
+    SELECT d INTO bad FROM unnest(NEW.confirmed_distinct_from) d
+     WHERE NOT EXISTS (SELECT 1 FROM persons x WHERE x.id = d AND x.institution_id = NEW.institution_id
+                         AND x.deleted_at IS NULL AND x.superseded_by_id IS NULL
+                         AND lower(regexp_replace(btrim(x.full_name), '\s+', ' ', 'g')) = lower(regexp_replace(btrim(NEW.full_name), '\s+', ' ', 'g')))
+     LIMIT 1;
+    IF bad IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: persons: A person is confirmed distinct from someone of the same account with the same name; % is not.', bad
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'persons_distinct_from_same_name';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS person_credentials_needs_email ON person_credentials;
+CREATE TRIGGER person_credentials_needs_email BEFORE INSERT ON person_credentials FOR EACH ROW EXECUTE FUNCTION lvrf_person_email_rules();
+DROP TRIGGER IF EXISTS persons_email_rules ON persons;
+CREATE TRIGGER persons_email_rules BEFORE INSERT OR UPDATE ON persons FOR EACH ROW EXECUTE FUNCTION lvrf_person_email_rules();
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4550,7 +4603,8 @@ COMMIT;
 --   29: figure_findings_guard, _immutable, _audit, _no_delete, _act_present — 5
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
 --   37: business_metrics_basis_note_own — 1
---   Total: 227 distinct triggers (226 before section 37: business_metrics_basis_note_own, +1; 210 before section 36: research_clearances' five, research_calls' four,
+--   38: person_credentials_needs_email, persons_email_rules — 2
+--   Total: 229 distinct triggers (227 before section 38: person_credentials_needs_email and persons_email_rules, +2; 226 before section 37: business_metrics_basis_note_own, +1; 210 before section 36: research_clearances' five, research_calls' four,
 --   research_imports_call_matches, research_call_claims' four and research_process_refusals' two, +16; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
@@ -4575,9 +4629,9 @@ COMMIT;
 -- new table, not a new trigger, and it deliberately carries none of its
 -- own (see "Known ungoverned tables" above) — a _no_delete guard on the
 -- table this file truncates and repopulates every run would make the
--- TRUNCATE in section 14 fail. Total stays 227.
+-- TRUNCATE in section 14 fail. Total stays 229.
 --
--- Expect 330 rows here (329 before section 37: business_metrics_basis_note_own U, +1. 328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
+-- Expect 333 rows here (330 before section 38: person_credentials_needs_email I, persons_email_rules I and U, +3. 329 before section 37: business_metrics_basis_note_own U, +1. 328 before section 35: value_runs_hypothesis_current I, +1. 320 before section 34: value_outcomes_spine_guard U, outcome_withdrawals audit I+U, no_delete D,
 -- guard I+U, act_present I+U, +8. 288 before section 33: +32, the four tables' audit I+U, no_delete D, guard I+U, act_present I+U
 -- (7 each), and record_documents guard I+U and act_present I+U. 287 before section 32: value_runs_case_current U, +1. 284 before 0046: industries_act_present I+U, industries_steward_only I: +3. 281 before 0045; section 30 adds evidence_final I+U, the about guard I: +3. 274 before 0044; section 29 adds figure_findings guard I, immutable U, audit I+U,
 -- no_delete D, act_present I+U: +7. 260 before 0043; section 28 adds customer_role_grants guard I+U, audit I+U, no_delete D,

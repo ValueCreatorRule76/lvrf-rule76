@@ -96,7 +96,7 @@ export interface StaffPerson {
 export async function findStaff(client: pg.Client, email: string): Promise<StaffPerson> {
   const { rows } = await client.query<StaffPerson & { simulated: boolean; tenant_id: string | null }>(
     `SELECT id, full_name, email, tenant_id, simulated FROM persons
-      WHERE lower(email) = lower($1) AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+      WHERE lower(email) = lower(btrim($1)) AND deleted_at IS NULL AND superseded_by_id IS NULL`,
     [email],
   );
   if (rows.length !== 1) refuse(`${rows.length} current persons have email ${email}; expected exactly one.`);

@@ -1,3 +1,4 @@
+import { AddPerson } from './AddPerson';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ConfirmFields } from './confirm/ConfirmFields';
 import { same } from './confirm/repeats';
@@ -290,7 +291,6 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
   const reload = () => { setTick((t) => t + 1); onChanged(); };
 
   // Form state, one object per step.
-  const [p1, setP1] = useState({ full_name: '', email: '', title: '' });
   const [pa, setPa] = useState({ person_id: '', title: 'External analyst of record — not an employee. Asserting from published material.' });
   const [p2, setP2] = useState({ offering_key: '', capability_name: '', owner_person_id: '', basis: '' });
   const [p4, setP4] = useState({ engagement_name: '', owner: '', metric_name: '', unit: '', direction: '', source_system: '', capability_name: '', baseline_value: '', baseline_measured_at: '' });
@@ -343,17 +343,9 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
           {s1 === 'next' && (
             <div className="mt-3 border-t border-rule-soft pt-2" data-testid="w1-add-person">
             <p className="m-0 mb-1 text-[11.5px] text-ink-45">Or add a person of this account (the customer's own people only; someone already in LVRF is named above, not added again).</p>
-            <GovernedForm<{ person_ids: string[] }>
-              path={`/api/institutions/${institutionId}/inputs`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account (customer-side).</p>}
-              fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {field('Full name', <input className={INPUT_CLASS} value={p1.full_name} onChange={(e) => setP1({ ...p1, full_name: e.target.value })} />)}
-                {field('Email (required by the route)', <input className={INPUT_CLASS} value={p1.email} onChange={(e) => setP1({ ...p1, email: e.target.value })} />)}
-                {field('Title', <input className={INPUT_CLASS} value={p1.title} onChange={(e) => setP1({ ...p1, title: e.target.value })} />, 'their title at the account, e.g. "EHS director"', true)}
-              </div>}
-              canSubmit={p1.full_name.trim() !== '' && p1.email.trim() !== ''}
-              buildBody={() => ({ persons: [{ full_name: p1.full_name, email: p1.email, title: p1.title || null }] })}
-              submitLabel="Add the person" onSuccess={reload} renderSuccess={() => <>Added.</>} />
+            {/* §32 D5: the one Add a person form, shared with card 01b. */}
+            <AddPerson institutionId={institutionId} known={w.persons} onDone={reload} inline
+              provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account (customer-side). Their email is optional: it is needed only to sign in.</p>} />
             </div>
           )}
         </Step>

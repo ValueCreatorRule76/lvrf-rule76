@@ -1,3 +1,4 @@
+import { normalEmail } from '../lib/personInput.js';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { handleGovernanceError } from '../lib/refusal.js';
@@ -236,7 +237,8 @@ export function accountInputsRouter(pool: Pool): Router {
       for (const [i, personInput] of personInputs.entries()) {
         const path = `persons[${i}]`;
         const fullName = requireString(personInput, 'full_name', path);
-        const email = requireString(personInput, 'email', path);
+        // §32 D2: optional; stored trimmed and lower-cased (an assessment finds its person by it, below).
+        const email = normalEmail(optionalNullableString(personInput, 'email', path));
         const title = optionalNullableString(personInput, 'title', path);
 
         const { rows: [person] } = await client.query<{ id: string }>(
@@ -246,7 +248,7 @@ export function accountInputsRouter(pool: Pool): Router {
           [institutionId, fullName, email, title],
         );
         personIds.push(person.id);
-        personIdByEmail.set(email, person.id);
+        if (email) personIdByEmail.set(email, person.id);
       }
 
       refusalSubjectTable = 'assessments';
@@ -261,10 +263,11 @@ export function accountInputsRouter(pool: Pool): Router {
         const aiAssisted = requireBoolean(assessmentInput, 'ai_assisted', path);
         const notes = optionalNullableString(assessmentInput, 'notes', path);
 
-        const learnerPersonId = personIdByEmail.get(personEmail);
+        const learnerPersonId = personIdByEmail.get(normalEmail(personEmail) ?? '');
         if (!learnerPersonId) {
+          // §32 D2 (Brad's note): a person an assessment names needs an email: the assessment finds its person by it.
           res.status(422).json({
-            message: `${path}: person_email does not match any submitted person: ${personEmail}`,
+            message: `${path}: person_email ${personEmail} matches no person submitted with that email. A person an assessment names needs an email: the assessment finds its person by it.`,
           });
           return;
         }

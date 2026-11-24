@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       id: string; full_name: string; tenant_id: string | null; simulated: boolean;
     }>(
       `SELECT id, full_name, tenant_id, simulated FROM persons
-        WHERE lower(email) = lower($1) AND deleted_at IS NULL AND superseded_by_id IS NULL`,
+        WHERE lower(email) = lower(btrim($1)) AND deleted_at IS NULL AND superseded_by_id IS NULL`,
       [email],
     );
     if (rows.length !== 1) {

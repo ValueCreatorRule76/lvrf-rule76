@@ -79,6 +79,8 @@ if (MODE === 'steward-to-lock' || MODE === 'break-evidence') {
   await setField(addPerson, 'Full name', 'The steward, added again');
   await setField(addPerson, 'Email', S_EMAIL);
   await sleep(200); await click(addPerson, 'Add the person');
+  // §32 D5: the shared Add a person form asks for its full-text confirmation first.
+  await sleep(300); await ev(`(${addPerson}).querySelector('[data-testid=form-confirm-yes]')?.click()`);
   check(await waitFor(`(${addPerson}).textContent.includes('already in LVRF; select them instead')`),
     'W1: an existing person\'s email is refused in plain words ("already in LVRF; select them instead")');
   check(await ev(`!/duplicate key|persons_email_key|constraint/i.test((${step('w1')}).textContent)`), '  ...no Postgres text and no constraint name on the page');

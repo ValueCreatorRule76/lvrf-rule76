@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const client = await connect();
   await inTransaction(client, async () => {
     const { rows: existing } = await client.query<{ id: string }>(
-      'SELECT id FROM persons WHERE lower(email) = lower($1)',
+      'SELECT id FROM persons WHERE lower(email) = lower(btrim($1))',
       [email],
     );
 

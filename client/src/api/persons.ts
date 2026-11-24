@@ -7,7 +7,7 @@ import { apiFetch } from './http';
 export interface Person {
   id: string;
   full_name: string;
-  email: string;
+  email: string | null;
   title: string | null;
   institution_id: string | null;
   institution_name: string | null;

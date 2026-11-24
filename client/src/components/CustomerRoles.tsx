@@ -1,3 +1,4 @@
+import { AddPerson } from './AddPerson';
 import { useEffect, useState } from 'react';
 import { apiFetch } from '../api/http';
 import { useActor } from '../actor/ActorContext';
@@ -23,32 +24,6 @@ interface Source { id: string; kind: string; summary: string; provenance: string
 const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
 const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
 const ROLE = (r: string) => r.replace('_', ' ');
-
-/** §29 (Brad, 24 Nov 2026): a person of this account, added here so a role can be named for them (the same route as W1's). */
-function AddPerson({ institutionId, onDone }: { institutionId: string; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [p, setP] = useState({ full_name: '', email: '', title: '' });
-  if (!open) return <button type="button" onClick={() => setOpen(true)} data-testid="person-add-open"
-    className={'self-start border border-silver px-3 py-1.5 text-[12px] font-semibold text-ink-70 hover:border-ink hover:text-ink ' + FOCUS_RING}>Add a person of this account…</button>;
-  const unmet = [...(p.full_name.trim() ? [] : ['give the full name']), ...(p.email.trim() ? [] : ['give the email'])];
-  return (
-    <div className="border-t border-rule-soft pt-3" data-testid="person-add">
-      <GovernedForm<{ person_ids: string[] }>
-        path={`/api/institutions/${institutionId}/inputs`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account: the customer&apos;s own people only, never the analyst of record or anyone at your own company. Adding them names no role: name it below, from a source.</p>}
-        fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block"><span className={L}>Full name</span><input className={I} value={p.full_name} onChange={(e) => setP({ ...p, full_name: e.target.value })} data-testid="person-add-name" /></label>
-          <label className="block"><span className={L}>Email</span><input className={I} value={p.email} onChange={(e) => setP({ ...p, email: e.target.value })} data-testid="person-add-email" /></label>
-          <label className="block sm:col-span-2"><span className={L}>Title at the account</span><input className={I} value={p.title} onChange={(e) => setP({ ...p, title: e.target.value })} data-testid="person-add-title" /></label>
-        </div>}
-        confirm={<span data-testid="confirm-text">Add {p.full_name.trim()}{p.title.trim() ? `, ${p.title.trim()}` : ''}, as a person of this account.</span>}
-        canSubmit={unmet.length === 0} unmet={unmet}
-        buildBody={() => ({ persons: [{ full_name: p.full_name.trim(), email: p.email.trim(), title: p.title.trim() || null }] })}
-        submitLabel="Add the person" onSuccess={() => { setOpen(false); setP({ full_name: '', email: '', title: '' }); onDone(); }} renderSuccess={() => <>Added.</>} />
-      <button type="button" onClick={() => setOpen(false)} className={'mt-2 text-[11.5px] text-ink-45 underline ' + FOCUS_RING}>Cancel</button>
-    </div>
-  );
-}
 
 function Revoke({ g, onDone, notSteward }: { g: Grant; onDone: () => void; notSteward?: string }) {
   const [open, setOpen] = useState(false);
@@ -115,7 +90,9 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
             {notSteward && <span className="text-[11px] text-ink-45" data-testid="customer-role-reason">{notSteward}</span>}
           </span>
         : null}
-      {!open && <AddPerson institutionId={institutionId} onDone={() => setReload((n) => n + 1)} />}
+      {/* §29 addition 3, §32 D5: the one Add a person form; "Choose them" opens the role form with them chosen. */}
+      {!open && <AddPerson institutionId={institutionId} known={data.persons} onDone={() => setReload((n) => n + 1)}
+        onChoose={(id) => { setOpen(true); setPersonId(id); }} />}
       {!open
         ? null
         : <div className="border-t border-rule-soft pt-3" data-testid="customer-role-form">

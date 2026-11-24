@@ -130,7 +130,7 @@ export function authRouter(pool: Pool): Router {
         `SELECT p.id AS person_id, p.full_name, p.email, p.tenant_id, c.password_hash, c.must_change
            FROM persons p
            JOIN person_credentials c ON c.person_id = p.id AND c.revoked_at IS NULL
-          WHERE lower(p.email) = lower($1)
+          WHERE lower(p.email) = lower(btrim($1))
             AND p.tenant_id IS NOT NULL
             AND p.simulated = false
             AND p.deleted_at IS NULL

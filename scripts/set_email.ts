@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const current = currentArg.trim();
-  const next = newArg.trim();
+  const next = newArg.trim().toLowerCase();  // §32: stored as its own trimmed lower case (persons_email_normalized)
   if (next.length > MAX_LENGTH || !PLAUSIBLE_EMAIL.test(next)) {
     console.error(`Refused: "${next}" is not a plausible email address.`);
     process.exit(1);
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
       id: string; full_name: string; email: string; tenant_id: string | null; simulated: boolean;
     }>(
       `SELECT id, full_name, email, tenant_id, simulated FROM persons
-        WHERE lower(email) = lower($1) AND deleted_at IS NULL AND superseded_by_id IS NULL
+        WHERE lower(email) = lower(btrim($1)) AND deleted_at IS NULL AND superseded_by_id IS NULL
         FOR UPDATE`,
       [current],
     );
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
     }
 
     const { rows: [{ taken }] } = await client.query<{ taken: number }>(
-      'SELECT count(*)::int AS taken FROM persons WHERE lower(email) = lower($1)',
+      'SELECT count(*)::int AS taken FROM persons WHERE lower(email) = lower(btrim($1))',
       [next],
     );
     if (taken > 0) {

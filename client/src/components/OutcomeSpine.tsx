@@ -41,6 +41,8 @@ const short = (id: string) => id.slice(0, 8);
 const withUnit = (v: string | null, unit: string | null) => (v === null ? '' : `${num(v)}${unit ? ` ${unit}` : ''}`);
 // §31 D5: the walk dates' default, and their latest day: the person's own today.
 const today = () => localToday();
+/** §32 D7: Measure by's earliest day: the day after the commit (§26 D3 wants a later day). */
+const dayAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 /** §26 D3: the latest promised date for a commit on `on`: three years after it (UTC dates). */
 const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`); d.setUTCFullYear(d.getUTCFullYear() + 3); return d.toISOString().slice(0, 10); };
 
@@ -81,7 +83,7 @@ function Commit({ o, persons, tenantSelf, onDone }: { o: SpineOutcome; persons: 
               {persons.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
             </select>}</label>
           <label className="block"><span className={L}>Committed on</span><input type="date" className={I} value={v.on} max={today()} onChange={(e) => setV({ ...v, on: e.target.value })} data-testid="commit-on" /></label>
-          <label className="block"><span className={L}>Measure by</span><input type="date" className={I} value={v.by} min={v.on || undefined} onChange={(e) => setV({ ...v, by: e.target.value })} data-testid="commit-by" />
+          <label className="block"><span className={L}>Measure by</span><input type="date" className={I} value={v.by} min={v.on ? dayAfter(v.on) : undefined} onChange={(e) => setV({ ...v, by: e.target.value })} data-testid="commit-by" />
             <span className="mt-1 block text-[11.5px] text-ink-45">The date the outcome will be measured by: after the commit date, within three years of it.</span></label>
           <label className="block"><span className={L}>Attribution method</span>
             <select className={I} value={v.method} onChange={(e) => setV({ ...v, method: e.target.value })} data-testid="commit-method">

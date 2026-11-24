@@ -286,7 +286,12 @@ export const persons = pgTable('persons', {
   tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'restrict' }),
   institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
   fullName: text('full_name').notNull(),
-  email: text('email').notNull(),
+  /**
+   * §32 (Brad, 24 Nov 2026): optional (a person named in a public source has none); required only to sign in
+   * (lvrf_person_email_rules refuses a credential without one). Stored as its own trimmed lower case, unique ignoring
+   * case.
+   */
+  email: text('email'),
   title: text('title'),
   /**
    * Persons currently disclose synthetic status via a '[SIM]' prefix in
@@ -296,15 +301,22 @@ export const persons = pgTable('persons', {
    * actor currently satisfies it.
    */
   simulated: boolean('simulated').notNull().default(false),
+  /**
+   * §32 addition 1 (Brad, 24 Nov 2026): the current persons of the same account, with the same name, this person was
+   * confirmed distinct from on "This is a different person". Set only then, when the person is added, and never after
+   * (lvrf_person_email_rules); who confirmed it and when are the audit's (persons_audit, the actor).
+   */
+  confirmedDistinctFrom: uuid('confirmed_distinct_from').array(),
   ...governance(),
 }, (t) => [
   foreignKey({ columns: [t.supersededById], foreignColumns: [t.id],
     name: 'persons_superseded_by_fk' }).onDelete('restrict'),
+  check('persons_email_normalized', sql`${t.email} IS NULL OR ${t.email} = lower(btrim(${t.email}))`),
   check(
     'persons_scoped_to_exactly_one',
     sql`(${t.tenantId} IS NOT NULL)::int + (${t.institutionId} IS NOT NULL)::int = 1`,
   ),
-  unique('persons_email_key').on(t.email),
+  uniqueIndex('persons_email_key').on(sql`lower(${t.email})`),
   index('persons_tenant_idx').on(t.tenantId),
   index('persons_institution_idx').on(t.institutionId),
 ]);

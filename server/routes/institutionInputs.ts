@@ -1,3 +1,4 @@
+import { normalEmail, sameNamePersons, sameNameMessage } from '../lib/personInput.js';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
@@ -192,15 +193,31 @@ export function institutionInputsRouter(pool: Pool): Router {
       for (const [i, personInput] of personInputs.entries()) {
         const path = `persons[${i}]`;
         const fullName = requireString(personInput, 'full_name', path);
-        const email = requireString(personInput, 'email', path);
+        // §32 D2: optional; stored trimmed and lower-cased.
+        const email = normalEmail(optionalNullableString(personInput, 'email', path));
         const title = optionalNullableString(personInput, 'title', path);
         const simulated = optionalBoolean(personInput, 'simulated', path, false);
+        // §32 D4: the same name on this account is warned, not refused: added only when each same-name person is
+        // named as different, which the new row records (confirmed_distinct_from).
+        const differentFrom = optionalArray(personInput, 'different_from', path).map((v, j) => {
+          if (typeof v !== 'string' || !isUuid(v)) throw new ValidationError(`${path}.different_from[${j}] must be a person id`);
+          return v;
+        });
+        const same = await sameNamePersons(client, institutionId, fullName);
+        if (same.some((p) => !differentFrom.includes(p.id))) {
+          res.status(409).json({ message: sameNameMessage(same), same_name: same });
+          return;
+        }
+        if (differentFrom.length > 0 && same.length === 0) {
+          res.status(422).json({ message: 'There is no one of that name at this account to confirm a different person from.' });
+          return;
+        }
 
         const { rows: [person] } = await client.query<{ id: string }>(
-          `INSERT INTO persons (institution_id, full_name, email, title, simulated)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO persons (institution_id, full_name, email, title, simulated, confirmed_distinct_from)
+           VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id`,
-          [institutionId, fullName, email, title, simulated],
+          [institutionId, fullName, email, title, simulated, differentFrom.length > 0 ? differentFrom : null],
         );
         personIds.push(person.id);
       }

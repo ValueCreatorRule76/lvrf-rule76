@@ -86,10 +86,10 @@ dropdb --if-exists "$VERIFY_DB"; make_clone "$VERIFY_DB" lvrf_prodcopy || { bad 
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "0052 applied to the prod copy's rows: every evidence row already satisfies the nine CHECKs" || { bad "migrate: $(tail -3 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened (section 37)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
-[ "$(trig)" = "227" ] && ok "227 triggers (S4 section 37: +1)" || bad "triggers: $(trig)"
+[ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1)" || bad "triggers: $(trig)"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | has -E "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
-DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 53 migrations, newest 0052_s4_form_confirmation" && ok "$DRIFT" || bad "drift: $DRIFT"
+DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "$DRIFT" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) FROM business_metrics WHERE pack_basis_evidence_id IS NOT NULL")" = "0" ] && ok "pack_basis_evidence_id: NULL on every metric of the copy (nothing backfilled, nothing orphaned)" || bad "pack_basis_evidence_id set on the copy"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 S="$(q "SELECT steward_person_id FROM tenants WHERE steward_person_id IS NOT NULL LIMIT 1")"; S_EMAIL="$(q "SELECT email FROM persons WHERE id = '$S'")"

@@ -18,11 +18,11 @@ export type StepState = 'done' | 'next' | 'waiting';
 
 export interface WalkState {
   institution: { id: string; name: string; industry_slug: string | null; industry_name: string | null };
-  persons: { id: string; full_name: string; email: string; title: string | null }[];
+  persons: { id: string; full_name: string; email: string | null; title: string | null }[];
   /** W1 fix: existing staff named analyst of record on this account, with the title for it. */
-  analysts: { link_id: string; id: string; full_name: string; email: string; title: string; linked_by: string; linked_at: string }[];
+  analysts: { link_id: string; id: string; full_name: string; email: string | null; title: string; linked_by: string; linked_at: string }[];
   /** The tenant's current staff, to choose the analyst of record from. */
-  staff: { id: string; full_name: string; email: string }[];
+  staff: { id: string; full_name: string; email: string | null }[];
   offerings: { offering_key: string; name: string; family: string }[];
   pack: { id: string; name: string; unit: string; direction: string; definition: string; confounders: string; addressable: boolean }[];
   capabilities: { id: string; name: string; claims: { industry_measure_id: string; measure_name: string; claim: string; claimed_by: string | null }[] }[];
