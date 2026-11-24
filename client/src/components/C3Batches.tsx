@@ -41,7 +41,7 @@ export function CreditErrataBatch() {
   const [reason, setReason] = useState('');
   const data = useJson<ErrataDryRun>('/api/errata/non-customer-credit', reload);
   const [recorded, setRecorded] = useState<number | null>(null);
-  const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const total = data && data !== 'error' ? data.count + data.unsourced_count : 0;
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   return (
@@ -108,7 +108,7 @@ export function SystemExerciseBatch() {
   const [reload, setReload] = useState(0);
   const [ticked, setTicked] = useState<Record<string, boolean>>({});
   const data = useJson<{ candidates: Candidate[]; marked: Marked[] }>('/api/system-exercise/candidates', reload);
-  const notSteward = actor?.is_steward ? undefined : `Marking items as a system exercise is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Marking items as a system exercise is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const key = (c: { subject_table: string; subject_id: string }) => `${c.subject_table}|${c.subject_id}`;
   const chosen = data && data !== 'error' ? data.candidates.filter((c) => ticked[key(c)]) : [];
   return (
@@ -174,7 +174,7 @@ export function AboutBatch() {
   const [reason, setReason] = useState('');
   const data = useJson<{ count: number; rows: AboutRow[]; accounts: AccountChoice[] }>('/api/evidence/about-batch', reload);
   if (data === null || data === 'error' || data.count === 0) return null;
-  const notSteward = actor?.is_steward ? undefined : `Stating what evidence from before this field is about is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Stating what evidence from before this field is about is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const choice = (r: AboutRow) => picked[r.id] ?? r.proposed ?? '';
   const stated = (r: AboutRow) => { const c = choice(r); return c !== '' && (c !== 'other_party' || (named[r.id] ?? '').trim().length >= 3); };
   const waiting = data.rows.filter((r) => !stated(r)).length;
@@ -357,7 +357,7 @@ export function SupersessionBatch() {
   const [plan, setPlan] = useState<DryRun | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [reason, setReason] = useState('');
-  const notSteward = actor?.is_steward ? undefined : `Superseding evidence is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Superseding evidence is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const onItem = (id: string, item: Item | null, unmet: string[]) => {
     setPlan(null); setFailed(null);
     setItems((all) => { const { [id]: _gone, ...rest } = all; return item === null ? rest : { ...rest, [id]: { item, unmet } }; });
@@ -438,7 +438,7 @@ export function MisstatedFindingsBatch() {
   const [reason, setReason] = useState('');
   const data = useJson<MisstatedDryRun>('/api/errata/misstated-findings', reload);
   const [recorded, setRecorded] = useState<number | null>(null);
-  const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Recording these errata is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   return (
     <section className="mt-8 flex flex-col gap-3" data-testid="misstated-errata-batch">
       <h2 className={H2}>Findings their seals contradict</h2>

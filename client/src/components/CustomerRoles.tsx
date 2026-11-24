@@ -35,7 +35,7 @@ function AddPerson({ institutionId, onDone }: { institutionId: string; onDone: (
     <div className="border-t border-rule-soft pt-3" data-testid="person-add">
       <GovernedForm<{ person_ids: string[] }>
         path={`/api/institutions/${institutionId}/inputs`} provenanceLabel="What this records"
-        provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account: the customer&apos;s own people only, never the analyst of record or anyone at the tenant. Adding them names no role: name it below, from a source.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">A person of this account: the customer&apos;s own people only, never the analyst of record or anyone at your own company. Adding them names no role: name it below, from a source.</p>}
         fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block"><span className={L}>Full name</span><input className={I} value={p.full_name} onChange={(e) => setP({ ...p, full_name: e.target.value })} data-testid="person-add-name" /></label>
           <label className="block"><span className={L}>Email</span><input className={I} value={p.email} onChange={(e) => setP({ ...p, email: e.target.value })} data-testid="person-add-email" /></label>
@@ -87,7 +87,7 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
       .then((j) => { if (!cancelled) setData(j); }, () => { if (!cancelled) setData('error'); });
     return () => { cancelled = true; };
   }, [institutionId, reload]);
-  const notSteward = actor?.is_steward ? undefined : `Naming a customer-side role is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Naming a customer-side role is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   if (data === null) return <p className="m-0 text-[12.5px] text-ink-45">Reading the account&apos;s roles…</p>;
   if (data === 'error') return <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the account&apos;s roles.</p>;
   const person = data.persons.find((p) => p.id === personId);

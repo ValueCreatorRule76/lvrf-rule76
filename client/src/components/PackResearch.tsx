@@ -667,7 +667,7 @@ export function PackResearch({
 
   const stewardReason = actor?.is_steward
     ? undefined
-    : `This is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
+    : `This is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone (3.0 Band A).`;
 
   return (
     <section className="mt-10 border-t border-rule pt-6">

@@ -7,7 +7,8 @@
 #
 #   1. scripts/check_plain_words.mjs: 0 hits over client strings, server strings and database messages; then each break
 #      caught, the file restored byte-identical: B1 a "§" in a client string; B2 "(C3)" in an ask; B3 "(D2)" back in a
-#      database message.
+#      database message; B4 "tenant" in JSX text with an entity, B5 "tenant" in a client string (§29, Brad, 24 Nov 2026:
+#      "tenant" is refused in client strings).
 #   2. The words on the page, on a clone of the prod copy: card 01d's two sentences on Curia's commitment made before
 #      attribution and promised dates were recorded; the value case's attribution line; "(UTC)" beside printed-on dates.
 #   3. The rendered sweep: every page at 1280, its visible text scanned. A hit in app text fails; a hit in the record (a
@@ -123,6 +124,9 @@ plainbreak() {  # FILE OLD NEW LABEL WANT_PATH
 plainbreak "$SPINE" "'no promised date on record (committed before promised dates were recorded, 24 Nov 2026)'" "'no promised date on record (committed before §26)'" "B1: a \"§\" in a client string (card 01d)" "client/src/components/OutcomeSpine.tsx"
 plainbreak "$GAPR" "The committer of record must be customer-side: a person of the account whose customer-side role is named from a source.';" "The committer of record must be customer-side: a person of the account whose customer-side role is named from a source (C3).';" "B2: \"(C3)\" in an ask" "server/routes/gapRegister.ts"
 plainbreak "$HARD" "published, and not simulated.'" "published, and not simulated (D2).'" "B3: \"(D2)\" back in a database message" "db/hardening.sql"
+# §29 (Brad, 24 Nov 2026): "tenant" is refused in client strings; B4 also proves JSX text with an entity is read.
+plainbreak "$SPINE" "No one can commit to or verify your own company&apos;s outcomes yet" "No one can commit to or verify the tenant&apos;s own outcomes yet" "B4: \"tenant\" in JSX text with an entity (the tenant page's sentence)" "client/src/components/OutcomeSpine.tsx"
+plainbreak "$SPINE" "Withdrawing is the steward's act — \${actor?.steward_name ?? \"the steward\"}'s alone." "Withdrawing is the steward's act — \${actor?.steward_name ?? \"the tenant's steward\"}'s alone." "B5: \"tenant\" in a client string (the steward fallback)" "client/src/components/OutcomeSpine.tsx"
 node scripts/check_plain_words.mjs > /dev/null 2>&1 && ok "  ...clean again after the breaks" || bad "  ...not clean after the breaks"
 
 step "2. Clone the prod copy, migrate, harden"
@@ -197,7 +201,7 @@ APPN="$(grep -c '^APP' "$W/classified.txt" || true)"; RECN="$(grep -c '^RECORD' 
 [ "$APPN" = "0" ] && ok "the sweep: 0 plan codes in app text" || { bad "the sweep: $APPN plan code(s) in app text"; grep '^APP' "$W/classified.txt" | sort -u | head -20; }
 echo "  listed, not failed: $RECN hit(s) in the record's own words (people's text, sealed text, ids), by code and text:"
 grep '^RECORD' "$W/classified.txt" | cut -f3,4 | sort | uniq -c | sort -rn | head -30 | sed 's/^/    /'
-cover "$LOG" 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'pages to read' 'coverage: all' 'the sweep: 0 plan codes'
+cover "$LOG" 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'B4: "tenant" in JSX text' 'B5: "tenant" in a client string' 'pages to read' 'coverage: all' 'the sweep: 0 plan codes'
 
 echo "  screenshots: $OUT"
 

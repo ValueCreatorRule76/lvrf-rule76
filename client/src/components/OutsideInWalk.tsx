@@ -201,7 +201,7 @@ function CorrectSupport({ e, outcomeId, metricName, sealedRuns, onDone }: { e: W
   const [open, setOpen] = useState(false);
   const [supports, setSupports] = useState('');
   const [reason, setReason] = useState('');
-  const notSteward = actor?.is_steward ? undefined : `Correcting what a link supports is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Correcting what a link supports is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   if (!open) {
     return (
       <span className="ml-1 inline-flex items-center gap-2 text-[11px] text-ink-45">
@@ -303,7 +303,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
   const { claims, eng, outcome, lockedRun, openRun, s1, s2, s3, s4, s5, s6, s7, s8, s9 } = deriveWalk(w);
   const pr = (sid: string, st: StepState) => Boolean(primaryFor?.includes(sid)) && st === 'next';
-  const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
+  const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone (3.0 Band A).`;
 
   // Who may own a capability or an engagement here: the analyst of record
   // (linked staff) and the account's own people.
@@ -329,7 +329,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
             <div data-testid="w1-name-existing">
             <GovernedForm<{ account_person_link_id: string }>
               path={`/api/institutions/${institutionId}/analyst-of-record`} provenanceLabel="What this records"
-              provenance={<p className="m-0 text-[12.5px] text-ink">An existing person — the tenant's own analyst, usually you — named analyst of record on this account, with the title for this account. <strong>No new person is created</strong>, and this does not make them the customer's: they can own what they assert, never commit to a target or verify an actual.</p>}
+              provenance={<p className="m-0 text-[12.5px] text-ink">An existing person — your company's own analyst, usually you — named analyst of record on this account, with the title for this account. <strong>No new person is created</strong>, and this does not make them the customer's: they can own what they assert, never commit to a target or verify an actual.</p>}
               fields={<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {field('Person', <select className={INPUT_CLASS} value={analystId} onChange={(e) => setPa({ ...pa, person_id: e.target.value })}>
                   {w.staff.map((p) => <option key={p.id} value={p.id}>{p.full_name}{p.id === actor?.id ? ' (you)' : ''}</option>)}</select>)}

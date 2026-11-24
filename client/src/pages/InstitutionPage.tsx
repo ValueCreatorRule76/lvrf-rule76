@@ -144,9 +144,9 @@ function ClassificationSection({ view }: { view: InstitutionView }) {
             </p>
           ) : institution.is_tenant_self ? (
             <p className="m-0 mt-1.5 text-[13px] leading-snug text-ink-45">
-              This is the tenant's own customer-zero account. It is classified only to carry its own
-              value case ("Classify as…", under "What its value case rests on"), never to be read as one of the
-              tenant's customers.
+              This is your own company's customer-zero account. It is classified only to carry its own
+              value case ("Classify as…", under "What its value case rests on"), never to be read as one of your
+              company's customers.
             </p>
           ) : (
             <p className="m-0 mt-1.5 text-[13px] leading-snug text-ink-45">
@@ -202,7 +202,7 @@ function PackSection({
               // a CUSTOMER, and this account is the tenant itself; it is
               // classified only to carry its own value case (S1, §20 D1),
               // as section 00 says.
-              'No pack applies — an industry pack describes what carries money for a customer, and this is the tenant’s own account.'
+              'No pack applies — an industry pack describes what carries money for a customer, and this is your own company’s account.'
             : 'No pack — this account is not classified against an industry yet.'}
         </p>
       </Card>
@@ -513,7 +513,7 @@ export function InstitutionPage() {
     return (
       <p className="p-8 text-ink-45">
         Sign in to view this account — the view is scoped to the signed-in person's own
-        tenant, and there is no default to fall back to.
+        company, and there is no default to fall back to.
       </p>
     );
   }

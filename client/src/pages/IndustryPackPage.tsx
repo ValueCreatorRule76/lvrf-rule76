@@ -41,7 +41,7 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
   const [reason, setReason] = useState('');
   const stewardReason = actor?.is_steward
     ? undefined
-    : `This is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone (3.0 Band A).`;
+    : `This is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone (3.0 Band A).`;
   if (!open) {
     return (
       <div className="mt-3 border-l-[3px] border-warning pl-3" data-testid="danger-zone">
@@ -372,7 +372,7 @@ export function IndustryPackPage() {
     return (
       <p className="p-8 text-ink-45">
         Sign in to view this industry's pack — the list is scoped to the signed-in
-        person's own tenant, and there is no default to fall back to.
+        person's own company, and there is no default to fall back to.
       </p>
     );
   }

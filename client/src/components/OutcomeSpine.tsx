@@ -46,7 +46,7 @@ const threeYearsAfter = (on: string) => { const d = new Date(`${on}T12:00:00Z`);
 /** §29 D1, D2 (Brad, 24 Nov 2026): only a customer-side person at the account commits or verifies; the lists offer no one else. */
 const NO_CUSTOMER_SIDE = 'No customer-side person is recorded at this account yet.';
 function NoOne({ tenantSelf }: { tenantSelf: boolean }) {
-  if (tenantSelf) return <span className="block text-[12.5px] text-ink" data-testid="no-customer-side">No one can commit to or verify the tenant&apos;s own outcomes yet.</span>;
+  if (tenantSelf) return <span className="block text-[12.5px] text-ink" data-testid="no-customer-side">No one can commit to or verify your own company&apos;s outcomes yet: that needs a named executive with a role named from a source, a rule still to be set.</span>;
   const go = (e: MouseEvent) => {
     const el = document.getElementById('customer-roles'); if (!el) return;
     e.preventDefault(); const det = el.closest('details'); if (det) det.open = true; el.scrollIntoView({ block: 'start' });
@@ -193,7 +193,7 @@ export function OutcomeSpine({ institutionId }: { institutionId: string }) {
   if (d === null) return <p className="m-0 text-[12.5px] text-ink-45">Reading the outcomes…</p>;
   if (d === 'error') return <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the outcomes.</p>;
   if (d.outcomes.length === 0) return <p className="m-0 text-[12.5px] text-ink-45">No outcome on this account yet; the walk records one at W4.</p>;
-  const notSteward = actor?.is_steward ? undefined : `Withdrawing is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Withdrawing is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   return (
     <ul className="m-0 list-none p-0" data-testid="outcome-spine">
       {d.outcomes.map((o) => (

@@ -203,7 +203,7 @@ if (MODE === 'aboutcontrol' || MODE === 'aboutprefilled') {
   if (MODE === 'aboutprefilled') { check(value === 'account', 'B2: the control pre-filled → caught: it reads "this account" with nothing chosen', value); ws.close(); process.exit(0); }
   check(value === '', "Curia's form: what it is about starts unchosen", value);
   const curia = await opts(f);
-  check(curia === 'This account | Skillsoft (the tenant) | Scotts Miracle-Gro | Another company, named', '  ...it offers this account, the tenant, the other account and a typed company', curia);
+  check(curia === 'This account | Skillsoft (your own company) | Scotts Miracle-Gro | Another company, named', '  ...it offers this account, the tenant, the other account and a typed company', curia);
   check((await ev(`${f}.querySelector('[data-testid=form-unmet]')?.textContent ?? ''`)).includes('say what this evidence is about'), '  ...and says so until it is chosen');
   await shot('l52_about_control_1280', 1280);
   const g = await openForm(E.SELF_INST);
@@ -218,7 +218,7 @@ if (MODE === 'supersession') {
   const rowOf = (id) => `document.querySelector('[data-testid=supersession-row][data-evidence="${id}"]')`;
   const dry = `document.querySelector('[data-testid=supersession-dry-run]')`;
   check(await ev(`${dry}.disabled`), '  ..."Show what this will do" waits for a row');
-  for (const [id, about, summary] of [[E.RC, 'Skillsoft (the tenant)', E.TC ?? ''], [E.RF, 'Skillsoft (the tenant)', E.TF ?? ''], [E.RT, 'account', E.T1], [E.R2, 'account', E.T2], [E.R9, 'account', E.T9]]) {
+  for (const [id, about, summary] of [[E.RC, 'Skillsoft (your own company)', E.TC ?? ''], [E.RF, 'Skillsoft (your own company)', E.TF ?? ''], [E.RT, 'account', E.T1], [E.R2, 'account', E.T2], [E.R9, 'account', E.T9]]) {
     await ev(`${rowOf(id)}.querySelector('[data-testid=supersession-tick]').click()`); await sleep(300);
     const sel = `${rowOf(id)}.querySelector('[data-testid=supersession-about]')`;
     check((await ev(`${sel}.value`)) === '', '  ...a ticked row starts unchosen');

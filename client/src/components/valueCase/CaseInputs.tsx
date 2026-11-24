@@ -137,7 +137,7 @@ function ShareForReview({ vc, notSteward, onDone }: { vc: CaseRef; notSteward?: 
 export function CaseInputs({ vc, actorIsSteward, stewardName, onDone, actorName }: {
   vc: CaseRef; actorIsSteward: boolean; stewardName: string | null; onDone: () => void; actorName?: string | null;
 }) {
-  const notSteward = actorIsSteward ? undefined : `Only the steward (${stewardName ?? 'the tenant’s steward'}) records a share for review.`;
+  const notSteward = actorIsSteward ? undefined : `Only the steward (${stewardName ?? 'the steward'}) records a share for review.`;
   return (
     <div className="mt-8" data-testid="case-inputs">
       <Card title="For the next run">

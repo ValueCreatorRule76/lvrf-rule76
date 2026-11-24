@@ -197,7 +197,7 @@ export function AiResearchCard({ kind, id, n, parsePath, onImported }: {
     return () => clearTimeout(t);
   }, [running, tick]);
   const reload = () => setTick((x) => x + 1);
-  const stewardReason = actor?.is_steward ? undefined : `This is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const stewardReason = actor?.is_steward ? undefined : `This is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
 
   return (
     <Card n={n} title="Research with Claude" badge={status ? <Badge tone={status.on ? 'healthy' : 'neutral'}>{status.on ? 'on' : 'off'}</Badge> : undefined}>

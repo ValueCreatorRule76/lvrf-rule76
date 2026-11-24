@@ -300,7 +300,7 @@ function CorrectOnRun({ run, account, onChanged }: { run: Run; account: AccountR
   const open_ = outcome.evidence.filter((e) => e.corrects_supports === null);
   // C2c: a link withdrawn with no replacement, struck through (a corrected one is named by its correction above).
   const withdrawnAlone = outcome.withdrawn_links.filter((l) => !l.replaced);
-  const notSteward = actor?.is_steward ? undefined : `Correcting or withdrawing a link is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Correcting or withdrawing a link is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   // A correction is offered for a link never corrected (C2b); a withdrawal for any current link — a corrected one too (C2c).
   const choosable = mode === 'withdraw' ? outcome.evidence : open_;
   const chosen = choosable.find((e) => e.evidence_id === evidenceId);
@@ -417,7 +417,7 @@ function FindingOnRun({ run, onChanged }: { run: Run; onChanged: () => void }) {
     return () => { cancelled = true; };
   }, [outcomeId, run.locked_at, reload]);
   if (!outcomeId || run.locked_at === null || !state) return null;
-  const notSteward = actor?.is_steward ? undefined : `Recording a finding is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Recording a finding is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const L = 'mb-1 block text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45';
   const I = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text-ink ' + FOCUS_RING;
   const btn = 'self-start border border-ink px-3 py-1.5 text-[12px] font-semibold tracking-[.02em] text-ink hover:bg-ink hover:text-offwhite disabled:cursor-not-allowed disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent';
@@ -483,7 +483,7 @@ function RecordErratum({ run, account, onChanged }: { run: Run; account: Account
   if (run.locked_at === null) return null;
   const outcome = account.status === 'ok' ? account.pov.outcomes.find((o) => o.id === run.payload.valueOutcomeId) : undefined;
   const corrected = (outcome?.evidence ?? []).filter((e) => e.corrects_supports !== null);
-  const notSteward = actor?.is_steward ? undefined : `Recording an erratum is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  const notSteward = actor?.is_steward ? undefined : `Recording an erratum is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   const noCorrection = corrected.length === 0 ? 'No link on this run\'s outcome has been corrected since it was sealed: an erratum records one.' : undefined;
   const reason = notSteward ?? noCorrection;
   if (!open) {

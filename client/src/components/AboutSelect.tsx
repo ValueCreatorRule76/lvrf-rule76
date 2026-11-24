@@ -17,7 +17,7 @@ export function AboutSelect({ accounts, ownId, ownName, value, onChange, disable
     <select className={className} value={value} disabled={disabled} onChange={(ev) => onChange(ev.target.value)} data-testid={testId}>
       <option value="" disabled>— choose —</option>
       <option value="account">{ownName ? `${ownName} (this account)` : 'This account'}</option>
-      {others.map((a) => <option key={a.id} value={a.id}>{a.is_tenant_self ? `${a.name} (the tenant)` : a.name}</option>)}
+      {others.map((a) => <option key={a.id} value={a.id}>{a.is_tenant_self ? `${a.name} (your own company)` : a.name}</option>)}
       <option value="other_party">Another company, named</option>
     </select>
   );

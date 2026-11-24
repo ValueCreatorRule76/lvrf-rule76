@@ -127,7 +127,7 @@ export function CreateAccountCard({ primary = false }: { primary?: boolean } = {
         fields={
           <>
             <label className="mb-3 block">
-              <span className={LABEL_CLASS}>Account name (required, unique per tenant)</span>
+              <span className={LABEL_CLASS}>Account name (required, unique among your company's accounts)</span>
               <input
                 type="text"
                 required

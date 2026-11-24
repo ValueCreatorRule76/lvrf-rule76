@@ -368,7 +368,7 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
       .then((j) => setRows(j.evidence as Row[]), () => setRows('error'));
   }, [institutionId]);
   useEffect(load, [load]);
-  const steward = (act: string) => (actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`);
+  const steward = (act: string) => (actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`);
   if (rows === null) return <p className="m-0 text-[12.5px] text-ink-45">Reading the evidence…</p>;
   if (rows === 'error') return <p className="m-0 text-[12.5px] text-critical">Couldn&apos;t read the evidence.</p>;
   // Steward safety (Brad, 5 Nov 2026): the current rows first; superseded rows under a collapsed History.

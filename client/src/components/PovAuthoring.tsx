@@ -312,7 +312,7 @@ export function SummaryItem({ s }: { s: ExecutiveSummary }) {
 }
 
 function stewardReason(act: string, actor: ReturnType<typeof useActor>['actor']): string | undefined {
-  return actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the tenant's steward"}'s alone.`;
+  return actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
 }
 
 function ReferenceMarkerForm({ pov, current, mode, onChanged }: { pov: Pov; current: ReferenceMarker | null; mode: 'mark' | 'correct' | 'unmark'; onChanged: (notice?: string) => void }) {

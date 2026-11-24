@@ -4,7 +4,7 @@
 //
 //   node scripts/check_plain_words.mjs [--root DIR]
 //
-// What it reads:
+// What it reads (and, in client strings only, the internal word "tenant"):
 //   client/src/**/*.ts(x)  every string literal and every JSX text run, comments stripped (data-testid and className
 //                          values, imports and identifiers never print, so they are not read);
 //   server/**/*.ts         every string literal outside comments (messages, refusals, asks, credit lines, findings),
@@ -18,6 +18,9 @@ import { join, relative } from 'node:path';
 
 const ROOT = process.argv.includes('--root') ? process.argv[process.argv.indexOf('--root') + 1] : process.cwd();
 export const PLAN_CODE = /§|LVRF_PLAN|AMENDMENT-\d|HEARTBEAT-REGISTER|\b(?:SS?[1-9]|B[1-9]|L\d{1,3}|C[1-9]b?|O-D\d+|O\d-D\d+|D\d{1,2}|P\d{1,2})\b/;
+// §29 (Brad, 24 Nov 2026): "tenant" is an internal word; no client string a page shows says it (the person's own company is
+// "your own company", its steward "the steward").
+export const INTERNAL_WORD = /\btenants?\b/i;
 
 const walk = (dir, ext) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
@@ -39,8 +42,8 @@ function stripJsComments(src) {
   return out;
 }
 const hits = [];
-const hit = (file, src, idx, text, where) => {
-  const m = text.match(PLAN_CODE);
+const hit = (file, src, idx, text, where, client = false) => {
+  const m = text.match(PLAN_CODE) ?? (client ? text.match(INTERNAL_WORD) : null);
   if (m) hits.push(`${relative(ROOT, file)}:${lineOf(src, idx)}  [${m[0]}]  (${where})  ${text.replace(/\s+/g, ' ').trim().slice(0, 160)}`);
 };
 
@@ -57,10 +60,11 @@ for (const [dir, jsx] of [['client/src', true], ['server', false]]) {
       if (/console\.(error|warn|log|info)\(\s*$/.test(src.slice(Math.max(0, m.index - 40), m.index))) continue;  // the server's own log
       if (/\bcode:\s*$/.test(src.slice(Math.max(0, m.index - 12), m.index))) continue;  // a finding's id (D0-D4, F1-F4): sealed, printed as an id
       if (!jsx) t = t.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');  // SQL comment lines in a query
-      hit(f, src, m.index, t, 'string');
+      hit(f, src, m.index, t, 'string', jsx);
     }
     // JSX text: a run between tags with no code in it (no ";", "=", "//" or a call).
-    if (jsx) for (const m of src.matchAll(/>([^<>{}]*[A-Za-z§][^<>{}]*)</g)) if (!/[;=]|\/\/|\w\(/.test(m[1])) hit(f, src, m.index, m[1], 'JSX text');
+    // An HTML entity (&apos;, &ldquo;) is text, not code: read as a space before the code test (§29: it hid a run).
+    if (jsx) for (const m of src.matchAll(/>([^<>{}]*[A-Za-z§][^<>{}]*)</g)) { const t = m[1].replace(/&[a-z]+;|&#\d+;/g, ' '); if (!/[;=]|\/\/|\w\(/.test(t)) hit(f, src, m.index, t, 'JSX text', true); }
   }
 }
 // hardening.sql: quoted literals outside "--" comments (RAISE messages included).

@@ -129,7 +129,7 @@ export function PoliciesPage() {
   useEffect(() => { load(); }, [load]);
   if (d === null) return <p className="p-8 text-ink-45">loading</p>;
   if (d === 'error') return <p className="p-8 text-ink-70">Couldn&apos;t load the policies. Reload the page to try again.</p>;
-  const notSteward = actor?.is_steward ? undefined : `Only the steward (${actor?.steward_name ?? 'the tenant’s steward'}) sets these.`;
+  const notSteward = actor?.is_steward ? undefined : `Only the steward (${actor?.steward_name ?? 'the steward'}) sets these.`;
   const cfo = d.lenses.find((l) => l.persona === 'cfo' && l.current);
   return (
     <div className="mx-auto max-w-4xl px-4 pb-14 pt-6 sm:px-[30px]" data-testid="policies">

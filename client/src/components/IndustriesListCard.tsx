@@ -37,7 +37,7 @@ export function IndustriesListCard() {
     return (
       <Card n="00" title="Industries">
         <p className="m-0 text-[12.5px] text-ink-45">
-          Sign in to see this tenant's industries.
+          Sign in to see your company's industries.
         </p>
       </Card>
     );
@@ -64,7 +64,7 @@ export function IndustriesListCard() {
   return (
     <Card n="00" title="Industries" badge={<Badge tone="neutral">{industries.length}</Badge>}>
       {industries.length === 0 ? (
-        <p className="m-0 text-[12.5px] text-ink-45">No industries recorded for this tenant.</p>
+        <p className="m-0 text-[12.5px] text-ink-45">No industries recorded for your company.</p>
       ) : (
         <ul className="m-0 list-none p-0">
           {industries.map((ind) => (
@@ -104,7 +104,7 @@ const INPUT = 'w-full border border-rule bg-white px-2.5 py-1.5 text-[13px] text
 function AddIndustry({ stewardName, isSteward, onAdded }: { stewardName: string | null; isSteward: boolean; onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [v, setV] = useState({ name: '', slug: '', reason: '' });
-  const notSteward = isSteward ? undefined : `Adding an industry is the steward's act — ${stewardName ?? "the tenant's steward"}'s alone.`;
+  const notSteward = isSteward ? undefined : `Adding an industry is the steward's act — ${stewardName ?? "the steward"}'s alone.`;
   if (!open) {
     return (
       <div className="mt-3">
@@ -121,7 +121,7 @@ function AddIndustry({ stewardName, isSteward, onAdded }: { stewardName: string 
     <div className="mt-3 border-t border-rule-soft pt-3" data-testid="add-industry">
       <GovernedForm<{ industry_id: string }>
         path="/api/industries" provenanceLabel="What this records" disabledReason={notSteward}
-        provenance={<p className="m-0 text-[12.5px] text-ink">An industry of this tenant, by you, with your reason. It has no measures until research adds them. It cannot be deleted.</p>}
+        provenance={<p className="m-0 text-[12.5px] text-ink">An industry of your company, by you, with your reason. It has no measures until research adds them. It cannot be deleted.</p>}
         fields={<div className="flex flex-col gap-3">
           <label className="block"><span className={LABEL}>Name</span><input className={INPUT} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></label>
           <label className="block"><span className={LABEL}>Slug</span><input className={INPUT} value={v.slug} onChange={(e) => setV({ ...v, slug: e.target.value })} /></label>

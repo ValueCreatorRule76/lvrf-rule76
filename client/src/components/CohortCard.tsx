@@ -122,7 +122,7 @@ export function CohortCard({ n, detail = false }: { n: string; detail?: boolean 
     <Card n={n} title={detail ? 'Book confidence: each member and each industry' : 'Book confidence — weakest link'}>
       {!actor ? (
         <p className="m-0 text-[12.5px] text-ink-45">
-          Sign in — the roll-up is scoped to the signed-in person's tenant.
+          Sign in — the roll-up is scoped to the signed-in person's own company.
         </p>
       ) : !result ? (
         <p className="m-0 text-[12.5px] text-ink-45">loading</p>
