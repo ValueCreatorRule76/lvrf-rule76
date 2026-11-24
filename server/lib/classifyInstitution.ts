@@ -119,7 +119,7 @@ export async function classifyInstitution(
       ok: false,
       status: 404,
       tenantId,
-      message: `industry_slug unknown for this tenant: ${industrySlug}`,
+      message: `industry_slug unknown for your company: ${industrySlug}`,
     };
   }
 

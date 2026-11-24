@@ -1,3 +1,4 @@
+import { screenMessages } from './lib/screenMessage.js';
 import './env.js';
 
 import express from 'express';
@@ -90,6 +91,8 @@ if (actorHeader === 'on') {
 app.use(requestLog(app));
 // P2 (P2-D5): a research import's body may be larger (lib/jsonBodies.ts).
 app.use(jsonBodies());
+// §30 D4: a hardening message's "LVRF: <table>:" prefix leaves the screen (the record keeps it).
+app.use(screenMessages());
 // Every mutating /api request, sign-in included: JSON only, and no
 // cross-site or foreign-origin write (lib/origin.ts).
 app.use('/api', originGuard(origins));

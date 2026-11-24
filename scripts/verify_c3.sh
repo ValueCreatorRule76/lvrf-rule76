@@ -246,7 +246,7 @@ expect POST "$(CR "$INST2")" "$(J person_id "$OWNER2" role metric_owner reason '
 expect POST "$(CR "$INST2")" "$(GR "$OWNER2" chief_of_staff)" 422 "an unknown role" "the metric owner or the executive sponsor"
 expect POST "$(CR "$INST1")" "$(GR "$ANALYST" metric_owner "$EV3")" 422 "the analyst of record (titled external analyst)" "is an analyst of record or external"
 expect POST "$(CR "$INST2")" "$(GR "$X")" 422 "tenant staff (X)" "is vendor-side"
-expect POST "$(CR "$INST2")" "$(GR "$SIGNER")" 422 "a person with sign-in credentials" "is vendor-side (tenant staff, a vendor-side role, or sign-in credentials)"
+expect POST "$(CR "$INST2")" "$(GR "$SIGNER")" 422 "a person with sign-in credentials" "is vendor-side (your company's staff, a vendor-side role, or sign-in credentials)"
 expect POST "$(CR "$INST2")" "$(GR "$S")" 422 "the steward themself" "the steward does not name a customer-side role for themself"
 expect POST "$(CR "$INST2")" "$(GR "$SIMP")" 422 "a simulated person" "a simulated person holds no customer-side role"
 expect POST "$(CR "$INST2")" "$(GR "$OWNER1")" 422 "a person of another account" "is not a person of this account"
@@ -399,7 +399,7 @@ ITEMS="evidence|$EV_TEST,value_runs|$R2B" NOTE_evidence="$SEX_NOTE" NOTE_value_r
 MK="$(q "SELECT id FROM system_exercise_marks WHERE subject_id = '$EV_TEST'")"
 sqlrefused "an UPDATE of a mark" "UPDATE system_exercise_marks SET reason = reason WHERE id = '$MK'" "is final"
 sqlrefused "a DELETE of a mark" "DELETE FROM system_exercise_marks WHERE id = '$MK'" "never deleted"
-sqlrefused "a mark by X, at the database" "INSERT INTO system_exercise_marks (tenant_id, subject_table, subject_id, reason, marked_by_person_id) VALUES ('$TEN', 'value_runs', '$R2', 'Entered to exercise the system, not as case evidence; its own note reads: ''a note long enough''', '$X')" "only the tenant's steward marks" "$X"
+sqlrefused "a mark by X, at the database" "INSERT INTO system_exercise_marks (tenant_id, subject_table, subject_id, reason, marked_by_person_id) VALUES ('$TEN', 'value_runs', '$R2', 'Entered to exercise the system, not as case evidence; its own note reads: ''a note long enough''', '$X')" "only the steward marks" "$X"
 RUN="$R2B" PDF=c3_run_marked.pdf cw run_marked
 pages() {  # PDF NEEDLE_EVERY NEEDLE_PAGE1 LABEL [no]
   local n p miss="" flat; n="$(pdfinfo "$1" 2>/dev/null | awk '/^Pages:/{print $2}')"

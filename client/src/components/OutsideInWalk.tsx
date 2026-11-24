@@ -303,7 +303,7 @@ export function OutsideInWalk({ institutionId, onChanged, onStatus, targets, pri
 
   const { claims, eng, outcome, lockedRun, openRun, s1, s2, s3, s4, s5, s6, s7, s8, s9 } = deriveWalk(w);
   const pr = (sid: string, st: StepState) => Boolean(primaryFor?.includes(sid)) && st === 'next';
-  const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone (3.0 Band A).`;
+  const stewardReason = actor?.is_steward ? undefined : `Retiring an engagement is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
 
   // Who may own a capability or an engagement here: the analyst of record
   // (linked staff) and the account's own people.

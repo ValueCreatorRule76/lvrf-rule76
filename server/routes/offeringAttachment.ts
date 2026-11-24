@@ -108,7 +108,7 @@ export function offeringAttachmentRouter(pool: Pool): Router {
       );
       if (!offering) {
         res.status(422).json({
-          message: `offering_key not found for this tenant: ${offeringKey}`,
+          message: `offering_key not found for your company: ${offeringKey}`,
         });
         return;
       }

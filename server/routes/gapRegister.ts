@@ -1,3 +1,4 @@
+import { screenMessage } from '../lib/screenMessage.js';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
@@ -520,7 +521,7 @@ export function gapRegisterRouter(pool: Pool): Router {
             const supports = f.factor === 'baseline_evidence_verified' ? 'baseline' : 'actual';
             const refusal = await findEvidenceRefusal(pool, vo.id, supports);
             state = refusal
-              ? { state: 'refused', refusalMessage: refusal.message, refusedAt: refusal.refused_at.toISOString() }
+              ? { state: 'refused', refusalMessage: screenMessage(refusal.message), refusedAt: refusal.refused_at.toISOString() }
               : alwaysOpen();
           } else {
             // metric_definition_confirmed's three gaps, both

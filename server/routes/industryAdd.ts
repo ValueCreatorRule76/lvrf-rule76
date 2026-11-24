@@ -37,7 +37,7 @@ export function industryAddRouter(pool: Pool): Router {
       if (reason.length < MIN_REASON) throw new Refusal(422, `Say why it is added, in at least ${MIN_REASON} characters.`);
       const { rows: taken } = await client.query<{ name: string; slug: string }>(
         'SELECT name, slug FROM industries WHERE tenant_id = $1 AND (slug = $2 OR lower(name) = lower($3))', [tenantId, slug, name]);
-      if (taken.length > 0) throw new Refusal(409, `This tenant already has "${taken[0].name}" (${taken[0].slug}).`);
+      if (taken.length > 0) throw new Refusal(409, `Your company already has "${taken[0].name}" (${taken[0].slug}).`);
       const { rows: [row] } = await client.query<{ id: string }>(
         'INSERT INTO industries (tenant_id, name, slug) VALUES ($1, $2, $3) RETURNING id', [tenantId, name, slug]);
       await recordAct(client, req, 'POST /api/industries', { act: 'add_industry', tenantId, subjectTable: 'industries', subjectId: row.id, reason });

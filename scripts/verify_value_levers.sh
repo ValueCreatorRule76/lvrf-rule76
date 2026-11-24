@@ -258,7 +258,7 @@ step "8. Solutions: POST /api/value-levers/:id/offerings (steward)"
 LO() { printf '{"offering_key":"%s","basis":"%s"}' "$1" "${2:-Hazard-recognition courses train exactly this behaviour.}"; }
 expect POST "/api/value-levers/$LEVER/offerings" "$(LO skillsoft_compliance_suite)" 403 "a non-steward" "Linking a solution to a lever is the steward's act" "$X"
 expect POST "/api/value-levers/$LEVER_X/offerings" "$(LO skillsoft_compliance_suite)" 404 "another tenant's lever" "value lever $LEVER_X not found"
-expect POST "/api/value-levers/$LEVER/offerings" "$(LO no_such_offering)" 422 "an offering not in the catalog" "is not a current offering in this tenant's catalog"
+expect POST "/api/value-levers/$LEVER/offerings" "$(LO no_such_offering)" 422 "an offering not in the catalog" "is not a current offering in your company's catalog"
 expect POST "/api/value-levers/$LEVER/offerings" "$(LO skillsoft_compliance_suite 'it helps')" 422 "a basis under 12 characters" "in at least 12 characters"
 AUD1="$(q "SELECT coalesce(max(id), 0) FROM audit_log")"
 expect POST "/api/value-levers/$LEVER/offerings" "$(LO skillsoft_compliance_suite)" 201 "the steward links the compliance suite"
@@ -304,11 +304,11 @@ sqlrefused "DELETE a link" "DELETE FROM lever_offerings WHERE id = '$LINK'" "lev
 sqlrefused "DELETE a lever" "DELETE FROM value_levers WHERE id = '$LEVER'" "value_levers"
 sqlrefused "edit a link's basis (append-only)" "UPDATE lever_offerings SET basis = 'A rewritten basis, after the fact.' WHERE id = '$LINK'" "only the withdrawal may be written after a link is made"
 sqlrefused "amend a withdrawn link" "UPDATE lever_offerings SET retirement_reason = 'A different reason, later.' WHERE id = '$LINK2'" "is already withdrawn; a withdrawal is not amended"
-sqlrefused "a link withdrawn by a non-steward" "UPDATE lever_offerings SET retired_at = now(), retired_by_person_id = '$X', retirement_reason = 'Verification: by X directly.' WHERE id = '$LINK'" "only the tenant's steward may withdraw a link"
-sqlrefused "a lever proposed by a non-steward" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$E1', 'y', 'A mechanism long enough.', 'x', 'Verification citation.', '$X')" "only the tenant's steward may propose a lever"
-sqlrefused "a lever whose tenant is not its entry's" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$M_X', 'y', 'A mechanism long enough.', 'x', 'Verification citation.', '$S')" "a lever's tenant is its pack entry's"
-sqlrefused "a link made by a non-steward" "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id) SELECT '$TEN', '$LEVER', id, 'A basis long enough.', '$X' FROM offerings WHERE tenant_id = '$TEN' AND offering_key = 'skillsoft_percipio_platform'" "only the tenant's steward may link a solution"
-sqlrefused "a lever withdrawn by a non-steward" "UPDATE value_levers SET deleted_at = now(), status = 'retired', retired_by_person_id = '$X', retirement_reason = 'Verification: by X directly.' WHERE id = '$LEVER'" "only the tenant's steward may withdraw a lever"
+sqlrefused "a link withdrawn by a non-steward" "UPDATE lever_offerings SET retired_at = now(), retired_by_person_id = '$X', retirement_reason = 'Verification: by X directly.' WHERE id = '$LINK'" "only the steward may withdraw a link"
+sqlrefused "a lever proposed by a non-steward" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$E1', 'y', 'A mechanism long enough.', 'x', 'Verification citation.', '$X')" "only the steward may propose a lever"
+sqlrefused "a lever whose tenant is not its entry's" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$M_X', 'y', 'A mechanism long enough.', 'x', 'Verification citation.', '$S')" "This lever's pack entry ("
+sqlrefused "a link made by a non-steward" "INSERT INTO lever_offerings (tenant_id, value_lever_id, offering_id, basis, linked_by_person_id) SELECT '$TEN', '$LEVER', id, 'A basis long enough.', '$X' FROM offerings WHERE tenant_id = '$TEN' AND offering_key = 'skillsoft_percipio_platform'" "only the steward may link a solution"
+sqlrefused "a lever withdrawn by a non-steward" "UPDATE value_levers SET deleted_at = now(), status = 'retired', retired_by_person_id = '$X', retirement_reason = 'Verification: by X directly.' WHERE id = '$LEVER'" "only the steward may withdraw a lever"
 sqlrefused "a lever 'withdrawn' with no who or why" "UPDATE value_levers SET deleted_at = now(), status = 'retired' WHERE id = '$LEVER'" "value_levers_retirement_is_complete"
 sqlrefused "a lever with an 11-character mechanism" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$E1', 'y', 'eleven char', 'x', 'Verification citation.', '$S')" "value_levers_stated"
 sqlrefused "a lever with no citation" "INSERT INTO value_levers (tenant_id, industry_measure_id, name, mechanism, leading_indicator, citation, proposed_by_person_id) VALUES ('$TEN', '$E1', 'y', 'A mechanism long enough.', 'x', ' ', '$S')" "value_levers_stated"
@@ -386,7 +386,7 @@ import sys; p = sys.argv[1]; s = open(p).read(); a = "if (!m || isOtherTenant(re
 assert s.count(a) == 1; open(p, 'w').write(s.replace(a, "if (!m) {"))
 PY
 start_server
-expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3)')" 422 "B3: without the route's tenant check, the DATABASE refuses the cross-tenant lever (a 422 that names the other tenant's entry, where the route answers 404)" "only the tenant's steward may propose a lever"
+expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3)')" 422 "B3: without the route's tenant check, the DATABASE refuses the cross-tenant lever (a 422 that names the other tenant's entry, where the route answers 404)" "only the steward may propose a lever"
 [ "$(q "SELECT count(*) FROM value_levers WHERE industry_measure_id = '$M_X' AND name LIKE 'Cross-tenant%'")" = "0" ] && ok "  ...nothing written" || bad "  ...a cross-tenant lever was written"
 restore "$ROUTE"; stop_server; start_server
 expect POST "/api/industry-measures/$M_X/levers" "$(LV 'Cross-tenant lever (B3, again)')" 404 "  ...restored: 404 again"

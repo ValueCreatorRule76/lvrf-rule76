@@ -4,7 +4,8 @@
 //
 //   node scripts/check_plain_words.mjs [--root DIR]
 //
-// What it reads (and, in client strings only, the internal word "tenant"):
+// What it reads (and the internal word "tenant": in client strings, §29; in server and database strings that can reach
+// the screen, §30, NOT_ON_SCREEN and OPERATOR_ONLY_TABLES naming what is out and why):
 //   client/src/**/*.ts(x)  every string literal and every JSX text run, comments stripped (data-testid and className
 //                          values, imports and identifiers never print, so they are not read);
 //   server/**/*.ts         every string literal outside comments (messages, refusals, asks, credit lines, findings),
@@ -17,10 +18,21 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = process.argv.includes('--root') ? process.argv[process.argv.indexOf('--root') + 1] : process.cwd();
-export const PLAN_CODE = /§|LVRF_PLAN|AMENDMENT-\d|HEARTBEAT-REGISTER|\b(?:SS?[1-9]|B[1-9]|L\d{1,3}|C[1-9]b?|O-D\d+|O\d-D\d+|D\d{1,2}|P\d{1,2})\b/;
+// §30 D2 (Brad, 24 Nov 2026): and "D-M" decision codes and "Band A–E" (with or without "3.0").
+export const PLAN_CODE = /§|LVRF_PLAN|AMENDMENT-\d|HEARTBEAT-REGISTER|\bD-M\d+|\b(?:\d\.\d )?Band [A-E]\b|\b(?:SS?[1-9]|B[1-9]|L\d{1,3}|C[1-9]b?|O-D\d+|O\d-D\d+|D\d{1,2}|P\d{1,2})\b/;
 // §29 (Brad, 24 Nov 2026): "tenant" is an internal word; no client string a page shows says it (the person's own company is
 // "your own company", its steward "the steward").
 export const INTERNAL_WORD = /\btenants?\b/i;
+// §30 D1 (Brad, 24 Nov 2026): and no server or database string that can reach the screen. Out, each for its reason (a
+// string not listed here is in scope):
+export const NOT_ON_SCREEN = [
+  ['server/seed/', 'the seeds run from the command line only'],
+  ['server/spine/', 'sealed text: the confidence models\' notes, the findings model and the drift reasons are sealed into runs and recomputed by check_run_hashes; heartbeat ids are record ids'],
+];
+// hardening.sql: RAISE messages are read for the word; these tables' guards are reached by scripts only, never a route.
+export const OPERATOR_ONLY_TABLES = [['access_grants', 'granted and revoked by scripts/grant_access.ts and revoke_access.ts only']];
+// A literal that is one identifier ('tenant', 'tenants') is a value or a table name, never words a page shows.
+const IDENTIFIER = /^[A-Za-z_]+$/;
 
 const walk = (dir, ext) => readdirSync(dir).flatMap((n) => {
   const p = join(dir, n);
@@ -42,8 +54,8 @@ function stripJsComments(src) {
   return out;
 }
 const hits = [];
-const hit = (file, src, idx, text, where, client = false) => {
-  const m = text.match(PLAN_CODE) ?? (client ? text.match(INTERNAL_WORD) : null);
+const hit = (file, src, idx, text, where, word = false) => {
+  const m = text.match(PLAN_CODE) ?? (word && !IDENTIFIER.test(text.trim()) ? text.match(INTERNAL_WORD) : null);
   if (m) hits.push(`${relative(ROOT, file)}:${lineOf(src, idx)}  [${m[0]}]  (${where})  ${text.replace(/\s+/g, ' ').trim().slice(0, 160)}`);
 };
 
@@ -60,7 +72,7 @@ for (const [dir, jsx] of [['client/src', true], ['server', false]]) {
       if (/console\.(error|warn|log|info)\(\s*$/.test(src.slice(Math.max(0, m.index - 40), m.index))) continue;  // the server's own log
       if (/\bcode:\s*$/.test(src.slice(Math.max(0, m.index - 12), m.index))) continue;  // a finding's id (D0-D4, F1-F4): sealed, printed as an id
       if (!jsx) t = t.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');  // SQL comment lines in a query
-      hit(f, src, m.index, t, 'string', jsx);
+      hit(f, src, m.index, t, 'string', jsx || !NOT_ON_SCREEN.some(([d]) => relative(ROOT, f).startsWith(d)));
     }
     // JSX text: a run between tags with no code in it (no ";", "=", "//" or a call).
     // An HTML entity (&apos;, &ldquo;) is text, not code: read as a space before the code test (§29: it hid a run).
@@ -72,7 +84,15 @@ for (const [dir, jsx] of [['client/src', true], ['server', false]]) {
   const f = join(ROOT, 'db/hardening.sql');
   const raw = readFileSync(f, 'utf8');
   const src = raw.split('\n').map((l) => { const i = l.indexOf('--'); return i >= 0 && (l.slice(0, i).match(/'/g) ?? []).length % 2 === 0 ? l.slice(0, i) + ' '.repeat(l.length - i) : l; }).join('\n');
-  for (const m of src.matchAll(/'(?:[^']|'')*'/g)) hit(f, src, m.index, m[0].slice(1, -1), 'database');
+  for (const m of src.matchAll(/'(?:[^']|'')*'/g)) {
+    const t = m[0].slice(1, -1);
+    // §30 D1: the word in a RAISE message (what a route can return), but not an operator-only table's.
+    // Inside a RAISE statement: after its RAISE EXCEPTION, with no statement end (";" outside quotes) between.
+    const r = src.lastIndexOf('RAISE EXCEPTION', m.index);
+    const inRaise = r >= 0 && !src.slice(r, m.index).replace(/'(?:[^']|'')*'/g, '').includes(';');
+    const raise = inRaise && !OPERATOR_ONLY_TABLES.some(([tb]) => t.startsWith(`LVRF: ${tb}:`));
+    hit(f, src, m.index, t, 'database', raise);
+  }
 }
 
 for (const h of hits) console.log(`HIT  ${h}`);

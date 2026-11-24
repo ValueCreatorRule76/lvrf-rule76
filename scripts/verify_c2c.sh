@@ -170,7 +170,7 @@ expect POST "$(WD "$O" "$(q "SELECT gen_random_uuid()")")" "$(J reason 'Verifica
 # B8 — the route's steward check removed: the database refuses X.
 edit "$CORR" "  router.post('/:outcomeId/evidence/:evidenceId/withdraw', requireSteward(pool), async" "  router.post('/:outcomeId/evidence/:evidenceId/withdraw', async"
 stop_server; start_server
-expect POST "$(WD "$O" "$EV_T")" "$(J reason 'Verification: B8, X withdraws it.')" 422 "B8: without the route's check, X's withdrawal → the database refuses" "only the tenant's steward withdraws a link" "$X"
+expect POST "$(WD "$O" "$EV_T")" "$(J reason 'Verification: B8, X withdraws it.')" 422 "B8: without the route's check, X's withdrawal → the database refuses" "only the steward withdraws a link" "$X"
 restore "$CORR"
 # B9 — the route's act removed: the deferred act check refuses the commit.
 python3 - "$CORR" <<'PY'

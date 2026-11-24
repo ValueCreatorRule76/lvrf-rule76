@@ -408,7 +408,7 @@ expect POST "$(OC "$R2")" "$NO" 200 "271a449a opened: not supported, so it stops
 expect POST "$(OC "$R1")" '{"source_verified":true}' 409 "a row under a finding: its opening refused" "no source on record"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason short)" 422 "a withdrawal with no reason: refused" "at least 12"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: no source exists to open.')" 403 "not the steward: refused" "" "$X"
-sqlapp "  ...at the database, not the steward" "SELECT set_config('lvrf.actor_person_id', '$X', true); UPDATE evidence SET source_verified = false WHERE id = '$R1'" "only the tenant's steward"
+sqlapp "  ...at the database, not the steward" "SELECT set_config('lvrf.actor_person_id', '$X', true); UPDATE evidence SET source_verified = false WHERE id = '$R1'" "only the steward"
 expect POST "/api/evidence/$R1/withdraw-verification" "$(J reason 'Verification: no source exists to open.')" 200 "1632a5e0 withdrawn"
 expect POST "/api/evidence/$RF/withdraw-verification" "$(J reason 'Verification: it supports nothing now.')" 200 "f9775317 withdrawn"
 [ "$(q "SELECT count(*) FROM evidence WHERE source_verified AND NOT citation_resolved")" = "0" ] && ok "no row is verified with no opening" || bad "rows remain"

@@ -91,7 +91,7 @@ export function analystOfRecordRouter(pool: Pool): Router {
         `SELECT full_name FROM persons WHERE id = $1 AND tenant_id = $2 AND NOT simulated AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [personId, tenantId],
       );
-      if (!p) throw new ValidationError([`body.person_id ${personId} is not a current member of this tenant's staff (a customer's people belong to the account directly: add them as persons)`]);
+      if (!p) throw new ValidationError([`body.person_id ${personId} is not a current member of your company's staff (a customer's people belong to the account directly: add them as persons)`]);
       const { rows: [dup] } = await client.query(
         `SELECT 1 FROM account_person_links WHERE institution_id = $1 AND person_id = $2 AND role = 'analyst_of_record' AND retired_at IS NULL`,
         [institutionId, personId],

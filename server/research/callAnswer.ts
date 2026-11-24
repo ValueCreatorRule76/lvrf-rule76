@@ -35,7 +35,7 @@ export async function readCallAnswer(client: PoolClient | Pool, reqBody: unknown
       WHERE id = $1 AND kind = 'result' AND tenant_id = $2`,
     [callId, tenantId],
   );
-  if (!r) throw new ImportTextError([`research call ${callId} is not an answered call of this tenant`], { call_id: callId });
+  if (!r) throw new ImportTextError([`research call ${callId} is not an answered call of your company`], { call_id: callId });
   if (r.outcome !== 'answered' || r.answer_text === null) {
     throw new ImportTextError([`research call ${callId.slice(0, 8)} ended "${r.outcome}"; there is no answer to import. Copy the prompt and run it yourself, or generate a new prompt.`], { call_id: callId });
   }

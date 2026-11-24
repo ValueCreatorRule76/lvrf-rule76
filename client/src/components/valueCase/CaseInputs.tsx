@@ -147,7 +147,7 @@ export function CaseInputs({ vc, actorIsSteward, stewardName, onDone, actorName 
           <PlanMilestone vc={vc} onDone={onDone} recorderName={actorName ?? null} />
         </div>
       </Card>
-      <Card title="Share for review (D-M21)">
+      <Card title="Share for review">
         <ShareForReview vc={vc} notSteward={notSteward} onDone={onDone} />
       </Card>
     </div>

@@ -175,7 +175,7 @@ export function leverOfferingRouter(pool: Pool): Router {
         `SELECT id, name FROM offerings WHERE tenant_id = $1 AND offering_key = $2 AND deleted_at IS NULL AND superseded_by_id IS NULL`,
         [lever.tenant_id, offeringKey],
       );
-      if (!offering) throw new ValidationError([`body.offering_key "${offeringKey}" is not a current offering in this tenant's catalog`]);
+      if (!offering) throw new ValidationError([`body.offering_key "${offeringKey}" is not a current offering in your company's catalog`]);
       const { rows: [dup] } = await client.query(
         'SELECT 1 FROM lever_offerings WHERE value_lever_id = $1 AND offering_id = $2 AND retired_at IS NULL', [leverId, offering.id],
       );

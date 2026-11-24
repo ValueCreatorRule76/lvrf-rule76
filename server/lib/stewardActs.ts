@@ -193,7 +193,7 @@ export function requireSteward(pool: Pool) {
           code: 'steward_only',
           message: steward
             ? `${act} is the steward's act (${steward.full_name}).`
-            : `${act} is the steward's act, and this tenant has no steward named.`,
+            : `${act} is the steward's act, and your company has no steward named.`,
         });
       })
       .catch(next);

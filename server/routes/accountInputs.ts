@@ -190,12 +190,12 @@ export function accountInputsRouter(pool: Pool): Router {
         );
         if (existing.length === 0) {
           res.status(409).json({
-            message: `An institution named "${institutionName}" already exists for this tenant, but is retired or superseded and not currently active — the naming conflict cannot be resolved to a current institution.`,
+            message: `An institution named "${institutionName}" already exists for your company, but is retired or superseded and not currently active — the naming conflict cannot be resolved to a current institution.`,
           });
           return;
         }
         res.status(409).json({
-          message: `An institution named "${institutionName}" already exists for this tenant.`,
+          message: `An institution named "${institutionName}" already exists for your company.`,
           institution_id: existing[0].id,
         });
         return;

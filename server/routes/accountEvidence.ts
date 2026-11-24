@@ -169,7 +169,7 @@ async function planItem(client: PoolClient, item: Record<string, unknown>, req: 
             e.evidence_form::text, e.quote_text, e.locator, e.how_read, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id,
             lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about, e.about_institution_id, e.about_other_party
        FROM evidence e JOIN institutions i ON i.id = e.institution_id WHERE e.id = $1 ${lock ? 'FOR UPDATE OF e' : ''}`, [id]);
-  if (!e || isOtherTenant(req, e.tenant_id, { table: 'evidence', id })) return refused('That is not an evidence row of this tenant.');
+  if (!e || isOtherTenant(req, e.tenant_id, { table: 'evidence', id })) return refused('That is not an evidence row of your company.');
   const blockers: string[] = [];
   let next: { aboutInstitutionId: string | null; aboutOtherParty: string | null } | null = null;
   let nextAbout: string | null = null;
@@ -243,7 +243,7 @@ async function planErratum(client: PoolClient, item: Record<string, unknown>, re
     `SELECT x.id, x.tenant_id, x.value_run_id, x.value_outcome_id, x.evidence_id, x.corrected_to_supports, x.kind, r.run_number, g.name AS engagement, x.what_was_wrong, x.what_is_right, x.reason, r.payload,
             EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id) AS superseded
        FROM run_errata x JOIN value_runs r ON r.id = x.value_run_id JOIN engagements g ON g.id = r.engagement_id WHERE x.id = $1`, [id]);
-  if (!x || isOtherTenant(req, x.tenant_id, { table: 'run_errata', id })) return { erratum_id: id, blockers: ['That is not an erratum of this tenant.'] };
+  if (!x || isOtherTenant(req, x.tenant_id, { table: 'run_errata', id })) return { erratum_id: id, blockers: ['That is not an erratum of your company.'] };
   const text = (k: string, now: string) => (typeof item[k] === 'string' && (item[k] as string).trim() !== '' ? (item[k] as string).trim() : now);
   const next = { what_was_wrong: text('what_was_wrong', x.what_was_wrong), what_is_right: text('what_is_right', x.what_is_right), reason: text('reason', x.reason) };
   const why = typeof item.supersession_reason === 'string' ? item.supersession_reason.trim() : '';

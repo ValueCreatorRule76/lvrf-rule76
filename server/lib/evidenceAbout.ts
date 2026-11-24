@@ -28,6 +28,6 @@ export async function parseAbout(client: PoolClient, about: unknown, ownInstitut
   }
   const { rows: [found] } = await client.query<{ id: string }>(
     `SELECT id FROM institutions WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [String(a.institution_id), tenantId]);
-  if (!found) throw new EvidenceFormError('The account named as what this evidence is about is not an account of this tenant.');
+  if (!found) throw new EvidenceFormError('The account named as what this evidence is about is not one of your company\'s accounts.');
   return { aboutInstitutionId: found.id, aboutOtherParty: null };
 }

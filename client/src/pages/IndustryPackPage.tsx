@@ -41,7 +41,7 @@ function RetireEntry({ measure, onRetired }: { measure: IndustryMeasure; onRetir
   const [reason, setReason] = useState('');
   const stewardReason = actor?.is_steward
     ? undefined
-    : `This is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone (3.0 Band A).`;
+    : `This is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`;
   if (!open) {
     return (
       <div className="mt-3 border-l-[3px] border-warning pl-3" data-testid="danger-zone">

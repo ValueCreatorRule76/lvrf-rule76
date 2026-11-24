@@ -1310,11 +1310,11 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     SELECT tenant_id INTO entry_tenant FROM industry_measures WHERE id = NEW.industry_measure_id;
     IF entry_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: value_levers: a lever''s tenant is its pack entry''s (entry % is not of tenant %).', NEW.industry_measure_id, NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: value_levers: This lever''s pack entry (%) is not in your company''s record.', NEW.industry_measure_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
     END IF;
     IF steward IS NULL OR NEW.proposed_by_person_id IS DISTINCT FROM steward THEN
-      RAISE EXCEPTION 'LVRF: value_levers: only the tenant''s steward may propose a lever (proposed_by % is not the steward).', NEW.proposed_by_person_id
+      RAISE EXCEPTION 'LVRF: value_levers: only the steward may propose a lever (proposed_by % is not the steward).', NEW.proposed_by_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
     END IF;
     IF NEW.deleted_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
@@ -1325,7 +1325,7 @@ BEGIN
   END IF;
   IF OLD.retired_by_person_id IS NULL AND NEW.retired_by_person_id IS NOT NULL
      AND (steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: value_levers: only the tenant''s steward may withdraw a lever (retired_by % is not the steward).', NEW.retired_by_person_id
+    RAISE EXCEPTION 'LVRF: value_levers: only the steward may withdraw a lever (retired_by % is not the steward).', NEW.retired_by_person_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_levers_steward_only';
   END IF;
   RETURN NEW;
@@ -1348,11 +1348,11 @@ BEGIN
     SELECT tenant_id INTO lever_tenant FROM value_levers WHERE id = NEW.value_lever_id;
     SELECT tenant_id INTO offering_tenant FROM offerings WHERE id = NEW.offering_id;
     IF lever_tenant IS DISTINCT FROM NEW.tenant_id OR offering_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: lever_offerings: a link''s tenant is its lever''s and its offering''s (tenant %).', NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: lever_offerings: This link''s lever or offering is not in your company''s record.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
     END IF;
     IF steward IS NULL OR NEW.linked_by_person_id IS DISTINCT FROM steward THEN
-      RAISE EXCEPTION 'LVRF: lever_offerings: only the tenant''s steward may link a solution to a lever (linked_by % is not the steward).', NEW.linked_by_person_id
+      RAISE EXCEPTION 'LVRF: lever_offerings: only the steward may link a solution to a lever (linked_by % is not the steward).', NEW.linked_by_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
     END IF;
     IF NEW.retired_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
@@ -1374,7 +1374,7 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
   END IF;
   IF steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward THEN
-    RAISE EXCEPTION 'LVRF: lever_offerings: only the tenant''s steward may withdraw a link (retired_by % is not the steward).', NEW.retired_by_person_id
+    RAISE EXCEPTION 'LVRF: lever_offerings: only the steward may withdraw a link (retired_by % is not the steward).', NEW.retired_by_person_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'lever_offerings_steward_only';
   END IF;
   RETURN NEW;
@@ -1586,7 +1586,7 @@ BEGIN
     END IF;
     SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
     IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: value_hypotheses: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the account % is not one of your company''s accounts.', NEW.institution_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
     END IF;
     SELECT vo.id, vo.institution_id, vo.capability_id, vo.deleted_at, vo.superseded_by_id,
@@ -1605,7 +1605,7 @@ BEGIN
     END IF;
     SELECT id, tenant_id, industry_measure_id, deleted_at, superseded_by_id INTO lev FROM value_levers WHERE id = NEW.value_lever_id;
     IF lev.id IS NULL OR lev.tenant_id IS DISTINCT FROM NEW.tenant_id OR lev.deleted_at IS NOT NULL OR lev.superseded_by_id IS NOT NULL THEN
-      RAISE EXCEPTION 'LVRF: value_hypotheses: lever % is not a current lever of this tenant.', NEW.value_lever_id
+      RAISE EXCEPTION 'LVRF: value_hypotheses: lever % is not a current lever of your company.', NEW.value_lever_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
     END IF;
     IF o.entry_id IS DISTINCT FROM lev.industry_measure_id THEN
@@ -1620,7 +1620,7 @@ BEGIN
     SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
       INTO author_ok FROM persons p WHERE p.id = NEW.author_person_id;
     IF NOT coalesce(author_ok, false) THEN
-      RAISE EXCEPTION 'LVRF: value_hypotheses: the author % is not current, non-simulated staff of the tenant.', NEW.author_person_id
+      RAISE EXCEPTION 'LVRF: value_hypotheses: the author % is not a current, real member of your company''s staff.', NEW.author_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'value_hypotheses_guard';
     END IF;
     IF o.verified_by_person_id IS NOT DISTINCT FROM NEW.author_person_id THEN
@@ -1739,11 +1739,11 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
     IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: reference_example_markers: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: reference_example_markers: the account % is not one of your company''s accounts.', NEW.institution_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
     END IF;
     IF steward IS NULL OR NEW.marked_by_person_id IS DISTINCT FROM steward THEN
-      RAISE EXCEPTION 'LVRF: reference_example_markers: only the tenant''s steward may mark a reference example (marked_by % is not the steward).', NEW.marked_by_person_id
+      RAISE EXCEPTION 'LVRF: reference_example_markers: only the steward may mark a reference example (marked_by % is not the steward).', NEW.marked_by_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
     END IF;
     IF NEW.deleted_at IS NOT NULL OR NEW.superseded_by_id IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL THEN
@@ -1767,7 +1767,7 @@ BEGIN
   END IF;
   IF OLD.retired_by_person_id IS NULL AND NEW.retired_by_person_id IS NOT NULL
      AND (steward IS NULL OR NEW.retired_by_person_id IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: reference_example_markers: only the tenant''s steward may unmark a reference example.'
+    RAISE EXCEPTION 'LVRF: reference_example_markers: only the steward may unmark a reference example.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'reference_example_markers_steward_only';
   END IF;
   RETURN NEW;
@@ -1811,13 +1811,13 @@ BEGIN
   END IF;
   SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
   IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: executive_summaries: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: executive_summaries: the account % is not one of your company''s accounts.', NEW.institution_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
   END IF;
   SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
     INTO author_ok FROM persons p WHERE p.id = NEW.author_person_id;
   IF NOT coalesce(author_ok, false) THEN
-    RAISE EXCEPTION 'LVRF: executive_summaries: the author % is not current, non-simulated staff of the tenant; a summary is written by a named person.', NEW.author_person_id
+    RAISE EXCEPTION 'LVRF: executive_summaries: the author % is not a current, real member of your company''s staff; a summary is written by a named person.', NEW.author_person_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'executive_summaries_guard';
   END IF;
   IF NEW.value_run_id IS NOT NULL AND NOT EXISTS (
@@ -1880,19 +1880,19 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
     IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: account_person_links: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: account_person_links: the account % is not one of your company''s accounts.', NEW.institution_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
     END IF;
     SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL AND p.superseded_by_id IS NULL)
       INTO ok FROM persons p WHERE p.id = NEW.person_id;
     IF NOT coalesce(ok, false) THEN
-      RAISE EXCEPTION 'LVRF: account_person_links: % is not current, non-simulated staff of the tenant; only the tenant''s own people are linked to an account (a customer''s people belong to it directly).', NEW.person_id
+      RAISE EXCEPTION 'LVRF: account_person_links: % is not a current, real member of your company''s staff; only your company''s own people are linked to an account (a customer''s people belong to it directly).', NEW.person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
     END IF;
     SELECT (p.tenant_id = NEW.tenant_id AND NOT p.simulated AND p.deleted_at IS NULL)
       INTO ok FROM persons p WHERE p.id = NEW.linked_by_person_id;
     IF NOT coalesce(ok, false) THEN
-      RAISE EXCEPTION 'LVRF: account_person_links: the linker % is not current staff of the tenant.', NEW.linked_by_person_id
+      RAISE EXCEPTION 'LVRF: account_person_links: the linker % is not a current member of your company''s staff.', NEW.linked_by_person_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'account_person_links_guard';
     END IF;
     IF NEW.retired_at IS NOT NULL OR NEW.retired_by_person_id IS NOT NULL OR NEW.retirement_reason IS NOT NULL THEN
@@ -2214,7 +2214,7 @@ BEGIN
     END IF;
     IF NEW.corrects_supports IS NOT NULL THEN
       IF steward IS NULL OR NEW.corrected_by_person_id IS DISTINCT FROM steward THEN
-        RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the tenant''s steward corrects what a link supports.'
+        RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the steward corrects what a link supports.'
           USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
       END IF;
       IF NOT EXISTS (SELECT 1 FROM value_outcome_evidence l
@@ -2250,7 +2250,7 @@ BEGIN
   END IF;
   IF OLD.withdrawn_at IS NULL AND NEW.withdrawn_at IS NOT NULL
      AND (steward IS NULL OR NEW.withdrawn_by_person_id IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the tenant''s steward withdraws a link.'
+    RAISE EXCEPTION 'LVRF: value_outcome_evidence: only the steward withdraws a link.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'value_outcome_evidence_guard';
   END IF;
   RETURN NEW;
@@ -2351,7 +2351,7 @@ DECLARE
 BEGIN
   SELECT tenant_id, locked_at, payload->>'valueOutcomeId' AS outcome INTO r FROM value_runs WHERE id = NEW.value_run_id;
   IF r.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: run_errata: run % is not of tenant %.', NEW.value_run_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: run_errata: run % is not one of your company''s runs.', NEW.value_run_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   IF r.locked_at IS NULL THEN
@@ -2426,7 +2426,7 @@ BEGIN
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
   IF steward IS NULL OR NEW.recorded_by_person_id IS DISTINCT FROM steward
      OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: run_errata: only the tenant''s steward records an erratum.'
+    RAISE EXCEPTION 'LVRF: run_errata: only the steward records an erratum.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'run_errata_steward_only';
   END IF;
   RETURN NEW;
@@ -2521,7 +2521,7 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
   END IF;
   IF st IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: governance_acts: the act''s subject is not of tenant %.', NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: governance_acts: the act''s subject is not in your company''s record.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
   END IF;
   IF NEW.subject_table = 'value_outcome_evidence'
@@ -2539,7 +2539,7 @@ BEGIN
   IF NEW.result_table IS NOT NULL AND NEW.subject_table <> 'value_outcome_evidence' THEN
     rt := lvrf_governed_row_tenant(NEW.result_table, NEW.result_id);
     IF rt IS DISTINCT FROM NEW.tenant_id THEN
-      RAISE EXCEPTION 'LVRF: governance_acts: the act''s result %.% does not exist in tenant %.', NEW.result_table, NEW.result_id, NEW.tenant_id
+      RAISE EXCEPTION 'LVRF: governance_acts: the act''s result %.% is not in your company''s record.', NEW.result_table, NEW.result_id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'governance_acts_guard';
     END IF;
   END IF;
@@ -3140,19 +3140,19 @@ BEGIN
     END IF;
     IF steward IS NULL OR NEW.revoked_by_person_id IS DISTINCT FROM steward
        OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
-      RAISE EXCEPTION 'LVRF: customer_role_grants: only the tenant''s steward revokes a role.'
+      RAISE EXCEPTION 'LVRF: customer_role_grants: only the steward revokes a role.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
     END IF;
     RETURN NEW;
   END IF;
   SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
   IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: customer_role_grants: the account is not of tenant %.', NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: customer_role_grants: the account is not one of your company''s accounts.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
   END IF;
   IF steward IS NULL OR NEW.granted_by_person_id IS DISTINCT FROM steward
      OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: customer_role_grants: only the tenant''s steward names a customer-side role.'
+    RAISE EXCEPTION 'LVRF: customer_role_grants: only the steward names a customer-side role.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
   END IF;
   SELECT * INTO p FROM persons WHERE id = NEW.person_id;
@@ -3168,7 +3168,7 @@ BEGIN
      OR EXISTS (SELECT 1 FROM person_credentials c WHERE c.person_id = p.id)
      OR EXISTS (SELECT 1 FROM person_roles pr WHERE pr.person_id = p.id AND pr.revoked_at IS NULL
                   AND pr.role IN ('value_engineer', 'account_executive', 'revenue_leader', 'ai_steward', 'rule76_steward', 'administrator')) THEN
-    RAISE EXCEPTION 'LVRF: customer_role_grants: % is vendor-side (tenant staff, a vendor-side role, or sign-in credentials), not the customer.', p.full_name
+    RAISE EXCEPTION 'LVRF: customer_role_grants: % is vendor-side (your company''s staff, a vendor-side role, or sign-in credentials), not the customer.', p.full_name
       USING ERRCODE = 'check_violation', CONSTRAINT = 'customer_role_grants_guard';
   END IF;
   IF p.institution_id IS DISTINCT FROM NEW.institution_id THEN
@@ -3211,12 +3211,12 @@ BEGIN
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
   IF steward IS NULL OR NEW.marked_by_person_id IS DISTINCT FROM steward
      OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: system_exercise_marks: only the tenant''s steward marks an item as a system exercise.'
+    RAISE EXCEPTION 'LVRF: system_exercise_marks: only the steward marks an item as a system exercise.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'system_exercise_marks_guard';
   END IF;
   subject_tenant := lvrf_governed_row_tenant(NEW.subject_table, NEW.subject_id);
   IF subject_tenant IS NULL OR subject_tenant IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: system_exercise_marks: % % does not exist in tenant %.', NEW.subject_table, NEW.subject_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: system_exercise_marks: % % is not in your company''s record.', NEW.subject_table, NEW.subject_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'system_exercise_marks_guard';
   END IF;
   RETURN NEW;
@@ -3289,13 +3289,13 @@ BEGIN
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
   IF steward IS NULL OR NEW.recorded_by_person_id IS DISTINCT FROM steward
      OR (lvrf_current_actor() IS NOT NULL AND lvrf_current_actor() IS DISTINCT FROM steward) THEN
-    RAISE EXCEPTION 'LVRF: figure_findings: only the tenant''s steward records a finding.'
+    RAISE EXCEPTION 'LVRF: figure_findings: only the steward records a finding.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
   END IF;
   SELECT o.id, o.institution_id, i.tenant_id, o.baseline_value, o.actual_value, o.claimed_currency_impact INTO vo
     FROM value_outcomes o JOIN institutions i ON i.id = o.institution_id WHERE o.id = NEW.value_outcome_id;
   IF vo.id IS NULL OR vo.tenant_id IS DISTINCT FROM NEW.tenant_id OR vo.institution_id IS DISTINCT FROM NEW.institution_id THEN
-    RAISE EXCEPTION 'LVRF: figure_findings: outcome % is not of this account and tenant.', NEW.value_outcome_id
+    RAISE EXCEPTION 'LVRF: figure_findings: outcome % is not of this account.', NEW.value_outcome_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'figure_findings_guard';
   END IF;
   IF (CASE NEW.field WHEN 'baseline_value' THEN vo.baseline_value WHEN 'actual_value' THEN vo.actual_value ELSE vo.claimed_currency_impact END)
@@ -3378,7 +3378,7 @@ BEGIN
         USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_about_final';
     END IF;
     IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
-      RAISE EXCEPTION 'LVRF: evidence %: only the tenant''s steward states what a row from before this field is about.', OLD.id
+      RAISE EXCEPTION 'LVRF: evidence %: only the steward states what a row from before this field is about.', OLD.id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_about_final';
     END IF;
   END IF;
@@ -3388,7 +3388,7 @@ BEGIN
         USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
     END IF;
     IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
-      RAISE EXCEPTION 'LVRF: evidence %: only the tenant''s steward withdraws a verification.', OLD.id
+      RAISE EXCEPTION 'LVRF: evidence %: only the steward withdraws a verification.', OLD.id
         USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
     END IF;
   END IF;
@@ -3478,7 +3478,7 @@ DECLARE
 BEGIN
   SELECT steward_person_id INTO steward FROM tenants WHERE id = NEW.tenant_id;
   IF steward IS NULL OR lvrf_current_actor() IS DISTINCT FROM steward THEN
-    RAISE EXCEPTION 'LVRF: industries: only the tenant''s steward adds an industry.'
+    RAISE EXCEPTION 'LVRF: industries: only the steward adds an industry.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'industries_steward_only';
   END IF;
   RETURN NEW;
@@ -3604,11 +3604,11 @@ BEGIN
   END IF;
   SELECT vo.*, i.tenant_id AS inst_tenant INTO o FROM value_outcomes vo JOIN institutions i ON i.id = vo.institution_id WHERE vo.id = NEW.value_outcome_id;
   IF o.inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: outcome_withdrawals: outcome % is not of tenant %.', NEW.value_outcome_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: outcome % is not one of your company''s outcomes.', NEW.value_outcome_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_guard';
   END IF;
   IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.withdrawn_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: outcome_withdrawals: only the tenant''s steward withdraws a measurement or a commitment, as themself.'
+    RAISE EXCEPTION 'LVRF: outcome_withdrawals: only the steward withdraws a measurement or a commitment, as themself.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'outcome_withdrawals_steward_only';
   END IF;
   -- What is withdrawn is what the outcome holds now, kept exactly.
@@ -3681,13 +3681,13 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_guard';
   END IF;
   IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.set_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: policy_values: only the tenant''s steward sets a policy value, as themself.'
+    RAISE EXCEPTION 'LVRF: policy_values: only the steward sets a policy value, as themself.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_steward_only';
   END IF;
   IF NEW.supersedes_id IS NOT NULL THEN
     SELECT tenant_id, key, value INTO prev FROM policy_values WHERE id = NEW.supersedes_id;
     IF prev.tenant_id IS DISTINCT FROM NEW.tenant_id OR prev.key IS DISTINCT FROM NEW.key THEN
-      RAISE EXCEPTION 'LVRF: policy_values: a new value supersedes a value of the same tenant and key.'
+      RAISE EXCEPTION 'LVRF: policy_values: a new value supersedes a value of the same key in your company''s record.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'policy_values_guard';
     END IF;
     IF NEW.key = 'pack_ratification_institutions' AND NEW.value < prev.value THEN
@@ -3709,13 +3709,13 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_guard';
   END IF;
   IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.ratified_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: lens_policies: only the tenant''s steward ratifies a lens policy, as themself.'
+    RAISE EXCEPTION 'LVRF: lens_policies: only the steward ratifies a lens policy, as themself.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_steward_only';
   END IF;
   IF NEW.supersedes_id IS NOT NULL THEN
     SELECT tenant_id, persona INTO prev FROM lens_policies WHERE id = NEW.supersedes_id;
     IF prev.tenant_id IS DISTINCT FROM NEW.tenant_id OR prev.persona IS DISTINCT FROM NEW.persona THEN
-      RAISE EXCEPTION 'LVRF: lens_policies: a new version supersedes a policy of the same tenant and persona.'
+      RAISE EXCEPTION 'LVRF: lens_policies: a new version supersedes a policy of the same persona in your company''s record.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'lens_policies_guard';
     END IF;
   END IF;
@@ -3737,7 +3737,7 @@ BEGIN
   END IF;
   SELECT tenant_id INTO inst_tenant FROM institutions WHERE id = NEW.institution_id;
   IF inst_tenant IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: monetization_rates: the account % is not of tenant %.', NEW.institution_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: monetization_rates: the account % is not one of your company''s accounts.', NEW.institution_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
   END IF;
   SELECT institution_id, unit, deleted_at, superseded_by_id INTO m FROM business_metrics WHERE id = NEW.business_metric_id;
@@ -3756,7 +3756,7 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_evidence_about_account';
   END IF;
   IF NOT lvrf_is_current_staff(NEW.recorded_by_person_id, NEW.tenant_id) OR NEW.recorded_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: monetization_rates: a rate is recorded by current, non-simulated staff of the tenant, as themself.'
+    RAISE EXCEPTION 'LVRF: monetization_rates: a rate is recorded by a current, real member of your company''s staff, as themself.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'monetization_rates_guard';
   END IF;
   IF NEW.supersedes_id IS NOT NULL THEN
@@ -3782,7 +3782,7 @@ BEGIN
   END IF;
   SELECT tenant_id, institution_id INTO eng FROM engagements WHERE id = NEW.engagement_id;
   IF eng.tenant_id IS DISTINCT FROM NEW.tenant_id THEN
-    RAISE EXCEPTION 'LVRF: roadmap_milestones: the engagement % is not of tenant %.', NEW.engagement_id, NEW.tenant_id
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: the engagement % is not one of your company''s engagements.', NEW.engagement_id
       USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
   END IF;
   IF NEW.value_outcome_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM value_outcomes WHERE id = NEW.value_outcome_id AND engagement_id = NEW.engagement_id) THEN
@@ -3795,7 +3795,7 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
   END IF;
   IF NOT lvrf_is_current_staff(NEW.planned_by_person_id, NEW.tenant_id) OR NEW.planned_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: roadmap_milestones: a milestone is planned by current, non-simulated staff of the tenant, as themself.'
+    RAISE EXCEPTION 'LVRF: roadmap_milestones: a milestone is planned by a current, real member of your company''s staff, as themself.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'roadmap_milestones_guard';
   END IF;
   IF NEW.supersedes_id IS NOT NULL THEN
@@ -3874,7 +3874,7 @@ BEGIN
       USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
   END IF;
   IF NOT lvrf_is_current_staff(NEW.rendered_by_person_id, NEW.tenant_id) OR NEW.rendered_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
-    RAISE EXCEPTION 'LVRF: record_documents: a % is recorded by current staff of the tenant, as themself.', replace(NEW.kind, '_', ' ')
+    RAISE EXCEPTION 'LVRF: record_documents: a % is recorded by a current member of your company''s staff, as themself.', replace(NEW.kind, '_', ' ')
       USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
   END IF;
   IF NEW.kind = 'print_request' THEN
@@ -3883,7 +3883,7 @@ BEGIN
     IF NEW.lens = 'cfo' AND NEW.lens_policy_id IS DISTINCT FROM (
          SELECT l.id FROM lens_policies l WHERE l.tenant_id = NEW.tenant_id AND l.persona = 'cfo'
             AND NOT EXISTS (SELECT 1 FROM lens_policies s WHERE s.supersedes_id = l.id)) THEN
-      RAISE EXCEPTION 'LVRF: record_documents: a CFO-lens print request names the CFO lens policy it applied, the tenant''s current one.'
+      RAISE EXCEPTION 'LVRF: record_documents: a CFO-lens print request names the CFO lens policy it applied, your company''s current one.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_guard';
     END IF;
     IF NEW.disclosure::text <> 'internal' THEN
@@ -3892,7 +3892,7 @@ BEGIN
     END IF;
   ELSE
     IF NOT lvrf_is_steward(NEW.tenant_id) THEN
-      RAISE EXCEPTION 'LVRF: record_documents: only the tenant''s steward shares a run for review (D-M21).'
+      RAISE EXCEPTION 'LVRF: record_documents: only the steward shares a run for review.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'record_documents_share_steward_only';
     END IF;
     IF NEW.disclosure::text <> 'shared_for_review' THEN
@@ -4215,7 +4215,7 @@ DECLARE
   subject_name text;
 BEGIN
   IF NOT lvrf_is_steward(NEW.tenant_id) THEN
-    RAISE EXCEPTION 'LVRF: research_clearances: only the tenant''s steward clears an account or an industry for research with Claude, or withdraws a clearance.'
+    RAISE EXCEPTION 'LVRF: research_clearances: only the steward clears an account or an industry for research with Claude, or withdraws a clearance.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
   END IF;
   IF NEW.person_id IS DISTINCT FROM lvrf_current_actor() THEN
@@ -4229,7 +4229,7 @@ BEGIN
     SELECT d.name INTO subject_name FROM industries d WHERE d.id = NEW.industry_id AND d.tenant_id = NEW.tenant_id;
   END IF;
   IF subject_name IS NULL THEN
-    RAISE EXCEPTION 'LVRF: research_clearances: the account or industry is not a current one of this tenant.'
+    RAISE EXCEPTION 'LVRF: research_clearances: the account or industry is not a current one of your company.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'research_clearances_guard';
   END IF;
   IF NEW.kind = 'clearance' THEN
@@ -4279,7 +4279,7 @@ BEGIN
   END IF;
   SELECT * INTO p FROM research_prompts WHERE id = NEW.prompt_id;
   IF NOT FOUND OR p.tenant_id <> NEW.tenant_id OR p.prompt_sha256 <> NEW.prompt_sha256 THEN
-    RAISE EXCEPTION 'LVRF: research_calls: the call names a prompt of this tenant, with that prompt''s SHA-256.'
+    RAISE EXCEPTION 'LVRF: research_calls: the call names a prompt of your company, with that prompt''s SHA-256.'
       USING ERRCODE = 'check_violation', CONSTRAINT = 'research_calls_guard';
   END IF;
   IF NEW.kind = 'sent' THEN

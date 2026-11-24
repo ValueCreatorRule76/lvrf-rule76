@@ -299,7 +299,7 @@ expect POST "$(FF "$OV")" "$(J field baseline_value value 214 reason 'Verificati
 FSQL() { printf "INSERT INTO figure_findings (tenant_id, institution_id, value_outcome_id, field, value, finding_text, reason, recorded_by_person_id) VALUES ('%s', '%s', '%s', 'baseline_value', %s, 'The baseline has no source on record: verification.', '%s', '%s')" "$TEN" "$1" "$2" "$3" "${4:-Verification: a finding by SQL.}" "${5:-$S}"; }
 sqlrefused "B6: \"invented\" in a finding, at the database" "$(FSQL "$INSTV" "$OV" 214 'Verification: the figure was invented.')" "figure_findings_never_invented"
 [ "$(sqlaccepted "$(FSQL "$INSTV" "$OV" 214 'Verification: the Inventec inventory export.')")" = "ACCEPTED" ] && ok "  ...whole words only: a name such as \"Inventec\" or the word \"inventory\" is not refused (rolled back)" || bad "  ...a false refusal: $(sqlaccepted "$(FSQL "$INSTV" "$OV" 214 'Verification: the Inventec inventory export.')")"
-sqlrefused "a finding by X, at the database" "$(FSQL "$INSTV" "$OV" 214 'Verification: by X.' "$X")" "only the tenant's steward records a finding" "$X"
+sqlrefused "a finding by X, at the database" "$(FSQL "$INSTV" "$OV" 214 'Verification: by X.' "$X")" "only the steward records a finding" "$X"
 sqlrefused "a finding naming another value than the outcome's" "$(FSQL "$INSTV" "$OV" 215)" "the finding names the figure as it stands"
 # Three accounts, each holding one of the three things the finding's text denies.
 blk() {  # NAME -> INST, O (an outcome with baseline 214, the owner P0)

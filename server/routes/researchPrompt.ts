@@ -229,7 +229,7 @@ export function researchPromptRouter(pool: Pool): Router {
         res.status(422).json({
           message:
             `business metric ${metricId} belongs to ${bm.institution_name}, a customer account, ` +
-            'not the tenant-self institution. A customer outcome metric lives in that customer\'s ' +
+            'not your own company\'s account. A customer outcome metric lives in that customer\'s ' +
             'system of record, not in any public source, so it cannot be researched. Researching ' +
             'WHICH measures carry money in an industry is a different capability and is not this route.',
         });
