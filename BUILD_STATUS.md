@@ -16839,3 +16839,138 @@ No migration. Hardening is re-applied for five functions' message text; the TOC 
   analyst of record)" on Curia, who is not customer-side. Read-only, on `2dc3f71` and prod: no route and no database
   rule refuses it; the route checks only account, simulated and deleted. Planned as **LVRF_PLAN §29**, the next small
   item, ahead of the future-date item.
+
+### §29: only a customer-side person commits or verifies — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §29; Brad's rulings, 24 Nov 2026: D1–D7 as recommended, the verifier included, four
+additions). Branch `customer-committer`, on `b808fd5`. **No migration, table or trigger.** One database function
+changes.
+- **One rule, `lvrf_customer_side_reason()`** (D1), the rule credit already reads, checked when a commitment or a
+  verification is made or its person changes. A role revoked later does not undo it.
+- **The forms (D2, addition 1):**
+  - "Who commits" and "Who verifies" list only customer-side people at the account, each with their roles and sources.
+  - **An account with none** prints "No customer-side person is recorded at this account yet. Add one, with a role named
+    from a source, on the roles card." "The roles card" links to card 01b and brings it into view. Commit stays
+    disabled; its unmet line reads "record a customer-side person at this account first".
+  - **The tenant's own page** (addition 4) prints "No one can commit to or verify the tenant's own outcomes yet.", with
+    no link (that page has no roles card); its unmet line reads "no one can commit here yet".
+- **The routes (D3, D6):** `POST …/commit` and `POST …/verify` refuse anyone else (422) after the existing account,
+  simulated and deleted checks: "Only a customer-side person at the account can commit to a target. {Name} is not:
+  {reason}." (and "…can verify an actual."). `server/lib/customerSide.ts` holds the sentence.
+- **The database (D4, D6):** `lvrf_block_simulated_attestor`, on INSERT and UPDATE of `value_outcomes`, refuses a new
+  or changed committer or verifier who is not customer-side (`value_outcomes_committer_customer_side`,
+  `value_outcomes_verifier_customer_side`), for every caller.
+- **Curia's `e3fb0061` (D5):** byte-identical after hardening; card 01d prints beside it "· not customer-side: committed
+  before only customer-side people could commit, 24 Nov 2026". The line shows only for a person who never held a role
+  at the account, so a role revoked after a commitment does not print it.
+- **Card 01b adds a person (addition 3):** "Add a person of this account…", a governed form on the existing
+  `POST /api/institutions/:id/inputs`, with its confirmation. It names no role.
+- **The checklist (addition 2):** `docs/LVRF_NEW_ACCOUNT_CHECKLIST.md` step 4a.
+- **The reads:** `GET …/customer-roles` adds `customer_side` per person; `GET …/outcome-spine` adds
+  `committed_before_rule`, `verified_before_rule` and `tenant_self`.
+
+**Departures from the plan, for Brad to read:**
+1. **The database rule is in `lvrf_block_simulated_attestor`, not `lvrf_outcome_spine_guard`** (D4 named the spine
+   guard). The spine guard fires on UPDATE only; the simulated-attestor trigger already fires on INSERT and UPDATE of
+   `value_outcomes` and already checks the verifier, so the rule covers an INSERT carrying a committer too, with no
+   new trigger. It runs after the simulated checks, so a simulated verifier keeps its old message.
+2. **D2's unmet line** is "record a customer-side person at this account first", not the whole sentence: the sentence
+   sits where the list would be, and the unmet line keeps its short form.
+3. **D5's date is 24 Nov 2026,** the ruling's date. If the deploy is later, the line still names the ruling's date.
+4. **The tenant's sentence and unmet line** ("No one can commit to or verify the tenant's own outcomes yet.", "no one
+   can commit here yet") are my wording of addition 4.
+5. **"Add a person" is not the steward's act,** as W1's "add a person" is not; naming the role stays the steward's.
+
+**Gate A:**
+- **`verify_customer_committer` (new): 110 passed, 0 failed.**
+  - **The clone:** 227 triggers; drift none; every run byte-identical after hardening; `e3fb0061` byte-identical, its
+    committer "no customer-side role named from a source".
+  - **The route:** a commit and a verification by a person with no role refused (422) in the sentence, nothing written
+    (no commitment, act or evidence row); the steward and a person of another account refused by the account check
+    ahead of it; the customer-side owner commits.
+  - **The database, as `lvrf_app`:** the same commit, a committed row's committer changed (to the clerk, to the
+    steward: "is not: vendor-side"), the same verification and an INSERT carrying a committer, each refused; the owner
+    accepted for both.
+  - **A role revoked after the commitment:** it stands, and is measured after; a new commit by that person is refused;
+    no before-the-rule line.
+  - **The page:** each list offers the owner alone; the empty account prints the sentence, the link, Commit disabled,
+    the unmet line, and the link brings card 01b into view; card 01b adds a person through its confirmation (no role
+    named); Curia's `e3fb0061` prints D5's line and Curia's open outcome the sentence; the tenant's own page its
+    sentence, no link.
+  - **Breaks, each caught by its own section:** R1 the route's commit check (the route section reads the database's
+    words, not D3's; nothing written); R2 the route's verify check; D1 the database's committer clause; D2 its
+    verifier clause; F1 the form's filter. Every file restored byte-identical. `check_plain_words` clean.
+- **The verify scripts under the rule** (`scripts/lib/customer_side.sh`):
+  - **`make_customer_side`** names a fixture committer or verifier customer-side through the routes (a source about
+    the account, opened, a role named from it): `verify_case_snapshot`, `verify_evidence_form`, `verify_acts_lineage`,
+    `verify_local_date`, `verify_promised_date`, `verify_outside_in_walk`, `verify_value_hypotheses` and the current-rule
+    parts of `verify_c2`.
+  - **`pre_s29` / `post_s29`** record a commitment as one made before the rule (Curia's shape) by the pre-§29 route and
+    guard (`2dc3f71`): `verify_c3`, `verify_c3b`, `verify_c2`'s Curia shape, two commits in
+    `verify_commit_measure_verify`, `verify_value_case`, and the War Room's re-commit of Curia's outcome.
+    - **Brad's two conditions (24 Nov 2026):** the swap runs only on the script's own `lvrf_verify*` clone (it refuses
+      a template, `lvrf_prodcopy`, `lvrf`, a snapshot or an unset name), and after restoring, each script compares the
+      route's md5 and the guard's `md5(prosrc)` with the current ones and fails on a difference. Every swap came back
+      at route `b0a30c6f6c14c6d0c7b2ccd45248c16f`, guard `4150205e2b683a59fbffd09c4772e310`.
+  - **`pre_s29_db` / `post_s29_db`:** the database guard alone, for `verify_value_hypotheses`' three verifier-not-author
+    checks, whose vendor-side verifier §29 now refuses first. The older rule is proven on its own.
+- **Changed expectations:**
+  - **Confidence: none,** in any script.
+  - **`verify_acts_lineage`:** act routes exercised 29 → 30, the other act routes 23 → 22 (naming a customer-side role
+    is now exercised there); one check added, that the two grants and their source openings are recorded acts.
+  - **`verify_steward_safety`:** the new-person confirmation added to those that name a new row in words (as
+    "Name {person}" and "Add the industry"): 28 → 29 confirmations name a short id is unchanged, 12 → 13 name a new row
+    or batch in words.
+- **The full regression: 60 scripts, 59 passed first time**; `verify_steward_safety` failed one check (the confirmation
+  above) and passed 31/0 after. `verify_plain_words` 37/0 (51 of 51 pages); `verify_deploy_steps` 27/0;
+  `verify_tenant_scope` "cases passed".
+- **Equivalence against `2dc3f71`:** 213 GETs, 208 identical; 5 differ only by added keys — `customer_side` on two
+  accounts' roles reads, `committed_before_rule`, `verified_before_rule` and `tenant_self` on three outcome reads.
+- **The function as built:** `lvrf_block_simulated_attestor` `md5(prosrc)` `4150205e2b683a59fbffd09c4772e310` (prod now
+  `2cdb1e17f62c3dfbd5e9983f9ac3caa0`, as `2dc3f71`).
+- **Bundle,** built on the clean tree: **`index-Dh8vkOZ9.js` / `index-BMv5OQwB.css`.**
+- **The leaked Vite servers** appeared again after the batches and were stopped before the full run (the approved small
+  item).
+
+#### Gate B for §29 (not run; Brad's pastes)
+
+No migration. Hardening is re-applied for one function; the TOC stays 972 and the triggers 227.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only customer-committer && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `b808fd5`.
+2. **On the box, pull, then back up** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p29-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**.
+3. **Ownership, then hardening:**
+   ```
+   cd /srv/lvrf && sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p29.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p29.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_block_simulated_attestor'"
+   ```
+   Expect `ownership exit 0`; `hardening exit 0`, `0` ERROR lines; **227**; **`4150205e2b683a59fbffd09c4772e310`**.
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p29-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **972**.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-Dh8vkOZ9.js` / `index-BMv5OQwB.css`**;
+   drift none (53, newest `0052`); "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing; Cancel everything):**
+- **Curia's card 01d:** `e3fb0061` reads "· not customer-side: committed before only customer-side people could commit,
+  24 Nov 2026".
+- **"Commit…" on Curia's Lot Acceptance Rate:** "No customer-side person is recorded at this account yet. Add one, with a
+  role named from a source, on the roles card." No one to choose; Commit disabled. "the roles card" brings card 01b
+  into view. Cancel.
+- **Card 01b:** "Add a person of this account…" opens its form. Cancel.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- `lvrf_block_simulated_attestor` `4150205e…`; `e3fb0061` unchanged;
+- hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
