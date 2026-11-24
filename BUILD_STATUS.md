@@ -16562,3 +16562,48 @@ here was run on the box. Stop at any step whose expectation is not met.
 - the two functions' `md5(prosrc)` as in step 3;
 - 0 outcomes with a promised date; Curia's commitment unchanged;
 - hashes 27/27; TOC 972; 227 triggers; drift none; ownership clean.
+
+### §26 closed: the promised measurement date deployed at `f3e8fe7`; Gate C clean — 24 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `f3e8fe7`.
+- Pre-deploy backup `~/lvrf-pre-p26-20261124T031859Z.dump`, **TOC 972**.
+- `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **227 triggers**.
+- `lvrf_outcome_spine_guard bd4ddfb7…`, `lvrf_outcome_withdrawal_guard 1d8baf40…`, both as Gate A computed.
+- Post-hardening backup `~/lvrf-post-p26-20261124T032046Z.dump`, **TOC 972**.
+- Deploy: "active and answering (after 6 refused tries)", all checks, bundle **`index-DWCdSp5i.js` /
+  `index-BMv5OQwB.css`**, "deploy OK". The API started at 03:21:37 UTC.
+
+**Brad's look (records nothing):**
+- **Curia's `e3fb0061` on card 01d** reads "no promised date on record (committed before §26)".
+- **The commit form on Lot Acceptance Rate** shows "Measure by" with its help text and the fixed-while-committed note.
+  Commit stays disabled until every field is complete. Cancelled.
+- **The War Room** is unchanged and empty.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `f3e8fe7`, tree clean. The served `index.html` names `index-DWCdSp5i.js` / `index-BMv5OQwB.css`.
+- **Since the pre-deploy backup (03:18:59 UTC), nothing was written** apart from one session, created at 03:23:21 UTC,
+  Brad's sign-in for his look:
+  - 0 governance acts (still 228, the last 15 Nov 21:12:17);
+  - 0 refusals, 0 research-process refusals;
+  - 0 audit rows, 0 record documents, 0 heartbeat events.
+- **The functions as deployed:** `md5(prosrc)` `bd4ddfb7895c53df6a4adfcf262eadda` and
+  `1d8baf40257a9df2f91009ebff978d2b`.
+- **0 outcomes with a promised date; 1 commitment.** Curia's `e3fb0061` is unchanged: committed 30 Aug 2026 09:00 UTC,
+  no method, no class, no date, last updated 30 Aug 2026.
+- Runs 27, all locked; **`check_run_hashes` 27/27**, recomputed and embedded.
+- **227 triggers**, none disabled; drift none (53 migrations, newest `0052`, 1,353 objects match); ownership clean
+  (`lvrf_ownership_violations()` 0).
+- **TOC 972** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**§26 is closed** (24 Nov 2026), ahead of the pilot's first commitment.
+- **Brad's two findings (24 Nov 2026), first among the small items, before the pilot:**
+  1. **Plan codes on screen.** Card 01d shows "(committed before §26)" and "(committed before B4)". Both become plain
+     words with the date: "committed before promised dates were recorded (24 Nov 2026)", and "committed before
+     attribution was recorded (6 Nov 2026)", B4's deploy date. Gate A gains a check that **no "§" and no slice code
+     (B1–B4, S1–S7, L-numbers) appears in any client string**.
+  2. **"Committed on" defaults to the UTC date.** At 22:28 New York time on 23 Nov it showed 11/24/2026, because the
+     form's `today()` is `toISOString()`. It should default to the person's local date, the day they actually
+     committed. The route's "after the commit date" rule then has to be checked for a measure-by date entered the
+     same evening. The form sends `${on}T12:00:00Z`, and the route and the guard compare that day's UTC date, so
+     the local day the person picked is the commit day. Gate A proves this.

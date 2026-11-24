@@ -5753,7 +5753,7 @@ stands, and of what is due, refuted or late. It writes nothing.
 - **About half a day for the mock-ups; about 3 days for the build after they are approved.** With the cut-off on
   Fri 18 Dec 2026, there are four weeks.
 
-## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **approved by Brad, 23 Nov 2026, with D1–D6 as recommended, D3's bound and D4's wording ruled**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§26 … Gate A"))
+## 26. 3.1 small item: the promised measurement date, recorded at commit (planned 23 Nov 2026; **approved by Brad, 23 Nov 2026, with D1–D6 as recommended, D3's bound and D4's wording ruled**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§26 … Gate A"); **closed 24 Nov 2026**: deployed at `f3e8fe7`, Gate C clean (`BUILD_STATUS.md`, "§26 closed"))
 
 **Brad's rulings (23 Nov 2026):**
 - **D1–D6 are approved as recommended.**

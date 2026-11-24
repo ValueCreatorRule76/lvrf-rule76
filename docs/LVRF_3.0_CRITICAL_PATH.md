@@ -206,7 +206,14 @@ cut line applied first.
        - **first, right after S6 (Brad, 20 Nov 2026), with its own plan: the commit form records a promised
          measurement date.** `value_outcomes.promised_measured_at` exists, and no route writes it. A commitment made
          without it can never be given one afterwards (append-only), so it **ships before the pilot's first
-         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Approved (Brad, 23 Nov 2026), LVRF_PLAN §26, with D1–D6;**
+         commitment**. Until then the War Room says "no promised date on record", never "on time" (§25 D5). **Approved (Brad, 23 Nov 2026), LVRF_PLAN §26, with D1–D6; closed 24 Nov 2026,** deployed at `f3e8fe7`, Gate C clean;
+       - **first now, before the pilot (Brad, 24 Nov 2026): §26's two findings.**
+         - **Plan codes on screen:** card 01d's "(committed before §26)" and "(committed before B4)" become "committed
+           before promised dates were recorded (24 Nov 2026)" and "committed before attribution was recorded (6 Nov
+           2026)". A Gate A check: no "§" and no slice code (B1–B4, S1–S7, L-numbers) in any client string.
+         - **"Committed on" defaults to the person's local date,** not the UTC date (at 22:28 New York time on 23 Nov it
+           showed 11/24/2026). Gate A proves that the route's "after the commit date" rule holds for a measure-by date
+           entered the same evening;
        - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
          - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
            AA at every size). Two places are known:
