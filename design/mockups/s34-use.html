@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LVRF §34 mock-up · "Use…" and "Decline…"</title>
+<!-- Fictional accounts and names only. "Use…" opens the existing form, pre-filled; every rule applies (D3). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="s34.css" />
+</head>
+<body>
+<div class="bar"><span class="brand">LVRF</span><span>A. Steward (fictional) · steward · <u>Sign out</u></span></div>
+<div class="page">
+  <div class="crumb">Brought back · Halden Assay Labs · Use…</div>
+  <h1>Use what was brought back</h1>
+  <div class="split">
+    <section class="blk">
+      <h2>The item</h2>
+      <p><span class="tag open">open</span></p>
+      <p><strong>A person and their role, from a public source.</strong><br />Mira Castell (fictional), VP Quality, named in Halden's 2025 annual report, page 12.</p>
+      <p class="muted">Brought back by Priya Nand (fictional), CSM, on 26 Jan 2027. Source: https://example.invalid/halden-annual-report-2025</p>
+      <p class="muted">It is linked to the row the form writes, only once that row is written.</p>
+    </section>
+    <section class="blk">
+      <h2>Add a person of this account (pre-filled)</h2>
+      <p class="notice">The existing form, filled from the item. Every rule applies: nothing is recorded until you confirm, and you complete what the item lacks.</p>
+      <div class="grid">
+        <label><span class="L">Full name</span><input class="I" value="Mira Castell (fictional)" /></label>
+        <label><span class="L">Email (optional; needed only to sign in)</span><input class="I" value="" /></label>
+        <label class="full"><span class="L">Title at the account</span><input class="I" value="VP Quality" /></label>
+      </div>
+      <div style="margin-top:12px"><a class="btn solid" href="#">Add the person</a> <a class="btn off" href="#">Cancel</a></div>
+      <p class="muted" style="margin-top:10px">Next, the same item can open "Name a customer-side role…", which needs a source about this account, opened and verified: the annual report, recorded first on "Record a source…".</p>
+    </section>
+  </div>
+
+  <section class="blk">
+    <h2>Decline…</h2>
+    <p><strong>What a point costs them: not yet.</strong> Corbel Freight · Jordan Reyes (fictional), AE · 28 Jan 2027</p>
+    <label><span class="L">Why it is declined (the team sees this)</span>
+      <textarea class="I">Nothing to record yet: their answer is "not yet". Bring it back again after their February close, with who in finance will answer.</textarea></label>
+    <div class="confirm"><span class="k">Confirm what this records</span>Decline this item from Jordan Reyes, with your reason above. It stays on the record, declined, and Jordan sees your reason. Nothing else changes.
+      <div style="margin-top:8px"><a class="btn solid small" href="#">Yes, decline it</a> <a class="btn small" href="#">Back</a></div></div>
+  </section>
+  <div class="mock">Mock-up, fictional accounts and names only.</div>
+</div>
+</body>
+</html>
