@@ -6033,6 +6033,8 @@ from the prod copy, 24 Nov 2026:
   rule 8 forbids.
 - **D5, "The published story, read against the record" (Brad's item 3):**
   - **Where the class lives. Recommended:** **a new nullable evidence field, `published_figure_class`** (migration).
+    **Departed from (Brad, 25 Nov 2026, §33 D2):** required on a vendor publication about another account only;
+    optional on a public filing; refused elsewhere. A public filing's research facts have no class to give.
     - **Its five values:** license count, activity count, adjective, outcome without baseline, outcome with
       baseline.
     - **When it is allowed:** only on a vendor publication or a public filing. The guard requires it once the field
@@ -6908,7 +6910,17 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
   warning. Cancel.
 - **About a day.**
 
-## 33. S7a: the published figure's class (planned 25 Nov 2026, for Brad's approval)
+## 33. S7a: the published figure's class (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1–D7 as recommended**)
+
+**Brad's rulings (25 Nov 2026):**
+- **D1–D7 are approved as recommended.**
+- **D2 as recommended, a departure from §27's D5 recorded with its reason:**
+  - **The rule:** the class is required on a vendor publication about another account; optional on a public filing; and
+    refused on every other kind and on your own company's account.
+  - **The reason:** D5 also required it on public filings. That would refuse every research fact taken from a filing
+    (revenue, a reported rate): the fact writer has no class to give, and the classes describe a vendor's story about a
+    customer, not a company's own filing.
+- **Next:** build S7a to Gate A.
 
 **What it builds** (§27 D5 and D11, approved by Brad 24 Nov 2026; the mock-ups approved 25 Nov 2026 with two changes):
 the class field on a published source, its migration and its guard, so that Brad can record Curia's published rows
