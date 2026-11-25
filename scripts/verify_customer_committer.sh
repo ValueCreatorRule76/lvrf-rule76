@@ -87,8 +87,8 @@ PY
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "229" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 229 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "233" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 233 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 edit() { python3 - "$1" "$2" "$3" <<'PY'
 import sys; p, a, b = sys.argv[1:4]; s = open(p).read()
@@ -129,9 +129,9 @@ ROW0="$(q "SELECT md5(to_jsonb(o)::text) FROM value_outcomes o WHERE id = '$CURI
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (no migration in §29)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 \
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "229" ] && ok "229 triggers (§29 adds none; §32 section 38: +2)" || bad "triggers: $(trig)"
+[ "$(trig)" = "233" ] && ok "233 triggers (§29 adds none; §32 section 38: +2)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical after hardening" || bad "a run changed"
 [ "$(q "SELECT md5(to_jsonb(o)::text) FROM value_outcomes o WHERE id = '$CURIA_O'")" = "$ROW0" ] && ok "Curia's e3fb0061 byte-identical after hardening (D5: the rule never reads it)" || bad "e3fb0061 changed"
 [ "$(q "SELECT lvrf_customer_side_reason(committed_by_person_id, institution_id) FROM value_outcomes WHERE id = '$CURIA_O'")" = "no customer-side role named from a source" ] \

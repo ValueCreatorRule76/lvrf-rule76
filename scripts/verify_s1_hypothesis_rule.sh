@@ -95,8 +95,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "229" ] \
-    && ok "  ...hardening.sql re-applied: every function and trigger as declared, 229 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "233" ] \
+    && ok "  ...hardening.sql re-applied: every function and trigger as declared, 233 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 start_server() {
   stop_port "$PORT"
@@ -130,15 +130,15 @@ N_RUNS0="$(q "SELECT count(*) FROM value_runs")"
 RUNS0="$(runs_md5)"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (no new migration)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "229" ] && ok "229 triggers by pg_trigger (§32 section 38: +2) (S1 section 35: +1, value_runs_hypothesis_current)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (328 + 1: INSERT)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(trig)" = "233" ] && ok "233 triggers by pg_trigger (§32 section 38: +2) (S1 section 35: +1, value_runs_hypothesis_current)" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "360" ] && ok "  ...360 (S7b section 39: +7) (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (328 + 1: INSERT)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT string_agg(event_manipulation || ':' || action_timing, ',') FROM information_schema.triggers WHERE trigger_name = 'value_runs_hypothesis_current'")" = "INSERT:BEFORE" ] && ok "  ...value_runs_hypothesis_current: BEFORE INSERT only (a sealed run is never read by it)" || bad "  ...timing"
 [ "$(q "SELECT count(*) FROM hardening_manifest WHERE trigger_name = 'value_runs_hypothesis_current'")" = "1" ] && ok "  ...in the hardening manifest" || bad "  ...manifest"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the $N_RUNS0 sealed runs byte-identical after section 35 installs" || bad "a sealed run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S1 adds no CHECK)" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S1 adds no CHECK)" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1; }
@@ -388,7 +388,7 @@ TENANT_INST="$SK" METRIC="$METRIC_SK" walk badge
 step "9. Every sealed run as it was; hashes"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the copy's $N_RUNS0 sealed runs byte-identical at the end: nothing re-ran, nothing changed" || bad "a sealed run changed"
 H1F="$(HASHES)"; printf '%s' "$H1F" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes, all (the copy's and the new): $H1F" || bad "hashes: $H1F"
-[ "$(trig)" = "229" ] && ok "229 triggers at the end" || bad "triggers: $(trig)"
+[ "$(trig)" = "233" ] && ok "233 triggers at the end" || bad "triggers: $(trig)"
 
 echo
 echo "==> $PASS passed, $FAIL failed"

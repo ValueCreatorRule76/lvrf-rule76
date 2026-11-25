@@ -86,10 +86,10 @@ dropdb --if-exists "$VERIFY_DB"; make_clone "$VERIFY_DB" lvrf_prodcopy || { bad 
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "0052 applied to the prod copy's rows: every evidence row already satisfies the nine CHECKs" || { bad "migrate: $(tail -3 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened (section 37)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
-[ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1)" || bad "triggers: $(trig)"
+[ "$(trig)" = "233" ] && ok "233 triggers (S7b section 39: +4) (§32 section 38: +2) (S4 section 37: +1)" || bad "triggers: $(trig)"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | has -E "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
-DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "$DRIFT" || bad "drift: $DRIFT"
+printf '%s' "$PLAIN" | has -E "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "$DRIFT" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) FROM business_metrics WHERE pack_basis_evidence_id IS NOT NULL")" = "0" ] && ok "pack_basis_evidence_id: NULL on every metric of the copy (nothing backfilled, nothing orphaned)" || bad "pack_basis_evidence_id set on the copy"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 S="$(q "SELECT steward_person_id FROM tenants WHERE steward_person_id IS NOT NULL LIMIT 1")"; S_EMAIL="$(q "SELECT email FROM persons WHERE id = '$S'")"
@@ -219,7 +219,7 @@ P4="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 ||
 printf '%s' "$P4" | has "STALE SENTENCE evidence_quote_not_how_read" && ! printf '%s' "$D4" | has "schema drift: none" && ok "B4 break: a CHECK dropped is caught (its sentence is stale; the schema drifts from 0052)" || bad "B4: $(printf '%s' "$P4" | tail -1) / $(printf '%s' "$D4" | tail -1)"
 grep -o 'ALTER TABLE "evidence" ADD CONSTRAINT "evidence_quote_not_how_read" CHECK ([^;]*);' db/drizzle/0052_s4_form_confirmation.sql | sed 's/--> statement-breakpoint//' > "$W/b4.sql"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/b4.sql" > /dev/null 2>&1
-DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1 | has "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "B4 control: re-added from 0052, 158 CHECKs, none stale" || bad "B4 control"
+DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1 | has "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "B4 control: re-added from 0052, 158 CHECKs, none stale" || bad "B4 control"
 # B5: the form sends other than it shows (the c56a3d33 cut: 340 characters of the summary).
 edit "$AE" "buildBody={() => ({ kind, summary: summary.trim(), provenance" "buildBody={() => ({ kind, summary: summary.trim().slice(0, 340), provenance"; sleep 4
 walk record > "$W/b5.out" 2>&1 || true

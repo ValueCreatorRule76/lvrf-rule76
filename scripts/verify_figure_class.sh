@@ -5,7 +5,7 @@
 #   ./scripts/verify_figure_class.sh [out_dir]
 #
 #   1. A clone of the prod copy migrated to 0054 and hardened: the column nullable, its five values held; every existing
-#      row's own fields unchanged, its class null; 229 triggers; drift none at 0054.
+#      row's own fields unchanged, its class null; 233 triggers; drift none at 0054.
 #   2. The wording: server/lib/figureClass.ts and client/src/lib/figureClass.ts equal each other and the ruled table.
 #   3. The database, as lvrf_app, rolled back: a vendor publication on another account without a class refused, with
 #      each of the five accepted; a public filing with or without one accepted; a class on an observation, or on your own
@@ -86,8 +86,8 @@ PY
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "229" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 229 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "233" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 233 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 edit() { python3 - "$1" "$2" "$3" <<'PY'
 import sys; p, a, b = sys.argv[1:4]; s = open(p).read()
@@ -127,9 +127,9 @@ RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated to 0054" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 \
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "229" ] && ok "229 triggers: S7a adds none" || bad "triggers: $(trig)"
+[ "$(trig)" = "233" ] && ok "233 triggers: S7a adds none" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical" || bad "a run changed"
 [ "$(q "SELECT md5(string_agg(md5($EF), '' ORDER BY id)) FROM evidence")" = "$EV0" ] && [ "$(q "SELECT count(*) FROM evidence WHERE published_figure_class IS NOT NULL")" = "0" ] \
   && ok "every existing evidence row's own fields unchanged, its class null" || bad "evidence changed"
@@ -234,7 +234,7 @@ restore "$AER"; restart_server
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 node scripts/check_plain_words.mjs > "$W/plain.log" 2>&1 && ok "plain words: $(tail -1 "$W/plain.log")" || bad "plain words: $(grep -m3 HIT "$W/plain.log")"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1 || true)"
-printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain sentences: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain sentences: $PLAIN"
 cover "$LOG" 'evidence_published_figure_class_known holds' 'the ruled table, word for word' 'a vendor publication on another account, no class' 'a class on your own company' 'the class changed after recording' \
   'a vendor publication without a class -> 422' 'superseded with its class' "the outcome's evidence" 'record: the confirmation names the class' 'record: the two lines pass contrast' 'filing: a public filing offers the class' \
   'supersede: the successor' "own: on your own company's account" 'w6: a vendor publication offers' 'phone: record: at 390, no sideways scroll' 'B1: ' 'B2: ' 'B3: ' 'B4: '

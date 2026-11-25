@@ -84,6 +84,12 @@ export const PLAIN_CHECK: Record<string, string> = {
   persons_email_normalized: 'An email is recorded in lower case, with no spaces at either end.',
   // S7a (0054): a published figure's class is one of five.
   evidence_published_figure_class_known: 'Choose what kind of figure it gives: a license count, an activity count, an adjective, an outcome without baseline, or an outcome with baseline.',
+  // S7b (§27, 0055): a story of record.
+  story_records_audience_known: 'Say who the story is for: internal or client.',
+  story_records_stage_known: "A story's stage is reference, decision, realization or compounding, computed from the record.",
+  story_records_reference_internal: "A reference example's story is for your company's people only; it has no client copy.",
+  story_records_hash_shape: "A story's hash is the full sha256 of what it prints.",
+  story_records_withdrawal_is_complete: 'A story is withdrawn by a person, with a reason of at least 12 characters, all recorded together.',
   reference_example_markers_retirement_is_complete: 'Unmarking records who unmarked it and why (at least 12 characters), together.',
   reference_example_markers_stated: 'A reference-example marker needs a source citation and a note of at least 12 characters each.',
   reference_example_markers_supersession_reason: 'Correcting a marker needs a reason of at least 12 characters.',

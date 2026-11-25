@@ -118,8 +118,8 @@ PY
   psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/fnbreak.sql" > /dev/null
 }
 reharden() {
-  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "229" ] \
-    && ok "  ...hardening.sql re-applied: every function as declared, 229 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
+  psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard2.log" 2>&1 && [ "$(trig)" = "233" ] \
+    && ok "  ...hardening.sql re-applied: every function as declared, 233 triggers" || bad "  ...re-harden: $(grep -m2 ERROR "$W/hard2.log")"
 }
 
 step "1. Typecheck"
@@ -133,14 +133,14 @@ RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs
 RUNIDS0="$(q "SELECT string_agg(quote_literal(id::text), ',' ORDER BY id) FROM value_runs")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
-[ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1): section 34 adds 5" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (320 + 8)" || bad "  ...rows"
+[ "$(trig)" = "233" ] && ok "233 triggers (S7b section 39: +4) (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1): section 34 adds 5" || bad "triggers: $(trig)"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "360" ] && ok "  ...360 (S7b section 39: +7) (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (320 + 8)" || bad "  ...rows"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 [ "$(q "SELECT count(*) FROM value_outcomes WHERE attribution_method IS NOT NULL OR measure_class IS NOT NULL")" = "0" ] && ok "  ...D1: every commitment made before B4 keeps no method or class" || bad "  ...a method was filled in"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 [ "$(q "SELECT has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'INSERT') || '|' || has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'UPDATE')")" = "true|false" ] && ok "outcome_withdrawals: INSERT, never UPDATE, for the app" || bad "privileges"
 
 step "3. The session and the server"
@@ -247,7 +247,7 @@ SQL
   [ "$FIX" = "FIXTURE" ] || { bad "the fixture: $FIX"; exit 1; }
   [ "$(q "SELECT realization || '|' || trim_scale(actual_value) || '|' || trim_scale(realized_currency_impact) || '|' || trim_scale(target_value) || '|' || (SELECT full_name FROM persons WHERE id = committed_by_person_id) || '|' || (SELECT count(*) FROM value_outcome_evidence WHERE value_outcome_id = '$FOUT' AND supports = 'actual' AND withdrawn_at IS NULL) || '|' || (SELECT bool_and(simulated) FROM evidence WHERE id IN ('$FS1', '$FS2')) FROM value_outcomes WHERE id = '$FOUT'")" = "measured|100.4|8400000|100|[SIM] Customer Sponsor|2|true" ] \
     && ok "the fixture ${FOUT:0:8}: measured, actual 100.4, realized 8400000, target 100 by [SIM] Customer Sponsor, two simulated rows (${FS1:0:8}, ${FS2:0:8}) as its actual: f23ee6a8 before act 1" || bad "the fixture: $(q "SELECT realization, actual_value, target_value FROM value_outcomes WHERE id = '$FOUT'")"
-  [ "$(trig)" = "229" ] && ok "  ...every guard in force again: 229 triggers" || bad "  ...triggers: $(trig)"
+  [ "$(trig)" = "233" ] && ok "  ...every guard in force again: 233 triggers" || bad "  ...triggers: $(trig)"
   C1="${C1//f23ee6a8/${FOUT:0:8}}"; C2="${C2//f23ee6a8/${FOUT:0:8}}"; C3="${C3//2c10e091/${FS1:0:8}}"; C4="${C4//eea43d9a/${FS2:0:8}}"
   OUT="$FOUT"; SIM1="$FS1"; SIM2="$FS2"; export OUT SIM1 SIM2 C1 C2 C3 C4
 fi
