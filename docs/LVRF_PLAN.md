@@ -6910,7 +6910,7 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
   warning. Cancel.
 - **About a day.**
 
-## 33. S7a: the published figure's class (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1–D7 as recommended**; **Gate A 25 Nov 2026** (`BUILD_STATUS.md`, "S7a … Gate A"); the supersession batch's skip ruled by Brad during it)
+## 33. S7a: the published figure's class (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1–D7 as recommended**; **Gate A 25 Nov 2026** (`BUILD_STATUS.md`, "S7a … Gate A"); the supersession batch's skip ruled by Brad during it; **closed 25 Nov 2026**, deployed at `2a189e1`, Gate C clean)
 
 **Brad's rulings (25 Nov 2026):**
 - **D1–D7 are approved as recommended.**

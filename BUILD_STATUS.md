@@ -17686,3 +17686,33 @@ account. The batch would skip and list each; each is superseded on card 01c, sta
 - nothing written since the deploy, apart from any session of your own;
 - `lvrf_evidence_final` `e368ebcc…`; no row with a class; 229 triggers; drift none (55, newest `0054`);
 - hashes 27/27; TOC 975; ownership clean.
+
+### S7a closed: the published figure's class, deployed at `2a189e1`; Gate C clean — 25 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `2a189e1`.
+- Pre-deploy backup `~/lvrf-pre-s7a-20261125T031253Z.dump`, **TOC 975**.
+- Migrate `0054` clean (55 migrations); `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **229 triggers**;
+  `lvrf_evidence_final` **`e368ebcc6d1328bd4bf22e5636b798d7`**; 0 rows with a class.
+- Post-hardening backup `~/lvrf-post-s7a-20261125T031431Z.dump`, **TOC 975**.
+- Deploy: drift none (55, newest `0054_s7a_figure_class`), D1/D3/D4 no findings, ownership clean, "active and answering
+  (after 5 refused tries)", all checks, bundle **`index-Cc9Uts9t.js` / `index-YDBWZVG7.css`**, "deploy OK". The API
+  started at 03:15:08 UTC.
+
+**Brad's look (records nothing):** on Curia's "Record a source…", kind Vendor publication shows "What kind of figure it
+gives" with the five classes (License count, Activity count, Adjective, Outcome without baseline, Outcome with
+baseline). Cancelled.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `2a189e1`, tree clean. The served `index.html` names `index-Cc9Uts9t.js` / `index-YDBWZVG7.css`.
+- **Since the pre-deploy backup (03:12:53 UTC), nothing was written:** 0 governance acts (still 228, the last 15 Nov
+  21:12:17); 0 refusals, 0 research-process refusals; 0 audit rows, 0 record documents, 0 heartbeat events; 0 sessions;
+  0 evidence rows.
+- **The function as deployed:** `lvrf_evidence_final` `e368ebcc6d1328bd4bf22e5636b798d7`; **0 rows with a class.**
+- **Drift none (55 migrations, newest `0054_s7a_figure_class`; 1,357 schema objects match `0054_snapshot.json`).**
+- **229 triggers**, none disabled; ownership clean (`lvrf_ownership_violations()` 0).
+- 1 commitment, 0 verifications; runs 27, all locked; **`check_run_hashes` 27/27**.
+- **TOC 975** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**S7a is closed** (25 Nov 2026). **Next:** Brad's six Curia rows (`docs/LVRF_S7_CURIA_ROWS.md`, through the page, rule
+10); the §34 mock-ups.
