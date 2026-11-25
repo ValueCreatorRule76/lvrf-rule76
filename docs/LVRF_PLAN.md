@@ -7032,7 +7032,21 @@ the class field on a published source, its migration and its guard, so that Brad
 - **Then Brad's six rows** (§27 section 4), through the page (rule 10). Row 4 supersedes `092c46b6` and states its class.
 - **About a day.** Inside the 18 Dec window.
 
-## 34. The account-team page (planned 25 Nov 2026, for Brad's approval; plan only, mock-ups before code)
+## 34. The account-team page (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1 (b), D2–D7 as recommended, and D8's dates**; mock-ups before code)
+
+**Brad's rulings (25 Nov 2026):**
+- **D1 = (b) for the pilot's start:** public names and roles, plus the customer's yes or no to each ask; no figures.
+  It is built so that (a) is one small change away. **(a) waits for an agreement with Skillsoft on holding customer
+  data.**
+- **D2–D7 are approved as recommended.**
+- **The ~40 writes open to any signed-in staff member:** a ruling is needed **before any member of staff other than the
+  steward is given sign-in**. It is on the 3.1 list with that condition.
+- **D8, the dates:**
+  - the mock-ups before Fri 18 Dec 2026;
+  - **the first working session: Thursday 28 Jan 2027**;
+  - **Gate B and Gate D by Fri 22 Jan 2027**;
+  - the 4–15 Jan window untouched.
+- **Next:** the mock-ups, after S7a's Gate B.
 
 **What Brad asked (25 Nov 2026):** "The account-team page", after S7b, in place before the account teams' first working
 session in the pilot's middle weeks, and outside the 4–15 Jan window, which it must not touch.
