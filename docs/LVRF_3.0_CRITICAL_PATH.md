@@ -479,6 +479,27 @@ cut line applied first.
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 
+- **The plain-words sweep's window crosses a summary/provenance join** (Brad, 25 Nov 2026, from S7b's Gate A).
+  - **The case:** on `/runs` (`client/src/components/C3Batches.tsx` line 132), the system-exercise batch quotes each
+    candidate's note, which `server/routes/creditAndMarks.ts` line 424 builds as `summary || ' (' || provenance || ')'`.
+    A code in the stored summary, near its end, gets a ±25-character window running across the app's ` (` into the
+    stored provenance. That string is in no row, so the sweep counts the record's own words as app text: Brad's
+    classification note on `e4a47f31`, "(S1, D1)".
+  - **The fix:** clip the window at the edge of the stored text (the summary's end), never change its length.
+  - **A break:** a code the app writes into its own text next to the join is still caught.
+  - Not changed in S7b's gate.
+- **`verify_s1_hypothesis_rule`'s 27 failures on prod's later state** (under L39: state-dependent scripts read the copy's
+  state). On any copy taken after 15 Nov, Skillsoft's outcome `f23ee6a8` carries the hypothesis Brad stated, and the
+  account is classified. The script's fixture assumes neither, so 27 checks fail from "hypothesis counts" on. They fail
+  the same way, word for word, under S7a (`2a189e1`) and S7b. The script must build its own fixture account, or read the
+  copy's state.
+- **The plain-words sweep timed out on a pack page** (S7a's run on the fresh copy, 25 Nov 2026).
+  - `/packs/pharmaceutical-biotechnology` did not finish within 60 s, so the sweep read 53 of 54 pages, and its coverage
+    checks failed as they should (an unread page proves nothing).
+  - S7b's run on the same copy read all 54.
+  - **To find out:** whether the pack page is slow, or the 60 s budget is too tight under load. It must be measured,
+    not retried.
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the
