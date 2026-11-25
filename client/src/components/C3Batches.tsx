@@ -230,6 +230,8 @@ interface PlanRow {
   mark?: { carries: boolean; reason: string | null };
   links?: { outcome_id: string; metric: string; supports: string; moves: boolean; frozen: boolean }[];
   withdrawn_links?: number; errata?: number; sealed_runs?: number; blockers: string[];
+  /** S7a: listed, never written (a vendor publication about another account). */
+  skipped?: string;
 }
 interface ErratumTexts { what_was_wrong: string; what_is_right: string; reason: string }
 interface PlanErratum { erratum_id: string; run_number?: number; engagement?: string; current?: ErratumTexts; next?: ErratumTexts; supersession_reason?: string; blockers: string[] }
@@ -316,6 +318,14 @@ function PlanErratumLine({ r }: { r: PlanErratum }) {
 
 /** What the dry run says will happen to one row. */
 function PlanLine({ r }: { r: PlanRow }) {
+  if (r.skipped) {
+    return (
+      <li className="border-b border-rule-soft px-4 py-3 text-[12px] last:border-b-0" data-testid="supersession-plan-skipped" data-evidence={r.evidence_id}>
+        <span className="font-semibold text-ink">{r.account} · {r.kind?.replace(/_/g, ' ')} <ShortId id={r.evidence_id} /></span>
+        <span className="mt-1 block text-ink-70" data-testid="plan-skipped">Skipped, {r.evidence_id.slice(0, 8)}: {r.skipped}</span>
+      </li>
+    );
+  }
   return (
     <li className="border-b border-rule-soft px-4 py-3 text-[12px] last:border-b-0" data-testid="supersession-plan-row" data-evidence={r.evidence_id}>
       <span className="font-semibold text-ink">{r.account} · {r.kind?.replace(/_/g, ' ')} <ShortId id={r.evidence_id} /></span>

@@ -240,9 +240,12 @@ if (MODE === 'supersession') {
   }
   const before = posted('/api/evidence/supersession-batch/dry-run');
   check(await ev(`(()=>{const b=${dry};if(b.disabled)return false;b.click();return true})()`), 'the dry run runs', await text('[data-testid=supersession-waiting]'));
-  check(await waitFor(`document.querySelectorAll('[data-testid=supersession-plan-row]').length === 5 && document.querySelectorAll('[data-testid=supersession-plan-erratum]').length === 2`), '  ...and lists the 5 rows and 2 errata', await text('[data-testid=supersession-failed]'));
+  check(await waitFor(`document.querySelectorAll('[data-testid=supersession-plan-row]').length === 4 && document.querySelectorAll('[data-testid=supersession-plan-erratum]').length === 2`), '  ...and lists the 4 rows and 2 errata', await text('[data-testid=supersession-failed]'));
   check(posted('/api/evidence/supersession-batch/dry-run') - before === 1, '  ...in one request');
   const planOf = (id) => `document.querySelector('[data-testid=supersession-plan-row][data-evidence="${id}"]')`;
+  // S7a (Brad, 25 Nov 2026): the vendor publication about Scotts is skipped, listed with its short id and why.
+  const sk = await ev(`document.querySelector('[data-testid=supersession-plan-skipped][data-evidence="${E.RT}"] [data-testid=plan-skipped]')?.textContent ?? null`);
+  check(sk === `Skipped, ${E.RT.slice(0, 8)}: stopped: a vendor publication's successor states its class; supersede it on card 01c`, `  ...${E.RT.slice(0, 8)}, a vendor publication about another account: skipped, listed with its short id and why`, sk);
   if (!E.POST) {
   const c = await ev(`${planOf(E.RC)}.textContent`);
   check(c.includes('About Curia → about Skillsoft'), '  ...cee6fea9: its current and new statement', c.slice(0, 200));
@@ -250,22 +253,14 @@ if (MODE === 'supersession') {
   check(c.includes('the system-exercise mark carries to the new row'), '  ...what happens to its mark');
   check(c.includes('Links: none current; 1 withdrawn stay on the old row'), '  ...its links', c);
   check(c.includes('16 sealed runs'), '  ...its lineage, and the sealed runs that stay', c);
-  const t = await ev(`${planOf(E.RT)}.textContent`);
-  check(t.includes('Text new: ' + E.T1), '  ...423be7c6: its current and new text');
-  check(t.includes('About Scotts Miracle-Gro → about Scotts Miracle-Gro'), '  ...its about, kept');
-  check(t.includes('Source-verified now, opened. The new row starts unverified and unopened'), '  ...that its verification does not carry', t);
-  check(t.includes('It stays AI-sourced'), '  ...that its AI origin does');
-  check(t.includes('Mark: none.'), '  ...no mark');
-  check(t.includes('moves to the new row, with its support unchanged (the outcome stays frozen)'), '  ...its link carried', t);
   const e1 = await ev(`document.querySelector('[data-testid=supersession-plan-erratum][data-erratum="${E.E1}"]').textContent`);
   check(e1.includes('another company') && e1.includes('A vendor claim about Scotts is never support for a baseline.') && e1.includes('misidentified'), '  ...each erratum: current and new text, and why', e1.slice(0, 240));
   } else {
     // A copy taken after B1's acts: every row's plan shows its current and new text, statement, mark, links and lineage.
-    for (const id of [E.RC, E.RF, E.RT, E.R2, E.R9]) {
+    for (const id of [E.RC, E.RF, E.R2, E.R9]) {
       const t = await ev(`${planOf(id)}.textContent`);
       check(['Text now:', 'Text new:', 'About ', 'Mark:', 'Lineage:'].every((w) => t.includes(w)) && /Links?:/.test(t), `  ...${id.slice(0, 8)}: its text, statement, mark, links and lineage`, t.slice(0, 200));
     }
-    check((await ev(`${planOf(E.RT)}.textContent`)).includes('moves to the new row, with its support unchanged (the outcome stays frozen)'), '  ...the frozen link carried');
   }
   const plan = `[data-testid=supersession-plan]`;
   await shotOf('l52_dry_run_1280', plan, 1280);
@@ -274,10 +269,10 @@ if (MODE === 'supersession') {
   const sec = `document.querySelector('[data-testid=supersession-batch]')`;
   await setField(sec, 'Why they are superseded', 'Verification: the rows and errata as ruled.'); await sleep(300);
   const n = posted('/api/evidence/supersession-batch') - posted('/api/evidence/supersession-batch/dry-run');
-  check(await submitIn(sec, 'Supersede 7 items'), 'the steward presses "Supersede 7 items"');
+  check(await submitIn(sec, 'Supersede 6 items'), 'the steward presses "Supersede 6 items"');
   await sleep(500);
   check((posted('/api/evidence/supersession-batch') - posted('/api/evidence/supersession-batch/dry-run')) === n, '  ...nothing is sent before the confirmation');
-  check((await text('[data-testid=confirm-text]')).includes('Supersede 7 items, as listed above.'), '  ...the confirmation states the count');
+  check((await text('[data-testid=confirm-text]')).includes('Supersede 6 items, as listed above.'), '  ...the confirmation states the count');
   await confirmIn(sec);
   check(await waitFor(`!document.querySelector('[data-testid=supersession-plan]')`), '  ...recorded');
 }

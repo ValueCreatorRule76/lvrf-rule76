@@ -156,13 +156,16 @@ async function carryToSuccessor(client: PoolClient, act: (a: ActRecord) => Promi
 interface BatchRow {
   id: string; institution_id: string; tenant_id: string; account: string; kind: string; summary: string; provenance: string; source_reference: string | null;
   confidence: string; simulated: boolean; ai_sourced: boolean; research_query: string | null; research_tool: string | null; attested_by_person_id: string | null; attested_at: string | null;
-  evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null;
+  evidence_form: string; quote_text: string | null; locator: unknown; how_read: string | null; own_company: boolean;
   source_verified: boolean; citation_resolved: boolean; deleted_at: string | null; superseded_by_id: string | null;
   about: string | null; about_institution_id: string | null; about_other_party: string | null;
 }
 const READING_FIELDS = ['evidence_form', 'quote_text', 'locator', 'how_read'];
 
 /** One item of the batch: what would happen to it, and what stops it. Writes nothing; the submit reads the same thing. */
+/** S7a (Brad, 25 Nov 2026): why the batch skips a vendor publication about another account. */
+export const SKIP_VENDOR = "stopped: a vendor publication's successor states its class; supersede it on card 01c";
+
 async function planItem(client: PoolClient, item: Record<string, unknown>, req: Request, tenantId: string, lock: boolean) {
   const id = String(item.evidence_id ?? '');
   const refused = (why: string) => ({ evidence_id: id, blockers: [why] });
@@ -171,9 +174,14 @@ async function planItem(client: PoolClient, item: Record<string, unknown>, req: 
     `SELECT e.id, e.institution_id, i.tenant_id, i.name AS account, e.kind::text, e.summary, e.provenance, e.source_reference, e.confidence::text, e.simulated, e.ai_sourced, e.research_query, e.research_tool,
             e.attested_by_person_id, to_char(e.attested_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS attested_at,
             e.evidence_form::text, e.quote_text, e.locator, e.how_read, e.source_verified, e.citation_resolved, e.deleted_at, e.superseded_by_id,
-            lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about, e.about_institution_id, e.about_other_party
+            lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about, e.about_institution_id, e.about_other_party, i.is_tenant_self AS own_company
        FROM evidence e JOIN institutions i ON i.id = e.institution_id WHERE e.id = $1 ${lock ? 'FOR UPDATE OF e' : ''}`, [id]);
   if (!e || isOtherTenant(req, e.tenant_id, { table: 'evidence', id })) return refused('That is not an evidence row of your company.');
+  // S7a (Brad, 25 Nov 2026): the batch cannot give a figure's class, so a vendor publication about another account is
+  // skipped, listed with its short id and why; its successor is recorded on card 01c, stating its class (§33 D3).
+  if (e.kind === 'vendor_publication' && !e.own_company) {
+    return { evidence_id: id, account: e.account, kind: e.kind, summary: e.summary, provenance: e.provenance, skipped: SKIP_VENDOR, blockers: [] as string[] };
+  }
   const blockers: string[] = [];
   let next: { aboutInstitutionId: string | null; aboutOtherParty: string | null } | null = null;
   let nextAbout: string | null = null;
@@ -279,7 +287,9 @@ async function planBatch(client: PoolClient, body: Record<string, unknown>, req:
   const plannedErrata = [];
   for (const i of errataItems) plannedErrata.push(await planErratum(client, i, req));
   const errata = plannedErrata.map((plan) => { const { write: _write, ...shown } = plan as typeof plan & { write?: unknown }; return shown; });
-  return { planned, plannedErrata, rows, errata, plan_hash: sha256Hex({ rows, errata }), can_submit: [...rows, ...errata].every((r) => r.blockers.length === 0) };
+  // S7a: a skipped row is listed, never written, and stops nothing; the count is what will be written.
+  const count = rows.filter((r) => !('skipped' in r)).length + errata.length;
+  return { planned, plannedErrata, rows, errata, count, plan_hash: sha256Hex({ rows, errata }), can_submit: [...rows, ...errata].every((r) => r.blockers.length === 0) };
 }
 
 /** /api/institutions/:institutionId/evidence */
@@ -414,8 +424,8 @@ export function evidenceActsRouter(pool: Pool): Router {
     try {
       tenantId = await actorTenantId(req);
       if (await refuseUnknownFields(pool, req, res, ['items', 'errata'], { endpoint, subjectTable: 'evidence', subjectId: null, tenantId, institutionId: null })) return;
-      const { rows, errata, plan_hash, can_submit } = await planBatch(client, isRecord(req.body) ? req.body : {}, req, tenantId, false);
-      res.status(200).json({ count: rows.length + errata.length, rows, errata, plan_hash, can_submit });
+      const { rows, errata, count, plan_hash, can_submit } = await planBatch(client, isRecord(req.body) ? req.body : {}, req, tenantId, false);
+      res.status(200).json({ count, rows, errata, plan_hash, can_submit });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'evidence', subjectId: null, tenantId, institutionId: null });
     }
@@ -433,8 +443,7 @@ export function evidenceActsRouter(pool: Pool): Router {
       const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
       if (reason.length < MIN_REASON) throw new Refusal(422, `Say why they are superseded, in at least ${MIN_REASON} characters.`);
       if (typeof b.expected_count !== 'number' || typeof b.plan_hash !== 'string') throw new Refusal(422, 'Give the count and the plan the dry run showed.');
-      const { planned, plannedErrata, rows, errata, plan_hash, can_submit } = await planBatch(client, b, req, tenantId, true);
-      const count = rows.length + errata.length;
+      const { planned, plannedErrata, rows, errata, count, plan_hash, can_submit } = await planBatch(client, b, req, tenantId, true);
       if (count !== b.expected_count) throw new Refusal(409, `The count changed: ${count} items now, not ${b.expected_count}. Run the dry run again.`);
       if (!can_submit) throw new Refusal(409, `Nothing was recorded: ${[...rows, ...errata].flatMap((r) => r.blockers)[0]}`);
       if (plan_hash !== b.plan_hash) throw new Refusal(409, 'The record changed since the dry run, so nothing was recorded. Run the dry run again.');
@@ -451,6 +460,7 @@ export function evidenceActsRouter(pool: Pool): Router {
       }
       const superseded = [];
       for (const { item, plan } of planned) {
+        if ('skipped' in plan) continue;  // S7a: listed, never written
         const { row: e, reading } = (plan as { write: { row: BatchRow; reading: ReturnType<typeof parseEvidenceForm> | null } }).write;
         const body: Record<string, unknown> = {
           about: item.about, kind: e.kind, summary: (plan as { next: { summary: string } }).next.summary, provenance: (plan as { next: { provenance: string } }).next.provenance, source_reference: e.source_reference ?? undefined,
@@ -462,7 +472,8 @@ export function evidenceActsRouter(pool: Pool): Router {
         await carryToSuccessor(client, act, e, successor, reason, actor);
         superseded.push({ evidence_id: e.id, successor_id: successor });
       }
-      res.status(201).json({ superseded: superseded.length, errata_superseded: plannedErrata.length, rows: superseded });
+      const skipped = rows.filter((r) => 'skipped' in r).map((r) => ({ evidence_id: r.evidence_id, short_id: r.evidence_id.slice(0, 8), reason: (r as { skipped: string }).skipped }));
+      res.status(201).json({ superseded: superseded.length, errata_superseded: plannedErrata.length, rows: superseded, skipped });
     } catch (err) {
       await answer(pool, err, req, res, { endpoint, subjectTable: 'evidence', subjectId: null, tenantId, institutionId: null });
     }

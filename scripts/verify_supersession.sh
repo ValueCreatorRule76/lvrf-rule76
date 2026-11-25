@@ -275,19 +275,27 @@ expect POST "$DR" "{\"items\":[$(IT "$RC" "$SK"),$(IT "$RC" "$SK")]}" 422 "a row
 expect POST "$DR" "{\"items\":[$(IT "$LEGR" "$SK" noreading)]}" 200 "a legacy row with no reading"
 [ "$(rj "b.can_submit")" = "false" ] && printf '%s' "$(ROW "$LEGR" ".blockers[0]")" | grep -q "records no reading" && ok "  ...stopped: a new row must record its reading (L52-D5)" || bad "  ...$(ROW "$RC" ".blockers")"
 expect POST "$DR" "$BODY" 200 "the dry run"
-[ "$(rj b.can_submit)|$(rj b.count)" = "true|7" ] && ok "  ...5 rows and 2 errata, nothing stopping them" || bad "  ...$(rj "JSON.stringify(b.rows.map(r=>r.blockers))")"
+[ "$(rj b.can_submit)|$(rj b.count)" = "true|6" ] && ok "  ...4 rows and 2 errata to write, nothing stopping them" || bad "  ...$(rj "JSON.stringify(b.rows.map(r=>r.blockers))")"
 HASH="$(rj b.plan_hash)"
+# S7a (Brad, 25 Nov 2026): the vendor publication about Scotts is skipped, listed with its short id and why, writing nothing.
+[ "$(ROW "$RT" ".skipped")|$(ROW "$RT" ".blockers.length")" = "stopped: a vendor publication's successor states its class; supersede it on card 01c|0" ] && ok "  ...${RT:0:8}, a vendor publication about another account: skipped and listed, \"stopped: a vendor publication's successor states its class; supersede it on card 01c\"" || bad "  ...${RT:0:8} skip: $(ROW "$RT" "")"
+# B-skip (Brad, 25 Nov 2026): a skip not listed fails. The plan drops the row's listing: the check above no longer finds it.
+edit "$AEV" "skipped: SKIP_VENDOR, blockers" "blockers"
+stop_server; start_server
+expect POST "$DR" "$BODY" 200 "B-skip: the dry run with the skip unlisted"
+[ "$(ROW "$RT" ".skipped")" != "stopped: a vendor publication's successor states its class; supersede it on card 01c" ] && ok "B-skip: the skip not listed → caught: ${RT:0:8} is no longer listed as skipped" || bad "B-skip: not caught"
+restore "$AEV"; stop_server; start_server
+expect POST "$DR" "$BODY" 200 "  ...with it back, the dry run again"
+[ "$(ROW "$RT" ".skipped")" = "stopped: a vendor publication's successor states its class; supersede it on card 01c" ] && [ "$(rj b.plan_hash)" = "$HASH" ] && ok "  ...the skip listed again, the same plan" || bad "  ...after B-skip: $(ROW "$RT" "")"
 if [ -z "$POST" ]; then
 [ "$(ROW "$RC" ".current.about")|$(ROW "$RC" ".next.about")|$(ROW "$RC" ".mark.carries")|$(ROW "$RC" ".links.length")|$(ROW "$RC" ".withdrawn_links")|$(ROW "$RC" ".sealed_runs")" = "Curia|Skillsoft|true|0|1|16" ] && ok "  ...cee6fea9: about Curia → Skillsoft; the mark carries; no current link; 16 sealed runs" || bad "  ...cee6fea9: $(ROW "$RC" "")"
 [ "$(ROW "$RF" ".next.about")|$(ROW "$RF" ".mark.carries")|$(ROW "$RF" ".withdrawn_links")|$(ROW "$RF" ".sealed_runs")" = "Skillsoft|true|2|10" ] && ok "  ...f9775317: about Skillsoft; the mark carries; 2 withdrawn links stay; 10 sealed runs" || bad "  ...f9775317"
-[ "$(ROW "$RT" ".current.about")|$(ROW "$RT" ".next.about")|$(ROW "$RT" ".current.verified")|$(ROW "$RT" ".mark.carries")|$(ROW "$RT" ".links[0].supports")|$(ROW "$RT" ".links[0].moves")|$(ROW "$RT" ".links[0].frozen")|$(ROW "$RT" ".errata")|$(ROW "$RT" ".sealed_runs")" = "Scotts Miracle-Gro|Scotts Miracle-Gro|true|false|impact_basis|true|true|3|2" ] && ok "  ...423be7c6: about Scotts, kept; no mark; its impact-basis link carried on the frozen outcome; 3 errata and 2 runs stay" || bad "  ...423be7c6: $(ROW "$RT" "")"
-[ "$(ROW "$RT" ".next.summary")" = "$T1" ] && ok "  ...its current and new text" || bad "  ...text"
 [ "$(ROW "$R2" ".next.summary")|$(ROW "$R2" ".links[0].supports")|$(ROW "$R2" ".links[0].frozen")" = "$T2|impact_basis|false" ] && ok "  ...271a449a: the guidance only; its live link moves" || bad "  ...271a449a"
 [ "$(ROW "$R9" ".next.summary")|$(ROW "$R9" ".links[0].supports")" = "$T9|baseline" ] && ok "  ...9765335f: the release's words; its baseline moves" || bad "  ...9765335f"
 [ "$(rj "b.errata.length")|$(rj "b.errata.every(e=>e.current.what_is_right.includes('another company')&&!e.next.what_is_right.includes('another company'))")" = "2|true" ] && ok "  ...both errata: current and new text" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
 else
 CNT() { q "$1"; }
-for r in "$RC" "$RF" "$RT" "$R2" "$R9"; do
+for r in "$RC" "$RF" "$R2" "$R9"; do
   [ "$(ROW "$r" ".current.about")" = "$(q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id = '$r'")" ] \
     && [ "$(ROW "$r" ".mark.carries")" = "$([ -n "$(q "SELECT 1 FROM system_exercise_marks WHERE subject_id = '$r'")" ] && echo true || echo false)" ] \
     && [ "$(ROW "$r" ".links.length")" = "$(q "SELECT count(*) FROM value_outcome_evidence WHERE evidence_id = '$r' AND withdrawn_at IS NULL")" ] \
@@ -296,8 +304,7 @@ for r in "$RC" "$RF" "$RT" "$R2" "$R9"; do
     && [ "$(ROW "$r" ".blockers.length")" = "0" ] \
     && ok "  ...${r:0:8}: its about, mark, links, withdrawn links and errata, as the copy holds them" || bad "  ...${r:0:8}: $(ROW "$r" "")"
 done
-[ "$(ROW "$RT" ".links[0].supports")|$(ROW "$RT" ".links[0].moves")|$(ROW "$RT" ".links[0].frozen")" = "impact_basis|true|true" ] && ok "  ...${RT:0:8}: its impact-basis link carried on the frozen outcome" || bad "  ...frozen link"
-[ "$(ROW "$RT" ".next.summary")|$(ROW "$R2" ".next.summary")|$(ROW "$R9" ".next.summary")" = "$T1|$T2|$T9" ] && ok "  ...each new text" || bad "  ...texts"
+[ "$(ROW "$R2" ".next.summary")|$(ROW "$R9" ".next.summary")" = "$T2|$T9" ] && ok "  ...each new text" || bad "  ...texts"
 [ "$(rj "b.errata.length")|$(rj "b.errata.every(e=>e.next.what_is_right!==e.current.what_is_right)")" = "2|true" ] && ok "  ...both errata: current and new text" || bad "  ...errata: $(rj "JSON.stringify(b.errata)")"
 fi
 [ "$(SNAP)" = "$S0" ] && ok "  ...the dry runs wrote nothing" || bad "  ...a dry run wrote"
@@ -319,18 +326,21 @@ expect POST "$DR" "{\"items\":[$(IT "$LEGR9" '"account"')]}" 200 "a legacy row, 
 [ "$(rj b.can_submit)" = "true" ] && ok "  ...allowed: the reading is the change" || bad "  ...$(rj "JSON.stringify(b.rows[0].blockers)")"
 S0="$(SNAP)"
 SUB() { node -e 'const b=JSON.parse(process.argv[1]);console.log(JSON.stringify({...b,expected_count:+process.argv[2],plan_hash:process.argv[3],reason:process.argv[4]}))' "$BODY" "$1" "$2" "$3"; }
-expect POST "$SB" "$(SUB 7 "$HASH" short)" 422 "the batch with no real reason" "at least 12"
-expect POST "$SB" "$(SUB 8 "$HASH" 'Verification: the count is off.')" 409 "the count off" "The count changed"
-expect POST "$SB" "$(SUB 7 0000 'Verification: a stale plan.')" 409 "a stale plan" "changed since the dry run"
-expect POST "$SB" "$(SUB 7 "$HASH" 'Verification: not the steward.')" 403 "X submits" "steward" "$X"
+expect POST "$SB" "$(SUB 6 "$HASH" short)" 422 "the batch with no real reason" "at least 12"
+expect POST "$SB" "$(SUB 7 "$HASH" 'Verification: the count is off.')" 409 "the count off" "The count changed"
+expect POST "$SB" "$(SUB 6 0000 'Verification: a stale plan.')" 409 "a stale plan" "changed since the dry run"
+expect POST "$SB" "$(SUB 6 "$HASH" 'Verification: not the steward.')" 403 "X submits" "steward" "$X"
 [ "$(SNAP)" = "$S0" ] && ok "  ...none of them wrote" || bad "  ...a refused batch wrote"
 
 step "8. The batch, in the browser; the record after"
 ER0="$(q "SELECT count(*) FROM run_errata")"; EA0="$(q "SELECT count(*) FROM governance_acts WHERE act = 'record_erratum' AND route = 'POST /api/evidence/supersession-batch'")"
 RC="$RC" RF="$RF" RT="$RT" R2="$R2" R9="$R9" E1="$E1" E2="$E2" T1="$T1" T2="$T2" T9="$T9" TC="$TC" TF="$TF" POST="$POST" cw supersession
+[ -z "$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RT'")" ] && ok "${RT:0:8}, skipped: the batch wrote nothing for it" || bad "${RT:0:8} was superseded by the batch"
+# Where the skip points: card 01c's own supersede, stating the class (§33 D3). Its successor plays the batch's old part below.
+expect POST "/api/evidence/$RT/supersede" "$(node -e 'const f=JSON.parse(process.argv[1]);console.log(JSON.stringify({...f,about:"account",kind:"vendor_publication",published_figure_class:"outcome_with_baseline",summary:process.argv[2],provenance:"Skillsoft case study naming Scotts Miracle-Gro (fixture restatement, not a source)",reason:"Verification: superseded on card 01c, stating its class, as the batch skipped it."}))' "$(FORMQ)" "$T1")" 201 "  ...superseded on card 01c's route instead, stating its class"
 NC="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RC'")"; NF="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RF'")"; NT="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$RT'")"
 N2="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$R2'")"; N9="$(q "SELECT superseded_by_id FROM evidence WHERE id = '$R9'")"
-[ -n "$NC" ] && [ -n "$NF" ] && [ -n "$NT" ] && [ -n "$N2" ] && [ -n "$N9" ] && ok "5 rows superseded" || bad "superseded: $NC $NF $NT $N2 $N9"
+[ -n "$NC" ] && [ -n "$NF" ] && [ -n "$NT" ] && [ -n "$N2" ] && [ -n "$N9" ] && ok "5 rows superseded (4 by the batch, the vendor publication on card 01c)" || bad "superseded: $NC $NF $NT $N2 $N9"
 ABT() { q "SELECT lvrf_evidence_about(about_institution_id, about_other_party) FROM evidence WHERE id = '$1'"; }
 [ "$(ABT "$NC")|$(ABT "$NF")|$(ABT "$NT")|$(ABT "$N2")" = "Skillsoft|Skillsoft|Scotts Miracle-Gro|Skillsoft" ] && ok "  ...each new row about what was stated" || bad "  ...about: $(ABT "$NC") $(ABT "$NF") $(ABT "$NT")"
 [ "$(q "SELECT summary FROM evidence WHERE id = '$NT'")" = "$T1" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$N2'")" = "$T2" ] && [ "$(q "SELECT summary FROM evidence WHERE id = '$N9'")" = "$T9" ] && ok "  ...with the new text" || bad "  ...text"
