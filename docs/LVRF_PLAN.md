@@ -6179,6 +6179,29 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 
 ### 6. Mock-ups, Gate B and the cut-off
 
+**Brad's rulings on the mock-ups (25 Nov 2026): approved, with two changes.**
+1. **The cover title follows the stage, never claiming beyond it:**
+   - Reference: "Story of record";
+   - Decision: "Story of record: decision";
+   - "Success story" only at Realization or later, when a sealed run holds a verified actual.
+   - **S7b's Gate A gains a break:** "Success story" on a story below Realization fails.
+2. **The five classes are approved word for word, except two "cannot support" lines:**
+   - **Activity count:** "capability change, a business outcome, or a rate per person, unless a headcount is cited from
+     the same source";
+   - **Outcome with baseline:** "attribution to the learning, unless the publication states a method that can be checked".
+
+   **The table as ruled:**
+
+   | Class | It can support | It cannot support |
+   |---|---|---|
+   | License count | how many seats were bought, and when, as the publisher states | use, adoption, or any outcome |
+   | Activity count | that the activity was recorded in the stated period, by the publisher's system | capability change, a business outcome, or a rate per person, unless a headcount is cited from the same source |
+   | Adjective | that the publisher described it so | any figure |
+   | Outcome without baseline | the after-figure the publisher states | a change, or what caused it |
+   | Outcome with baseline | the change the publisher states, as the publisher's claim | attribution to the learning, unless the publication states a method that can be checked |
+
+   It supersedes D5's table above.
+
 **The mock-ups, made 25 Nov 2026, for Brad's review:**
 - **Where:** `design/mockups/s7-*.html` and `s7-story.css` (fictional accounts only: Halden Assay Labs, a reference
   example; Corbel Freight, a client at Decision; Northstar Learning, the vendor).
@@ -6884,3 +6907,108 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
 - **Brad's look:** card 01b's "Add a person": the email optional. Typing Curia's own analyst's name shows the same-name
   warning. Cancel.
 - **About a day.**
+
+## 33. S7a: the published figure's class (planned 25 Nov 2026, for Brad's approval)
+
+**What it builds** (§27 D5 and D11, approved by Brad 24 Nov 2026; the mock-ups approved 25 Nov 2026 with two changes):
+the class field on a published source, its migration and its guard, so that Brad can record Curia's published rows
+(§27 section 4) and S7b's story can read what each one can and cannot support. S7a writes no story.
+
+### 1. What the code and the record hold today (read 25 Nov 2026, `fed0ee9` and prod; read only)
+
+- **The kinds:** `evidence_kind` holds `vendor_publication` and `public_filing` among seven.
+- **Who writes evidence with a kind the person chooses:**
+  - `POST /api/institutions/:id/evidence` and its supersede: card 01c's "Record a source…" and "Supersede…" (`SourceForm`);
+  - `POST /api/value-outcomes/:id/evidence`: the outcome's evidence (`AddEvidenceCard`, W6);
+  - the fact writer (`server/lib/institutionFactWriter.ts`), which records a fact's source, often a public filing, from
+    research.
+  - Other writers insert only `observation` or `attestation`.
+- **The evidence guards:** four triggers on `evidence`. `lvrf_evidence_final` (L41, BEFORE INSERT OR UPDATE) already
+  holds what is fixed at recording, so the class rule fits there: no new trigger.
+- **On prod:**
+  - accounts other than your own company's hold 3 vendor publications (2 current) and 9 public filings (7 current);
+  - your own company's account holds 5 public filings (3 current);
+  - most public filings are research facts (revenue, a reported rate), not a vendor's story about a customer.
+
+### 2. Decisions (recommendations first)
+
+- **D1. The field:** migration `0054` adds `evidence.published_figure_class text`, null on every existing row. A CHECK
+  holds it to five values: `license_count`, `activity_count`, `adjective`, `outcome_without_baseline`,
+  `outcome_with_baseline`.
+  - The CHECK sits inside the table's definition, so the TOC stays **975** and the triggers **229**. Both are measured at
+    Gate A.
+  - The CHECK gets a plain sentence (`plainChecks.ts`).
+- **D2, where it is required (a departure from D5's wording, for Brad's ruling).** D5 reads "required once the field
+  exists, when [a vendor publication or a public filing] is recorded on an account that is not the tenant's own".
+  - **The difficulty:** applied to public filings, that would refuse every research fact from a filing (revenue, a
+    reported rate). The fact writer has no class to give, and the classes describe a vendor's story about a customer,
+    not a company's own filing.
+  - **Recommended:**
+    - **required** on a new **vendor publication** recorded on an account that is not your own company's;
+    - **offered, optional,** on a new **public filing** there (a filing can quote a vendor's story);
+    - **refused** on every other kind, and on your own company's account.
+  - **Option:** D5 as written, with the fact writer's filings exempted by name.
+- **D3, fixed at recording.**
+  - **An UPDATE that changes the class is refused:** "What kind of figure a source gives is fixed when it is recorded;
+    correct it by supersession."
+  - **A supersession is a new row,** so the rule applies to it: a vendor publication's successor states its class.
+  - **Existing rows keep their null.** The rule reads new rows only.
+- **D4, the routes.** Both evidence routes take `published_figure_class` and refuse, before writing, in the database's
+  words:
+  - **missing where required:** "A vendor publication about another account says what kind of figure it gives.";
+  - **given where it does not belong:** "Only a vendor publication or a public filing about another account says what
+    kind of figure it gives.";
+  - **an unknown value.**
+
+  The fact writer is unchanged: a filing it records stays without a class.
+- **D5, the forms, as the mock-up shows (approved 25 Nov 2026).** `SourceForm` (record and supersede) and
+  `AddEvidenceCard` gain "What kind of figure it gives". It shows only for a vendor publication (required) or a public
+  filing (optional) on an account other than your own company's. Under it:
+  - "A story reads it so", with the chosen class's two lines in the ruled wording;
+  - "It is fixed when recorded: a correction supersedes the row."
+
+  The confirmation names the class and its two lines. Until a class is chosen on a vendor publication, the unmet line
+  reads "choose what kind of figure it gives".
+- **D6, one wording.** The ruled table lives in `server/lib/figureClass.ts`; S7b's story reads it. The form's copy
+  (`client/src/lib/figureClass.ts`) must equal it word for word, and Gate A compares the two.
+- **D7, the reads.** The account's evidence read returns `published_figure_class`. Card 01c prints it beside the kind
+  ("vendor publication · outcome with baseline").
+
+### 3. Gate A (planned)
+
+- **`verify_figure_class` (new),** on a clone migrated to `0054` and hardened:
+  - **The column:** nullable, the five values held by the CHECK, every existing row byte-identical with a null class;
+    drift none at `0054`; 229 triggers; the TOC measured, expected 975.
+  - **The database, as `lvrf_app`, rolled back:**
+    - a vendor publication on another account without a class: refused;
+    - with each of the five: accepted;
+    - a public filing with or without one: accepted;
+    - a class on an observation, or on your own company's account: refused;
+    - an UPDATE changing the class: refused;
+    - a supersession of a classed row without a class: refused.
+  - **The routes:** each of D4's refusals, with nothing written; a classed vendor publication recorded and superseded.
+  - **The page:** card 01c's "Record a source…" and "Supersede…", and W6's evidence form, at 1280 and 390:
+    - the field appears only for the kinds and accounts D2 names;
+    - the chosen class's two lines are in the ruled wording;
+    - the unmet line;
+    - the confirmation names the class;
+    - the can and cannot lines pass contrast (4.5:1, computed).
+  - **The wording:** the server's and the client's tables equal each other and the ruled table, word for word.
+  - **Breaks:**
+    - B1, the database's required rule removed: a vendor publication without a class accepted;
+    - B2, the class made editable: the UPDATE accepted;
+    - B3, the class missing from the confirmation: caught on the page;
+    - B4, the route's check removed: the database still refuses, its refusal recorded.
+- **Scripts that record a vendor publication on another account,** updated by design to give a class, each named.
+  `check_plain_words` over the new sentences.
+- **The full regression, and equivalence against `fed0ee9`:** GETs identical apart from the evidence reads' new key,
+  named.
+
+### 4. Gate B, Brad's acts and effort
+
+- **Gate B:** migrate `0054` (backup first, rule 8), then hardening for `lvrf_evidence_final`, its hash computed at
+  Gate A. The TOC and the triggers are as measured at Gate A.
+- **Brad's look:** card 01c on Curia, "Record a source…" with kind "Vendor publication": the field, its lines and the
+  unmet line. Cancel.
+- **Then Brad's six rows** (§27 section 4), through the page (rule 10). Row 4 supersedes `092c46b6` and states its class.
+- **About a day.** Inside the 18 Dec window.
