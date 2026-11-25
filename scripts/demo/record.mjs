@@ -25,6 +25,7 @@
  *   LVRF_SKILLSOFT_RUN_ID  go straight to this run instead of finding Skillsoft run 3 in Runs
  *   LVRF_DEMO_PACE         multiplies every pause (1.3 = slower, 0.7 = faster); default 1
  *   LVRF_DEMO_OUT          output folder; default ~/Movies/LVRF demo
+ *   LVRF_DEMO_CARDS        the argument cards (PNG); default ~/lvrf-backups/demo-cards
  *   LVRF_DEMO_FINALE       the rendered PDF pages for the finale; default ~/lvrf-backups/demo-finale
  *                          (made from the S3 prints with: pdftoppm -r 200 -png <pdf> <prefix>)
  */
@@ -41,13 +42,25 @@ const PACE = Number(process.env.LVRF_DEMO_PACE ?? 1) || 1;
 const REHEARSE = process.argv.includes('--rehearse');
 const VIEWPORT = { width: 1440, height: 900 };
 const FINALE_DIR = process.env.LVRF_DEMO_FINALE ?? path.join(os.homedir(), 'lvrf-backups', 'demo-finale');
+const CARDS_DIR = process.env.LVRF_DEMO_CARDS ?? path.join(os.homedir(), 'lvrf-backups', 'demo-cards');
+// The argument cards (rendered by cards/build.py), with seconds on screen. Cards carry no caption bar: they speak for themselves.
+const OPENING_CARDS = [
+  ['01-catalyst', 12], ['02-why-now', 13], ['03-not-just-ve', 12], ['04-principles', 13],
+  ['05-architecture', 13], ['06-ai-assist', 14], ['07-heartbeat-packs', 13], ['08-spine', 13],
+];
 const FINALE_ORIGIN = 'https://lvrf-demo.invalid';
 
 // ── Captions: edit freely. Keep them qualitative: no figure appears here that the page itself doesn't show. ──
 const C = {
   introTitle: 'LVRF',
-  introSub: 'Learning Value Realization Framework · two examples: a Skillsoft value case and Curia’s point of view',
+  introSub: 'Learning Value Realization Framework, for Skillsoft',
   home: ['Accounts', 'The value engineer’s home: every account, its engagements, and where each one stands.'],
+  warRoom: ['The War Room', 'Every live engagement in one view: what is due, confirmed, refuted or late.'],
+  warRoomMoney: ['The War Room', 'It never sums or averages money across accounts. Each account’s case stands on its own evidence.'],
+  storyOpen: ['Story of record · draft', 'Curia’s story, composed from real locked runs only. A draft is on screen only, and never prints.'],
+  storyScore: ['A sealed score, with its erratum', 'Every sealed confidence prints with its correction beside it, the same size and weight. Nothing is recomputed or hidden.'],
+  storyStage: ['The stage follows the evidence', 'A reference example stays a reference. Nothing is called a result until a verified actual says so.'],
+  storyPublished: ['Each published figure, classed', 'What each figure can support, and what it cannot, with its source.'],
   runs: ['Runs', 'Every run is sealed when it’s locked. We’ll open Skillsoft’s run 3.'],
   run: ['Skillsoft · run 3', 'One run of record. From here, its value case.'],
   caseGeneral: ['Value case · general lens', 'Read from the run’s sealed payload. Nothing on this page is computed in the browser.'],
@@ -106,6 +119,21 @@ window.__show = async (src) => {
   void pg.offsetWidth; pg.style.transition = t; pg.style.opacity = '1';
 };
 apply(null);
+</script></body></html>`;
+}
+
+function slidesHtml(cssHrefs) {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>LVRF</title>
+${cssHrefs.map((h) => `<link rel="stylesheet" href="${h}">`).join('\n')}
+<style>html,body{margin:0;height:100%;overflow:hidden}
+#s{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s ease}</style></head>
+<body class="bg-ink"><img id="s" alt="">
+<script>
+const s = document.getElementById('s');
+window.__slide = async (src) => {
+  s.style.opacity = '0'; await new Promise((r) => setTimeout(r, 600));
+  s.src = src; await s.decode().catch(() => {}); s.style.opacity = '1';
+};
 </script></body></html>`;
 }
 
@@ -217,6 +245,11 @@ await ctx.route('**/*', (route) => {
 await ctx.route(`${FINALE_ORIGIN}/**`, async (route) => {
   const name = path.basename(new URL(route.request().url()).pathname);
   if (name === 'finale.html') return route.fulfill({ contentType: 'text/html', body: finaleHtml(finaleCss) });
+  if (name === 'slides.html') return route.fulfill({ contentType: 'text/html', body: slidesHtml(finaleCss) });
+  if (new URL(route.request().url()).pathname.startsWith('/cards/')) {
+    try { return route.fulfill({ contentType: 'image/png', body: await readFile(path.join(CARDS_DIR, name)) }); }
+    catch { return route.fulfill({ status: 404, body: 'missing' }); }
+  }
   try { return route.fulfill({ contentType: 'image/png', body: await readFile(path.join(FINALE_DIR, name)) }); }
   catch { return route.fulfill({ status: 404, body: 'missing' }); }
 });
@@ -251,14 +284,34 @@ async function clickShown(locator) {
   await el.evaluate((e) => window.__lvrfHighlight(e, false));
   await el.click();
 }
+async function cssHrefs() { return page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href)); }
+async function showCards(list) {
+  const have = [];
+  for (const [n, secs] of list) { try { await access(path.join(CARDS_DIR, `${n}.png`)); have.push([n, secs]); } catch { warn(`Card missing: ${n}.png in ${CARDS_DIR}`); } }
+  if (!have.length) return false;
+  if (!page.url().endsWith('/slides.html')) { finaleCss = await cssHrefs(); await page.goto(`${FINALE_ORIGIN}/slides.html`); }
+  for (const [n, secs] of have) { await page.evaluate((src) => window.__slide(src), `cards/${n}.png`); await hold(secs); }
+  return true;
+}
 async function settle() { await page.waitForLoadState('networkidle').catch(() => {}); await hold(0.6); }
 
 try {
   // Intro
-  await page.goto(BASE + '/');
-  await card(C.introTitle, C.introSub, 4);
-  await settle(); await uncard();
+  await page.goto(BASE + '/'); await settle();
+  await card(C.introTitle, C.introSub, 4.5);
+  if (await showCards(OPENING_CARDS)) { await page.goto(BASE + '/'); await settle(); }
+  else await uncard();
   await caption(C.home, 4.5);
+
+  // ── The War Room (read-only; no money anywhere on it) ──
+  const band = page.getByTestId('band-open');
+  if (await visible(band, 4000)) await clickShown(band); else await page.goto(BASE + '/book');
+  if (await visible(page.getByTestId('war-room'), 10000)) {
+    await settle();
+    await caption(C.warRoom, 5);
+    if (await scrollTo(page.getByTestId('book-tiles'), 'start')) await hold(1);
+    if (await scrollTo(page.getByTestId('book-row').first(), 'center')) await caption(C.warRoomMoney, 5.5);
+  } else warn('No War Room page; skipped');
 
   // ── Skillsoft: run 3 ──
   if (process.env.LVRF_SKILLSOFT_RUN_ID) {
@@ -324,17 +377,27 @@ try {
   if (await scrollTo(page.getByTestId('chain'), 'start')) { await caption(C.povChain, 4); await glide(500, 2.5); await hold(1.5); }
   if (await scrollTo(page.getByTestId('locked-runs'), 'center')) await caption(C.povRuns, 5.5);
 
+  // ── Curia's Story of record: the draft (a read; Issue… is the steward's act and is never pressed) ──
+  await caption(['', ''], 0);
+  await page.goto(page.url().replace(/\/pov(\?.*)?$/, '/story'));
+  if (await visible(page.getByTestId('story-body'), 10000)) {
+    await settle();
+    await caption(C.storyOpen, 5);
+    if (await scrollTo(page.getByTestId('sealed-score'), 'center')) await caption(C.storyScore, 6.5);
+    if (await scrollTo(page.getByTestId('stage-strip'), 'center')) await caption(C.storyStage, 6);
+    if (await scrollTo(page.getByTestId('published'), 'start')) { await caption(C.storyPublished, 5); await glide(400, 2); await hold(1.5); }
+  } else warn('No Story of record page (S7b not deployed yet?); skipped');
+
   // ── Finale: the outputs ──
   await caption(['', ''], 0);
   const missing = [];
   for (const f of new Set(FINALE.map((x) => x.img))) { try { await access(path.join(FINALE_DIR, f)); } catch { missing.push(f); } }
   if (missing.length) warn(`Finale skipped: missing ${missing.join(', ')} in ${FINALE_DIR}`);
   else {
-    finaleCss = await page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href));
-    await card(C.finaleTitle, C.finaleSub, 3.5);
+    finaleCss = await cssHrefs();
+    if (!(await showCards([['09-outputs', 11]]))) await card(C.finaleTitle, C.finaleSub, 3.5);
     await page.goto(`${FINALE_ORIGIN}/finale.html`);
-    await card(C.finaleTitle, C.finaleSub, 1.5);
-    await uncard();
+    await hold(0.5);
     let current = null;
     for (const st of FINALE) {
       if (st.img !== current) {
@@ -350,8 +413,9 @@ try {
     await page.evaluate(() => window.__zoom(null)); await hold(1.6);
   }
 
-  // Outro
+  // Close: the Defensible card, then the principle.
   await caption(['', ''], 0);
+  await showCards([['10-defensible', 10]]);
   await card(C.outroTitle, C.outroSub, 5);
 } catch (err) {
   console.error(`\nStopped: ${err.message}`);
