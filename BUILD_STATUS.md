@@ -17357,3 +17357,158 @@ though the rule wants a later day (§26 D3). Its earliest day is `min={v.on}` to
 (`client/src/components/OutcomeSpine.tsx`). It should be Committed on + 1, following Committed on when it changes. The
 same-day date is already refused in words by the form, the route and the database (§26, §28's `verify_local_date`), so
 only the picker is wrong.
+
+### §32: a person's email is optional — Gate A, 24 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §32; Brad's rulings, 24 Nov 2026: D1–D7 as recommended, two additions; the Measure by
+fix rides in it). Branch `person-email`, on `d498a08`. **Migration `0053`; one new function on two new triggers.**
+- **`0053`:**
+  - `persons.email` `DROP NOT NULL`;
+  - `persons_email_key` is now a unique index on `lower(email)`, keeping its name;
+  - `persons_email_normalized` (a stored email is its own trimmed lower case);
+  - `persons.confirmed_distinct_from uuid[]`.
+  - No row changes: prod's 6 emails are distinct ignoring case, none with a capital or a space.
+- **The routes (D2):** `POST …/inputs` and `POST /api/account-inputs` take an email or none, normalized before writing.
+  Account inputs' assessment finds its person by email, so a person it names needs one: "…matches no person submitted
+  with that email. A person an assessment names needs an email: the assessment finds its person by it."
+- **The lookups (addition 2):** sign-in and the six access scripts compare `lower(email) = lower(btrim($1))`;
+  `set_email.ts` and `grant_access.ts` store the trimmed lower case.
+- **The same name (D4, addition 1):**
+  - **The route:** 409, "{name}, {title} is already recorded at this account. Choose them, or confirm this is a
+    different person.", unless `different_from` names each same-name person. That is recorded on the new row in
+    `confirmed_distinct_from`; who and when are `persons_audit`'s.
+  - **The database:** hardening section 38, `lvrf_person_email_rules`, on two triggers.
+    - `person_credentials_needs_email`: "A person signs in with their email; {name} has none. Record an email for them
+      first."
+    - `persons_email_rules`: `confirmed_distinct_from` is set only when a person is added, each id a current person of
+      the same account with the same name, and never changes after.
+- **One form (D5):** `client/src/components/AddPerson.tsx`, for W1 and card 01b. Its email reads "Email (optional; needed
+  only to sign in)". The same-name warning offers:
+  - "Choose them": on card 01b, the role form opens with them chosen;
+  - "This is a different person": the confirmation reads "Add {name}, {title}, as a person of this account. This is a
+    different person from {existing}, already recorded here."
+- **The reads (D6):** `email: string | null`.
+- **Measure by (D7):** its earliest day is the day after Committed on, and follows it.
+- **The plain sentence** for `persons_email_normalized`: "An email is recorded in lower case, with no spaces at either
+  end."
+
+**Departures, for Brad to read:**
+1. **Two triggers, not one.** Addition 1's column needs its own database guard, so D3's one trigger became one function
+   on two triggers. Triggers 227 → **229**, the TOC 972 → **975** (measured: a clone hardened with main's files 970,
+   with the branch's 973).
+2. **Account inputs' rule:** an assessment finds its person only by email, so the rule is "an assessment's email must
+   match a submitted person's", its refusal saying why.
+3. **B3:** the planned break (the assessment rule removed) is B5 below. B3 removes the route's email normalization, and
+   the database still refuses a mixed-case email.
+4. **A finding (before §32, and after): account inputs' assessments can never be admitted.** The route creates the
+   account and its persons, then requires each assessment's capability to "already exist for the institution". An
+   account made in the same request has none. So B5 shows which step refuses, not an admission (below). For a later
+   ruling: the assessment path there either goes, or takes its capabilities in the same request.
+
+**Gate A:**
+- **`verify_person_email` (new): 99 passed, 0 failed.**
+  - **The clone at `0053`:** email optional; `persons_email_key` unique on `lower(email)`; `persons_email_normalized`
+    validated; every person's own fields unchanged, the new column null on every row; 229 triggers; drift none
+    (54 migrations, newest `0053`); runs byte-identical.
+  - **The routes:**
+    - a person with no email (null), a mixed-case email with spaces (stored lower), an empty one (null);
+    - an email taken in another case refused ("…is already in LVRF; select them instead");
+    - account inputs: an email-less person admitted; an assessment naming an email no submitted person has refused,
+      nothing written;
+    - sign-in with the steward's email in capitals, with spaces: 200.
+  - **The same name:**
+    - another case and extra spaces: refused (409), naming who is there, nothing written;
+    - with `different_from`: admitted, the row recording it; no other row records one; the audit names the steward;
+    - the same name on another account: admitted, no warning;
+    - `different_from` with no one to differ from: refused.
+  - **The database, as `lvrf_app`, rolled back:**
+    - a credential for the email-less person refused; for one with an email, accepted;
+    - `confirmed_distinct_from` changed, or set on an existing person, refused; set naming someone of another name,
+      refused;
+    - a mixed-case email refused (`persons_email_normalized`); the same email again refused (`persons_email_key`).
+  - **The page:**
+    - card 01b: the email optional, a name alone enough; the same name (other case, spaces) shows the existing person
+      and holds the form; "Choose them" opens the role form with them chosen, nothing added; "This is a different
+      person" puts the full sentence in the confirmation, and the person is added and recorded;
+    - W1's form is the shared one, its email optional;
+    - Measure by's earliest day is the day after Committed on, and follows it when Committed on changes.
+  - **Breaks:**
+    - B1, the route's same-name check removed: a second same-name person added with no warning;
+    - B2, the credential rule removed: a credential for the email-less person accepted;
+    - B3, the route's normalization removed: the database still refuses a mixed-case email, nothing written;
+    - B4, Measure by's earliest day back to the commit day: caught on the page;
+    - **B5** (Brad, 24 Nov 2026), account inputs' assessment-email check removed:
+      - **its control:** an assessment naming a submitted person's email, in capitals, passes the email check and is
+        refused only at the next step, the capability;
+      - **the break:** a mismatched email is no longer refused for its email; it reaches that next step;
+      - **restored:** refused in its own words again;
+      - nothing is written by any of the three.
+    - Every file restored byte-identical; `check_plain_words` clean.
+- **The scripts, updated by design:**
+  - the trigger count 227 → 229 (22 scripts; 228 where one trigger is dropped);
+  - trigger-event rows 350 → 353 (6 scripts);
+  - CHECKs 158 → 159 (6 scripts);
+  - the journal line, 54 migrations, newest `0053` (13 scripts);
+  - `grant_access.ts` stores the email lower-cased, and `verify_access_grants` reads its mixed-case email back so;
+  - the outside-in walk clicks the shared form's confirmation;
+  - `verify_steward_safety`'s list of confirmations that name a new row in words names `AddPerson.tsx`;
+  - the duplicate-email sentence reads the email from the index's `(lower(email))=(…)` report.
+- **The full regression: 62 scripts. 48 passed first time; the 14 that read the old counts or forms failed, were
+  updated, and passed on rerun, each 0 failed:** `verify_access_grants` 77/0, `verify_c2` 170/0, `verify_c3` 208/0,
+  `verify_c3b` 241/0, `verify_case_snapshot` 117/0, `verify_commit_measure_verify` 220/0, `verify_evidence_final` 181/0,
+  `verify_person_email` 99/0, `verify_plain_refusals` 76/0, `verify_s1_hypothesis_rule` 207/0, `verify_s2_ai_research`
+  213/0, `verify_s4_form_confirmation` 106/0, `verify_steward_safety` 31/0, `verify_value_case` 201/0.
+  - Among the 48: `verify_tenant_scope` **329 passed, 0 failed** (setup 21, cases 308); `verify_plain_server` 113/0;
+    `verify_future_date` 95/0; `verify_customer_committer` 111/0; `verify_plain_words` 43/0; `verify_deploy_steps` 27/0.
+- **Equivalence against `d498a08`:** 213 GETs, **213 identical**.
+- **The function as built:** `lvrf_person_email_rules` `md5(prosrc)` `2b6cfc2891ddd4e43da2cd96e6e7d4cd` (new).
+- **Bundle,** built on the clean tree: **`index-BA2U_PSV.js` / `index-YDBWZVG7.css`.**
+
+#### Gate B for §32 (not run; Brad's pastes)
+
+**A migration (`0053`): back up first (rule 8).** Then hardening, for the new section 38.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only person-email && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `d498a08`.
+2. **On the box, pull, then back up before migrating** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-p32-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **972**. Stop if either differs.
+3. **Migrate `0053`, then ownership, then hardening (section 38):**
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_p32.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_p32.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_person_email_rules'" -c "SELECT attnotnull FROM pg_attribute WHERE attrelid = 'persons'::regclass AND attname = 'email'"
+   ```
+   Expect:
+   - the migrate to apply `0053` with no error. If a prod email were not its own trimmed lower case, the CHECK would
+     refuse and nothing would be applied; the 6 read on 24 Nov all are;
+   - `ownership exit 0`;
+   - `hardening exit 0`, `0` ERROR lines;
+   - **229**, **`2b6cfc2891ddd4e43da2cd96e6e7d4cd`**, and **`f`** (email optional).
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-p32-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **975**: 972, plus the function and its two triggers.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect:
+   - bundle **`index-BA2U_PSV.js` / `index-YDBWZVG7.css`**;
+   - steps 5b, 5c and 5d passed, drift none (**54 migrations, newest `0053_s32_person_email`**);
+   - "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing; Cancel everything):**
+- **Card 01b's "Add a person of this account…":** the email reads "optional; needed only to sign in". Typing Curia's own
+  person's name (Brad Piver) shows the same-name warning, with "Choose them" and "This is a different person". Cancel.
+- **"Commit…" on Lot Acceptance Rate:** Measure by's picker offers no day before tomorrow. Cancel.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- the 6 persons unchanged (their own fields), `confirmed_distinct_from` null on each;
+- `lvrf_person_email_rules` `2b6cfc28…`; 229 triggers; drift none (54, newest `0053`);
+- hashes 27/27; TOC 975; ownership clean.

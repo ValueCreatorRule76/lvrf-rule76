@@ -6730,7 +6730,7 @@ UTC date is refused, by the route and by the database, with a Gate A break. It c
   day after today. Cancel.
 - **About half a day.**
 
-## 32. 3.1 small item: a person's email is optional (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended and two additions**)
+## 32. 3.1 small item: a person's email is optional (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D7 as recommended and two additions**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§32 … Gate A"), with four departures for Brad to read)
 
 **Brad's rulings (24 Nov 2026):**
 - **D1–D7 are approved as recommended.**
