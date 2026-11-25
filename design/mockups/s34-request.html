@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LVRF §34 mock-up · Request an account</title>
+<!-- Fictional accounts and names only. §34 amendment item 1, D9 and D10 as recommended (not yet ruled). The offerings are
+     Skillsoft's catalog as loaded on prod (read 25 Nov 2026). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" />
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="s34.css" />
+</head>
+<body>
+<div class="bar"><span class="brand">LVRF</span><span>Jordan Reyes (fictional) · account executive · <u>Sign out</u></span></div>
+<div class="page">
+  <div class="crumb">Your accounts · Request an account</div>
+  <h1>Request an account</h1>
+  <p class="sub">Ask the steward to take on an account. The steward creates it, or tells you why not. You'll see it under "Your accounts" once it's created.</p>
+
+  <section class="blk">
+    <h2>The company</h2>
+    <div class="grid">
+      <label><span class="L">Company name</span><input class="I" value="Marrow Valley Foods (fictional)" /></label>
+      <label><span class="L">Website</span><input class="I" value="https://marrowvalley.example" /></label>
+      <label><span class="L">What you're pursuing</span>
+        <select class="I"><option>Renewal</option><option>Expansion</option><option>New logo</option></select></label>
+      <label><span class="L">Renewal date</span><input class="I" value="2027-06-30" />
+        <span class="help">Today or later. For an expansion or a new logo, this is the target close.</span></label>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>What you hope to sell</h2>
+    <p class="muted">Choose one or more from Skillsoft's solutions.</p>
+    <div class="checks">
+      <label><input type="checkbox" checked /> <span>Skillsoft Percipio Platform <span class="fam">· platform</span></span></label>
+      <label><input type="checkbox" /> <span>Skill Benchmarks &amp; Skills Readiness Assessment <span class="fam">· assessment</span></span></label>
+      <label><input type="checkbox" /> <span>Codecademy for Enterprise <span class="fam">· practice</span></span></label>
+      <label><input type="checkbox" checked /> <span>Skillsoft CAISY® Conversation AI Simulator <span class="fam">· practice</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft 1:1 Coaching (incl. Specialized) <span class="fam">· coaching</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft AI Coach <span class="fam">· coaching</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft Group Coaching <span class="fam">· coaching</span></span></label>
+      <label><input type="checkbox" /> <span>Instructor-Led Tech Training (Global Knowledge) <span class="fam">· instructor-led</span></span></label>
+      <label><input type="checkbox" checked /> <span>Skillsoft Leadership Development Program (SLDP) <span class="fam">· program</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft Compliance Suite <span class="fam">· content</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft Content Marketplace <span class="fam">· enabler</span></span></label>
+      <label><input type="checkbox" /> <span>Skillsoft LX Design Studio <span class="fam">· enabler</span></span></label>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Anything else (optional)</h2>
+    <p class="notice">Don't enter anything the customer hasn't made public or agreed to share.</p>
+    <label><span class="L">Notes</span>
+      <textarea class="I">Renewal is 1,200 seats. Their new COO wants frontline supervisors trained before the 2027 plant expansion.</textarea>
+      <span class="help">An email address or a phone number here is refused.</span></label>
+
+    <p class="L" style="margin-top:14px">Contacts: names and titles that are already public</p>
+    <div class="contact">
+      <input class="I" value="Ruth Adeyemi (fictional)" aria-label="Name" />
+      <input class="I" value="Chief Operating Officer" aria-label="Title" />
+      <input class="I" value="https://marrowvalley.example/leadership" aria-label="Where it's public" />
+    </div>
+    <div class="contact">
+      <input class="I" placeholder="Name" aria-label="Name" />
+      <input class="I" placeholder="Title" aria-label="Title" />
+      <input class="I" placeholder="Where it's public (a link, or where you saw it)" aria-label="Where it's public" />
+    </div>
+    <p class="help">No emails or phone numbers. The steward adds a person from here, with a source.</p>
+
+    <label style="margin-top:12px"><span class="L">Links</span>
+      <input class="I" value="https://marrowvalley.example/news/2027-plant-expansion" /></label>
+  </section>
+
+  <div class="unmet">Nothing is missing.</div>
+  <div style="margin-top:12px"><a class="btn solid" href="#">Send the request</a> <a class="btn off" href="#">Cancel</a></div>
+
+  <div class="confirm"><span class="k">Confirm what this records</span>
+    A request to the steward for an account: <strong>Marrow Valley Foods (fictional)</strong>, https://marrowvalley.example.<br />
+    Pursuing: <strong>a renewal</strong>, renewal date 30 Jun 2027.<br />
+    Hoping to sell: Skillsoft Percipio Platform; Skillsoft CAISY® Conversation AI Simulator; Skillsoft Leadership Development Program (SLDP).<br />
+    Notes: "Renewal is 1,200 seats. Their new COO wants frontline supervisors trained before the 2027 plant expansion."<br />
+    Contact: Ruth Adeyemi (fictional), Chief Operating Officer, public at https://marrowvalley.example/leadership.<br />
+    Link: https://marrowvalley.example/news/2027-plant-expansion.<br />
+    Sent by you, Jordan Reyes, today. It creates no account: the steward creates it or declines it, with a reason you will see. It can't be changed once sent.
+    <div style="margin-top:8px"><a class="btn solid small" href="#">Yes, send it</a> <a class="btn small" href="#">Back</a></div>
+  </div>
+  <div class="mock">Mock-up, fictional accounts and names only. The solutions are Skillsoft's catalog as loaded. D9 and D10 as recommended, not yet ruled.</div>
+</div>
+</body>
+</html>

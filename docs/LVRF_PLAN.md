@@ -7232,3 +7232,118 @@ The review PDF goes in `~/lvrf-backups/s34-mockup/` (`chmod 600`).
 About half a day for the mock-ups, then about four days to Gate A: two migrations (the link role, the staff role, the
 table), the server's role checks across about 40 writes and every read, the page, the queue and "Use…" for four
 forms. Then Gate D, a 30-minute session and its fixes.
+
+### 8. The mock-ups' first review (Brad, 25 Nov 2026)
+
+- **Approved in direction.**
+- **Approved:** a met ask shows "Recorded:" with what was recorded, in place of its question; "Use…" covers Add a person
+  only, and the role is named afterwards on its own form ("Name a customer-side role…").
+- **Changed: the account-team page shows confidence in words, never the number.** For example: "Confidence: low.
+  Nothing has been measured yet." The word is the latest locked run's stored band (`value_runs.confidence_band`: high
+  at 80 and over, medium at 55 and over, otherwise low; `db/CONFIDENCE_MODEL.md`). The sentence after it is the first
+  thing missing. The number stays on the steward's pages and on the prints.
+
+### 9. Amendment: account teams give inputs and sell with what LVRF produces (Brad, 25 Nov 2026)
+
+**Brad's principle:** account teams give the steward inputs, and use what LVRF produces to sell. They never do the
+method.
+
+1. **"Request an account": the account team's front door.**
+   - It is a request to the steward, never the creation of an account. Account teams cannot create accounts (D6).
+   - **Required:** the company's name; its website; what they're pursuing (renewal, expansion, new logo); the date that
+     matters (the renewal date, or the target close); what they hope to sell, chosen from Skillsoft's solution catalog
+     (the offerings as loaded).
+   - **Optional:** notes, contacts, links.
+   - It goes to the steward's queue, beside Bring back items. The steward creates the account, or declines with a
+     reason. The request then links to the account it became.
+   - **Append-only,** like `bring_back_items`.
+2. **"What LVRF produced",** on the account-team page, once the account is worked:
+   - the one-page summary (D11);
+   - the POV and value case prints;
+   - the asks;
+   - **"What to lead with":** the Skillsoft solutions the steward linked to the account's levers (`lever_offerings`),
+     read-only.
+3. **Bring back stays as planned.**
+4. **Contacts under D1 (b):** names and titles already public only, with no emails or phone numbers, for the pilot's
+   start. The notes field carries "Don't enter anything the customer hasn't made public or agreed to share." Contacts
+   with details wait for the (a) agreement.
+
+**What the record holds (read 25 Nov 2026, prod, in a read-only transaction):**
+- 12 current offerings in 8 families: platform 1, assessment 1, practice 2, coaching 3, instructor-led 1, program 1,
+  content 1, enabler 2.
+- 3 current lever links.
+- A lever belongs to an industry measure, not to an account. "The account's levers" are the levers of the measures in
+  the account's classified industry pack.
+- No one-page summary print exists today. The nearest record is the executive summary (O2, `executive_summaries`):
+  human-written, attributed, append-only versions.
+
+### 10. The amendment's decisions (recommendations first)
+
+- **D9, the request's minimum inputs. Recommended: Brad's list as written, with these rules:**
+  - **Company name and website:** required, as typed. The website must be a web address; the steward verifies it on
+    creation, as today.
+  - **What they're pursuing:** one of renewal, expansion, new logo.
+  - **The date that matters:** a real date, labelled by the pursuit ("Renewal date" for a renewal, "Target close"
+    otherwise). **Today or later.** A request is about something ahead; this is the reverse of §31's walk-date rule.
+  - **What they hope to sell:** one or more current offerings (not superseded), at least one. Stored by the offering's
+    id, so a later catalog change doesn't rewrite what was asked for.
+  - **Not asked:** the industry, the stage or any lever. Those are the steward's, from sources (the method).
+  - **Already an account:** the requester sees only their linked accounts (D6), so the form doesn't say whether a
+    company exists. The steward's queue shows a possible match (same website domain, or same name ignoring case), and
+    the steward either links the requester to it (decline with that reason, then the link on the Account team card) or
+    creates a new one.
+  - **The requester's link:** creating the account from a request offers, in the same confirmation, to link the
+    requester to it as `account_team` (D2). It is still the steward's act, and can be unticked.
+  - **Research:** a request's name and website reach research only through the account the steward creates, as
+    today. Its notes, contacts and links never reach a research prompt (S2 unchanged).
+- **D10, contacts and the notes field under D1 (b). Recommended:**
+  - **Each contact:** a name and a title, both required, and where it is public (a link, or "where I saw it"),
+    required.
+  - **Refused in every free-text field of a request** (notes, contacts, links' labels), by the route and by the
+    database: anything shaped like an email address or a phone number, with a plain sentence saying why. This is the
+    request's version of Bring back's no-figures rule.
+  - **Figures in notes are allowed.** A deal value or seat count is Skillsoft's own information, not the customer's.
+    Bring back keeps its no-figures rule, because there a figure would be the customer's.
+  - **The notes field** carries "Don't enter anything the customer hasn't made public or agreed to share.", above it,
+    in full.
+  - **A contact never becomes a person by itself.** The steward adds one through "Add a person" (D3), with every rule.
+  - **Under (a), later:** the email and phone refusals lift for contacts the customer agreed to share, with the same
+    confirmation as Bring back's. It is one change, with S2's residual risk fixed first.
+- **D11, what "worked" means and what the one-page summary is. Recommended:**
+  - **Worked:** the account has a locked run. Before then, the page shows the request and "The steward is working on
+    it", with no section of "What LVRF produced".
+  - **The one-page summary:** the account's current executive summary (O2), shown on the page with its author and
+    date. It is written by a person, never generated. With none, the page says "No summary yet." and keeps the other
+    parts.
+  - **"What to lead with":** each lever of the account's pack with its linked solutions. Beside each solution, the
+    steward's basis and what it can show, in words (from the offering's evidence class: usage, not results, unless it
+    says otherwise). A lever with no linked solution is not shown. With none at all: "The steward hasn't linked
+    solutions to this account's levers yet."
+
+**What it adds to the build:**
+- **A new table, `account_requests`** (in the same migration as `bring_back_items`): append-only, created or declined
+  by the steward only, each with its act. Its offerings are kept in a link table, or an id array checked against
+  current offerings.
+- **The request form** for account-team members, and a "Request an account" entry on their accounts list.
+- **The queue** holds both requests and Bring back items, oldest first, each with its kind.
+- **"Create the account…"** opens the existing account form, pre-filled, with every rule (D3).
+- **"What LVRF produced"** reads the executive summary, the prints and `lever_offerings`. No write.
+- **Gate A** gains:
+  - a request created, append-only, and creating or declining it by the steward only;
+  - an email or phone number refused in a request's free text (route and database), with a break;
+  - an account-team member refused account creation (403);
+  - the requester never shown another account through the possible-match check;
+  - the page shows a confidence word and never a number (a static check on the page's text and on its API response).
+- **Effort:** about one more day.
+
+**Mock-ups this adds** (fictional accounts and names only; the review PDF in `~/lvrf-backups/s34-mockup/`):
+- the request form and its confirmation, at 1280 and 390;
+- the steward's queue holding a request;
+- the account-team page after the account is worked, with confidence in words and "What LVRF produced".
+
+**The mock-ups (25 Nov 2026; `design/mockups/s34-*.html`, `s34.css`; review PDF of 14 pages, each screen at 1280 then
+390, in `~/lvrf-backups/s34-mockup/`):** "Your accounts" with a request waiting (`s34-accounts`); the request form and
+its confirmation (`s34-request`); the account-team page once worked, with confidence in words and "What LVRF produced"
+(`s34-page`); Bring back (`s34-bring-back`); the steward's queue, now "From account teams", holding a request beside
+Bring back items (`s34-queue`); "Use…" and "Decline…" (`s34-use`); the team's view of a declined item
+(`s34-history`). D9–D11 are drawn as recommended, pending Brad's rulings.
