@@ -17503,8 +17503,8 @@ fix rides in it). Branch `person-email`, on `d498a08`. **Migration `0053`; one n
    - "active and answering", health 200, `actor_header` off; the 401 checks, **`deploy OK`**.
 
 **Brad's look (records nothing; Cancel everything):**
-- **Card 01b's "Add a person of this account…":** the email reads "optional; needed only to sign in". Typing Curia's own
-  person's name (Brad Piver) shows the same-name warning, with "Choose them" and "This is a different person". Cancel.
+- **Card 01b's "Add a person of this account…":** the email reads "optional; needed only to sign in". Typing Curia's one
+  person's full name as recorded, "Brad Piver (external analyst of record)", in any case, shows the same-name warning, with "Choose them" and "This is a different person". Cancel.
 - **"Commit…" on Lot Acceptance Rate:** Measure by's picker offers no day before tomorrow. Cancel.
 
 **Gate C (read-only, as `lvrf_app`):**
