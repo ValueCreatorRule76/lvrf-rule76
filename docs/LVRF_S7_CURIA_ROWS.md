@@ -18,7 +18,7 @@ Program From Scratch", on skillsoft.com.
 | Where it came from | Skillsoft's customer case study "From the Ground Up: How Curia Built a Popular Learning and Development Program From Scratch", published by Skillsoft on skillsoft.com. Skillsoft's own account of Curia's program, not Curia's records. |
 | Citation, export ID or URL | *[the case study's URL, from your browser's address bar]* |
 | What it is about | Curia (this account) |
-| What it rests on | A quote |
+| What it rests on | A quote — the source's own words |
 
 On a quote: at most 40 words. If the page shows a figure only in a stat block, with no sentence, paste the block's words
 exactly as shown (for example "102,584 total accesses"), and add "(a stat block, not a sentence)" at the end of the
@@ -76,7 +76,7 @@ person, unless a headcount is cited from the same source."
 - **How it was read:** The hours of learning recorded for January–June 2023, as Skillsoft reports it from its own
   platform.
 
-## Then, on each of the six rows: "Record that you opened…"
+## Then, on each of the six rows: "Open the source…"
 
 - **Does the source say what this evidence states?** "Yes — the source is verified", once you have checked the quote on
   the page. "No — opened, and it stays unverified" otherwise, with why.
