@@ -1,0 +1,2 @@
+ALTER TABLE "evidence" ADD COLUMN "published_figure_class" text;--> statement-breakpoint
+ALTER TABLE "evidence" ADD CONSTRAINT "evidence_published_figure_class_known" CHECK ("evidence"."published_figure_class" IS NULL OR "evidence"."published_figure_class" IN ('license_count', 'activity_count', 'adjective', 'outcome_without_baseline', 'outcome_with_baseline'));

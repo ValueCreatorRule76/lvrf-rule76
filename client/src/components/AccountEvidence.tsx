@@ -1,3 +1,5 @@
+import { useFigureClass } from './FigureClassField';
+import { figureClassLabel } from '../lib/figureClass';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ConfirmFields, type ConfirmField } from './confirm/ConfirmFields';
 import { EVIDENCE_FIELD_LABEL, reasonRepeats, repeatedPairs, summaryRepeatsQuote, SUMMARY_QUOTE_WARNING, type EvidenceTexts } from './confirm/repeats';
@@ -34,12 +36,14 @@ const SOURCE_KINDS = ['public_filing', 'system_export', 'artifact', 'vendor_publ
 interface Row extends EvidenceFormShown {
   id: string; kind: string; summary: string; provenance: string; source_reference: string | null;
   source_verified: boolean; citation_resolved: boolean; ai_sourced: boolean; simulated: boolean; superseded_by_id: string | null;
-  attester_document: string | null; opened_by: string | null; opened_on: string | null; attested_by: string | null;
+  attester_document: string | null; published_figure_class: string | null; opened_by: string | null; opened_on: string | null; attested_by: string | null;
   captured_by: string; captured_on: string; about: string | null; basis: string | null; basis_reason: string | null;
   under_finding: boolean; system_exercise: SystemExerciseMark | null; links: { supports: string; withdrawn: boolean; value_outcome_id: string; metric: string }[];
   superseded_about: string | null;
 }
-function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice, confirm, reasonCheck }: {
+function SourceForm({ institutionId, path, submitLabel, provenance, extraFields, extraBody, extraUnmet = [], onDone, simulatedChoice, confirm, reasonCheck, ownCompany }: {
+  /** S7a (§33 D2): whether the account is your own company's: the figure's class is offered only elsewhere. */
+  ownCompany: boolean;
   institutionId: string; path: string; submitLabel: string; provenance: ReactNode; extraFields?: ReactNode;
   extraBody?: () => Record<string, unknown>; extraUnmet?: string[]; onDone: () => void; simulatedChoice?: boolean;
   /**
@@ -57,13 +61,14 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
   const [simulated, setSimulated] = useState('false');
   const about = useAbout(institutionId);
   const form = useEvidenceForm({ allowed: ['quote', 'locator'], kind, sourceReference: reference });
+  const fc = useFigureClass(kind, ownCompany);
   // S4 (LVRF_PLAN §23): every field as it will be sent, for the confirmation and for the repeated-value rule.
   const fb = form.body() as { evidence_form?: string; quote_text?: string; how_read?: string; locator?: { document: string; value: number; scale: string; table?: string; row?: string; column?: string } };
   const texts: EvidenceTexts = { summary: summary.trim(), provenance: origin.trim(), source_reference: reference.trim(), quote_text: fb.quote_text, how_read: fb.how_read };
   const repeatsReason = reasonCheck && reasonCheck.reason.trim() !== ''
     ? reasonRepeats(reasonCheck.reason, [{ which: 'the row it supersedes', v: reasonCheck.old }, { which: 'the new row', v: texts }]) : null;
   const unmet = [...(kind === '' ? ['choose the kind'] : []), ...(summary.trim() === '' ? ['write the summary'] : []),
-    ...(origin.trim().length < 12 ? ['state where it came from, in at least 12 characters'] : []), ...form.unmet, ...about.unmet, ...extraUnmet,
+    ...(origin.trim().length < 12 ? ['state where it came from, in at least 12 characters'] : []), ...form.unmet, ...about.unmet, ...fc.unmet, ...extraUnmet,
     ...repeatedPairs(texts), ...(repeatsReason && reasonCheck ? [`${reasonCheck.label} repeats ${repeatsReason}: say it in words of your own`] : [])];
   const loc = fb.locator;
   const confirmFields: ConfirmField[] = [
@@ -72,6 +77,7 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
     { label: EVIDENCE_FIELD_LABEL.provenance, value: texts.provenance },
     { label: 'Citation, export ID or URL', value: texts.source_reference },
     { label: 'What it is about', value: about.describe() },
+    ...(fc.confirm ? [fc.confirm] : []),
     { label: 'What it rests on', value: fb.evidence_form === 'quote' ? 'A quote' : fb.evidence_form === 'locator' ? 'A located cell' : fb.evidence_form === 'statement' ? "A person's statement" : '' },
     ...(fb.evidence_form === 'quote' ? [{ label: EVIDENCE_FIELD_LABEL.quote_text, value: fb.quote_text }] : []),
     ...(loc ? [{ label: 'Document', value: loc.document }, { label: 'Value', value: String(loc.value) }, { label: 'Scale', value: loc.scale },
@@ -96,6 +102,7 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
         <label className="block"><span className={L}>Citation, export ID or URL</span>
           <input className={I} value={reference} onChange={(ev) => setReference(ev.target.value)} data-testid="source-reference" /></label>
         {about.fields}
+        {fc.fields}
         {form.fields}
         {simulatedChoice && <label className="block"><span className={L}>Simulated?</span>
           <select className={I} value={simulated} onChange={(ev) => setSimulated(ev.target.value)}>
@@ -107,7 +114,7 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
       confirm={confirm ? confirm({ fields: confirmFields, warnings })
         : <ConfirmFields lead={<>Record this source on this account. It supports <strong>no outcome</strong> and is recorded <strong>unverified</strong>; a person verifies it by opening the source.</>}
             fields={confirmFields} warnings={warnings} />}
-      buildBody={() => ({ kind, summary: summary.trim(), provenance: origin.trim(), about: about.body(), ...form.body(),
+      buildBody={() => ({ kind, summary: summary.trim(), provenance: origin.trim(), about: about.body(), ...form.body(), ...fc.body(),
         ...(reference.trim() !== '' ? { source_reference: reference.trim() } : {}),
         ...(simulatedChoice && simulated === 'true' ? { simulated: true } : {}), ...(extraBody?.() ?? {}) })}
       submitLabel={submitLabel} onSuccess={onDone} renderSuccess={() => <>Recorded, unverified.</>}
@@ -116,7 +123,7 @@ function SourceForm({ institutionId, path, submitLabel, provenance, extraFields,
 }
 
 /** L47: "Record a source…", on this card and on the roles card. */
-export function RecordSource({ institutionId, onRecorded }: { institutionId: string; onRecorded: () => void }) {
+export function RecordSource({ institutionId, onRecorded, ownCompany }: { institutionId: string; onRecorded: () => void; ownCompany: boolean }) {
   const [open, setOpen] = useState(false);
   if (!open) {
     return <button type="button" onClick={() => setOpen(true)} data-testid="record-source-open"
@@ -124,7 +131,7 @@ export function RecordSource({ institutionId, onRecorded }: { institutionId: str
   }
   return (
     <div className="border-t border-rule-soft pt-3" data-testid="record-source">
-      <SourceForm institutionId={institutionId} path={`/api/institutions/${institutionId}/evidence`} submitLabel="Record the source"
+      <SourceForm ownCompany={ownCompany} institutionId={institutionId} path={`/api/institutions/${institutionId}/evidence`} submitLabel="Record the source"
         provenance={<p className="m-0 text-[12.5px] text-ink">A source this account&apos;s evidence rests on, with what it states and where it came from. It supports <strong>no outcome</strong>, and it is recorded <strong>unverified</strong>: a person verifies it by opening the source.</p>}
         onDone={() => { setOpen(false); onRecorded(); }} />
       <button type="button" onClick={() => setOpen(false)} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
@@ -261,13 +268,13 @@ function WithdrawVerification({ row, notSteward, onDone }: { row: Row; notStewar
   );
 }
 
-function Supersede({ row, institutionId, notSteward, onDone }: { row: Row; institutionId: string; notSteward?: string; onDone: () => void }) {
+function Supersede({ row, institutionId, notSteward, onDone, ownCompany }: { row: Row; institutionId: string; notSteward?: string; onDone: () => void; ownCompany: boolean }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   if (!open) return <button type="button" disabled={Boolean(notSteward)} title={notSteward} onClick={() => setOpen(true)} className={SMALL} data-testid="supersede-open">Supersede…</button>;
   return (
     <div className="mt-1.5 w-full border-t border-rule-soft pt-2" data-testid="supersede">
-      <SourceForm institutionId={institutionId} path={`/api/evidence/${row.id}/supersede`} submitLabel="Supersede this evidence" simulatedChoice
+      <SourceForm ownCompany={ownCompany} institutionId={institutionId} path={`/api/evidence/${row.id}/supersede`} submitLabel="Supersede this evidence" simulatedChoice
         provenance={<p className="m-0 text-[12.5px] text-ink">A new row that replaces this one, recorded <strong>unverified</strong>. This row stays on the record, pointing to it. <strong>Its links and its mark move to the new row.</strong></p>}
         extraFields={<label className="block"><span className={L}>Why it is superseded</span><textarea rows={2} className={I} value={reason} onChange={(ev) => setReason(ev.target.value)} data-testid="supersede-reason" /></label>}
         extraBody={() => ({ reason: reason.trim() })}
@@ -294,7 +301,7 @@ function noOpeningReason(e: Row, live: Row['links']): string | null {
   return null;
 }
 
-function EvidenceRow({ e, institutionId, steward, onDone }: { e: Row; institutionId: string; steward: (act: string) => string | undefined; onDone: () => void }) {
+function EvidenceRow({ e, institutionId, steward, onDone, ownCompany }: { e: Row; institutionId: string; steward: (act: string) => string | undefined; onDone: () => void; ownCompany: boolean }) {
   const live = e.links.filter((l) => !l.withdrawn);
   const openable = !e.citation_resolved && e.superseded_by_id === null && !e.under_finding && !e.simulated
     && !(e.evidence_form === 'statement' && e.kind === 'observation') && !(e.ai_sourced && live.length === 0);
@@ -315,7 +322,7 @@ function EvidenceRow({ e, institutionId, steward, onDone }: { e: Row; institutio
         <ShortId id={e.id} />
       </div>
       <p className="m-0 mt-1 text-[11.5px] text-ink-45">
-        {label(EVIDENCE_KIND, e.kind)} · recorded by {e.captured_by}, {day(e.captured_on)}
+        {label(EVIDENCE_KIND, e.kind)}{e.published_figure_class && <span data-testid="evidence-figure-class">{` · ${figureClassLabel(e.published_figure_class)}`}</span>} · recorded by {e.captured_by}, {day(e.captured_on)}
         {' · '}<span data-testid="evidence-about">{e.about ? <>about {e.about}</> : <span className="text-warning">what it is about is not yet stated</span>}</span>
         {' · '}{live.length === 0 ? 'supports no outcome' : `supports ${live.map((l) => label(SUPPORTS, l.supports)).join(', ')}`}
       </p>
@@ -344,7 +351,7 @@ function EvidenceRow({ e, institutionId, steward, onDone }: { e: Row; institutio
               <div className="mt-0.5 flex flex-wrap items-center gap-2"><CorrectLink row={e} link={l} notSteward={steward('Correcting a link')} onDone={onDone} /></div>
             </div>))}
         </div>}
-        <div className="mt-1.5 flex flex-wrap items-center gap-2"><Supersede row={e} institutionId={institutionId} notSteward={steward('Superseding evidence')} onDone={onDone} /></div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2"><Supersede row={e} institutionId={institutionId} ownCompany={ownCompany} notSteward={steward('Superseding evidence')} onDone={onDone} /></div>
         {withdrawals && (
           <div className="mt-2 border-l-[3px] border-warning pl-3" data-testid="danger-zone">
             <p className="m-0 text-[10px] font-semibold uppercase tracking-[.14em] text-warning">Withdrawals: these take something off the record going forward</p>
@@ -363,9 +370,10 @@ function EvidenceRow({ e, institutionId, steward, onDone }: { e: Row; institutio
 export function AccountEvidence({ institutionId }: { institutionId: string }) {
   const { actor } = useActor();
   const [rows, setRows] = useState<Row[] | null | 'error'>(null);
+  const [ownCompany, setOwnCompany] = useState(false);
   const load = useCallback(() => {
     apiFetch(`/api/institutions/${institutionId}/evidence`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j) => setRows(j.evidence as Row[]), () => setRows('error'));
+      .then((j) => { setOwnCompany(Boolean(j.own_company)); setRows(j.evidence as Row[]); }, () => setRows('error'));
   }, [institutionId]);
   useEffect(load, [load]);
   const steward = (act: string) => (actor?.is_steward ? undefined : `${act} is the steward's act — ${actor?.steward_name ?? "the steward"}'s alone.`);
@@ -378,16 +386,16 @@ export function AccountEvidence({ institutionId }: { institutionId: string }) {
     <div className="flex flex-col gap-3" data-testid="account-evidence">
       {current.length === 0 ? <p className="m-0 text-[12.5px] text-ink-45">No current evidence recorded for this account.</p>
         : <ul className="m-0 list-none p-0" data-testid="evidence-current">
-          {current.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} steward={steward} onDone={load} />)}
+          {current.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} ownCompany={ownCompany} steward={steward} onDone={load} />)}
         </ul>}
       {history.length > 0 && (
         <details className="border-t border-rule-soft pt-2" data-testid="evidence-history">
           <summary className={'cursor-pointer text-[11.5px] font-semibold text-ink-70 ' + FOCUS_RING}>History: {history.length} superseded {history.length === 1 ? 'row' : 'rows'}</summary>
           <ul className="m-0 mt-1 list-none p-0">
-            {history.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} steward={steward} onDone={load} />)}
+            {history.map((e) => <EvidenceRow key={e.id} e={e} institutionId={institutionId} ownCompany={ownCompany} steward={steward} onDone={load} />)}
           </ul>
         </details>)}
-      <RecordSource institutionId={institutionId} onRecorded={load} />
+      <RecordSource institutionId={institutionId} ownCompany={ownCompany} onRecorded={load} />
     </div>
   );
 }

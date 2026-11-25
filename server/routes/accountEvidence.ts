@@ -1,3 +1,4 @@
+import { readFigureClass } from '../lib/figureClass.js';
 import { Router, type Request, type Response } from 'express';
 import { evidenceRepeat, reasonRepeats } from '../lib/repeatedFields.js';
 import type { Pool, PoolClient } from 'pg';
@@ -42,7 +43,7 @@ class Refusal extends Error {
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const MIN_REASON = 12;
 const MIN_PROVENANCE = 12;
-const BODY_FIELDS = ['about', 'kind', 'summary', 'provenance', 'source_reference', 'evidence_form', 'quote_text', 'locator', 'how_read', 'attested_by_person_id', 'attested_at'];
+const BODY_FIELDS = ['about', 'kind', 'published_figure_class', 'summary', 'provenance', 'source_reference', 'evidence_form', 'quote_text', 'locator', 'how_read', 'attested_by_person_id', 'attested_at'];
 const notTaken = (k: string) => {
   if (k === 'source_verified') return 'body.source_verified is not taken: evidence is recorded unverified, and a person verifies it by opening its source.';
   if (k === 'supports') return 'body.supports is not taken: account evidence supports no outcome. Link evidence to an outcome from the outcome.';
@@ -95,14 +96,17 @@ async function insertRecorded(client: PoolClient, body: Record<string, unknown>,
     if (!who) throw new Refusal(422, 'The attester must be a real person of this account.');
   }
   if (kind === 'attestation' && attestedBy === null) throw new Refusal(422, 'An attestation names the person who attests it.');
+  // S7a (§33 D2, D4): what kind of figure a published source gives, required, optional or refused, before writing.
+  const cls = await readFigureClass(client, body.published_figure_class, kind, institutionId);
+  if ('refuse' in cls) throw new Refusal(422, cls.refuse);
   const { rows: [row] } = await client.query<{ id: string }>(
     `INSERT INTO evidence (institution_id, kind, summary, provenance, source_reference, confidence, simulated, captured_by_person_id,
        attested_by_person_id, attested_at, evidence_form, quote_text, locator, how_read, about_institution_id, about_other_party,
-       ai_sourced, research_query, research_tool)
-     VALUES ($1, $2, $3, $4, $5, $16, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $17, $18, $19) RETURNING id`,
+       ai_sourced, research_query, research_tool, published_figure_class)
+     VALUES ($1, $2, $3, $4, $5, $16, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $17, $18, $19, $20) RETURNING id`,
     [institutionId, kind, text('summary'), text('provenance'), sourceReference, simulated, actor, attestedBy, attestedAt,
       form.evidenceForm, form.quoteText, form.locator === null ? null : JSON.stringify(form.locator), form.howRead,
-      about.aboutInstitutionId, about.aboutOtherParty, confidence, origin !== null, origin?.researchQuery ?? null, origin?.researchTool ?? null]);
+      about.aboutInstitutionId, about.aboutOtherParty, confidence, origin !== null, origin?.researchQuery ?? null, origin?.researchTool ?? null, cls.value]);
   return row.id;
 }
 
@@ -281,8 +285,8 @@ async function planBatch(client: PoolClient, body: Record<string, unknown>, req:
 /** /api/institutions/:institutionId/evidence */
 export function accountEvidenceRouter(pool: Pool): Router {
   const router = Router();
-  const accountOf = async (q: Pool | PoolClient, id: string) => (await q.query<{ id: string; tenant_id: string; name: string }>(
-    'SELECT id, tenant_id, name FROM institutions WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
+  const accountOf = async (q: Pool | PoolClient, id: string) => (await q.query<{ id: string; tenant_id: string; name: string; own_company: boolean }>(
+    'SELECT id, tenant_id, name, is_tenant_self AS own_company FROM institutions WHERE id = $1 AND deleted_at IS NULL', [id])).rows[0];
 
   router.get('/:institutionId/evidence', async (req, res) => {
     const { institutionId } = req.params;
@@ -295,7 +299,7 @@ export function accountEvidenceRouter(pool: Pool): Router {
       }
       const { rows } = await pool.query(
         `SELECT e.id, e.kind::text, e.summary, e.provenance, e.source_reference, e.evidence_form::text, e.quote_text, e.locator, e.how_read,
-                e.source_verified, e.citation_resolved, e.ai_sourced, e.simulated, e.superseded_by_id, e.attester_document,
+                e.source_verified, e.citation_resolved, e.ai_sourced, e.simulated, e.superseded_by_id, e.attester_document, e.published_figure_class,
                 rp.full_name AS opened_by, to_char(e.citation_resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS opened_on,
                 ap.full_name AS attested_by, cp.full_name AS captured_by, to_char(e.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS captured_on,
                 lvrf_evidence_about(e.about_institution_id, e.about_other_party) AS about,
@@ -314,7 +318,8 @@ export function accountEvidenceRouter(pool: Pool): Router {
            LEFT JOIN persons ap ON ap.id = e.attested_by_person_id
           WHERE e.institution_id = $1 AND e.deleted_at IS NULL
           ORDER BY e.captured_at, e.id`, [institutionId]);
-      res.json({ account: account.name, evidence: rows });
+      // S7a (§33 D5): whether this is your own company's account, so the form offers the figure's class only elsewhere.
+      res.json({ account: account.name, own_company: account.own_company, evidence: rows });
     } catch (err) {
       respondServerError(res, err);
     }

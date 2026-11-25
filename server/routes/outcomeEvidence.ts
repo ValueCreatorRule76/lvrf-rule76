@@ -1,3 +1,4 @@
+import { readFigureClass } from '../lib/figureClass.js';
 import { Router } from 'express';
 import type { Pool } from 'pg';
 import { isUuid } from './params.js';
@@ -297,6 +298,9 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
       // recorded as a route refusal, through the EvidenceFormError path below.
       const repeat = evidenceRepeat({ summary, provenance, source_reference: sourceReference, quote_text: form.quoteText, how_read: form.howRead });
       if (repeat) throw new EvidenceFormError(repeat);
+      // S7a (§33 D2, D4): what kind of figure a published source gives, required, optional or refused, before writing.
+      const cls = await readFigureClass(client, body.published_figure_class, kind, outcome.institution_id);
+      if ('refuse' in cls) throw new EvidenceFormError(cls.refuse);
 
       // institution_id comes from the outcome, never the payload.
       const { rows: [evidence] } = await client.query<{ id: string }>(
@@ -304,16 +308,16 @@ export function outcomeEvidenceRouter(pool: Pool): Router {
            institution_id, kind, summary, provenance, source_reference,
            confidence, source_verified, ai_sourced, research_query, research_tool,
            simulated, captured_by_person_id, attested_by_person_id, attested_at,
-           evidence_form, quote_text, locator, how_read, about_institution_id, about_other_party
+           evidence_form, quote_text, locator, how_read, about_institution_id, about_other_party, published_figure_class
          )
-         VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         VALUES ($1, $2, $3, $4, $5, $6, false, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
          RETURNING id`,
         [
           outcome.institution_id, kind, summary, provenance, sourceReference,
           confidence, aiSourced, researchQuery, researchTool,
           simulated, actorPersonId, attestedByPersonId, attestedAt,
           form.evidenceForm, form.quoteText, form.locator === null ? null : JSON.stringify(form.locator), form.howRead,
-          about.aboutInstitutionId, about.aboutOtherParty,
+          about.aboutInstitutionId, about.aboutOtherParty, cls.value,
         ],
       );
       refusalEvidenceId = evidence.id;

@@ -1,3 +1,4 @@
+import { useFigureClass } from '../FigureClassField';
 import { useState } from 'react';
 import type { Run } from '../../types/run';
 import { Card, Badge } from './Card';
@@ -54,6 +55,7 @@ export function AddEvidenceCard({
   n = '01A',
   onRecorded,
   primary = false,
+  ownCompany = false,
 }: {
   run?: Run;
   outcomeId?: string;
@@ -61,6 +63,11 @@ export function AddEvidenceCard({
   onRecorded?: () => void;
   /** UX-1: the open step's next action (see GovernedForm's primary). */
   primary?: boolean;
+  /**
+   * S7a (§33 D2): whether the account is your own company's; the figure's class is offered only elsewhere. W6 is never on
+   * your own company's page; the run page does not know, and the route refuses a class there in words.
+   */
+  ownCompany?: boolean;
 }) {
   const outcomeId = outcomeIdProp ?? run?.payload.valueOutcomeId;
 
@@ -76,6 +83,7 @@ export function AddEvidenceCard({
   // P1: called before any early return (a hook runs on every render).
   const evidenceForm = useEvidenceForm({ allowed: ['quote', 'locator', 'statement'], kind, sourceReference });
   const about = useAbout(run?.institution_id ?? undefined);
+  const fc = useFigureClass(kind, ownCompany);
 
   if (!outcomeId) {
     // Same pattern EvidenceCard.tsx already uses for a run walked before
@@ -113,6 +121,7 @@ export function AddEvidenceCard({
     simulated !== '' &&
     aiFieldsValid &&
     about.unmet.length === 0 &&
+    fc.unmet.length === 0 &&
     evidenceForm.unmet.length === 0;
   // Every reason the submit waits, in words (Q4l: a silent failure is a bug).
   const unmet = [
@@ -120,6 +129,7 @@ export function AddEvidenceCard({
     ...(kind === '' ? ['choose the kind'] : []),
     ...evidenceForm.unmet,
     ...about.unmet,
+    ...fc.unmet,
     ...(summary.trim() === '' ? ['write the summary'] : []),
     ...(supports === '' ? ['choose what it supports'] : []),
     ...(aiSourced === '' ? ['say whether it was AI-sourced'] : []),
@@ -141,6 +151,7 @@ export function AddEvidenceCard({
           provenance,
           supports,
           ...evidenceForm.body(),
+          ...fc.body(),
           ...(sourceReference.trim() !== '' ? { source_reference: sourceReference } : {}),
           about: about.body(),
           ai_sourced: aiSourced === 'true',
@@ -204,6 +215,7 @@ export function AddEvidenceCard({
               />
             </label>
             {/* P1: what the evidence rests on — a quote, a locator, or a person's statement. */}
+            {fc.fields}
             {evidenceForm.fields}
           </>
         }

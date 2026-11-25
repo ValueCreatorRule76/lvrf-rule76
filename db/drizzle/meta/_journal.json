@@ -379,6 +379,13 @@
       "when": 1795561819921,
       "tag": "0053_s32_person_email",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795570686222,
+      "tag": "0054_s7a_figure_class",
+      "breakpoints": true
     }
   ]
 }

@@ -82,6 +82,8 @@ export const PLAIN_CHECK: Record<string, string> = {
   persons_scoped_to_exactly_one: "A person belongs to your company's staff or to one account, not both.",
   // §32 (0053): an email is stored as its own trimmed lower case (the routes normalize it before writing).
   persons_email_normalized: 'An email is recorded in lower case, with no spaces at either end.',
+  // S7a (0054): a published figure's class is one of five.
+  evidence_published_figure_class_known: 'Choose what kind of figure it gives: a license count, an activity count, an adjective, an outcome without baseline, or an outcome with baseline.',
   reference_example_markers_retirement_is_complete: 'Unmarking records who unmarked it and why (at least 12 characters), together.',
   reference_example_markers_stated: 'A reference-example marker needs a source citation and a note of at least 12 characters each.',
   reference_example_markers_supersession_reason: 'Correcting a marker needs a reason of at least 12 characters.',

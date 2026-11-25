@@ -773,6 +773,13 @@ export const evidence = pgTable('evidence', {
   aboutOtherParty: text('about_other_party'),
   /** Condition 1: a verified attestation rests on a document from the attester: 'email', 'signed_statement' or 'letter'. */
   attesterDocument: text('attester_document'),
+  /**
+   * S7a (LVRF_PLAN §33, approved by Brad 25 Nov 2026): what kind of figure a published source gives, so a story can say
+   * what it can and cannot support (server/lib/figureClass.ts holds the ruled wording). Required on a vendor publication
+   * about another account, optional on a public filing, refused elsewhere and on your own company's account; fixed at
+   * recording (lvrf_evidence_final). Null on every row recorded before it.
+   */
+  publishedFigureClass: text('published_figure_class'),
   ...governance(),
 }, (t) => [
   /**
@@ -788,6 +795,8 @@ export const evidence = pgTable('evidence', {
         OR (${t.attesterDocument} IS NOT NULL AND ${t.evidenceForm} IN ('quote', 'locator'))`),
   check('evidence_attester_document_known',
     sql`${t.attesterDocument} IS NULL OR ${t.attesterDocument} IN ('email', 'signed_statement', 'letter')`),
+  check('evidence_published_figure_class_known',
+    sql`${t.publishedFigureClass} IS NULL OR ${t.publishedFigureClass} IN ('license_count', 'activity_count', 'adjective', 'outcome_without_baseline', 'outcome_with_baseline')`),
   /** P1: one rule per form. A statement is an observation citing no source, or an attestation (Brad, 24 Oct 2026). */
   check('evidence_form_shape',
     sql`(${t.evidenceForm} = 'quote' AND ${t.locator} IS NULL AND ${t.quoteText} IS NOT NULL

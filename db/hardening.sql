@@ -3372,6 +3372,7 @@ DECLARE
     'evidence_form', 'quote_text', 'locator', 'how_read'];
   opening boolean;
   steward uuid;
+  own boolean;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.source_verified THEN
@@ -3382,7 +3383,24 @@ BEGIN
       RAISE EXCEPTION 'LVRF: the attester''s document is named when the attestation is opened, not when it is recorded.'
         USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_verified_by_opening';
     END IF;
+    -- S7a (LVRF_PLAN §33 D2, Brad 25 Nov 2026): what kind of figure a published source gives. Required on a vendor
+    -- publication about another account; optional on a public filing; refused on every other kind and on your own
+    -- company's account. Rows recorded before the field keep their null.
+    own := coalesce((SELECT i.is_tenant_self FROM institutions i WHERE i.id = NEW.institution_id), false);
+    IF NEW.published_figure_class IS NULL AND NEW.kind = 'vendor_publication' AND NOT own THEN
+      RAISE EXCEPTION 'LVRF: evidence: A vendor publication about another account says what kind of figure it gives.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_published_figure_class_required';
+    END IF;
+    IF NEW.published_figure_class IS NOT NULL AND (NEW.kind NOT IN ('vendor_publication', 'public_filing') OR own) THEN
+      RAISE EXCEPTION 'LVRF: evidence: Only a vendor publication or a public filing about another account says what kind of figure it gives.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_published_figure_class_required';
+    END IF;
     RETURN NEW;
+  END IF;
+  -- S7a (§33 D3): fixed at recording, said in its own words before the general rule below.
+  IF NEW.published_figure_class IS DISTINCT FROM OLD.published_figure_class THEN
+    RAISE EXCEPTION 'LVRF: evidence %: What kind of figure a source gives is fixed when it is recorded; correct it by supersession.', OLD.id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'evidence_published_figure_class_fixed';
   END IF;
   IF (to_jsonb(NEW) - free) IS DISTINCT FROM (to_jsonb(OLD) - free) THEN
     RAISE EXCEPTION 'LVRF: evidence %: what it records is final. Correct it by supersession: a new row, under a person''s act.', OLD.id

@@ -128,7 +128,8 @@ export function CustomerRoles({ institutionId }: { institutionId: string }) {
           <button type="button" onClick={close} className="mt-2 text-[11px] text-ink-45 underline">Cancel</button>
         </div>}
       {/* L47: the source a role is named from is account evidence, not outcome support. */}
-      <RecordSource institutionId={institutionId} onRecorded={() => setReload((n) => n + 1)} />
+      {/* The roles card is on another account's page only, never your own company's (S7a: ownCompany). */}
+      <RecordSource institutionId={institutionId} ownCompany={false} onRecorded={() => setReload((n) => n + 1)} />
     </div>
   );
 }
