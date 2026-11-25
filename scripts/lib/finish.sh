@@ -13,6 +13,9 @@
 # script stopped by `set -e` inside a redirected function call (`q … > /dev/null`)
 # runs its EXIT trap with that redirection still in place: the stop-early line
 # would go to /dev/null while the exit stayed 1 (found 25 Oct 2026, P1).
+# Every script's ports are its own: a taken port stops the script here, before its EXIT trap is set (ports.sh).
+. scripts/lib/ports.sh
+refuse_taken_ports
 exec 8>&1 9>&2
 REACHED_TALLY=0
 finish() {

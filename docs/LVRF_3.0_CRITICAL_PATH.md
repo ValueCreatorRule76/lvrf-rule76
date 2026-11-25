@@ -240,6 +240,9 @@ cut line applied first.
            stage 10)."; `client/src/components/valueCase/CaseInputs.tsx`), the one "stage <number>" on screen today; and a
            `check_plain_words` check that refuses "stage" followed by a digit in any string a page can show (Brad,
            24 Nov 2026, added to this ruling's list at §30's close);
+         - **a classification note in the record (Brad, 25 Nov 2026, from S7b's regression):** Skillsoft's classification
+           note of 15 Nov reads "…rests on this pack (S1, D1)", a plan code visible on its runs page. Record text is never
+           rewritten; the ruling says whether a classification note may be superseded in plain words. Not in S7b;
        - **a later ruling (Brad, 24 Nov 2026, from §31), not in §31: the other dates that must not be in the future,** in
          this order:
          1. **evidence dates first** (`attested_at`, `captured_at`): evidence cannot be dated after it was recorded;
@@ -251,6 +254,9 @@ cut line applied first.
          measure and verify, producing and locking a run, hypotheses, research prompts and imports, facts, rates and
          milestones are not steward-only today (LVRF_PLAN §34, section 1). §34's `account_team` role closes them for
          account teams only;
+       - **under the same condition (Brad, 25 Nov 2026, from S7b's tenant cases): the other company's non-steward, for
+         every other steward-only write route in `verify_tenant_scope`.** Each answers the same for a real id and a made-up
+         id, and writes nothing. S7b adds the case for the two story write routes only;
        - **the account-team page (Brad, 25 Nov 2026), after S7b:** LVRF_PLAN §34, approved with D1 (b). Mock-ups before
          18 Dec 2026, after S7a's Gate B; Gate B and Gate D by Fri 22 Jan 2027; the first working session Thu 28 Jan
          2027; the 4–15 Jan window untouched;
@@ -462,6 +468,16 @@ cut line applied first.
     of what it says, not of who printed it, or when.
   - **The item:** a print request recorded for each print of an issued story (which story, which form, who, when),
     before the browser prints, as the value case's.
+
+- **State-dependent scripts build their own fixtures or read the copy's state** (Brad, 25 Nov 2026, from S7b's
+  regression; L39 for the whole regression). A newer snapshot of prod must not break a script: four failed on the dump
+  taken after Brad's six Curia rows only because prod had moved since 14 Nov (`verify_commit_measure_verify`'s batch
+  already recorded; `verify_figure_class`'s rows with a class; `verify_plain_words`'s classification note;
+  `verify_s1_hypothesis_rule`'s account already classified). Until then the regression runs on the pinned
+  `lvrf_snapshot_20261114.dump`, and a newer dump only for the story of the real record and the equivalence.
+- **Every script stops its servers by the port they listen on** (Brad, 25 Nov 2026, from S7b's cross-check). Twenty Vite
+  servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
+  is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 
 ## 4.0 (recorded so nothing is lost)
 

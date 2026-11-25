@@ -36,6 +36,9 @@ cleanup() {
   git worktree remove --force "$WT/src" > /dev/null 2>&1 || true; rm -rf "$WT"
   if [ "${KEEP_CLONES:-}" != 1 ]; then sleep 1; dropdb --if-exists "$A" 2>/dev/null || true; dropdb --if-exists "$B" 2>/dev/null || true; fi
 }
+A_PORT="$PA"; B_PORT="$PB"  # named so refuse_taken_ports checks them
+. scripts/lib/ports.sh
+refuse_taken_ports
 trap cleanup EXIT
 
 echo "==> A: $DEPLOYED, its own restore of $DUMP"

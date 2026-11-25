@@ -53,6 +53,8 @@ finish() {
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "${W:?}/chrome"
   [ "$FAIL$PASS" = "00" ] || true
 }
+. scripts/lib/ports.sh
+refuse_taken_ports
 trap finish EXIT
 has()  { grep "$@" > /dev/null; }   # grep -q's early exit SIGPIPEs the writer, failing the pipe under pipefail
 edit() { python3 - "$1" "$2" "$3" <<'PY'
