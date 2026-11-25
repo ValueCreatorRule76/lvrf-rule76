@@ -9,6 +9,7 @@
 //   issue    the same page as the steward: "Issue this story…", its confirmation in full, "Yes, issue it"; prints the new id
 //   issued   /stories/E.STORY: Print offered; the full hash on the page; the banners; the one page and the full story; the
 //            headline as in draft; a screenshot of each form
+//   html     /stories/E.STORY: prints the md5 of the story body's markup (a re-render is byte-identical)
 //   refused  /accounts/E.INST/story?audience=client: the refusal for a reference example, no issue control
 const SECTIONS = (process.argv[2] ?? 'draft').split(',');
 const E = process.env;
@@ -125,6 +126,14 @@ for (const s of SECTIONS) {
     await waitFor(`document.querySelector('[data-testid=story-body]')?.dataset.form === 'onepage'`);
     await body('issued, one page');
     await shot('story-issued-onepage');
+  }
+  if (s === 'html') {
+    await go(`/stories/${E.STORY}`);
+    await waitFor(`!!document.querySelector('[data-testid=story-body]')`);
+    await sleep(500);
+    const html = await ev(`document.querySelector('[data-testid=story-body]').outerHTML`);
+    const { createHash } = await import('node:crypto');
+    console.log(`HTML ${createHash('md5').update(html ?? '').digest('hex')}`);
   }
   if (s === 'refused') {
     await go(`/accounts/${E.INST}/story?audience=client`);

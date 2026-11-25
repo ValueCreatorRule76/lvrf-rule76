@@ -6029,6 +6029,13 @@ record is what it prints.
   - **Compounding:** verified actuals in two or more sealed runs, at different measurement dates.
   - **What each stage may print:** "Achieved", "realized" and "result" print only at realization and above. Below
     it, "Results" does not render at all (CVAF's rule: a section with nothing behind it does not render).
+  - **Compounding, ruled (Brad, 25 Nov 2026): option (a), with a condition.** A run's seal records no date for its
+    actual, so "at different measurement dates" cannot be read from seals alone. Compounding is **two verified sealed
+    real runs whose actuals rest on different sealed evidence rows, where neither row supersedes the other**: a row and
+    its correction are one measurement (`lvrf_evidence_chain`). **S7b's Gate A gains a break:** a corrected row counted
+    as a second measurement fails. On the 3.1 list: (b), the measurement date sealed in new runs and used for
+    Compounding once both runs carry it; and a print record for issued stories, required before any story is printed
+    for a customer.
 - **D3, a reference example is not a decision story. Recommended:** an account whose current marker makes it a
   reference example gets **"Reference" as its stage, never Decision.**
   - Curia took no decision through LVRF (its marker says so), and a decision story would claim one.

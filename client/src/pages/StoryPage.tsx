@@ -34,10 +34,10 @@ const TABLE = 'mt-1 w-full border-collapse max-sm:block max-sm:[&_thead]:hidden 
 function stageWhy(stage: StoryStage, s: StoryStage): string {
   const reached = STAGES.indexOf(s) <= STAGES.indexOf(stage) && !(stage === 'reference' && s !== 'reference');
   if (s === 'reference') return stage === 'reference' ? 'its marker: a reference example' : 'not a reference example';
-  if (stage === 'reference') return s === 'decision' ? 'never, for a reference example' : s === 'realization' ? 'needs a verified actual in a sealed run' : 'needs a second, on different sealed evidence';
+  if (stage === 'reference') return s === 'decision' ? 'never, for a reference example' : s === 'realization' ? 'needs a verified actual in a sealed run' : 'needs a second, a separate measurement';
   if (s === 'decision') return reached ? 'a locked run' : '';
   if (s === 'realization') return reached ? 'a verified actual in a sealed run' : 'needs a verified actual in a sealed run';
-  return reached ? 'verified actuals in two sealed runs, on different sealed evidence' : 'needs a second, on different sealed evidence';
+  return reached ? 'verified actuals in two sealed runs, separate measurements' : 'needs a second, a separate measurement';
 }
 
 function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; form: 'full' | 'onepage'; hash: string | null; issuedOn: string | null; withdrawn: boolean }) {

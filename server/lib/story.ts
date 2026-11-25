@@ -17,9 +17,9 @@ import { sealedAsks } from './sealedAsks.js';
  *     with the class's ruled lines (server/lib/figureClass.ts), its basis and its open state;
  *   - each engagement's latest real run's asks (sealedAsks, the value case's own definition; D8).
  *
- * The stage (D2, D3): a reference example is 'reference', never Decision; otherwise 'compounding' when two or more sealed
- * real runs are verified (realization 'verified', the banners' rule) on different sealed actual evidence; 'realization'
- * when one is; 'decision' when a real run is locked. With no locked real run there is nothing to tell (null).
+ * The stage (D2, D3): a reference example is 'reference', never Decision; otherwise 'compounding' when two sealed real runs
+ * are verified (realization 'verified', the banners' rule) on different sealed actual evidence rows, neither superseding
+ * the other (Brad, 25 Nov 2026); 'realization' when one is; 'decision' when a real run is locked. With no locked real run there is nothing to tell (null).
  *
  * It writes nothing.
  */
@@ -165,14 +165,33 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     g.result = verified ? { run_id: verified.id, actual: Number(verified.payload.actualValue), realization: verified.payload.realization } : null;
   }
 
-  // The stage (D2, D3).
+  // The stage (D2, D3; Compounding ruled by Brad, 25 Nov 2026). Two verified sealed real runs compound when their actuals
+  // rest on different sealed evidence rows, neither superseding the other: a row and its correction are ONE measurement,
+  // so each sealed actual row is read as the first row of its supersession chain (lvrf_evidence_chain).
   let stage: StoryStage;
   if (marker) stage = 'reference';
   else {
     const verified = runs.filter((r) => r.payload.realization === 'verified');
-    const actualHeads = new Set(verified.map((r) => ((r.payload.evidence ?? []) as { supports: string; evidence_id?: string; id?: string }[])
-      .filter((e) => e.supports === 'actual').map((e) => e.evidence_id ?? e.id ?? '').sort().join(',')).filter((k) => k !== ''));
-    stage = verified.length >= 2 && actualHeads.size >= 2 ? 'compounding' : verified.length >= 1 ? 'realization' : 'decision';
+    const actualIds = [...new Set(verified.flatMap((r) => ((r.payload.evidence ?? []) as { supports: string; evidence_id?: string }[])
+      .filter((e) => e.supports === 'actual' && typeof e.evidence_id === 'string').map((e) => e.evidence_id as string)))];
+    const { rows: roots } = actualIds.length === 0 ? { rows: [] as { id: string; root: string }[] } : await db.query<{ id: string; root: string }>(
+      `SELECT a.id::text, coalesce((SELECT p.id FROM evidence p
+                                      WHERE a.id IN (SELECT lvrf_evidence_chain(p.id))
+                                        AND NOT EXISTS (SELECT 1 FROM evidence q WHERE q.superseded_by_id = p.id)
+                                      ORDER BY p.created_at, p.id LIMIT 1), a.id)::text AS root
+         FROM unnest($1::uuid[]) AS a(id)`, [actualIds]);
+    const rootOf = new Map(roots.map((x) => [x.id, x.root]));
+    const measurements = verified.map((r) => new Set(((r.payload.evidence ?? []) as { supports: string; evidence_id?: string }[])
+      .filter((e) => e.supports === 'actual' && typeof e.evidence_id === 'string').map((e) => rootOf.get(e.evidence_id as string) ?? (e.evidence_id as string))));
+    // Two runs compound when one rests on a measurement the other does not.
+    let compounds = false;
+    for (let i = 0; i < measurements.length && !compounds; i++) {
+      for (let j = i + 1; j < measurements.length && !compounds; j++) {
+        const a = measurements[i], b = measurements[j];
+        if (a.size > 0 && b.size > 0 && ([...a].some((x) => !b.has(x)) || [...b].some((x) => !a.has(x)))) compounds = true;
+      }
+    }
+    stage = compounds ? 'compounding' : verified.length >= 1 ? 'realization' : 'decision';
   }
 
   const findings: StoryFinding[] = findingRows.map((f) => {

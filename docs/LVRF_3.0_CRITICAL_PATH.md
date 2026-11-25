@@ -451,6 +451,18 @@ cut line applied first.
   - **The item:** draw them as SVG shapes in the tokens, so a print embeds only Bebas Neue, Barlow, Barlow Condensed
     and the mono face.
 
+- **The measurement date, sealed in new runs** (Brad, 25 Nov 2026, from S7b's Compounding ruling, option (b)).
+  - **The gap:** a run's seal records no date for its actual; only the live outcome does (`actual_measured_at`).
+  - **The item:** seal the actual's measurement date in every new run. Compounding then also requires different dates,
+    once both runs carry one. Runs sealed before it keep their bytes and are read as today, by their evidence rows.
+- **A print record for issued stories** (Brad, 25 Nov 2026, from S7b). **Required before any story is printed for a
+  customer.**
+  - **The gap:** a value case's Print writes a print-request row (`record_documents`), which needs a run and an
+    outcome. An issued story has neither, so its Print writes nothing today. The issued story's own row is the record
+    of what it says, not of who printed it, or when.
+  - **The item:** a print request recorded for each print of an issued story (which story, which form, who, when),
+    before the browser prints, as the value case's.
+
 ## 4.0 (recorded so nothing is lost)
 
 - **The Realization Flywheel** (a CVAF pattern; Brad, 5 Nov 2026): for each measured outcome, variance against the
