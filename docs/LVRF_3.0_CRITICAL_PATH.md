@@ -283,6 +283,10 @@ cut line applied first.
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
+       - **next, after S7b (Brad, 25 Nov 2026): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
+         confirmation step (S7a's accepted departure, LVRF_PLAN §33), so the figure's class shows in the form only. The
+         class is fixed once recorded, so W6 confirms every field in full, as card 01c's forms do (S4, LVRF_PLAN §23),
+         before the pilot's account teams use it.
        - **next, after S6 and the promised measurement date (Brad, 20 Nov 2026): ONE contrast item.**
          - **Small gold text on paper uses `--gold-ink`** (AMENDMENT-004; CLAUDE.md: gold on white is 2.40:1 and fails
            AA at every size). Two places are known:

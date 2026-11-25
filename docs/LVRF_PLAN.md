@@ -6921,6 +6921,9 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
     (revenue, a reported rate): the fact writer has no class to give, and the classes describe a vendor's story about a
     customer, not a company's own filing.
 - **Next:** build S7a to Gate A.
+- **W6's departure accepted (Brad, 25 Nov 2026):** W6's "Add evidence" has no confirmation step, so the class and its two
+  lines show in the form only. S4's full-text confirmation on W6 is the next small item after S7b, because the class is
+  fixed once recorded and must be confirmed in full before the pilot's account teams use W6.
 
 **What it builds** (§27 D5 and D11, approved by Brad 24 Nov 2026; the mock-ups approved 25 Nov 2026 with two changes):
 the class field on a published source, its migration and its guard, so that Brad can record Curia's published rows
