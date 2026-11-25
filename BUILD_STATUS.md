@@ -17809,3 +17809,135 @@ Read as `lvrf_app` over ssh, inside `BEGIN READ ONLY`.
   carries "misstated finding" errata (F2 and F3; F3 alone on run 13). 1a had been read from the 6 Nov copy. Under the
   rulings they print beside each score like every current erratum, so Curia's headline gains "its finding F3 misstates
   the seal".
+
+### S7b: the story of record — Gate A, 25 Nov 2026 (UTC)
+
+Branch `s7b`. Plan, rulings and the Story-link amendment: `docs/LVRF_PLAN.md` §27. **Gate A, as Brad defined it (25 Nov
+2026): run 2's full regression on the pinned 14 Nov snapshot, with the fresh-copy results below.**
+
+**What S7b builds (commits `e5e5430` to `aea2ee0`):**
+- `story_records` (`0055`) and hardening section 39: a story is sealed when the steward issues it, withdrawn once by
+  the steward, and never edited or deleted;
+- the story composed in `server/lib/story.ts`, read from real locked runs only;
+- the routes, in `server/routes/stories.ts`;
+- the draft and issued story pages;
+- "Story" in the account frame, kept by Brad's ruling (§27 amendment).
+
+`verify_story` holds breaks B1–B9.
+
+**Run 2: the full regression, 65 scripts, on the 14 Nov snapshot, at `aea2ee0` before the fixes below.** Every file
+was byte-identical after the run. 56 passed (6,054 checks). The other nine:
+
+| Script | In run 2 | Cause | After the fix |
+|---|---|---|---|
+| `verify_acts_lineage` | 3 failed | S7b's story routes: the 30th `_act_present` trigger; the guard's `endpoint` form; the two routes exercised by `verify_story` | **201/0**, on a fresh 14 Nov restore |
+| `verify_s5_account_frame` | 4 failed | the "Story" link | **289/0**, on a fresh 14 Nov restore |
+| `verify_steward_acts` | 1 failed | 37 steward-only routes, not 35 | **42/0** (clones local `lvrf`, not the prod copy) |
+| `verify_tenant_scope` | cases failed | no tenant case for the five story routes | **setup 22/0, cases passed** (local `lvrf`) |
+| `verify_value_case` | 1 failed | S7b moved the ask codes to `server/lib/sealedAsks.ts` | **201/0**, on a fresh 14 Nov restore |
+| `verify_story` | 5 failed | it needs the copy taken after Brad's six Curia rows | **not run** on the 14 Nov snapshot (exit 3, below); **233/0** on the fresh copy |
+| `verify_corrections` | **refused by the port guard, not run** | port 5198 held by a Vite left by an earlier script in the run | **212/0**, on a fresh 14 Nov restore |
+| `verify_pov_print` | **refused by the port guard, not run** | port 5197, the same | **121/0**, on a fresh 14 Nov restore |
+| `verify_run_page` | **refused by the port guard, not run** | port 5198, the same | **273/0**, on a fresh 14 Nov restore |
+
+- **The three refused scripts** are counted as not run until their reruns passed, never as passed.
+- **Every rerun that depends on the database** (those that clone `lvrf_prodcopy`) ran on its own fresh restore of the
+  14 Nov snapshot, never on the copy run 2 had used.
+- **Leftover servers:** 20 at the end of run 2, and one or two after each rerun. Each was stopped only after its command
+  line was checked to be this checkout's Vite on the port it held.
+
+**The fixes, all in test scripts; no product file changed:**
+1. **`verify_acts_lineage`:**
+   - 30 `_act_present` triggers.
+   - **The coverage guard's `endpoint` form is resolved, never assumed** (Brad), by `scripts/lib/act_route_resolves.py`.
+     It passes only when the handler registered on that route sets `const endpoint = '<that exact route>'` and calls
+     `recordAct(client, req, endpoint, …)` in the same handler, with the mount prefix read from `server/index.ts`.
+     **A break with its control:** the withdraw handler's `endpoint` made to name the issue route is refused;
+     restored, it resolves.
+   - The routes exercised elsewhere are 24: S7b's issue and withdraw, by `verify_story`.
+2. **`verify_s5_account_frame`:** "Story" after "Point of view" for every account but the tenant's own. It is opened on
+   Curia (the draft composes) and on a new account with no runs (the no-story sentence, exactly; never an error or a
+   blank).
+3. **`verify_steward_acts`** (Brad: not only the count):
+   - issue and withdraw are each found, steward-only, in the table and in the source;
+   - each is refused for the non-steward X with a 403 naming the act;
+   - 37 steward-only routes.
+4. **`verify_tenant_scope`:** a case for each of the five story routes, with a fixture story of A's issued by A's
+   steward with its act, at the stage its marker allows. B gets 404 on all five. A's controls prove each row exists
+   without writing (an unknown audience; a reason too short).
+5. **`verify_value_case`:** its ask codes are read from `sealedAsks.ts` too (17 codes).
+6. **`verify_story`'s precondition** (Brad): unless the prod copy holds six current, verified Curia rows with a class,
+   it stops before any check and before its trap. It prints "not run: needs a prod copy with Brad's six Curia rows"
+   and exits 3; the regression counts exit 3 as not run.
+   - **On the 14 Nov restore:** exit 3, "(lvrf_prodcopy holds 0)", counted NOT-RUN.
+   - **On the fresh copy:** it runs in full, 233/0.
+
+**On the fresh copy** (Brad's dump of 25 Nov 14:03 UTC):
+- **`verify_story`: 233/0,** breaks B1–B9 each caught.
+- **`verify_plain_words` and `verify_s1_hypothesis_rule`, S7a against S7b.** S7a ran from a worktree at `2a189e1`, on
+  the fresh copy restored by its own code (`0054`), behind a port check; S7b ran on the copy restored by its code
+  (`0055`).
+
+  | Script | S7a | S7b | The same way? |
+  |---|---|---|---|
+  | `verify_s1_hypothesis_rule` | 186/27 | 186/27 | **Yes: the same 27 failures, word for word.** From "hypothesis counts": Skillsoft's outcome `f23ee6a8` has the hypothesis Brad stated on 15 Nov, so the fixture's starting state no longer holds. |
+  | `verify_plain_words` | 38/6 | 41/2 | **Yes, the same single app-text hit** (below), and its coverage line. S7a's four extra failures are a timing failure: its sweep timed out on `/packs/pharmaceutical-biotechnology` at 60 s and read 53 of 54 pages. S7b's read all 54. |
+
+  Both are state-dependent, as recorded on the 3.1 list. The fresh copy has moved since 14 Nov, and the two branches
+  agree on it.
+- **The `verify_plain_words` hit:**
+  - **The page and element:** `/runs`, the system-exercise batch card, each candidate's quoted note
+    (`client/src/components/C3Batches.tsx` line 132).
+  - **The window the sweep tested:** the 52 characters `sure rests on this pack (S1, D1). (Asserted at indus`, ±25
+    around "S1".
+  - **The note's text is stored:** `evidence.summary` on row `e4a47f31`, "Classified only to carry its own value case;
+    its renewal measure rests on this pack (S1, D1).". It is Brad's classification note, written by
+    `server/lib/classifyInstitution.ts` (the insert at line 134), with its `provenance` "Asserted at industry
+    classification by Brad Piver" (line 144).
+  - **What the card shows is built by app code:** `server/routes/creditAndMarks.ts` line 424,
+    `e.summary || ' (' || e.provenance || ')' AS note`.
+  - **Why the sweep counts it as app text:** its window runs from the stored summary, across the app's ` (` join, into
+    the stored provenance. No string like that exists in the data dump, so the sweep calls it app text, though the code
+    sits in Brad's own words. **S7a gives the same hit on the same page.**
+  - **Not changed in this gate** (Brad). The later fix clips the window at the edge of the note's text, not its length,
+    with a test that a code the app writes into its own text is still caught.
+- **The traced row behind 41|25 against 42|26** (`verify_commit_measure_verify`'s oracle):
+
+  | Copy | Oracle | `lvrf_misstated_findings()` |
+  |---|---|---|
+  | 14 Nov snapshot | 41 on 25 | 41 on 25 |
+  | Fresh copy | 42 on 26 | 41 on 25 |
+
+  - **The extra row** is Skillsoft run 3 (`0061c95f`), its F3, sealed on 15 Nov after the snapshot.
+  - **That F3 is true:** "no verifier of record has been named … remains 'claimed'". It was sealed by the corrected
+    code, which no longer calls an absent verifier synthetic.
+  - **So the function is right to leave it out.** The oracle's shortcut, "every F3 but Skillsoft run 1's", held for
+    every 14 Nov run but not for one sealed afterwards. No product fault.
+- **The cross-check's run 1 and run 2:** they ran in another session, and only their outcome is recorded (the 3.1
+  list: four state-dependent scripts on the fresh copy). They are not reconstructed here. This Gate A reran what Brad
+  named instead.
+- **Equivalence against prod's `2a189e1`, on the fresh dump:** 219 GETs, **219 identical, no added keys.** Added by the
+  branch, not compared: `GET /api/institutions/:institutionId/stories`,
+  `GET /api/institutions/:institutionId/story-draft` and `GET /api/stories/:id`. Nothing removed.
+
+**The TOC, measured:** the 14 Nov snapshot restored by S7a's code (`0054`) and by S7b's (`0055`), then dumped.
+`0055` and section 39 add **14 entries**:
+- the `story_records` table, its data and its ACL;
+- its primary key and its four foreign keys;
+- its index;
+- `lvrf_story_record_guard`;
+- its four triggers: `_guard`, `_audit`, `_no_delete` and `_act_present`.
+
+Locally 973 → 987, so on prod **975 → 989**. Triggers 233; CHECKs 165, each with its plain sentence; the journal 56,
+newest `0055_s7b_story_records`.
+
+**`lvrf_prodcopy` is left as the pinned 14 Nov snapshot,** restored by this branch's code.
+
+**Gate B (planned): a migration.**
+- Back up and expect a TOC of 975.
+- Migrate `0055` as `lvrf_migrate`, then `ownership.sql` and `hardening.sql`: 233 triggers.
+- Back up again and expect **989**.
+- Deploy: a new bundle.
+
+**Brad's acts, after Gate B:** issuing Curia's story, which is the steward's alone (rule 10), and the stage-10 check on
+its print.

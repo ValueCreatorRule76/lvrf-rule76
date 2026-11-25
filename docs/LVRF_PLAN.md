@@ -6247,6 +6247,25 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 - **Effort:** about half a day for the mock-ups; about a day for S7a; about three days for S7b after the mock-ups
   are approved.
 
+### 7. Amendment: "Story" in the account frame (Brad, 25 Nov 2026)
+
+S7b's story-page commit (`614e8fe`) added a "Story" link to the S5 account frame, as "a declared screen change". It was
+not in this section's plan, rulings or mock-ups, and S7b's Gate A regression found it: `verify_s5_account_frame` failed
+on a sixth link it did not expect. **Brad's ruling: keep it.**
+
+- **Its place:** the frame's last page link, after "Point of view".
+- **Which accounts show it:** every account but your own. The tenant's own account has no "Point of view" and no
+  "Story", as S5 ruled for its own pages.
+- **What it opens:** `/accounts/:id/story`, the account's story page, under the same account's frame, with "Story" as
+  the current page.
+  - With a locked run that is not a system exercise, the page shows the draft (DRAFT, on screen only, no Print) and the
+    account's issued stories.
+  - **With none, the page says so in words:** "This account has no locked run that is not a system exercise: there is
+    no story to tell yet." Any issued stories still list above it. It shows no issue panel; it is never an error and
+    never blank.
+- **Gate A:** `verify_s5_account_frame` expects "Story" in every frame but the tenant's own, and opens it on Curia (its
+  draft composes) and on a new account with no runs (the no-story sentence, exactly).
+
 ## 28. 3.1 small items: plain words on screen, and the local commit date (planned 24 Nov 2026; **approved by Brad, 24 Nov 2026, with D1–D4 as recommended and D5 changed; D2's wording read by Brad before the build**; **Gate A 24 Nov 2026** (`BUILD_STATUS.md`, "§28 … Gate A"); **closed 24 Nov 2026**, deployed at `2dc3f71`, Gate C clean (`BUILD_STATUS.md`, "§28 closed"))
 
 **Brad's rulings (24 Nov 2026):**
