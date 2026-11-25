@@ -61,6 +61,21 @@ const note = (s) => `${s} — ${MARK}`;
 // kind 'special': its own check, run where noted.
 
 const CASES = [
+  // ---- S7b (§27): the story of record. A story's account and its row are the tenant's alone.
+  { route: 'GET /api/institutions/:institutionId/story-draft', kind: 'id', path: `/api/institutions/${E.INST_A}/story-draft`,
+    notFound: [404, `account ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'GET /api/institutions/:institutionId/stories', kind: 'id', path: `/api/institutions/${E.INST_A}/stories`,
+    notFound: [404, `account ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  // A's control sends an unknown audience (400 before any write), so A's own request proves the account without issuing.
+  { route: 'POST /api/institutions/:institutionId/stories', kind: 'id', path: `/api/institutions/${E.INST_A}/stories`,
+    body: { audience: 'internal' }, controlBody: { audience: 'nobody' },
+    notFound: [404, `account ${E.INST_A} not found`], target: ['institutions', E.INST_A] },
+  { route: 'GET /api/stories/:id', kind: 'id', path: `/api/stories/${E.STORY_A}`,
+    notFound: [404, `story ${E.STORY_A} not found`], target: ['story_records', E.STORY_A] },
+  // A's control gives a reason too short (422 once the story is found), so A's own request proves it without withdrawing.
+  { route: 'POST /api/stories/:id/withdraw', kind: 'id', path: `/api/stories/${E.STORY_A}/withdraw`,
+    body: { reason: note('Verification: P3 tenant scope checks.') }, controlBody: { reason: 'short' },
+    notFound: [404, `story ${E.STORY_A} not found`], target: ['story_records', E.STORY_A] },
   // ---- S2 (§21): research with Claude
   // The month's spend is the actor's tenant's alone (a sum, no ids): nothing of A's to find in B's answer.
   { route: 'GET /api/research-ai/status', kind: 'special' },

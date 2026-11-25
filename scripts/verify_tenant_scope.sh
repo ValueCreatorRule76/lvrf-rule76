@@ -233,6 +233,12 @@ CALL_A="$(printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);
 
 step "5. The cases"
 export PROMPT_A CLR_A CALL_A
+# S7b (§27): a story of A's, issued by A's steward in its own transaction with its act, as the route does: sealed
+# (the hash is the sha256 of its payload's text), on A's account, for internal use, at the stage its marker allows (a reference
+# example's story is a reference story; section 39 refuses any other). Its payload is a fixture: the tenant cases read only that the row exists and whose it is.
+STORY_A="$(printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nWITH st AS (SELECT CASE WHEN EXISTS (SELECT 1 FROM reference_example_markers k WHERE k.institution_id = '%s' AND k.deleted_at IS NULL AND k.superseded_by_id IS NULL) THEN 'reference' ELSE 'decision' END AS stage), p AS (SELECT st.stage, jsonb_build_object('account', jsonb_build_object('id', '%s'), 'stage', st.stage, 'audience', 'internal', 'fixture', 'P3 tenant scope (S7b)') AS j FROM st), s AS (INSERT INTO story_records (tenant_id, institution_id, audience, stage, payload, payload_hash, issued_by_person_id) SELECT '%s', '%s', 'internal', p.stage, j, encode(sha256(convert_to(j::text, 'UTF8')), 'hex'), '%s' FROM p RETURNING id), a AS (INSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, actor_person_id, route) SELECT '%s', 'issue', 'story_records', id, '%s', 'POST /api/institutions/:institutionId/stories' FROM s) SELECT id FROM s;\nCOMMIT;\n" "$STEW_A" "$INST_A" "$INST_A" "$TENANT_A" "$INST_A" "$STEW_A" "$TENANT_A" "$STEW_A" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" | grep -E '^[0-9a-f-]{36}$' | tail -1)"
+[ -n "$STORY_A" ] && ok "S7b: A's story ${STORY_A:0:8}, issued by A's steward with its act" || bad "S7b fixture story: '$STORY_A'"
+export STORY_A
 export BASE="http://127.0.0.1:$PORT" VERIFY_DB LOG PW EMAIL_A EMAIL_B TS
 export STAFF_A TENANT_A TENANT_B STAFF_B INST_B CUST_B ENG_B IND_B SLUG_B MEASURE_OTHER INST_A INST_A_NAME INST_A_UNCLASSIFIED CUST_A CAPNAME_A FACT_A
 export MS_A ENG_A ENG_A_RETIRE RUN_A RUN_A2 OUTCOME_A OUTCOME_A_OPEN CAP_A METRIC_A METRIC_A_SELF IND_A SLUG_A RR_A RR_A2 MEASURE_A LEVER_A LINK_A HYP_A MARKER_A LEVER_B SUMMARY_B OUTCOME_A OUTCOME_A_INST APL_A EV_A ARR_A ARR_A2 LINKEV_A GRANT_A

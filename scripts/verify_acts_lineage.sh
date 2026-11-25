@@ -51,7 +51,8 @@ BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_acts.XXXXXX")"
 SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 ACCT=server/routes/accountResearch.ts; CITE=server/routes/evidenceCitation.ts
-EDITED=("$ACCT" "$CITE")
+STOR=server/routes/stories.ts
+EDITED=("$ACCT" "$CITE" "$STOR")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -146,8 +147,8 @@ else
     && ok "all $RR0 research results keep import_id exactly as the copy held it (${RRI0%%|*} NULL, $(echo "$RRI0" | cut -d'|' -f2) naming the import they came from): none blank-filled, none invented" || bad "import_id after the migration: $RRI0 -> $RRI1"
 fi
 [ "$(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")" = "$ACTS_PRE" ] && ok "governance_acts and research_imports as before the migration ($ACTS_PRE, the copy's own): none backfilled (P2-D2)" || bad "acts/imports changed by the migration: $ACTS_PRE → $(q "SELECT (SELECT count(*) FROM governance_acts) || '|' || (SELECT count(*) FROM research_imports)")"
-[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "29" ] \
-  && ok "29 _act_present triggers (S2's research_clearances; B4's outcome_withdrawals; P2's 18, C3's customer_role_grants and system_exercise_marks, C3b's figure_findings, B1's industries, B3's policy_values, lens_policies, monetization_rates, roadmap_milestones and record_documents), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
+[ "$(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present' AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred")" = "30" ] \
+  && ok "30 _act_present triggers (S7b's story_records; S2's research_clearances; B4's outcome_withdrawals; P2's 18, C3's customer_role_grants and system_exercise_marks, C3b's figure_findings, B1's industries, B3's policy_values, lens_policies, monetization_rates, roadmap_milestones and record_documents), each a deferred constraint trigger" || bad "act_present triggers: $(q "SELECT count(*) FROM pg_trigger WHERE tgname LIKE '%_act_present'")"
 
 step "4. The coverage guard (Brad's condition on D3): every mutating route classed; every act route records its act"
 node scripts/list_api_routes.mjs 2>/dev/null | grep -E '^(POST|PUT|PATCH|DELETE) ' | sort -u > "$W/routes.txt"
@@ -159,9 +160,18 @@ NOROUTE="$(cut -f1 "$W/classes.txt" | comm -13 "$W/routes.txt" - | paste -sd'|' 
 MISSING=""
 while IFS=$'\t' read -r route acts; do
   [ "$acts" = "create-only" ] && continue
-  grep -rqF "recordAct(client, req, '$route'" server/routes server/research || { grep -rqF "const route = '$route'" server/routes server/research && grep -rqF "recordAct(client, req, route," server/routes server/research; } || MISSING="$MISSING|$route"
+  # S7b Gate A (Brad, 25 Nov 2026): the third form, recordAct(client, req, endpoint, …), passes only when the handler
+  # registered on this route sets const endpoint to exactly this route and calls recordAct with it (act_route_resolves.py).
+  grep -rqF "recordAct(client, req, '$route'" server/routes server/research || { grep -rqF "const route = '$route'" server/routes server/research && grep -rqF "recordAct(client, req, route," server/routes server/research; } || python3 -I scripts/lib/act_route_resolves.py "$route" > /dev/null || MISSING="$MISSING|$route"
 done < "$W/classes.txt"
 [ -z "$MISSING" ] && ok "$(grep -vc 'create-only' "$W/classes.txt") act routes each call recordAct with their own pattern; $(grep -c 'create-only' "$W/classes.txt") create-only routes, listed by name in LVRF_PLAN §10" || bad "act routes not calling recordAct:$MISSING"
+# The guard's endpoint form, broken (Brad, 25 Nov 2026): the withdraw handler's endpoint made to name the issue route.
+# The resolver must refuse it, since the literal no longer equals the route the handler is registered on; restored, it passes.
+edit "$STOR" "    const endpoint = 'POST /api/stories/:id/withdraw';" "    const endpoint = 'POST /api/institutions/:institutionId/stories';"
+! python3 -I scripts/lib/act_route_resolves.py 'POST /api/stories/:id/withdraw' > "$W/resolve.out" && grep -q "endpoint names 'POST /api/institutions/:institutionId/stories'" "$W/resolve.out" \
+  && ok "guard break: a handler whose endpoint names another route is refused ($(head -1 "$W/resolve.out" | cut -c1-120))" || bad "guard break not caught: $(cat "$W/resolve.out")"
+restore "$STOR"
+python3 -I scripts/lib/act_route_resolves.py 'POST /api/stories/:id/withdraw' > "$W/resolve.out" && ok "guard control: restored, the withdraw handler's endpoint resolves to its own route" || bad "guard control: $(cat "$W/resolve.out")"
 
 step "5. Fixtures and the server"
 TS="$(date +%s)"
@@ -346,8 +356,9 @@ act_is "supersede (entity)" "supersede:institution_entities:institution_entities
 SCRIPT_ROUTES="$(q "SELECT string_agg(DISTINCT route, E'\n' ORDER BY route) FROM governance_acts WHERE id::text NOT IN ($PRE_ACT_IDS)")"
 ACT_ROUTES="$(npx tsx -e "import('$(pwd)/server/lib/governanceAct.ts').then(m => console.log(Object.entries(m.ROUTE_ACTS).filter(([, a]) => a !== 'create-only').map(([r]) => r).sort().join('\n')))" 2>/dev/null)"
 NOT_HERE="$(comm -23 <(printf '%s\n' "$ACT_ROUTES") <(printf '%s\n' "$SCRIPT_ROUTES" | sort) | paste -sd'|' -)"
-[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "30" ] && [ "$NOT_HERE" = "POST /api/customer-roles/:id/revoke|POST /api/engagements/:engagementId/milestones|POST /api/errata/misstated-findings|POST /api/errata/non-customer-credit|POST /api/evidence/:id/supersede|POST /api/evidence/:id/withdraw-verification|POST /api/evidence/about-batch|POST /api/evidence/supersession-batch|POST /api/industries|POST /api/policies/lenses|POST /api/policies/values|POST /api/research-ai/clearances/:id/withdraw|POST /api/research-ai/industries/:industryId/clearances|POST /api/research-ai/institutions/:institutionId/clearances|POST /api/roadmap-milestones/:id/supersede|POST /api/system-exercise/marks|POST /api/value-outcomes/:outcomeId/commitment/withdraw|POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw|POST /api/value-outcomes/:outcomeId/figure-findings|POST /api/value-outcomes/:outcomeId/measurement/withdraw|POST /api/value-outcomes/:outcomeId/monetization-rates|POST /api/value-runs/:runId/share-for-review" ] \
-  && ok "30 distinct act routes exercised by this script (§29: naming a customer-side role, for the committer and verifier); the other 22 act routes in ROUTE_ACTS by their own scripts (S2's clear, clear and withdraw: verify_s2_ai_research; B4's two withdrawals and the B4 addendum's misstated-finding batch: verify_commit_measure_verify; B3's six: verify_value_case; withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
+EXPECT_NOT_HERE="$(printf '%s\n' 'POST /api/customer-roles/:id/revoke' 'POST /api/engagements/:engagementId/milestones' 'POST /api/errata/misstated-findings' 'POST /api/errata/non-customer-credit' 'POST /api/evidence/:id/supersede' 'POST /api/evidence/:id/withdraw-verification' 'POST /api/evidence/about-batch' 'POST /api/evidence/supersession-batch' 'POST /api/industries' 'POST /api/policies/lenses' 'POST /api/policies/values' 'POST /api/research-ai/clearances/:id/withdraw' 'POST /api/research-ai/industries/:industryId/clearances' 'POST /api/research-ai/institutions/:institutionId/clearances' 'POST /api/roadmap-milestones/:id/supersede' 'POST /api/system-exercise/marks' 'POST /api/value-outcomes/:outcomeId/commitment/withdraw' 'POST /api/value-outcomes/:outcomeId/evidence/:evidenceId/withdraw' 'POST /api/value-outcomes/:outcomeId/figure-findings' 'POST /api/value-outcomes/:outcomeId/measurement/withdraw' 'POST /api/value-outcomes/:outcomeId/monetization-rates' 'POST /api/value-runs/:runId/share-for-review' 'POST /api/institutions/:institutionId/stories' 'POST /api/stories/:id/withdraw' | sort | paste -sd'|' -)"
+[ "$(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .)" = "30" ] && [ "$NOT_HERE" = "$EXPECT_NOT_HERE" ] \
+  && ok "30 distinct act routes exercised by this script (§29: naming a customer-side role, for the committer and verifier); the other 24 act routes in ROUTE_ACTS by their own scripts (S7b's issue and withdraw: verify_story; S2's clear, clear and withdraw: verify_s2_ai_research; B4's two withdrawals and the B4 addendum's misstated-finding batch: verify_commit_measure_verify; B3's six: verify_value_case; withdraw a link: verify_c2c; roles, revoke, credit errata, marks: verify_c3; the finding: verify_c3b; the about batch, a withdrawn verification, a supersession: verify_evidence_final)" || bad "act routes exercised: $(printf '%s\n' "$SCRIPT_ROUTES" | grep -c .); not here: $NOT_HERE"
 
 step "8. Lineage — a fixture chain made after P2"
 LN() { q "SELECT string_agg(kind || ':' || source, ' > ' ORDER BY step) FROM lvrf_lineage('$1', '$2'${3:+, '$3'})"; }

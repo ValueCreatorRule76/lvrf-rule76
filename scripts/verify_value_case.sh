@@ -405,7 +405,7 @@ KC="$(q "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 're
 [ "$(q "SELECT ($KC) IS FALSE FROM (VALUES ('print_request'::text, 'cfo'::text, NULL::text, NULL::uuid)) v(kind, lens, shared_with, value_run_id)")" = "t" ] && ok "  ...and the CHECK reads false, not NULL, on a NULL run" || bad "  ...CHECK on NULL: $KC"
 
 step "11. Converting questions and floor-first (C10)"
-codes() { { grep -oE "'code', '[a-z_]+'" db/hardening.sql | grep -oE "'[a-z_]+'$" | tr -d "'"; grep -oE "(codes|reasons)\.push\('[a-z_]+'\)" "$CASE" | grep -oE "'[a-z_]+'" | tr -d "'"; } | sort -u; }
+codes() { { grep -oE "'code', '[a-z_]+'" db/hardening.sql | grep -oE "'[a-z_]+'$" | tr -d "'"; grep -oE "(codes|reasons)\.push\('[a-z_]+'\)" "$CASE" server/lib/sealedAsks.ts | grep -oE "'[a-z_]+'" | tr -d "'"; } | sort -u; }  # S7b: the asks moved to sealedAsks.ts, which the story reads too
 ALL="$(codes | tr '\n' ' ')"
 MISSING="$(for c in $ALL; do grep -q "^  $c: {" "$ASKS" || echo "$c"; done)"
 [ -z "$MISSING" ] && [ "$(printf '%s' "$ALL" | wc -w | tr -d ' ')" -ge 15 ] && ok "every reason code the database and the case can give has its ask and converting question ($(printf '%s' "$ALL" | wc -w | tr -d ' ') codes)" || bad "codes without a question: $MISSING"

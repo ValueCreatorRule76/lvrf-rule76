@@ -5,6 +5,8 @@
 #
 #   ./scripts/verify_story.sh [out_dir]
 #
+#   Exit 3, "not run: needs a prod copy with Brad's six Curia rows": the copy predates them; nothing was checked.
+#
 #   1. A clone of the prod copy (taken after Brad's six Curia rows) migrated to 0055 and hardened: story_records and its
 #      four triggers, 233 in all; every run and evidence row byte-identical; drift none at 0055.
 #   2. Curia's draft, read against SQL: stage Reference, never Decision; the six real runs and none of the sixteen
@@ -39,6 +41,13 @@ case "$LOCAL_URL" in */lvrf) ;; *) echo "REFUSING: .env does not name lvrf"; exi
 CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 [ -x "$CHROME" ] || { echo "REFUSING: Chrome not found"; exit 1; }
 psql -X -At -d lvrf_prodcopy -c "SELECT 1" > /dev/null 2>&1 || { echo "REFUSING: lvrf_prodcopy is missing (run scripts/restore_prod_copy.sh)"; exit 1; }
+# The precondition (Brad, 25 Nov 2026): this script reads Curia's story from the real record, so it needs a prod copy taken
+# after Brad's six Curia rows: six current, verified rows on Curia with a published figure's class. Without them it stops
+# here, before any check and before its EXIT trap, with exit 3 and the sentence below; a regression counts exit 3 as not
+# run, never as passed or failed. (The class is read through to_jsonb, so a copy older than 0054 reads 0, not an error.)
+EXIT_NOT_RUN=3
+SIX="$(psql -X -At -d lvrf_prodcopy -c "SELECT count(*) FROM evidence e JOIN institutions i ON i.id = e.institution_id WHERE i.name LIKE 'Curia%' AND i.deleted_at IS NULL AND e.deleted_at IS NULL AND e.superseded_by_id IS NULL AND e.source_verified AND to_jsonb(e)->>'published_figure_class' IS NOT NULL" 2>/dev/null || echo 0)"
+[ "$SIX" = "6" ] || { echo "not run: needs a prod copy with Brad's six Curia rows (lvrf_prodcopy holds $SIX)"; exit "$EXIT_NOT_RUN"; }
 
 VERIFY_DB=lvrf_verifystory
 VERIFY_URL="${LOCAL_URL%/*}/${VERIFY_DB}"

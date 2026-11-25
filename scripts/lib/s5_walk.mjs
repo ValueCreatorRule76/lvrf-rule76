@@ -101,6 +101,8 @@ const expectedPages = (a) => {
   p.push({ key: 'runs', label: `Runs (${a.runs})`, href: '/runs' });
   p.push(a.head ? { key: 'case', label: 'Value case', href: `/runs/${a.head.id}/case` } : { key: 'case', label: 'Value case: none yet, no locked run', href: null });
   if (!a.self) p.push({ key: 'pov', label: 'Point of view', href: `/accounts/${a.id}/pov` });
+  // S7b (Brad's ruling, 25 Nov 2026, §27 amendment): "Story" after "Point of view", for every account but your own.
+  if (!a.self) p.push({ key: 'story', label: 'Story', href: `/accounts/${a.id}/story` });
   return p;
 };
 const MONEY = /[$€£]|\bUSD\b|\bmillion\b|\bbillion\b|\b\d+(\.\d+)?\s?[mbk]n?\b/i;
@@ -146,6 +148,22 @@ async function frameSection(list, deep) {
     check(!MONEY.test(f.text), `${W}: no money in the frame`, (f.text.match(MONEY) || [''])[0]);
     if (!deep) continue;
     await T.shot(`${TAG}_frame_${a.key}_1280`);
+    // S7b (Brad, 25 Nov 2026): the Story link opened on an account with a story (Curia: its draft composes) and on one
+    // without (the new account: the no-story page, in words; never an error or a blank).
+    if (a.key === 'curia' || a.key === 'new') {
+      check(await T.ev(frameClick('story')), `${W}: "Story" is a link in the frame`);
+      check(await T.waitFor(`location.pathname==='/accounts/${a.id}/story' && !!document.querySelector('[data-testid=story-draft-page]') && ${frameReady(a.id)}`, 30000),
+        `${W}: "Story" opens the account's story page, under the same account's frame`);
+      const s = await T.ev(`(()=>({current:[...document.querySelectorAll('[data-testid=frame-desktop] [data-page]')].find((e)=>e.getAttribute('aria-current')==='page')?.dataset.page??null,
+        body:!!document.querySelector('[data-testid=story-body]'), refused:document.querySelector('[data-testid=draft-refused]')?.textContent??null,
+        text:(document.querySelector('[data-testid=story-draft-page]')?.innerText??'').trim().length}))()`);
+      check(s.current === 'story', `${W}: on it, "Story" is the current page`, String(s.current));
+      if (a.key === 'curia') check(s.body && s.refused === null, `${W}: a story: the account's draft composes`, JSON.stringify(s));
+      else check(!s.body && s.refused === 'This account has no locked run that is not a system exercise: there is no story to tell yet.' && s.text > s.refused.length,
+        `${W}: no story: the page says so in words ("There is no story to tell yet"), not an error or a blank`, JSON.stringify(s));
+      await T.shot(`${TAG}_story_${a.key}_1280`);
+      check(await openAccount(T, a), `${W}: back to the account`);
+    }
     if (a.head) {
       // Its run, its value case: the same account, the right page current.
       await T.ev(frameClick('case'));
