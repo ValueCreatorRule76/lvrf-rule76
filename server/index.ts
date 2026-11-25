@@ -49,6 +49,7 @@ import { validateMetricRouter } from './routes/validateMetric.js';
 import { metricPackBasisRouter } from './routes/metricPackBasis.js';
 import { lockRunRouter } from './routes/lockRun.js';
 import { correctionsOutcomeRouter, erratumRouter } from './routes/corrections.js';
+import { institutionStoriesRouter, storiesRouter } from './routes/stories.js';
 import { creditErrataRouter, customerRoleGrantRouter, customerRoleRevokeRouter, figureFindingRouter, misstatedFindingsRouter, systemExerciseRouter } from './routes/creditAndMarks.js';
 import { recordDocumentsWriteRouter, recordDocumentsReadRouter } from './routes/recordDocuments.js';
 import { compareRunsRouter } from './routes/compareRuns.js';
@@ -145,6 +146,8 @@ app.use('/api/business-metrics', metricPackBasisRouter(pool));
 app.use('/api/business-metrics', researchPromptRouter(pool));
 app.use('/api/value-runs', lockRunRouter(pool));
 app.use('/api/value-runs', erratumRouter(pool));
+app.use('/api/institutions', institutionStoriesRouter(pool));
+app.use('/api/stories', storiesRouter(pool));
 // C3 (26 Oct 2026): customer-side roles from a source; the errata the seals call for; system-exercise marks.
 app.use('/api/institutions', customerRoleGrantRouter(pool));
 app.use('/api/customer-roles', customerRoleRevokeRouter(pool));

@@ -19,7 +19,7 @@ import type { PoolClient } from 'pg';
 
 export type GovernanceAct =
   | 'import' | 'validate' | 'approve' | 'certify' | 'activate' | 'supersede' | 'verify' | 'attest'
-  | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit'
+  | 'open_citation' | 'accept' | 'reject' | 'withdraw' | 'ratify' | 'demote' | 'commit' | 'issue'
   | 'measure' | 'lock' | 'retire' | 'exclude' | 'mark' | 'link' | 'correct' | 'record_erratum' | 'grant' | 'find' | 'state_about' | 'add_industry'
   | 'record_rate' | 'plan' | 'share'
   // S2 (§21): the steward clears a subject for research with Claude, or withdraws it.
@@ -89,6 +89,9 @@ export const ROUTE_ACTS: Readonly<Record<string, readonly GovernanceAct[] | 'cre
   'POST /api/engagements/:engagementId/milestones': ['plan'],
   'POST /api/roadmap-milestones/:id/supersede': ['plan'],
   'POST /api/value-runs/:runId/share-for-review': ['share'],
+  // S7b (§27)
+  'POST /api/institutions/:institutionId/stories': ['issue'],
+  'POST /api/stories/:id/withdraw': ['withdraw'],
   // B4 (§14, D3): the steward withdraws a measurement or a commitment.
   'POST /api/value-outcomes/:outcomeId/measurement/withdraw': ['withdraw'],
   'POST /api/value-outcomes/:outcomeId/commitment/withdraw': ['withdraw'],

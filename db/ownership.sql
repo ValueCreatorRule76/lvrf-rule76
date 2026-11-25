@@ -200,7 +200,9 @@ BEGIN
     -- B4 (§14, 0049): insert-only.
     'outcome_withdrawals',
     -- S2 (§21, 0051): insert-only. research_call_claims and research_process_refusals are written by lvrf_research only.
-    'research_clearances', 'research_calls']
+    'research_clearances', 'research_calls',
+    -- S7b (§27, 0055): issued, then withdrawn once (story_records_guard), so INSERT here and UPDATE below.
+    'story_records']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT INSERT ON public.%I TO lvrf_app', t);
@@ -211,7 +213,7 @@ BEGIN
     'industry_measures', 'institution_entities', 'institution_facts', 'institutions',
     'lever_offerings', 'person_credentials', 'persons', 'reference_example_markers',
     'research_results', 'sessions', 'tenants', 'value_hypotheses', 'value_levers',
-    'value_outcome_evidence', 'value_outcomes', 'value_runs']
+    'value_outcome_evidence', 'value_outcomes', 'value_runs', 'story_records']
   LOOP
     IF to_regclass(format('public.%I', t)) IS NOT NULL THEN
       EXECUTE format('GRANT UPDATE ON public.%I TO lvrf_app', t);

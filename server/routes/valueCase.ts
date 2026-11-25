@@ -4,6 +4,7 @@ import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
 import { askFor, oneStep } from '../lib/caseQuestions.js';
+import { bestOf, rank, sealedAsks, type SealedEvidence } from '../lib/sealedAsks.js';
 import { falsifierSentence } from './valueHypotheses.js';
 
 /**
@@ -17,18 +18,6 @@ import { falsifierSentence } from './valueHypotheses.js';
  * A run sealed before payloadVersion 5 has no cost of delay, roadmap or solutioning: the case says "not sealed in this
  * run", never fills them from today's record.
  */
-const BASIS_RANK: Record<string, number> = { system_of_record: 5, published: 4, client_stated: 3, inferred: 2, assumed: 1 };
-const rank = (b: string | null | undefined) => (b ? BASIS_RANK[b] ?? 0 : 0);
-
-interface SealedEvidence { kind: string; summary: string; provenance: string | null; source_reference: string | null; supports: string; basis: string | null;
-  figure_check?: { result: string; detail: string } | null; simulated?: boolean }
-
-/** The strongest sealed basis behind one support (baseline, actual, impact basis), or null when none is sealed. */
-function bestOf(evidence: SealedEvidence[], supports: string): SealedEvidence | null {
-  const items = evidence.filter((e) => e.supports === supports);
-  return items.sort((a, b) => rank(b.basis) - rank(a.basis))[0] ?? null;
-}
-
 /**
  * Floor-first (Brad, 5 Nov 2026): an outcome's floor is the weakest basis among the figures it rests on; the case lists
  * the strongest floor first, so it never leads with its weakest evidence. Ties keep their sealed order.
@@ -85,19 +74,8 @@ export function valueCaseRouter(pool: Pool): Router {
       const target = bestOf(evidence, 'target_commitment');
       const cod = version >= 5 ? sealedCase?.cost_of_delay ?? null : null;
 
-      // What we need from you: from the sealed record, in spine order. The vendor's own gaps are kept apart.
-      const codes: string[] = [];
-      if (!baseline || baseline.basis !== 'system_of_record') codes.push('baseline_not_system_of_record');
-      for (const reason of (cod?.reasons ?? []) as { code: string }[]) codes.push(reason.code);
-      if (p.targetValue === null || p.targetValue === undefined) codes.push('no_commitment');
-      if (p.actualValue === null || p.actualValue === undefined) codes.push('no_actual');
-      // B4 (stage-10 rehearsal, item 4): a committer the record does not find customer-side is an ask of its own.
-      if (p.targetValue !== null && p.targetValue !== undefined && p.people?.committer && p.people.committer.customer_side === false) codes.push('committer_not_customer_side');
-      if (!p.people?.verifier) codes.push('no_verifier');
-      const ours = new Set(['no_months', 'no_lens']);
-      const unique = [...new Set(codes)];
-      const asks = unique.filter((c) => !ours.has(c)).map((c) => askFor(c, r.account, metric, unit));
-      const vendorGaps = unique.filter((c) => ours.has(c)).map((c) => askFor(c, r.account, metric, unit));
+      // What we need from you: from the sealed record, in spine order (sealedAsks, the one definition S7b's story reads too).
+      const { asks, vendorGaps } = sealedAsks(p, r.account);
 
       // The CFO lens, applied at read (O3, O-D1, O-D3).
       let cfo = null;
