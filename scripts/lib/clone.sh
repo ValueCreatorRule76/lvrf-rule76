@@ -36,3 +36,7 @@ migrate_clone() {  # DB [drizzle-kit args...]
 }
 
 . scripts/lib/evidence_fixture.sh
+
+# S7a (LVRF_PLAN §33): a vendor publication about another account states what kind of figure it gives. A fixture's
+# evidence body gains one, named where it is used:  "$(with_class "$(EVB vendor_publication ...)" [CLASS])"
+with_class() { node -e 'const b=JSON.parse(process.argv[1]);b.published_figure_class=process.argv[2]||"outcome_without_baseline";console.log(JSON.stringify(b))' "$1" "${2:-}"; }

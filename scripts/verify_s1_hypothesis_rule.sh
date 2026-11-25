@@ -136,9 +136,9 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 [ "$(q "SELECT count(*) FROM hardening_manifest WHERE trigger_name = 'value_runs_hypothesis_current'")" = "1" ] && ok "  ...in the hardening manifest" || bad "  ...manifest"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the $N_RUNS0 sealed runs byte-identical after section 35 installs" || bad "a sealed run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none, no migration ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S1 adds no CHECK)" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S1 adds no CHECK)" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1; }

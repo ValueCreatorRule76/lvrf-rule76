@@ -245,11 +245,11 @@ expect POST "/api/engagements/$ENG_W/retire" '{"retirement_reason":"Verification
 SEALS0="$(seals)"
 
 step "5. The vendor trigger: a vendor publication about another company supports the impact basis only"
-expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' baseline)" 422 "a vendor publication on a customer account as the baseline, at the route" "it may support the impact basis only"
-expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' actual)" 422 "  ...as the actual" "Vendor-published evidence may not support a measured actual"
-expect POST "/api/value-outcomes/$O_F/evidence" "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' impact_basis)" 201 "  ...as the impact basis: accepted"
+expect POST "/api/value-outcomes/$O_F/evidence" "$(with_class "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' baseline)")" 422 "a vendor publication on a customer account as the baseline, at the route" "it may support the impact basis only"
+expect POST "/api/value-outcomes/$O_F/evidence" "$(with_class "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' actual)")" 422 "  ...as the actual" "Vendor-published evidence may not support a measured actual"
+expect POST "/api/value-outcomes/$O_F/evidence" "$(with_class "$(EVB vendor_publication 'vendor case study' 'Vendor case study (fixture)' impact_basis)")" 201 "  ...as the impact basis: accepted"
 EV_VEN="$(rj b.evidence_id)"
-VEN_SQL() { printf "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read, about_institution_id) VALUES ('%s', 'vendor_publication', 'v', 'Verification vendor fixture', '%s', 'quote', 'Customers cut incidents by 75%%.', 'The vendor fixture headline, read as written.', '%s') RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '%s', id, '%s' FROM e" "$1" "$S" "$1" "$2" "$3"; }
+VEN_SQL() { printf "WITH e AS (INSERT INTO evidence (institution_id, kind, summary, provenance, captured_by_person_id, evidence_form, quote_text, how_read, about_institution_id, published_figure_class) VALUES ('%s', 'vendor_publication', 'v', 'Verification vendor fixture', '%s', 'quote', 'Customers cut incidents by 75%%.', 'The vendor fixture headline, read as written.', '%s', (SELECT CASE WHEN i.is_tenant_self THEN NULL ELSE 'outcome_without_baseline' END FROM institutions i WHERE i.id = '%s')) RETURNING id) INSERT INTO value_outcome_evidence (value_outcome_id, evidence_id, supports) SELECT '%s', id, '%s' FROM e" "$1" "$S" "$1" "$1" "$2" "$3"; }
 sqlrefused "the same, at the database (baseline)" "$(VEN_SQL "$INST" "$O_F" baseline)" "it may support the impact basis only"
 # The tenant's own account has only simulated customer persons, so no outcome can be opened there through
 # the route; its existing outcome (engagement open) takes the link, in a transaction rolled back.

@@ -148,9 +148,9 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
   && [ "$(q "SELECT count(*) FROM record_documents WHERE kind NOT IN ('rendering', 'print_request', 'share_for_review')")" = "0" ] \
   && ok "  ...every existing record document keeps its kind (${RD0%|*}): the migrations change none" || bad "  ...kinds: $RD0 -> $(q "SELECT string_agg(DISTINCT kind, ',') FROM record_documents")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 
@@ -300,7 +300,7 @@ CODC() { q "SELECT jsonb_path_query_array(lvrf_cost_of_delay('$OA')->'reasons', 
 in_txn() {  # SQL SELECT — the SELECT's result, inside a rolled-back transaction under the steward
   printf "BEGIN;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\n%s;\n%s;\nROLLBACK;\n" "$S" "$1" "$2" | psql -X -q -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 | tail -1
 }
-expect POST "/api/value-outcomes/$OA/evidence" "$(EVB vendor_publication 'Vendor states a rate (fixture)' impact_basis)" 201 "a vendor's publication"; RV="$(rj b.evidence_id)"
+expect POST "/api/value-outcomes/$OA/evidence" "$(with_class "$(EVB vendor_publication 'Vendor states a rate (fixture)' impact_basis)")" 201 "a vendor's publication"; RV="$(rj b.evidence_id)"
 expect POST "/api/value-outcomes/$OA/evidence" "$(EVB attestation 'Owner states a rate, no role named (fixture)' impact_basis "$OWNA")" 201 "an attestation by a person with no customer-side role"; RN="$(rj b.evidence_id)"
 CORR() { printf "INSERT INTO monetization_rates (tenant_id, institution_id, business_metric_id, rate, currency, per_unit, rate_kind, how_read, evidence_id, reason, recorded_by_person_id, supersedes_id) VALUES ('%s', '%s', '%s', 250000, 'USD', '%s', 'performance', 'Verification: a correction.', '%s', 'Verification: the evidence changes.', '%s', '%s')" "$TEN" "$INSTA" "$META" "$UNIT" "$1" "$S" "$RT"; }
 V="$(in_txn "$(CORR "$RV")" "SELECT jsonb_path_query_array(lvrf_cost_of_delay('$OA')->'reasons', '\$[*].code')::text")"
@@ -441,7 +441,7 @@ HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 |
 printf '%s' "$(HASHES)" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $(HASHES)" || bad "hashes: $(HASHES)"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.source_fixture IS DISTINCT FROM 'value_case_fixture'")" = "$RUNS0" ] && ok "every run on the copy byte-identical after all of this" || bad "an older run changed"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^160 CHECKs in the database: 160 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 

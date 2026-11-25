@@ -131,7 +131,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "229" ] && ok "229 triggers (§29 adds none; §32 section 38: +2)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 55 migrations, newest 0054_s7a_figure_class" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical after hardening" || bad "a run changed"
 [ "$(q "SELECT md5(to_jsonb(o)::text) FROM value_outcomes o WHERE id = '$CURIA_O'")" = "$ROW0" ] && ok "Curia's e3fb0061 byte-identical after hardening (D5: the rule never reads it)" || bad "e3fb0061 changed"
 [ "$(q "SELECT lvrf_customer_side_reason(committed_by_person_id, institution_id) FROM value_outcomes WHERE id = '$CURIA_O'")" = "no customer-side role named from a source" ] \

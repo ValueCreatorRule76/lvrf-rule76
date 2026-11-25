@@ -154,7 +154,7 @@ outcome "Hyp TRIR five" 1.4; O5="$OUT"
 ok "five outcomes on the TRIR entry, baseline 1.4 (and one of 0: zero is data), each metric based on the entry"
 EVB() { printf '{"kind":"%s","provenance":"Fixture source, page 21 (not a source)","summary":"%s","supports":"%s","confidence":"medium","evidence_form":"quote","quote_text":"Verification fixture quote, not a source.","how_read":"Verification fixture: read from the fixture quote as written.","source_verified":false,"ai_sourced":false,"simulated":false}' "$1" "$2" "$3"; }
 expect POST "/api/value-outcomes/$O1/evidence" "$(EVB public_filing 'TRIR FY25 1.4 (fixture)' baseline)" 201 "baseline evidence: a public filing"
-expect POST "/api/value-outcomes/$O1/evidence" "$(EVB vendor_publication 'Vendor claim: 75% fewer recordables (fixture)' impact_basis)" 201 "a vendor claim, as impact_basis"
+expect POST "/api/value-outcomes/$O1/evidence" "$(with_class "$(EVB vendor_publication 'Vendor claim: 75% fewer recordables (fixture)' impact_basis)")" 201 "a vendor claim, as impact_basis"
 expect GET "/api/institutions/$INST/pov" "" 200 "the POV, before any customer-side evidence"
 [ "$(rj "[b.banners.outside_in, b.banners.unverified, b.value_spine.join('>')].join('|')")" = "true|true|$(q "SELECT array_to_string(enum_range(NULL::value_stage), '>')")" ] \
   && ok "  ...OUTSIDE-IN and UNVERIFIED; the spine in the enum's order" || bad "  ...$(rj "JSON.stringify([b.banners,b.value_spine])")"
