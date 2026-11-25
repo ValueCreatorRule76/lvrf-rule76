@@ -6910,7 +6910,7 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
   warning. Cancel.
 - **About a day.**
 
-## 33. S7a: the published figure's class (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1–D7 as recommended**)
+## 33. S7a: the published figure's class (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1–D7 as recommended**; **Gate A 25 Nov 2026** (`BUILD_STATUS.md`, "S7a … Gate A"); the supersession batch's skip ruled by Brad during it)
 
 **Brad's rulings (25 Nov 2026):**
 - **D1–D7 are approved as recommended.**
@@ -6921,6 +6921,10 @@ such as a CHRO named in a case study, have none, so the form blocks them or invi
     (revenue, a reported rate): the fact writer has no class to give, and the classes describe a vendor's story about a
     customer, not a company's own filing.
 - **Next:** build S7a to Gate A.
+- **The supersession batch skips a vendor publication about another account (Brad, 25 Nov 2026, ruled during the
+  regression):** it cannot give a class, so it lists the row with its short id and "stopped: a vendor publication's
+  successor states its class; supersede it on card 01c", and writes nothing for it. A break: a skip not listed fails.
+  Prod's affected rows are named in Gate A's record (`092c46b6`, `9c05af38`).
 - **W6's departure accepted (Brad, 25 Nov 2026):** W6's "Add evidence" has no confirmation step, so the class and its two
   lines show in the form only. S4's full-text confirmation on W6 is the next small item after S7b, because the class is
   fixed once recorded and must be confirmed in full before the pilot's account teams use W6.

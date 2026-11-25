@@ -17549,3 +17549,140 @@ fix rides in it). Branch `person-email`, on `d498a08`. **Migration `0053`; one n
   2. **Account inputs' assessment path goes** (§32's finding: an assessment there can never be admitted). Assessments
      come back through their own form when needed.
 - **Next (Brad, 25 Nov 2026):** S7a.
+
+### S7a: the published figure's class — Gate A, 25 Nov 2026 (UTC)
+
+**What was built** (LVRF_PLAN §33; Brad's rulings, 25 Nov 2026: D1–D7 as recommended, D2 departing from §27 D5; the
+mock-ups approved with two changes; the batch's skip, ruled during the regression). Branch `figure-class`, on `5f83b12`.
+**Migration `0054`; no new trigger.** One database function changes.
+- **`0054`:** `evidence.published_figure_class`, held to five values (`evidence_published_figure_class_known`, with
+  its plain sentence). Null on every existing row.
+- **The rule** (`lvrf_evidence_final`):
+  - required on a vendor publication about another account;
+  - optional on a public filing;
+  - refused on every other kind and on your own company's account;
+  - fixed at recording: "What kind of figure a source gives is fixed when it is recorded; correct it by
+    supersession."
+- **Both evidence routes** refuse before writing, in the database's words (`server/lib/figureClass.ts`).
+- **The wording** is the ruled table, in `server/lib/figureClass.ts`; the form's copy equals it word for word.
+- **The forms:** card 01c's "Record a source…" and "Supersede…", and W6's "Add evidence", offer "What kind of figure it
+  gives" only where the rule allows it, with "A story reads it so" and the chosen class's two lines. Card 01c's
+  confirmation names the class and its lines; card 01c prints the class beside the kind.
+- **The supersession batch (Brad's ruling, 25 Nov 2026):** it cannot give a class, so it skips a vendor publication
+  about another account. The skipped row is listed with its short id and "stopped: a vendor publication's successor
+  states its class; supersede it on card 01c". It is written nowhere and stops nothing else. The count the steward
+  confirms is what is written.
+
+**Departures, accepted by Brad (25 Nov 2026):**
+- **W6's "Add evidence" has no confirmation step,** so there the class and its lines show in the form only. S4's
+  full-text confirmation on W6 is the next small item after S7b.
+
+**Prod rows the batch's skip affects** (read 25 Nov 2026, read only): the current vendor publications about another
+account. The batch would skip and list each; each is superseded on card 01c, stating its class.
+- **`092c46b6`**, Curia (legacy form): "102,584 total accesses, 8,487 badges earned, 5,282 learning hours…". Brad's row 4
+  (§27 section 4) supersedes it on card 01c.
+- **`9c05af38`**, Scotts Miracle-Gro (AI-sourced): "Skillsoft-published case study naming Scotts Miracle-Gro: '75%
+  reduction…'".
+
+**Gate A:**
+- **`verify_figure_class` (new): 112 passed, 0 failed.**
+  - **The clone at `0054`:** the column nullable and its five values held; every existing row's own fields unchanged,
+    its class null; 229 triggers; drift none (55 migrations, newest `0054`); runs byte-identical.
+  - **The wording:** both tables equal the ruled one, word for word.
+  - **The database, as `lvrf_app`, rolled back:**
+    - a vendor publication about another account without a class: refused;
+    - with each of the five: accepted;
+    - a public filing, with or without one: accepted;
+    - a class on an observation, or on your own company's account: refused;
+    - a vendor publication on your own company's account without one: accepted;
+    - the class changed: refused;
+    - an unknown class: refused.
+  - **The routes:**
+    - each refusal, nothing written;
+    - a classed vendor publication recorded;
+    - superseded only with a class, the successor holding it;
+    - the outcome's evidence route the same.
+  - **The page, at 1280 and 390:**
+    - no class for an observation;
+    - for a vendor publication, the field, its unmet line, each class's two lines in the ruled wording;
+    - contrast at least 4.5:1, computed;
+    - no sideways scroll at 390;
+    - the confirmation naming the class;
+    - recorded with its class;
+    - a public filing's class optional;
+    - "Supersede…" requiring it;
+    - your own company's page offering none;
+    - W6 requiring it.
+  - **Breaks:**
+    - B1, the required rule removed: accepted without a class;
+    - B2, the class made editable: the change accepted;
+    - B3, the class missing from the confirmation: caught on the page;
+    - B4, the route's check removed: the database still refused, its refusal recorded, nothing written.
+- **`verify_supersession`, under the skip: 224 passed, 0 failed.**
+  - The batch's dry run lists `9c05af38` as skipped, with its short id and the sentence. Its count is 6 (4 rows, 2
+    errata), and the page says so.
+  - The batch writes nothing for it. It is then superseded on card 01c's route, stating its class. The erratum chain
+    below follows that successor, as before.
+  - **B-skip** (Brad, 25 Nov 2026): the skip's listing removed. Caught: the row no longer listed. Restored, the same
+    plan.
+- **The scripts, updated by design:**
+  - CHECKs 159 → 160;
+  - the journal at `0054` (55 migrations);
+  - each fixture's vendor publication about another account states its class (`with_class` in
+    `scripts/lib/clone.sh`, named where used; the corrections SQL fixture by the account's own rule);
+  - `verify_supersession`, as above.
+- **The full regression: 64 scripts, 63 passed first time.** `verify_supersession` failed on the batch's conflict with the
+  class rule, was ruled on (the skip), and passed on rerun, 224/0.
+  - `verify_tenant_scope` **329 passed, 0 failed** (setup 21, cases 308);
+  - `verify_figure_class` 112/0; `verify_plain_words` 43/0; `verify_deploy_steps` 27/0.
+- **Equivalence against `5f83b12`:** 213 GETs, 210 identical. The 3 that differ are each account's evidence read,
+  adding keys only: `own_company` and each row's `published_figure_class`.
+- **The TOC:** measured, unchanged (a clone hardened with main's files 973, with the branch's 973), so prod's stays
+  **975**. **229 triggers.**
+- **The function as built:** `lvrf_evidence_final` `md5(prosrc)` **`e368ebcc6d1328bd4bf22e5636b798d7`** (prod now
+  `06db34f0f083a37b63df1374ac284658`, §30's).
+- **Bundle,** built on the clean tree: **`index-Cc9Uts9t.js` / `index-YDBWZVG7.css`.**
+
+#### Gate B for S7a (not run; Brad's pastes)
+
+**A migration (`0054`): back up first (rule 8).** Then hardening, for `lvrf_evidence_final`.
+1. **Merge (fast-forward) and push**, on the dev Mac:
+   ```
+   cd ~/Development/Rule76/lvrf-rule76 && git checkout main && git pull --ff-only && git merge --ff-only figure-class && git push && git log --oneline -3
+   ```
+   Expect a fast-forward from `5f83b12`.
+2. **On the box, pull, then back up before migrating** (rule 8):
+   ```
+   cd /srv/lvrf && git pull --ff-only && git log --oneline -1
+   F=~/lvrf-pre-s7a-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F" && chmod 600 "$F" && echo "$F"
+   pg_restore -l "$F" | grep -vc '^;'
+   ```
+   Expect the head of step 1, and **975**. Stop if either differs.
+3. **Migrate `0054`, then ownership, then hardening:**
+   ```
+   cd /srv/lvrf && DATABASE_URL="$(grep '^MIGRATE_DATABASE_URL=' ~/.lvrf_migrate.env | cut -d= -f2-)" npx drizzle-kit migrate
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/ownership.sql; echo "ownership exit $?"
+   sudo -u postgres psql -d lvrf -X -q -v ON_ERROR_STOP=1 -f db/hardening.sql > ~/lvrf_hardening_s7a.log 2>&1; echo "hardening exit $?"; grep -c ERROR ~/lvrf_hardening_s7a.log
+   sudo -u postgres psql -d lvrf -XAt -c "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal" -c "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_evidence_final'" -c "SELECT count(*) FROM evidence WHERE published_figure_class IS NOT NULL"
+   ```
+   Expect the migrate to apply `0054` with no error; `ownership exit 0`; `hardening exit 0`, `0` ERROR lines; **229**,
+   **`e368ebcc6d1328bd4bf22e5636b798d7`**, and **0** (no row has a class yet).
+4. **The TOC after hardening:**
+   ```
+   F2=~/lvrf-post-s7a-$(date -u +%Y%m%dT%H%M%SZ).dump && sudo -u postgres pg_dump -Fc lvrf > "$F2" && chmod 600 "$F2" && pg_restore -l "$F2" | grep -vc '^;'
+   ```
+   Expect **975**.
+5. **Deploy:** `cd /srv/lvrf && ./scripts/lvrf-deploy.sh`. Expect bundle **`index-Cc9Uts9t.js` / `index-YDBWZVG7.css`**;
+   drift none (**55 migrations, newest `0054_s7a_figure_class`**); "active and answering", health 200, `actor_header`
+   off; the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing; Cancel):**
+- **Card 01c on Curia, "Record a source…", kind "Vendor publication":** "What kind of figure it gives"; choosing a class
+  shows "A story reads it so" and its two lines; until one is chosen, "choose what kind of figure it gives". Cancel.
+
+**Then Brad's six rows** (§27 section 4), through the page (rule 10). Row 4 supersedes `092c46b6` and states its class.
+
+**Gate C (read-only, as `lvrf_app`):**
+- nothing written since the deploy, apart from any session of your own;
+- `lvrf_evidence_final` `e368ebcc…`; no row with a class; 229 triggers; drift none (55, newest `0054`);
+- hashes 27/27; TOC 975; ownership clean.
