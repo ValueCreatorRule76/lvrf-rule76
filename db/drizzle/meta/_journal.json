@@ -386,6 +386,13 @@
       "when": 1795570686222,
       "tag": "0054_s7a_figure_class",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1795615611204,
+      "tag": "0055_s7b_story_records",
+      "breakpoints": true
     }
   ]
 }

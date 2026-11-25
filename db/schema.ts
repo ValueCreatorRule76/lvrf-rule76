@@ -194,6 +194,9 @@ export const governanceAct = pgEnum('governance_act', [
   // S2 (3.1; LVRF_PLAN §21, approved by Brad 18 Nov 2026): the steward clears an account or an industry for research
   // with Claude, or withdraws that clearance (research_clearances).
   'clear', 'withdraw_clearance',
+  // S7b (3.1; LVRF_PLAN §27, approved by Brad 24 Nov 2026): the steward issues a story of record (story_records); its
+  // withdrawal is the existing 'withdraw'.
+  'issue',
 ]);
 
 /* ================================================================== */
@@ -2523,6 +2526,42 @@ export const executiveSummaries = pgTable('executive_summaries', {
   check('executive_summaries_ai_disclosed',
     sql`(${t.draftedWithAi} AND ${t.draftingTool} IS NOT NULL AND length(btrim(${t.draftingTool})) >= 2)
         OR (NOT ${t.draftedWithAi} AND ${t.draftingTool} IS NULL)`),
+]);
+
+/**
+ * S7b (3.1; LVRF_PLAN §27, D1, D2, D3, D4; Brad's rulings 24-25 Nov 2026). A STORY OF RECORD, issued: the account's
+ * record told in sequence, sealed when the steward issues it. `payload` is everything the story prints, composed by
+ * server/lib/story.ts from the account's real locked runs, their current errata, its figure findings and the current
+ * heads of the evidence it cites; `payload_hash` is the sha256 of `payload::text`, set by the database
+ * (story_records_guard), and printed in full on every page. Only an issued story prints; a re-render is byte-identical.
+ *
+ * Issuing and withdrawing are the steward's acts only (Brad, 25 Nov 2026). APPEND-ONLY but for WITHDRAWAL: the three
+ * withdrawal fields are set together and once (story_records_withdrawal_is_complete; story_records_guard refuses every
+ * other UPDATE); never deleted (story_records_no_delete). A reference example's story is the stage 'reference' and the
+ * internal audience only (D3, D4; story_records_reference_internal, and the guard reads the account's marker).
+ */
+export const storyRecords = pgTable('story_records', {
+  id: id(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  audience: text('audience').notNull(),
+  stage: text('stage').notNull(),
+  payload: jsonb('payload').notNull(),
+  payloadHash: text('payload_hash').notNull(),
+  issuedByPersonId: uuid('issued_by_person_id').notNull().references(() => persons.id, { onDelete: 'restrict' }),
+  issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
+  withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+  withdrawnByPersonId: uuid('withdrawn_by_person_id').references(() => persons.id, { onDelete: 'restrict' }),
+  withdrawalReason: text('withdrawal_reason'),
+}, (t) => [
+  index('story_records_institution_idx').on(t.institutionId),
+  check('story_records_audience_known', sql`${t.audience} IN ('internal', 'client')`),
+  check('story_records_stage_known', sql`${t.stage} IN ('reference', 'decision', 'realization', 'compounding')`),
+  check('story_records_reference_internal', sql`${t.stage} <> 'reference' OR ${t.audience} = 'internal'`),
+  check('story_records_hash_shape', sql`${t.payloadHash} ~ '^[0-9a-f]{64}$'`),
+  check('story_records_withdrawal_is_complete',
+    sql`(${t.withdrawnAt} IS NULL AND ${t.withdrawnByPersonId} IS NULL AND ${t.withdrawalReason} IS NULL)
+        OR (${t.withdrawnAt} IS NOT NULL AND ${t.withdrawnByPersonId} IS NOT NULL AND length(btrim(${t.withdrawalReason})) >= 12)`),
 ]);
 
 /* ================================================================== */

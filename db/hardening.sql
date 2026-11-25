@@ -2505,7 +2505,9 @@ BEGIN
                -- B3 (§19, section 33)
                'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals',
                -- S2 (§21, section 36)
-               'research_clearances') THEN
+               'research_clearances',
+               -- S7b (§27, section 39)
+               'story_records') THEN
     RETURN NULL;
   END IF;
   EXECUTE format('SELECT to_jsonb(x) FROM public.%I x WHERE x.id = $1', t) INTO j USING p_id;
@@ -2657,6 +2659,9 @@ BEGIN
           IF o->>'withdrawn_at' IS NULL AND n->>'withdrawn_at' IS NOT NULL THEN what := 'a withdrawal'; END IF;
         WHEN 'customer_role_grants' THEN
           IF o->>'revoked_at' IS NULL AND n->>'revoked_at' IS NOT NULL THEN what := 'a revocation'; END IF;
+        -- S7b (section 39): a story's withdrawal.
+        WHEN 'story_records' THEN
+          IF o->>'withdrawn_at' IS NULL AND n->>'withdrawn_at' IS NOT NULL THEN what := 'a story withdrawn'; END IF;
         ELSE NULL;
       END CASE;
     END IF;
@@ -2680,6 +2685,8 @@ BEGIN
       WHEN 'outcome_withdrawals' THEN what := 'a ' || (n->>'kind') || ' withdrawn';
       -- S2 (section 36): a clearance for research with Claude, or its withdrawal.
       WHEN 'research_clearances' THEN what := CASE n->>'kind' WHEN 'clearance' THEN 'a clearance for research with Claude' ELSE 'a clearance withdrawn' END;
+      -- S7b (section 39): a story of record issued.
+      WHEN 'story_records' THEN what := 'a story issued';
       WHEN 'record_documents' THEN
         IF n->>'kind' = 'share_for_review' THEN what := 'a share for review'; END IF;
       WHEN 'value_outcome_evidence' THEN
@@ -2720,7 +2727,7 @@ BEGIN
     'account_person_links', 'institution_facts', 'institution_entities', 'business_metrics',
     'industry_measure_exclusions', 'value_outcome_evidence', 'run_errata', 'customer_role_grants', 'system_exercise_marks', 'figure_findings',
     'policy_values', 'lens_policies', 'monetization_rates', 'roadmap_milestones', 'record_documents', 'outcome_withdrawals',
-    'research_clearances']
+    'research_clearances', 'story_records']
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_act_present', t);
     EXECUTE format('CREATE CONSTRAINT TRIGGER %I AFTER INSERT OR UPDATE ON %I DEFERRABLE INITIALLY DEFERRED '
@@ -4508,6 +4515,87 @@ CREATE TRIGGER person_credentials_needs_email BEFORE INSERT ON person_credential
 DROP TRIGGER IF EXISTS persons_email_rules ON persons;
 CREATE TRIGGER persons_email_rules BEFORE INSERT OR UPDATE ON persons FOR EACH ROW EXECUTE FUNCTION lvrf_person_email_rules();
 
+-- 39. S7b (3.1; LVRF_PLAN §27, approved by Brad 24 Nov 2026; issuing and withdrawing the steward's acts only, Brad
+--     25 Nov 2026) — a story of record is sealed when issued, and withdrawn, never edited or deleted (0055).
+-- ------------------------------------------------------------------
+-- story_records_guard (BEFORE INSERT OR UPDATE):
+--   INSERT: the account is one of the company's, current; the issuer is the steward, as the acting person; the seal is
+--     the sha256 of the payload's text (the route never sets it on its own); the payload names the same account, stage
+--     and audience as the row; an account with a current reference-example marker is the stage 'reference', and no
+--     other account is (D3); no withdrawal yet.
+--   UPDATE: only the withdrawal, once, by the steward as the acting person; nothing else ever changes.
+-- story_records_audit (AFTER INSERT OR UPDATE), story_records_no_delete (BEFORE DELETE); story_records_act_present is
+-- section 27's (an 'issue' act on issuing, a 'withdraw' act on withdrawing, in the same transaction).
+CREATE OR REPLACE FUNCTION lvrf_story_record_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  marked boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF OLD.withdrawn_at IS NOT NULL THEN
+      RAISE EXCEPTION 'LVRF: story_records: This story was withdrawn on %; a withdrawn story stays on the record as it is.', to_char(OLD.withdrawn_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+    END IF;
+    IF (to_jsonb(NEW) - ARRAY['withdrawn_at', 'withdrawn_by_person_id', 'withdrawal_reason'])
+       IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['withdrawn_at', 'withdrawn_by_person_id', 'withdrawal_reason']) THEN
+      RAISE EXCEPTION 'LVRF: story_records: A story is sealed when it is issued; it is withdrawn, never edited.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+    END IF;
+    IF NEW.withdrawn_at IS NULL THEN RETURN NEW; END IF;
+    IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.withdrawn_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+      RAISE EXCEPTION 'LVRF: story_records: Only the steward withdraws a story of record, in their own name.'
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+    END IF;
+    NEW.withdrawn_at := now();
+    RETURN NEW;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM institutions i WHERE i.id = NEW.institution_id AND i.tenant_id = NEW.tenant_id
+                   AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL) THEN
+    RAISE EXCEPTION 'LVRF: story_records: The account % is not one of your company''s current accounts.', NEW.institution_id
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  IF NOT lvrf_is_steward(NEW.tenant_id) OR NEW.issued_by_person_id IS DISTINCT FROM lvrf_current_actor() THEN
+    RAISE EXCEPTION 'LVRF: story_records: Only the steward issues a story of record, in their own name.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  IF NEW.withdrawn_at IS NOT NULL OR NEW.withdrawn_by_person_id IS NOT NULL OR NEW.withdrawal_reason IS NOT NULL THEN
+    RAISE EXCEPTION 'LVRF: story_records: A story is issued first; its withdrawal is a later act.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  IF NEW.payload_hash IS DISTINCT FROM encode(sha256(convert_to(NEW.payload::text, 'UTF8')), 'hex') THEN
+    RAISE EXCEPTION 'LVRF: story_records: The story''s hash is not the hash of what it prints.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  IF NEW.payload->'account'->>'id' IS DISTINCT FROM NEW.institution_id::text
+     OR NEW.payload->>'stage' IS DISTINCT FROM NEW.stage OR NEW.payload->>'audience' IS DISTINCT FROM NEW.audience THEN
+    RAISE EXCEPTION 'LVRF: story_records: The story names a different account, stage or audience from the record it is issued as.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  marked := EXISTS (SELECT 1 FROM reference_example_markers k WHERE k.institution_id = NEW.institution_id
+                      AND k.deleted_at IS NULL AND k.superseded_by_id IS NULL);
+  IF marked AND NEW.stage <> 'reference' THEN
+    RAISE EXCEPTION 'LVRF: story_records: This account is a reference example: its story is a reference story, never a decision or a result.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  IF NOT marked AND NEW.stage = 'reference' THEN
+    RAISE EXCEPTION 'LVRF: story_records: Only a reference example''s story is a reference story.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  NEW.issued_at := now();
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS story_records_guard ON story_records;
+CREATE TRIGGER story_records_guard BEFORE INSERT OR UPDATE ON story_records
+  FOR EACH ROW EXECUTE FUNCTION lvrf_story_record_guard();
+DROP TRIGGER IF EXISTS story_records_audit ON story_records;
+CREATE TRIGGER story_records_audit AFTER INSERT OR UPDATE ON story_records
+  FOR EACH ROW EXECUTE FUNCTION lvrf_audit();
+DROP TRIGGER IF EXISTS story_records_no_delete ON story_records;
+CREATE TRIGGER story_records_no_delete BEFORE DELETE ON story_records
+  FOR EACH ROW EXECUTE FUNCTION lvrf_block_delete('A story of record is on the record; it is withdrawn, never deleted.');
+
 -- 14. 2.0 item 4 — hardening manifest: what THIS run applied
 -- ------------------------------------------------------------------
 -- WHY: on 23 August five triggers sat DECLARED above and ABSENT from the
@@ -4622,7 +4710,8 @@ COMMIT;
 --   30: evidence_final, value_outcome_evidence_about_guard — 2
 --   37: business_metrics_basis_note_own — 1
 --   38: person_credentials_needs_email, persons_email_rules — 2
---   Total: 229 distinct triggers (227 before section 38: person_credentials_needs_email and persons_email_rules, +2; 226 before section 37: business_metrics_basis_note_own, +1; 210 before section 36: research_clearances' five, research_calls' four,
+--   39: story_records_guard, _audit, _no_delete, _act_present (section 27's loop) — 4
+--   Total: 233 distinct triggers (229 before section 39: story_records' four, +4; 227 before section 38: person_credentials_needs_email and persons_email_rules, +2; 226 before section 37: business_metrics_basis_note_own, +1; 210 before section 36: research_clearances' five, research_calls' four,
 --   research_imports_call_matches, research_call_claims' four and research_process_refusals' two, +16; 209 before section 35: value_runs_hypothesis_current, +1; 204 before section 34: value_outcomes_spine_guard and outcome_withdrawals' four, +5;
 --   186 before section 33: four tables × audit, no_delete, guard, act_present, and
 --   record_documents guard and act_present, +18). (0024 took it 78 -> 82: institution_facts
