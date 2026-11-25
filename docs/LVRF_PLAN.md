@@ -7032,7 +7032,7 @@ the class field on a published source, its migration and its guard, so that Brad
 - **Then Brad's six rows** (§27 section 4), through the page (rule 10). Row 4 supersedes `092c46b6` and states its class.
 - **About a day.** Inside the 18 Dec window.
 
-## 34. The account-team page (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1 (b), D2–D7 as recommended, and D8's dates**; mock-ups before code)
+## 34. The account-team page (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1 (b), D2–D7 as recommended, and D8's dates**; amended by Brad 25 Nov 2026, with D9 as recommended and D10 and D11 changed (§34.11)**; mock-ups before code)
 
 **Brad's rulings (25 Nov 2026):**
 - **D1 = (b) for the pilot's start:** public names and roles, plus the customer's yes or no to each ask; no figures.
@@ -7347,3 +7347,32 @@ its confirmation (`s34-request`); the account-team page once worked, with confid
 (`s34-page`); Bring back (`s34-bring-back`); the steward's queue, now "From account teams", holding a request beside
 Bring back items (`s34-queue`); "Use…" and "Decline…" (`s34-use`); the team's view of a declined item
 (`s34-history`). D9–D11 are drawn as recommended, pending Brad's rulings.
+
+### 11. Brad's rulings on the amendment (25 Nov 2026)
+
+- **D9: as recommended.**
+- **D10: as recommended, except no figures in any of the request's free text** (notes, contacts, links' labels) for
+  the pilot's start, the same as Bring back, until the (a) agreement with Skillsoft. Emails, phone numbers and figures
+  are each refused, by the route and by the database, with a plain sentence saying why. The notes' guidance sentence
+  stays: "Don't enter anything the customer hasn't made public or agreed to share." The help line under the notes reads
+  "An email address, a phone number or a figure here is refused."
+- **D11: as recommended, except "What to lead with" lists only the levers named in the account's current hypotheses,
+  from its sealed case.** Each lever shows its linked solutions, the steward's reason, and what the solution can show.
+  Until a hypothesis names a lever, the section reads "The steward is choosing what to lead with."
+
+**What the record already holds for it (read 25 Nov 2026):** `lvrf_case_chain` seals each current hypothesis with its
+lever (`lever`: id, name, mechanism, leading indicator) and that lever's links (`offerings`: offering key, name, basis,
+withdrawn). The latest locked run's `payload.case.hypotheses` is therefore the source; no live read of
+`lever_offerings`. Two build notes:
+- **A withdrawn link** (`withdrawn: true` in the sealed case) is not shown on the account-team page.
+- **What a solution can show** is not in the sealed link. It is read from the offering by its key (its
+  `evidence_class`), in words.
+
+**Gate A gains:**
+- a figure refused in each of the request's free-text fields (route and database), with a break;
+- "What to lead with" shows only the sealed case's hypotheses' levers, and a lever linked to solutions but named in
+  no hypothesis does not appear (with a break);
+- with no locked run naming a lever, the sentence "The steward is choosing what to lead with."
+
+**Mock-ups updated:** the request's notes carry no figure and the help line names figures (`s34-request`); "What to
+lead with" says it reads from the account's case, with its empty sentence shown as a note (`s34-page`).
