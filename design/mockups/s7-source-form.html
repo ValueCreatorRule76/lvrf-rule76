@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LVRF S7a mock-up · card 01c, "Record a source…" with the figure's class</title>
+<!-- Fictional accounts only. Shown at 1280 and at 390. The class field appears only for a vendor publication or a public
+     filing on an account that is not your own company's; it is required there (D5). -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--offwhite); font-family: var(--body); color: var(--ink); }
+  .page { max-width: 1120px; margin: 0 auto; padding: 24px 20px; }
+  .crumb { font-size: 12px; color: var(--ink-45); }
+  h1 { font-family: var(--display); font-weight: 400; font-size: 34px; letter-spacing: 0.02em; margin: 4px 0 14px; }
+  .card { background: var(--paper); border: 1px solid var(--rule); }
+  .card .hd { display: flex; align-items: baseline; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--rule); }
+  .card .n { font-family: var(--mono); font-size: 12px; color: var(--gold-ink); }
+  .card .t { font-size: 14px; font-weight: 600; }
+  .card .bd { padding: 14px 18px 18px; }
+  .prov { border-left: 3px solid var(--rule); padding: 6px 10px; font-size: 12.5px; margin: 0 0 12px; }
+  .prov .pl { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-45); display: block; margin-bottom: 2px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .full { grid-column: 1 / -1; }
+  label { display: block; }
+  .L { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-45); }
+  .I { width: 100%; border: 1px solid var(--rule); background: var(--paper); padding: 6px 10px; font-size: 13px; font-family: var(--body); color: var(--ink); }
+  textarea.I { min-height: 48px; }
+  .new { outline: 2px solid var(--gold); outline-offset: 4px; }
+  .newtag { font-family: var(--mono); font-size: 10px; color: var(--gold-ink); margin-left: 6px; text-transform: none; letter-spacing: 0; }
+  .classhelp { margin-top: 6px; font-size: 12px; line-height: 1.45; }
+  .classhelp .can { color: var(--healthy); }
+  .classhelp .cannot { color: var(--critical); }
+  .classhelp .k { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-45); }
+  .unmet { margin-top: 8px; font-size: 11.5px; color: var(--ink-45); }
+  .btns { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--ink); background: var(--ink); color: var(--offwhite); padding: 7px 14px; font-size: 12px; font-weight: 600; font-family: var(--body); }
+  .btn.off { background: var(--paper); color: var(--ink-45); border-color: var(--silver); }
+  .confirm { margin-top: 14px; border: 1px solid var(--rule); border-left: 3px solid var(--gold); padding: 10px 12px; font-size: 12.5px; background: var(--paper); }
+  .confirm .k { font-size: 10px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-45); display: block; margin-bottom: 4px; }
+  .table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 12px; }
+  .table th { text-align: left; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-45); border-bottom: 1px solid var(--ink); padding: 4px 8px 4px 0; }
+  .table td { border-bottom: 1px solid var(--rule); padding: 6px 8px 6px 0; vertical-align: top; }
+  .table td.c { color: var(--healthy); } .table td.x { color: var(--critical); }
+  .note { font-family: var(--mono); font-size: 11px; color: var(--ink-45); margin-top: 14px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } .page { padding: 14px 10px; } h1 { font-size: 28px; } .table, .table tbody, .table tr, .table td { display: block; } .table thead { display: none; } .table tr { border-bottom: 1px solid var(--rule); padding: 6px 0; } .table td { border: 0; padding: 2px 0; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="crumb">Accounts · Halden Assay Labs (fictional) · Account detail</div>
+  <h1>Halden Assay Labs</h1>
+  <div class="card">
+    <div class="hd"><span class="n">01c</span><span class="t">The account’s evidence</span></div>
+    <div class="bd">
+      <p class="prov"><span class="pl">What this records</span>A source this account’s evidence rests on, with what it states and where it came from. It supports <strong>no outcome</strong>, and it is recorded <strong>unverified</strong>: a person verifies it by opening the source.</p>
+      <div class="grid">
+        <label><span class="L">Kind</span><select class="I"><option>Vendor publication</option></select></label>
+        <label><span class="L">What it is about</span><select class="I"><option>Halden Assay Labs (this account)</option></select></label>
+        <label class="full"><span class="L">What it states</span><input class="I" value="Halden’s audit findings fell from 31 to 12 after the program" /></label>
+        <label><span class="L">Where it came from</span><input class="I" value="Northstar Learning case study, Halden Assay Labs (2025)" /></label>
+        <label><span class="L">Citation, export ID or URL</span><input class="I" value="https://example.invalid/case-studies/halden" /></label>
+        <label class="full new"><span class="L">What kind of figure it gives<span class="newtag">new in S7a · required for a vendor publication or public filing about another account</span></span>
+          <select class="I"><option disabled>— choose —</option><option>License count</option><option>Activity count</option><option>Adjective</option><option>Outcome without baseline</option><option selected>Outcome with baseline</option></select>
+          <div class="classhelp"><span class="k">A story reads it so</span><br /><span class="can">It can support: the change the publisher states, as the publisher’s claim.</span><br /><span class="cannot">It cannot support: attribution to the learning: no method is stated.</span><br />It is fixed when recorded: a correction supersedes the row.</div>
+        </label>
+        <label class="full"><span class="L">The quote, word for word</span><textarea class="I">Audit findings fell from 31 in 2023 to 12 in 2025.</textarea></label>
+        <label class="full"><span class="L">How it was read</span><input class="I" value="Page 2, the results panel, second line" /></label>
+      </div>
+      <div class="btns"><button class="btn">Record the source</button><button class="btn off">Cancel</button></div>
+      <div class="confirm"><span class="k">Confirm what this records</span>Record “Halden’s audit findings fell from 31 to 12 after the program”, a vendor publication about Halden Assay Labs, as an <strong>outcome with baseline</strong>: a story will read it as the change the publisher states, as the publisher’s claim, and never as attribution to the learning. Unverified until a person opens the source.</div>
+      <div class="unmet">Before a class is chosen, the form says: “To submit: choose what kind of figure it gives.”</div>
+
+      <table class="table">
+        <thead><tr><th>Class</th><th>It can support</th><th>It cannot support</th></tr></thead>
+        <tbody>
+          <tr><td><strong>License count</strong></td><td class="c">how many seats were bought, and when, as the publisher states</td><td class="x">use, adoption, or any outcome</td></tr>
+          <tr><td><strong>Activity count</strong></td><td class="c">that the activity was recorded in the stated period, by the publisher’s system</td><td class="x">capability change, a business outcome, or a rate per person (no headcount is cited)</td></tr>
+          <tr><td><strong>Adjective</strong></td><td class="c">that the publisher described it so</td><td class="x">any figure</td></tr>
+          <tr><td><strong>Outcome without baseline</strong></td><td class="c">the after-figure the publisher states</td><td class="x">a change, or what caused it</td></tr>
+          <tr><td><strong>Outcome with baseline</strong></td><td class="c">the change the publisher states, as the publisher’s claim</td><td class="x">attribution to the learning: no method is stated</td></tr>
+        </tbody>
+      </table>
+      <div class="note">The table is D5’s wording, for Brad’s approval word for word. It is not on the form: the form shows the chosen row only. Mock-up, fictional accounts only.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

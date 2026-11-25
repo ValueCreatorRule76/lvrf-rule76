@@ -1,0 +1,40 @@
+/* S7 (3.1; LVRF_PLAN §27, approved by Brad 24 Nov 2026) — the mock-up of the success story of record, in the S3 print
+   family (s3-print.css): both banners and the full hash on every page, Bebas headings, small-caps condensed kickers.
+   LVRF's tokens only (tokens.css); no hex here. Fictional accounts only. */
+
+/* The stage strip: computed, never chosen (D2, D3). Reached stages in ink; the current one gold; the rest muted. */
+.stages { display: flex; gap: 0; margin: 8pt 0 10pt; border-top: 1.2pt solid var(--ink); }
+.stages > div { flex: 1; padding: 5pt 8pt 5pt 0; font-family: var(--condensed); font-weight: 600; font-size: 7.6pt; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-25); border-right: 0.5pt solid var(--rule); margin-right: 8pt; }
+.stages > div:last-child { border-right: 0; margin-right: 0; }
+.stages > div.reached { color: var(--ink-70); }
+.stages > div.now { color: var(--gold-ink); }
+.stages > div .why { display: block; font-family: var(--body); font-weight: 400; font-size: 8pt; letter-spacing: 0; text-transform: none; color: var(--ink-45); margin-top: 2pt; }
+
+/* The sealed score and its points erratum: ONE line, the same size and the same weight (Brad, 24 Nov 2026). */
+.scoreline { font-family: var(--body); font-weight: 500; font-size: 13pt; line-height: 1.35; color: var(--ink); margin: 6pt 0 2pt; }
+.scoreline .sep { color: var(--ink-45); padding: 0 4pt; }
+.scoreline .er { color: var(--warning); }
+.scoreline.timeline { font-size: 9.6pt; margin: 0; }
+.scorecite { font-family: var(--mono); font-size: 7.6pt; color: var(--ink-45); }
+
+/* Every figure carries its ledger number (D7). Short ids print in the ledger only, in mono. */
+sup.l { font-family: var(--mono); font-size: 6.6pt; color: var(--gold-ink); padding-left: 1pt; }
+.ledger td { font-size: 8.2pt; }
+.ledger td.id, .ledger .mono { font-family: var(--mono); font-size: 7.6pt; overflow-wrap: anywhere; }
+.ledger td.num { font-family: var(--mono); color: var(--gold-ink); white-space: nowrap; }
+
+/* "The published story, read against the record" (D5): each row with its class, what it can and cannot support. */
+.pub td { font-size: 8.6pt; }
+.pub .cls { font-family: var(--condensed); font-weight: 600; font-size: 7.6pt; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-70); white-space: nowrap; }
+.pub .can { color: var(--healthy); }
+.pub .cannot { color: var(--critical); }
+.pub .basis { font-size: 7.8pt; color: var(--ink-45); }
+
+.ref-title { font-family: var(--body); font-size: 10.5pt; color: var(--ink-70); margin: 4pt 0 0; font-style: italic; }
+.prepared { font-family: var(--condensed); font-weight: 600; font-size: 7.6pt; letter-spacing: 0.08em; color: var(--ink-45); }
+.onepage { page: s3body; }
+.mock-label { font-family: var(--mono); font-size: 7.4pt; color: var(--ink-45); border: 0.6pt dashed var(--ink-25); padding: 3pt 5pt; margin: 0 0 6pt; }
+
+/* A heading never ends a page: it stays with what follows it. */
+.kicker-p, h2.sec, .hair { break-after: avoid; page-break-after: avoid; }

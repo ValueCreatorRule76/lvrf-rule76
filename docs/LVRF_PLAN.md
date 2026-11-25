@@ -6179,6 +6179,12 @@ no quote below is filled in. Paste each quote from the page, word for word, and 
 
 ### 6. Mock-ups, Gate B and the cut-off
 
+**The mock-ups, made 25 Nov 2026, for Brad's review:**
+- **Where:** `design/mockups/s7-*.html` and `s7-story.css` (fictional accounts only: Halden Assay Labs, a reference
+  example; Corbel Freight, a client at Decision; Northstar Learning, the vendor).
+- **The review PDF:** `~/lvrf-backups/s7-mockup/s7-mockup-review.pdf` (`600`, 16 pages). Its front page carries D5's
+  can/cannot table for Brad's approval word for word, before S7a's form ships.
+
 - **Mock-ups first, fictional accounts only:**
   - a reference example and a client account at Decision, each one-page and full, at 1280 and in print;
   - the headline "55 / 100 as sealed · 45 of these points rest on a person who is not customer-side" (in a
