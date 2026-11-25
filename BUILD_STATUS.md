@@ -17941,3 +17941,33 @@ newest `0055_s7b_story_records`.
 
 **Brad's acts, after Gate B:** issuing Curia's story, which is the steward's alone (rule 10), and the stage-10 check on
 its print.
+
+#### Gate B for S7b (not run; Brad's pastes)
+
+A migration (`0055`) and hardening section 39. Every step is Brad's paste; nothing here was run on the box. **Stop at
+any step whose expectation is not met.**
+
+1. **Merge (fast-forward) and push,** on the Mac. Fifteen commits go to `main`, `a9ddfe0` → this one:
+   - S7b's code and scripts;
+   - the per-script port guard (`458ec97`);
+   - the two S7 Curia-rows Gate C records;
+   - S7b's Gate A record, §27's amendment, and the 3.1 items;
+   - these steps.
+2. **On the box (LVRF key only), a backup before migrating:** expect **975**.
+3. **Pull:** expect the head of step 1.
+4. **Migrate `0055`** as `lvrf_migrate`: expect "migrations applied successfully", with no error.
+5. **Ownership, then hardening:** expect `ownership exit 0`, `hardening exit 0` and `0` ERROR lines.
+6. **The checks:**
+   - **233** triggers;
+   - `story_records` present, with **0** rows;
+   - `lvrf_story_record_guard` `md5(prosrc)` **`8a42b278b6fea86e88215db8be6d6439`**;
+   - after hardening, the TOC **989**.
+7. **Deploy:**
+   - bundle **`index-CofOK_sV.js` / `index-Cm0s_icv.css`**;
+   - 5b, 5c and 5d passed, drift none (56, newest `0055_s7b_story_records`);
+   - health 200 once the API answers (the deploy waits up to 30 s, `bb6d222`);
+   - the 401 checks;
+   - "deploy OK".
+8. **Health, by hand:** 200, `actor_header` off, `ai_research` off; 401 with no session.
+
+The exact commands are given to Brad with these expectations.
