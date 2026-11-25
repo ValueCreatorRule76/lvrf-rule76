@@ -17716,3 +17716,47 @@ baseline). Cancelled.
 
 **S7a is closed** (25 Nov 2026). **Next:** Brad's six Curia rows (`docs/LVRF_S7_CURIA_ROWS.md`, through the page, rule
 10); the §34 mock-ups.
+
+### S7: Brad's six Curia rows, Gate C read-only — not clean (25 Nov 2026, UTC)
+
+Read as `lvrf_app` over ssh, each query inside `BEGIN READ ONLY`. The window is from S7a's pre-deploy backup
+(03:12:53 UTC).
+
+**What holds:**
+- **Eight evidence rows were written on Curia, all by Brad, through the page.** All are vendor publications about Curia
+  (`about_institution_id` = the account), with the quote form, not simulated, not AI-sourced, and the case study's URL
+  as the citation.
+  - **License count:** `ff0717c0` (500), `f6a51004` (1,000), `dc93b3a4` (2,500).
+  - **Activity count:** `245b5df4` (102,584 accesses), `e6b7d7d8` (8,487 badges), `86f5afd0` (5,282 learning hours).
+  - **The two slips, superseded:** `c65461e8` → `ff0717c0` (the label "Citation, export ID or URL" at the end of
+    "Where it came from"); `3c03c888` → `245b5df4` (the quote began "as shown on the page's stat block:").
+- **`092c46b6` is superseded,** through the slip: `092c46b6` → `3c03c888` → `245b5df4`. The current row is `245b5df4`.
+- **Three supersede acts** (13:02:58, 13:11:51, 13:16:17). Audit: 8 evidence inserts, 3 evidence updates (the
+  supersessions), 3 governance-act inserts.
+- **Nothing else was written:**
+  - 0 evidence rows off Curia;
+  - 0 refusals and 0 research-process refusals;
+  - 0 record documents, 0 heartbeat events, 0 new sessions (Brad's session from 24 Nov, last seen 13:29:41, the last
+    row's write);
+  - no audit rows on any other table.
+- `lvrf_evidence_final` `md5(prosrc)` `e368ebcc6d1328bd4bf22e5636b798d7`; 229 triggers, none disabled; ownership 0;
+  runs 27, all locked.
+
+**What doesn't hold:**
+1. **None of the rows is opened.** Every row reads `citation_resolved` false, `source_verified` false, with no opener
+   and no time. There are 0 `open_citation` acts and no audit update after the last supersession. An opening
+   (`POST /api/evidence/:id/open-citation`) writes both, so none was saved. Nothing was refused either: no request
+   reached the route, or none was confirmed.
+2. **Row 6 (`86f5afd0`) states the wrong thing.** Its "What it states" is row 5's "How it was read" ("The count of
+   badges earned for January–June 2023, as Skillsoft reports it from its own platform (a stat block, not a
+   sentence).") in place of "The case study reports 5,282 learning hours at Curia from January to June 2023." Its
+   quote and how-read are right.
+
+**To finish (Brad's acts, rule 10):**
+- **"Supersede…" on `86f5afd0`,** with the same fields, and:
+  - What it states: "The case study reports 5,282 learning hours at Curia from January to June 2023.";
+  - Why it is superseded: "What it states carried the badges row's reading; it now states the learning hours figure.".
+- **Then "Open the source…" on each of the six current rows,** with the quote checked on the page.
+- **Then this Gate C again.**
+
+S7b waits for this Gate C to be clean.
