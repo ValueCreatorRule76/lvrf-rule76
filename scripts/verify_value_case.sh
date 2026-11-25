@@ -141,7 +141,7 @@ migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "mi
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > "$W/own.log" 2>&1 && ok "ownership.sql" || bad "ownership: $(grep -m2 ERROR "$W/own.log")"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5): section 33 adds 18" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "350" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (B4: +8) (288 + 32)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical: the migrations and section 33 write nothing to a run" || bad "  ...a run changed"
 # Gate A, 14 Nov 2026: a copy taken after B3 holds print requests too (Brad's act 7, 6 Nov); the migrations change no kind.
 [ "$(q "SELECT count(*) || '|' || coalesce(string_agg(DISTINCT kind, ','), '') || '|' || md5(coalesce(string_agg(id::text || ':' || kind, ',' ORDER BY id), '')) FROM record_documents")" = "$RD0" ] \
@@ -150,7 +150,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"
 printf '%s' "$OWN" | grep -q "lvrf_app owns nothing" && ok "ownership: $OWN" || bad "ownership: $OWN"
 
@@ -441,7 +441,7 @@ HASHES() { DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 |
 printf '%s' "$(HASHES)" | grep -qE "differs 0; embedded payloadHash matches [0-9]+, differs 0" && ok "check_run_hashes: $(HASHES)" || bad "hashes: $(HASHES)"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r WHERE r.source_fixture IS DISTINCT FROM 'value_case_fixture'")" = "$RUNS0" ] && ok "every run on the copy byte-identical after all of this" || bad "an older run changed"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to before the run" || bad "$f differs"; done
 echo "  screenshots: $SHOTS"
 

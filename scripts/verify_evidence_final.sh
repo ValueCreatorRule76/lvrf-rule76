@@ -132,7 +132,7 @@ POST="$([ "$(q "SELECT count(*) FROM evidence WHERE about_institution_id IS NULL
 [ -n "$POST" ] && ok "(a copy taken after L41's acts: the pre-act blocks read the state Gate C recorded)" || ok "(a copy taken before L41's acts: every block as written)"
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) (181 + evidence_final, value_outcome_evidence_about_guard + industries_act_present, industries_steward_only)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "350" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (281 + 3)" || bad "  ...rows"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (281 + 3)" || bad "  ...rows"
 if [ -z "$POST" ]; then
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none, with evidence_verified_opened waiting ($DRIFT)" || bad "drift: $DRIFT"
@@ -142,7 +142,7 @@ else
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "every CHECK has its plain sentence ($PLAIN)" || bad "plain: $PLAIN"
 fi
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'evidence'")" = "$AUD0" ] && ok "0045 and hardening write no evidence row: the audit log gains nothing (L41-D3)" || bad "audit grew"
 [ "$(q "SELECT count(*) || '|' || md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" = "${EV0%%|*}|$(q "SELECT md5(string_agg(md5((to_jsonb(e) - 'about_institution_id' - 'about_other_party' - 'attester_document')::text), '' ORDER BY id)) FROM evidence e")" ] && ok "  ...all ${EV0%%|*} rows kept" || bad "  ...rows"
@@ -454,7 +454,7 @@ reharden
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 54 migrations" && ok "drift: none ($DRIFT3)" || bad "drift: $DRIFT3"
 PLAIN2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN2" | grep -qE "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
+printf '%s' "$PLAIN2" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN2" || bad "plain: $PLAIN2"
 else
 reharden
 [ "$(q "SELECT string_agg(conname || '=' || convalidated, ',' ORDER BY conname) FROM pg_constraint WHERE conname IN ('evidence_about_stated', 'evidence_verified_opened')")" = "evidence_about_stated=true,evidence_verified_opened=true" ] && ok "the re-run keeps both CHECKs validated" || bad "CHECKs after the re-run"

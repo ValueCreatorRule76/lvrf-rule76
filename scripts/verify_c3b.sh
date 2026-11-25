@@ -176,7 +176,7 @@ RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated (through 0044_c3b_findings)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1) (B4 section 34: +5) (B3 section 33: +18) (176 + section 29's five: figure_findings guard, immutable, audit, no_delete, act_present)" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "350" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (B4: +8) (B3: +32) (274 + 7)" || bad "  ...rows: $(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"

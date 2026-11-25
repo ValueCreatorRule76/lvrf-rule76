@@ -134,13 +134,13 @@ RUNIDS0="$(q "SELECT string_agg(quote_literal(id::text), ',' ORDER BY id) FROM v
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 && ok "hardened" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "229" ] && ok "229 triggers (§32 section 38: +2) (S4 section 37: +1) (S2 section 36: +16) (S1 section 35: +1): section 34 adds 5" || bad "triggers: $(trig)"
-[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "350" ] && ok "  ...349 information_schema rows (S2: +20) (S1: +1) (320 + 8)" || bad "  ...rows"
+[ "$(q "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public'")" = "353" ] && ok "  ...353 (§32 section 38: +3, before it 350) information_schema rows (S2: +20) (S1: +1) (320 + 8)" || bad "  ...rows"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "  ...every run byte-identical" || bad "  ...a run changed"
 [ "$(q "SELECT count(*) FROM value_outcomes WHERE attribution_method IS NOT NULL OR measure_class IS NOT NULL")" = "0" ] && ok "  ...D1: every commitment made before B4 keeps no method or class" || bad "  ...a method was filled in"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
-printf '%s' "$PLAIN" | grep -qE "^158 CHECKs in the database: 158 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
+printf '%s' "$PLAIN" | grep -qE "^159 CHECKs in the database: 159 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
 [ "$(q "SELECT has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'INSERT') || '|' || has_table_privilege('lvrf_app', 'public.outcome_withdrawals', 'UPDATE')")" = "true|false" ] && ok "outcome_withdrawals: INSERT, never UPDATE, for the app" || bad "privileges"
 
 step "3. The session and the server"

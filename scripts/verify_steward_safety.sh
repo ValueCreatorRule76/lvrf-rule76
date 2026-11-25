@@ -132,7 +132,7 @@ C3Batches.tsx:Mark {chosen.length}
 C3Batches.tsx:State what {data.count}
 C3Batches.tsx:Supersede {plan.count}
 CustomerRoles.tsx:Name {person.full_name}
-CustomerRoles.tsx:Add {p.full_name.trim()}
+AddPerson.tsx:Add {p.full_name.trim()}
 IndustriesListCard.tsx:Add the industry
 PackResearch.tsx:Exclude &ldquo;
 CaseInputs.tsx:Plan “

@@ -22,7 +22,8 @@
 #      form; Measure by's earliest day.
 #   Breaks: B1 the route's same-name check (two same-name persons added with no warning), B2 the credential rule (a
 #   credential for the email-less person accepted), B3 the route's normalization (the database still refuses a
-#   mixed-case email), B4 Measure by's earliest day back to the commit day.
+#   mixed-case email), B4 Measure by's earliest day back to the commit day, B5 account inputs' check that an assessment's
+#   email matches a submitted person's (with its positive control).
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -42,8 +43,8 @@ PORT=3441; VITE_PORT=5441; CDP_PORT=9551
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_email.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-SPINE=client/src/components/OutcomeSpine.tsx; INPUTS=server/routes/institutionInputs.ts; PIN=server/lib/personInput.ts
-EDITED=("$SPINE" "$INPUTS" "$PIN")
+SPINE=client/src/components/OutcomeSpine.tsx; INPUTS=server/routes/institutionInputs.ts; PIN=server/lib/personInput.ts; ACIN=server/routes/accountInputs.ts
+EDITED=("$SPINE" "$INPUTS" "$PIN" "$ACIN")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -126,7 +127,7 @@ step "1. Clone the prod copy, migrate to 0053, harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
-PERS0="$(q "SELECT md5(string_agg(md5(to_jsonb(p)::text), '' ORDER BY id)) FROM persons p")"
+PERS0="$(q "SELECT md5(string_agg(md5(concat_ws('|', id, tenant_id, institution_id, full_name, email, title, simulated, deleted_at, superseded_by_id)), '' ORDER BY id)) FROM persons p")"
 migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated to 0053" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 \
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
@@ -134,8 +135,8 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
 printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 54 migrations, newest 0053_s32_person_email" && ok "drift: none ($DRIFT)" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical" || bad "a run changed"
-[ "$(q "SELECT md5(string_agg(md5((to_jsonb(p) - 'confirmed_distinct_from')::text), '' ORDER BY id)) FROM persons p")" = "$PERS0" ] && [ "$(q "SELECT count(*) FROM persons WHERE confirmed_distinct_from IS NOT NULL")" = "0" ] \
-  && ok "every person byte-identical but the new column, null on every row" || bad "persons changed"
+[ "$(q "SELECT md5(string_agg(md5(concat_ws('|', id, tenant_id, institution_id, full_name, email, title, simulated, deleted_at, superseded_by_id)), '' ORDER BY id)) FROM persons p")" = "$PERS0" ] && [ "$(q "SELECT count(*) FROM persons WHERE confirmed_distinct_from IS NOT NULL")" = "0" ] \
+  && ok "every person's own fields unchanged (name, email, title, scope, state); the new column null on every row" || bad "persons changed"
 [ "$(q "SELECT attnotnull FROM pg_attribute WHERE attrelid = 'persons'::regclass AND attname = 'email'")" = "f" ] && ok "persons.email is optional" || bad "email still NOT NULL"
 q "SELECT pg_get_indexdef('persons_email_key'::regclass)" | grep -q "UNIQUE INDEX persons_email_key ON public.persons USING btree (lower(email))" && ok "persons_email_key: unique on lower(email)" || bad "index: $(q "SELECT pg_get_indexdef('persons_email_key'::regclass)")"
 [ "$(q "SELECT count(*) FROM pg_constraint WHERE conname = 'persons_email_normalized' AND convalidated")" = "1" ] && ok "persons_email_normalized: validated (every email on the copy is its own trimmed lower case)" || bad "normalized check"
@@ -218,6 +219,23 @@ restart_server
 ADD "$INST" "$(J full_name 'K32 Casey (invented)' email "Casey.$TS@K32.example" title Clerk)"
 [ "$CODE" != "201" ] && [ "$(q "SELECT count(*) FROM persons WHERE full_name = 'K32 Casey (invented)'")" = "0" ] && ok "B3: the route's normalization removed → the database still refuses a mixed-case email ($CODE), nothing written" || bad "B3: $CODE $(said)"
 restore "$PIN"; restart_server
+# B5 — account inputs' check that an assessment's email matches a submitted person's, removed. Its positive control
+# first: an assessment naming a submitted person's email is admitted, the assessment that person's.
+AI() { J institution "$(J name "Rowan Mill $1 (§32 fixture, invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for §32.')" persons "[$(J full_name "K32 learner $1 (invented)" email "learner.$1.$TS@k32.example" title Learner)]" assessments "[$(J person_email "$2" capability_name 'K32 capability' score 3 ai_assisted false)]"; }
+req POST /api/account-inputs "$(AI match "LEARNER.match.$TS@k32.example")"
+[ "$CODE" = "201" ] && [ "$(q "SELECT count(*) FROM assessments a JOIN persons p ON p.id = a.learner_person_id WHERE p.email = 'learner.match.$TS@k32.example'")" = "1" ] \
+  && ok "B5 control: an assessment naming a submitted person's email (in capitals) is admitted, the assessment that person's" || bad "B5 control: $CODE $(said)"
+edit "$ACIN" "        if (!learnerPersonId) {" "        if (false) {"
+restart_server
+N_INST="$(q "SELECT count(*) FROM institutions")"
+req POST /api/account-inputs "$(AI miss "nobody.$TS@k32.example")"; B5M="$(said)"
+if [ "$CODE" = "201" ]; then ok "B5: the check removed → caught: a mismatched submission is admitted ($CODE)"
+elif ! printf '%s' "$B5M" | grep -qF "A person an assessment names needs an email"; then
+  ok "B5: the check removed → caught: the mismatched submission is no longer refused in its plain sentence ($CODE: $(printf '%s' "$B5M" | head -c 140)); written: $(( $(q "SELECT count(*) FROM institutions") - N_INST )) institution(s)"
+else bad "B5: not caught: $CODE $B5M"; fi
+restore "$ACIN"; restart_server
+req POST /api/account-inputs "$(AI miss2 "nobody2.$TS@k32.example")"
+[ "$CODE" = "422" ] && said | grep -qF "A person an assessment names needs an email: the assessment finds its person by it." && ok "  ...with it back, refused again in its words" || bad "  ...with it back: $CODE $(said)"
 # B4 — Measure by's earliest day back to the commit day.
 edit "$SPINE" "value={v.by} min={v.on ? dayAfter(v.on) : undefined}" "value={v.by} min={v.on || undefined}"
 sleep 4
@@ -228,7 +246,7 @@ for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byt
 node scripts/check_plain_words.mjs > "$W/plain.log" 2>&1 && ok "plain words: $(tail -1 "$W/plain.log")" || bad "plain words: $(grep -m3 HIT "$W/plain.log")"
 cover "$LOG" 'persons.email is optional' 'sign-in with the steward' 'a person added with no email' 'stored trimmed and lower-cased' 'an email already taken, in another case' 'an assessment naming an email' \
   'the same name (another case' 'the row records it' 'no other row records one' 'a credential for the email-less person' 'confirmed_distinct_from changed' 'a mixed-case email' \
-  'roles: "Choose them" opens the role form' 'distinct: the confirmation says it in full' "w1: W1's form is the shared one" "measureby: Measure by's earliest day is" 'B1: ' 'B2: ' 'B3: ' 'B4: '
+  'roles: "Choose them" opens the role form' 'distinct: the confirmation says it in full' "w1: W1's form is the shared one" "measureby: Measure by's earliest day is" 'B1: ' 'B2: ' 'B3: ' 'B4: ' 'B5 control: ' 'B5: '
 
 echo
 echo "==> ${PASS} passed, ${FAIL} failed"

@@ -39,7 +39,7 @@ function arg(flag: string): string | undefined {
 }
 
 async function main(): Promise<void> {
-  const email = process.argv[2]?.trim();
+  const email = process.argv[2]?.trim().toLowerCase();  // §32: stored as its own trimmed lower case
   const reason = arg('--reason');
   const name = arg('--name');
   if (!email || email.startsWith('--') || reason === undefined) {

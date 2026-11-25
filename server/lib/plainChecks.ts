@@ -80,6 +80,8 @@ export const PLAIN_CHECK: Record<string, string> = {
   offerings_source_refs_is_array: "An offering's source references are a list.",
   person_credentials_hash_is_argon2id: 'A password is stored only as an argon2id hash.',
   persons_scoped_to_exactly_one: "A person belongs to your company's staff or to one account, not both.",
+  // §32 (0053): an email is stored as its own trimmed lower case (the routes normalize it before writing).
+  persons_email_normalized: 'An email is recorded in lower case, with no spaces at either end.',
   reference_example_markers_retirement_is_complete: 'Unmarking records who unmarked it and why (at least 12 characters), together.',
   reference_example_markers_stated: 'A reference-example marker needs a source citation and a note of at least 12 characters each.',
   reference_example_markers_supersession_reason: 'Correcting a marker needs a reason of at least 12 characters.',

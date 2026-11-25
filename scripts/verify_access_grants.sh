@@ -131,8 +131,10 @@ noleak
 step "9. grant_access: a new person, and an existing one"
 NEW_EMAIL="New.Analyst.$TS@BandA.example"; PW_N0="starting-n-$TS"
 run grant_access.ts "$PW_S" "$PW_N0" "$PW_N0" -- "$NEW_EMAIL" --reason "Verification: a new analyst" --name "New Analyst N"
-N="$(q "SELECT id FROM persons WHERE email = '$NEW_EMAIL'")"
+# §32: given in mixed case, the email is stored as its own lower case; the person is found by that form.
+N="$(q "SELECT id FROM persons WHERE email = lower('$NEW_EMAIL')")"
 [ "$RC" = "0" ] && [ -n "$N" ] && ok "N created and granted" || bad "grant N: $OUT"
+[ "$(q "SELECT email FROM persons WHERE id = '$N'")" = "$(printf '%s' "$NEW_EMAIL" | tr 'A-Z' 'a-z')" ] && ok "  ...its email, given as $NEW_EMAIL, stored lower-cased (§32)" || bad "  ...stored email: $(q "SELECT email FROM persons WHERE id = '$N'")"
 [ "$(q "SELECT tenant_id FROM persons WHERE id = '$N'")" = "$TEN" ] && ok "  ...N is vendor staff of the steward's tenant" || bad "  ...N's tenant wrong"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'persons' AND record_id = '$N' AND operation = 'insert' AND actor_person_id = '$S'")" = "1" ] && ok "  ...persons_audit: insert, actor = S" || bad "  ...person audit wrong"
 [ "$(q "SELECT count(*) FROM audit_log WHERE table_name = 'access_grants' AND record_id = (SELECT id::text FROM access_grants WHERE person_id = '$N') AND operation = 'insert' AND actor_person_id = '$S'")" = "1" ] && ok "  ...access_grants_audit: insert, actor = S" || bad "  ...grant audit wrong"
