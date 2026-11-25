@@ -219,23 +219,24 @@ restart_server
 ADD "$INST" "$(J full_name 'K32 Casey (invented)' email "Casey.$TS@K32.example" title Clerk)"
 [ "$CODE" != "201" ] && [ "$(q "SELECT count(*) FROM persons WHERE full_name = 'K32 Casey (invented)'")" = "0" ] && ok "B3: the route's normalization removed → the database still refuses a mixed-case email ($CODE), nothing written" || bad "B3: $CODE $(said)"
 restore "$PIN"; restart_server
-# B5 — account inputs' check that an assessment's email matches a submitted person's, removed. Its positive control
-# first: an assessment naming a submitted person's email is admitted, the assessment that person's.
+# B5 — account inputs' check that an assessment's email matches a submitted person's, removed. Account inputs creates the
+# account in the same request, and an assessment's capability must already exist for it, so no assessment there can be
+# admitted (a finding, before §32 and after). What B5 can show is which step refuses: the email check comes first.
+CAPNF="capability not found for this institution: K32 capability"
 AI() { J institution "$(J name "Rowan Mill $1 (§32 fixture, invented) $TS" industry_slug manufacturing classification_note 'Verification: classified for §32.')" persons "[$(J full_name "K32 learner $1 (invented)" email "learner.$1.$TS@k32.example" title Learner)]" assessments "[$(J person_email "$2" capability_name 'K32 capability' score 3 ai_assisted false)]"; }
+N_INST="$(q "SELECT count(*) FROM institutions")"
 req POST /api/account-inputs "$(AI match "LEARNER.match.$TS@k32.example")"
-[ "$CODE" = "201" ] && [ "$(q "SELECT count(*) FROM assessments a JOIN persons p ON p.id = a.learner_person_id WHERE p.email = 'learner.match.$TS@k32.example'")" = "1" ] \
-  && ok "B5 control: an assessment naming a submitted person's email (in capitals) is admitted, the assessment that person's" || bad "B5 control: $CODE $(said)"
+[ "$CODE" = "422" ] && said | grep -qF "$CAPNF" && ! said | grep -qF "needs an email" \
+  && ok "B5 control: an assessment naming a submitted person's email (in capitals) passes the email check, refused only at the next step (the capability)" || bad "B5 control: $CODE $(said)"
 edit "$ACIN" "        if (!learnerPersonId) {" "        if (false) {"
 restart_server
-N_INST="$(q "SELECT count(*) FROM institutions")"
 req POST /api/account-inputs "$(AI miss "nobody.$TS@k32.example")"; B5M="$(said)"
-if [ "$CODE" = "201" ]; then ok "B5: the check removed → caught: a mismatched submission is admitted ($CODE)"
-elif ! printf '%s' "$B5M" | grep -qF "A person an assessment names needs an email"; then
-  ok "B5: the check removed → caught: the mismatched submission is no longer refused in its plain sentence ($CODE: $(printf '%s' "$B5M" | head -c 140)); written: $(( $(q "SELECT count(*) FROM institutions") - N_INST )) institution(s)"
-else bad "B5: not caught: $CODE $B5M"; fi
+[ "$CODE" = "422" ] && printf '%s' "$B5M" | grep -qF "$CAPNF" \
+  && ok "B5: the check removed → caught: a mismatched email is no longer refused for its email; it reaches the next step ($B5M)" || bad "B5: $CODE $B5M"
 restore "$ACIN"; restart_server
 req POST /api/account-inputs "$(AI miss2 "nobody2.$TS@k32.example")"
-[ "$CODE" = "422" ] && said | grep -qF "A person an assessment names needs an email: the assessment finds its person by it." && ok "  ...with it back, refused again in its words" || bad "  ...with it back: $CODE $(said)"
+[ "$CODE" = "422" ] && said | grep -qF "A person an assessment names needs an email: the assessment finds its person by it." && ok "  ...with it back, the mismatch is refused in its words again" || bad "  ...with it back: $CODE $(said)"
+[ "$(q "SELECT count(*) FROM institutions")" = "$N_INST" ] && ok "  ...nothing written by any of the three" || bad "  ...an institution was written"
 # B4 — Measure by's earliest day back to the commit day.
 edit "$SPINE" "value={v.by} min={v.on ? dayAfter(v.on) : undefined}" "value={v.by} min={v.on || undefined}"
 sleep 4

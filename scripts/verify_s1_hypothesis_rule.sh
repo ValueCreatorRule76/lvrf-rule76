@@ -225,7 +225,7 @@ expect POST "/api/value-hypotheses/$H_D/withdraw" "$(J retirement_reason 'Verifi
 restore "$PRODUCE"; start_server
 # H2 — the trigger removed: the route refuses; SQL lands.
 q "DROP TRIGGER value_runs_hypothesis_current ON value_runs" > /dev/null
-[ "$(trig)" = "226" ] && ok "H2: the trigger dropped on the clone (226)" || bad "H2 drop"
+[ "$(trig)" = "228" ] && ok "H2: the trigger dropped on the clone (228)" || bad "H2 drop"
 produce "$E_CUR" "Verification: H2." 409 "H2: the trigger removed → caught by the route (409)" "has no current hypothesis"
 R="$(runsql "$E_CUR" "$P_CUR")"; [ "$R" = "LANDED" ] && ok "  ...and a SQL insert lands without it (rolled back): the trigger is the database's half" || bad "  ...H2 SQL: $R"
 reharden
