@@ -5992,6 +5992,21 @@ from the prod copy, 24 Nov 2026:
 - **Runs 1 and 1** (the reference engagement's first run, and lot acceptance's) carry no erratum.
 - **D9's "once, naming the runs"** applies to the ledger. Beside each score, the run's own errata always print.
 
+**Correction to 1a (25 Nov 2026, read from the fresh prod copy, `lvrf-post-curia-rows-20261125T140354Z.dump`):**
+1a was read from a copy restored on 6 Nov, not from prod as it says. Since 15 Nov, B4's addendum has recorded a
+"misstated finding" erratum on every one of Curia's six real runs. **What 1a missed:**
+- **Runs 1 and 1** (the reference engagement's first run, and lot acceptance's) are not erratum-free. Each carries "its
+  finding F2 misstates the seal" and "its finding F3 misstates the seal".
+- **Runs 3, 4 and 5** carry both, besides the errata 1a lists.
+- **Run 13** carries "its finding F3 misstates the seal", besides its three.
+
+Under Brad's rulings (every current erratum, in the platform's wording, `lvrf_erratum_line()`, beside the sealed score
+it concerns, at the same size and weight, never dropped), each of these prints too. Curia's headline therefore
+reads: "55 / 100 as sealed · a link corrected since sealing; not recomputed · 45 of these points rest on a person who
+is not customer-side · its baseline, 214, has no source on record · its finding F3 misstates the seal". The order is
+`lvrf_run_erratum_line`'s: recorded time, then kind, then id. No ruling changes. The story follows the rule, and the
+record is what it prints.
+
 ### 2. Decisions (recommendations first)
 
 - **D1, what a story reads, and when it is sealed. Recommended:**

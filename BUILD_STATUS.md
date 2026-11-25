@@ -17795,3 +17795,17 @@ Read as `lvrf_app` over ssh, inside `BEGIN READ ONLY`.
   locked.
 
 **Brad's six Curia rows are done** (25 Nov 2026). **Next:** S7b.
+
+### S7b: the fresh prod copy (25 Nov 2026, UTC)
+
+- **Brad's dump:** `/home/brad/lvrf-post-curia-rows-20261125T140354Z.dump`, TOC 975. Copied with the LVRF key alone
+  (`IdentitiesOnly`) to `~/lvrf-backups/`, `600`; sha256 `86e2a369f5e91324…` on the box and on the Mac, equal.
+- **Restored as `lvrf_prodcopy`** by `scripts/restore_prod_copy.sh` from the repo at the deployed schema (0054),
+  16/0:
+  - sign-in data neutralised (30 sessions, none live; 1 credential replaced);
+  - 229 triggers; ownership clean; already at `0054_s7a_figure_class`;
+  - 3 current accounts, 27 runs; 6 current verified rows with a class.
+- **A correction to §27's section 1a,** recorded in the plan. Since 15 Nov, every one of Curia's six real runs also
+  carries "misstated finding" errata (F2 and F3; F3 alone on run 13). 1a had been read from the 6 Nov copy. Under the
+  rulings they print beside each score like every current erratum, so Curia's headline gains "its finding F3 misstates
+  the seal".
