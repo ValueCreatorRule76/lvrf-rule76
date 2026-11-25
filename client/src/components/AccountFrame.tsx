@@ -22,11 +22,13 @@ const KICKER = 'text-[10.5px] font-semibold uppercase tracking-[.16em] text-gold
 const PAGE_LINK = 'whitespace-nowrap border-b-2 pb-2 pt-1.5 text-[12px] font-semibold uppercase tracking-[.08em] no-underline ' + FOCUS_RING;
 const LEAVE = 'whitespace-nowrap border border-ink bg-white px-3 py-[5px] text-[12.5px] font-semibold text-ink hover:bg-offwhite ' + FOCUS_RING;
 
-type PageKey = 'workspace' | 'research' | 'runs' | 'case' | 'pov' | null;
+type PageKey = 'workspace' | 'research' | 'runs' | 'case' | 'pov' | 'story' | null;
 
 function currentPage(pathname: string, hash: string, id: string): PageKey {
   if (pathname === `/accounts/${id}`) return hash === '#research' ? 'research' : 'workspace';
   if (pathname === `/accounts/${id}/pov`) return 'pov';
+  // S7b (§27): the story of record, the draft and the account's issued stories.
+  if (pathname === `/accounts/${id}/story`) return 'story';
   if (/^\/runs\/[^/]+\/case$/.test(pathname)) return 'case';
   if (pathname === '/runs' || /^\/runs\/[^/]+$/.test(pathname)) return 'runs';
   return null;
@@ -43,6 +45,7 @@ function pagesOf(d: FrameData): PageItem[] {
     ? { key: 'case', label: 'Value case', to: `/runs/${d.confidence.run_id}/case` }
     : { key: 'case', label: 'Value case', to: null, off: 'Value case: none yet, no locked run' });
   if (!d.self) items.push({ key: 'pov', label: 'Point of view', to: `/accounts/${d.id}/pov` });
+  if (!d.self) items.push({ key: 'story', label: 'Story', to: `/accounts/${d.id}/story` });
   return items;
 }
 

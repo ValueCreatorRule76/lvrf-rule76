@@ -13,6 +13,7 @@ import { ChangePasswordPage } from './actor/ChangePassword';
 import { AppHeader } from './components/AppHeader';
 import { SnapshotsPage } from './pages/SnapshotsPage';
 import { ValueCasePage } from './pages/ValueCasePage';
+import { IssuedStoryPage, StoryDraftPage } from './pages/StoryPage';
 import { PoliciesPage } from './pages/PoliciesPage';
 import { WarRoomPage } from './pages/WarRoomPage';
 import { AccountFocusProvider } from './components/AccountFocus';
@@ -47,6 +48,8 @@ function SignedInRoutes() {
         <Route path="/packs/:slug" element={<IndustryPackPage />} />
         <Route path="/accounts/:id" element={<InstitutionPage />} />
         <Route path="/accounts/:id/pov" element={<PovPage />} />
+        <Route path="/accounts/:id/story" element={<StoryDraftPage />} />
+        <Route path="/stories/:id" element={<IssuedStoryPage />} />
         <Route path="/lineage/:table/:id" element={<LineagePage />} />
       </Routes>
       {status === 'expired' && <SignInOverlay />}

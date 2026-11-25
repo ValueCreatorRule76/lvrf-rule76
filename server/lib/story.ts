@@ -38,6 +38,11 @@ export interface StoryRun {
 export interface StoryEngagement {
   id: string; name: string; retired: boolean; runs: StoryRun[]; latest_run_id: string;
   metric: { name: string; unit: string | null; baseline: number | null };
+  /** From the latest real run's seal only; null when it seals no commitment. */
+  commitment: { target: number; committer: string | null; committer_customer_side: boolean | null; measured_by: string | null;
+                attribution: { method: string | null; class: string | null } | null } | null;
+  /** The latest VERIFIED real run's sealed actual (D2: only at Realization and above); null below. */
+  result: { run_id: string; actual: number; realization: string } | null;
   asks: { code: string; need: string; question: string }[];
 }
 export interface StoryFinding { id: string; outcome_id: string; field: string; value: string; line: string; recorded_on: string }
@@ -52,6 +57,8 @@ export interface StoryPayload {
   account: { id: string; name: string }; prepared_by: string;
   marker: { kind: string; note: string | null } | null;
   title: string; subtitle: string | null;
+  /** Rule 6, on every page: outside-in when every real run is (lvrf_run_banners); unverified when none holds a verified actual. */
+  banners: { outside_in: boolean; unverified: boolean };
   engagements: StoryEngagement[];
   headline: { engagement_id: string; run_id: string }[];
   findings: StoryFinding[];
@@ -89,9 +96,9 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
 
   const { rows: runs } = await db.query<{
     id: string; engagement_id: string; engagement: string; retired: boolean; run_number: number; locked_at: Date;
-    score: number; band: string; payload_hash: string; payload: Record<string, any>;
+    score: number; band: string; payload_hash: string; payload: Record<string, any>; banners: { outside_in: boolean; unverified: boolean };
   }>(
-    `SELECT r.id, g.id AS engagement_id, g.name AS engagement, (g.deleted_at IS NOT NULL OR g.status::text = 'retired') AS retired,
+    `SELECT r.id, lvrf_run_banners(r.id) AS banners, g.id AS engagement_id, g.name AS engagement, (g.deleted_at IS NOT NULL OR g.status::text = 'retired') AS retired,
             r.run_number, r.locked_at, r.confidence_score::float AS score, r.confidence_band::text AS band, r.payload_hash, r.payload
        FROM value_runs r JOIN engagements g ON g.id = r.engagement_id
       WHERE g.institution_id = $1 AND r.deleted_at IS NULL AND r.locked_at IS NOT NULL
@@ -132,7 +139,7 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     let g = engagements.find((e) => e.id === r.engagement_id);
     if (!g) {
       g = { id: r.engagement_id, name: r.engagement, retired: r.retired, runs: [], latest_run_id: r.id,
-            metric: { name: '', unit: null, baseline: null }, asks: [] };
+            metric: { name: '', unit: null, baseline: null }, commitment: null, result: null, asks: [] };
       engagements.push(g);
     }
     g.runs.push({
@@ -149,6 +156,13 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     g.metric = { name: p.businessMetric?.name ?? 'the metric', unit: p.businessMetric?.unit ?? null,
                  baseline: p.baselineValue === null || p.baselineValue === undefined ? null : Number(p.baselineValue) };
     g.asks = sealedAsks(p, acct.name).asks.map((a) => ({ code: a.code, need: a.need, question: a.question }));
+    // D3: a reference example never prints a commitment as the client's, so none is carried.
+    g.commitment = marker || p.targetValue === null || p.targetValue === undefined ? null : {
+      target: Number(p.targetValue), committer: p.people?.committer?.name ?? null, committer_customer_side: p.people?.committer?.customer_side ?? null,
+      measured_by: p.case?.roadmap?.promised_measured_on ?? null, attribution: p.case?.attribution ?? null };
+    const verified = runs.filter((r) => r.engagement_id === g.id && r.payload.realization === 'verified' && r.payload.actualValue !== null && r.payload.actualValue !== undefined)
+      .sort((a, b) => b.run_number - a.run_number)[0];
+    g.result = verified ? { run_id: verified.id, actual: Number(verified.payload.actualValue), realization: verified.payload.realization } : null;
   }
 
   // The stage (D2, D3).
@@ -192,7 +206,10 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
   const runLabel = (g: StoryEngagement, r: StoryRun) => `run ${r.run_number} of ${g.name}${g.retired ? ' (retired)' : ''}`;
   const errataGroup = (group: string) => {
     const all = engagements.flatMap((g) => g.runs.flatMap((r) => r.errata.filter((x) => x.group === group).map((x) => ({ g, r, x }))));
-    const runsNamed = [...new Set(all.map(({ g, r }) => runLabel(g, r)))];
+    // Grouped per engagement: "runs 1, 3, 4, 5 and 13 of X (retired); run 1 of Y".
+    const byEng = engagements.map((g) => ({ g, nums: [...new Set(all.filter((a) => a.g.id === g.id).map((a) => a.r.run_number))] })).filter((x) => x.nums.length > 0);
+    const list = (xs: number[]) => (xs.length === 1 ? `run ${xs[0]}` : `runs ${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+    const runsNamed = byEng.map(({ g, nums }) => `${list(nums)} of ${g.name}${g.retired ? ' (retired)' : ''}`);
     const ids = [...new Set(all.map(({ x }) => x.id))];
     return { ids, source: `Errata on ${runsNamed.join('; ')}, in the platform's wording for their kind`, first: all[0]?.x.line ?? '' };
   };
@@ -211,6 +228,14 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     const latest = g.runs.find((r) => r.id === g.latest_run_id)!;
     if (g.metric.baseline !== null) {
       add(`baseline:${g.id}`, withUnit(g.metric.baseline, g.metric.unit), `Sealed ${runLabel(g, latest)}, the baseline field`, [latest.id], latest.payload_hash);
+    }
+  }
+  for (const g of engagements) {
+    const latest = g.runs.find((r) => r.id === g.latest_run_id)!;
+    if (g.commitment) add(`target:${g.id}`, withUnit(g.commitment.target, g.metric.unit), `Sealed ${runLabel(g, latest)}, the target field`, [latest.id], latest.payload_hash);
+    if (g.result) {
+      const vr = g.runs.find((r) => r.id === g.result!.run_id)!;
+      add(`actual:${g.id}`, withUnit(g.result.actual, g.metric.unit), `Sealed ${runLabel(g, vr)}, the actual field, verified`, [vr.id], vr.payload_hash);
     }
   }
   for (const e of published) {
@@ -233,6 +258,7 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     storyVersion: STORY_VERSION, audience, stage,
     account: { id: acct.id, name: acct.name }, prepared_by: acct.tenant,
     marker, title, subtitle,
+    banners: { outside_in: runs.every((r) => r.banners?.outside_in === true), unverified: !runs.some((r) => r.payload.realization === 'verified') },
     engagements,
     headline: engagements.map((g) => ({ engagement_id: g.id, run_id: g.latest_run_id })),
     findings, published,
