@@ -17760,3 +17760,38 @@ Read as `lvrf_app` over ssh, each query inside `BEGIN READ ONLY`. The window is 
 - **Then this Gate C again.**
 
 S7b waits for this Gate C to be clean.
+
+### S7: Brad's six Curia rows, Gate C again — clean (25 Nov 2026, UTC)
+
+Read as `lvrf_app` over ssh, inside `BEGIN READ ONLY`.
+
+- **Brad's fix:** `86f5afd0` was superseded by `04989916` (13:38:21) with his reason. "What it states" now reads "The
+  case study reports 5,282 learning hours at Curia from January to June 2023."; the quote, how-read, citation and
+  class are unchanged.
+- **The six current rows:** each is a vendor publication about Curia, with the quote form, the case study's URL, and
+  not simulated or AI-sourced. Each is **opened by Brad and verified,** basis `inferred`.
+
+  | Row | Class | Figure | Opened |
+  |---|---|---|---|
+  | `ff0717c0` | license count | 500 licenses | 13:39:41 |
+  | `f6a51004` | license count | 1,000 licenses | 13:40:41 |
+  | `dc93b3a4` | license count | 2,500 licenses | 13:40:56 |
+  | `245b5df4` | activity count | 102,584 accesses | 13:39:55 |
+  | `e6b7d7d8` | activity count | 8,487 badges | 13:40:07 |
+  | `04989916` | activity count | 5,282 learning hours | 13:40:17 |
+
+- **Superseded, unopened:**
+  - `092c46b6` → `3c03c888` → `245b5df4`;
+  - `c65461e8` → `ff0717c0`;
+  - `86f5afd0` → `04989916`.
+- **Since the first Gate C:** 1 supersede act and 6 `open_citation` acts; audit has 1 evidence insert, 7 evidence
+  updates and 7 governance-act inserts, and nothing else.
+- **Since 03:12:53 UTC:**
+  - 0 evidence rows off Curia;
+  - 0 refusals and 0 research-process refusals;
+  - 0 record documents, 0 heartbeat events, 0 new sessions;
+  - no audit rows on any other table.
+- `lvrf_evidence_final` `e368ebcc6d1328bd4bf22e5636b798d7`; 229 triggers, none disabled; ownership 0; runs 27, all
+  locked.
+
+**Brad's six Curia rows are done** (25 Nov 2026). **Next:** S7b.
