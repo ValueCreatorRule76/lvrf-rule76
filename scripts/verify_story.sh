@@ -228,7 +228,9 @@ sqlrefused "a story issued with no act recorded" "$(INS internal reference "$PAY
 sqlrefused "an issued story edited" "UPDATE story_records SET audience = 'internal', payload = payload || '{\"title\":\"Edited\"}'::jsonb WHERE id = '$ST2'" "A story is sealed when it is issued; it is withdrawn, never edited."
 sqlrefused "a withdrawn story withdrawn again" "UPDATE story_records SET withdrawal_reason = 'Verification: again, and again.' WHERE id = '$ST'" "a withdrawn story stays on the record as it is"
 sqlrefused "a withdrawal by someone other than the steward" "UPDATE story_records SET withdrawn_at = now(), withdrawn_by_person_id = '$OTHER', withdrawal_reason = 'Verification: not the steward.' WHERE id = '$ST2'" "Only the steward withdraws a story of record" "$OTHER"
-sqlrefused "a story deleted" "DELETE FROM story_records WHERE id = '$ST2'" "it is withdrawn, never deleted"
+sqlrefused "a story deleted, as lvrf_app" "DELETE FROM story_records WHERE id = '$ST2'" "permission denied for table story_records"
+DEL="$(printf "BEGIN;\nDELETE FROM story_records WHERE id = '%s';\nROLLBACK;\n" "$ST2" | psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" 2>&1 || true)"
+printf '%s' "$DEL" | grep -qF "A story of record is on the record; it is withdrawn, never deleted." && ok "a story deleted, as the owner → refused by story_records_no_delete" || bad "the owner's delete: $(printf '%s' "$DEL" | tail -2)"
 
 step "6. A fixture account: Decision, Realization, one measurement corrected, Compounding"
 expect POST /api/account-inputs "$(J institution "$(J name "Corbel Freight (S7b fixture, invented)" industry_slug manufacturing classification_note 'Verification: classified for S7b.')" persons "[$(J full_name 'K7b owner (invented)' email "owner.$TS@k7b.example" title Owner)]")" 201 "a fixture account"
@@ -330,3 +332,8 @@ STAGE_A2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/lib/story_stage.mts "$TEN
 step "8. The code restored, and the page passes again"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to the start" || bad "$f differs"; done
 walk draft "after the breaks" "$W/after.log" "${CURIA_HE[@]}"; [ "$(fails "$W/after.log")" = 0 ] && ok "Curia's draft passes again after the breaks" || bad "after the breaks: $(grep -m1 '^FAIL' "$W/after.log")"
+
+echo
+echo "==> ${PASS} passed, ${FAIL} failed"
+REACHED_TALLY=1
+[ "$FAIL" = "0" ]
