@@ -254,7 +254,12 @@ cut line applied first.
          (`min={v.on}`). Its earliest selectable day becomes Committed on + 1, and follows Committed on when it changes.
          The same day is already refused in words by the form, the route and the database, so this is the picker only.
          **It rides in the email item's deploy** (Brad, 24 Nov 2026);
-       - **then, before the pilot (Brad, 24 Nov 2026, from §29's look): a person's email is optional when they are added,**
+       - **two small items (Brad, 25 Nov 2026, from §32's look):**
+         - the same-name warning's existing title, run into the sentence ("…published material. is already recorded…"):
+           in brackets without its trailing full stop, or on its own line;
+         - account inputs' assessment path removed (an assessment there can never be admitted: §32's finding);
+           assessments come back through their own form when needed;
+       - **closed 25 Nov 2026 (LVRF_PLAN §32, deployed at `f33d6f1`):** before the pilot (Brad, 24 Nov 2026, from §29's look): a person's email is optional when they are added,**
          required only when they are given sign-in. People named in public sources have none, so today the form blocks
          them or invites a made-up address. What depends on it is read in `BUILD_STATUS.md` ("§29 closed"): the
          column's NOT NULL, the only duplicate-person guard, sign-in and the access scripts, account inputs' assessment

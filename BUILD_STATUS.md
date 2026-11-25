@@ -17512,3 +17512,40 @@ fix rides in it). Branch `person-email`, on `d498a08`. **Migration `0053`; one n
 - the 6 persons unchanged (their own fields), `confirmed_distinct_from` null on each;
 - `lvrf_person_email_rules` `2b6cfc28…`; 229 triggers; drift none (54, newest `0053`);
 - hashes 27/27; TOC 975; ownership clean.
+
+### §32 closed: a person's email is optional, deployed at `f33d6f1`; Gate C clean — 25 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `f33d6f1`.
+- Pre-deploy backup `~/lvrf-pre-p32-20261125T011316Z.dump`, **TOC 972**.
+- Migrate `0053` clean (54 migrations); `ownership exit 0`; `hardening exit 0`, 0 ERROR lines; **229 triggers**;
+  `lvrf_person_email_rules` **`2b6cfc2891ddd4e43da2cd96e6e7d4cd`**; `persons.email` optional (`f`).
+- Post-hardening backup `~/lvrf-post-p32-20261125T011519Z.dump`, **TOC 975**, as measured at Gate A.
+- Deploy: "active and answering (after 4 refused tries)", all checks, bundle **`index-BA2U_PSV.js` /
+  `index-YDBWZVG7.css`**, "deploy OK". The API started at 01:15:56 UTC. The deploy's drift line was outside Brad's tail;
+  Gate C reads it below.
+
+**Brad's look (records nothing):**
+- Card 01b's form shows "Email (optional; needed only to sign in)" and needs only the full name.
+- Typing "Brad Piver (external analyst of record)" shows the same-name warning, with "Choose them" and "This is a
+  different person"; Add stays disabled until one is chosen. Cancelled.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone):**
+- **The box:** head `f33d6f1`, tree clean. The served `index.html` names `index-BA2U_PSV.js` / `index-YDBWZVG7.css`.
+- **Since the pre-deploy backup (01:13:16 UTC), nothing was written:** 0 governance acts (still 228, the last 15 Nov
+  21:12:17); 0 refusals, 0 research-process refusals; 0 audit rows, 0 record documents, 0 heartbeat events; 0 sessions.
+- **The persons:** 6. Each has an email, already its own trimmed lower case; `confirmed_distinct_from` is null on all
+  six. The newest `updated_at` is 11 Oct 2026, so the migration and hardening changed no row.
+- **The function as deployed:** `lvrf_person_email_rules` `2b6cfc2891ddd4e43da2cd96e6e7d4cd`.
+- **Drift none (54 migrations, newest `0053_s32_person_email`; 1,355 schema objects match `0053_snapshot.json`).**
+- **229 triggers**, none disabled; ownership clean (`lvrf_ownership_violations()` 0).
+- 1 commitment, 0 verifications; runs 27, all locked; **`check_run_hashes` 27/27**.
+- **TOC 975** (Brad's post-hardening dump; `lvrf_app` cannot dump).
+
+**§32 is closed** (25 Nov 2026).
+- **Brad's two small items (25 Nov 2026):**
+  1. **The same-name warning runs the existing person's title into the sentence:** "…Asserting from published material.
+     is already recorded…". The title goes in brackets without its trailing full stop, or on its own line.
+  2. **Account inputs' assessment path goes** (§32's finding: an assessment there can never be admitted). Assessments
+     come back through their own form when needed.
+- **Next (Brad, 25 Nov 2026):** S7a.
