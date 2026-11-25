@@ -7031,3 +7031,204 @@ the class field on a published source, its migration and its guard, so that Brad
   unmet line. Cancel.
 - **Then Brad's six rows** (§27 section 4), through the page (rule 10). Row 4 supersedes `092c46b6` and states its class.
 - **About a day.** Inside the 18 Dec window.
+
+## 34. The account-team page (planned 25 Nov 2026; **approved by Brad, 25 Nov 2026, with D1 (b), D2–D7 as recommended, and D8's dates**; mock-ups before code)
+
+**Brad's rulings (25 Nov 2026):**
+- **D1 = (b) for the pilot's start:** public names and roles, plus the customer's yes or no to each ask; no figures.
+  It is built so that (a) is one small change away. **(a) waits for an agreement with Skillsoft on holding customer
+  data.**
+- **D2–D7 are approved as recommended.**
+- **The ~40 writes open to any signed-in staff member:** a ruling is needed **before any member of staff other than the
+  steward is given sign-in**. It is on the 3.1 list with that condition.
+- **D8, the dates:**
+  - the mock-ups before Fri 18 Dec 2026;
+  - **the first working session: Thursday 28 Jan 2027**;
+  - **Gate B and Gate D by Fri 22 Jan 2027**;
+  - the 4–15 Jan window untouched.
+- **Next:** the mock-ups, after S7a's Gate B.
+
+**What Brad asked (25 Nov 2026):** "The account-team page", after S7b, in place before the account teams' first working
+session in the pilot's middle weeks, and outside the 4–15 Jan window, which it must not touch.
+
+**Why:** LVRF is built for one expert operator, the steward. In the pilot, 3–5 Skillsoft account teams (AEs, CSMs) use
+it, and the SOW promises "Your teams using it" and "A playbook". The method's complexity stays with the steward. Account
+teams get one narrow page they can't get lost in.
+
+### 1. What the code and the record hold today (read 25 Nov 2026, `2a189e1` and prod; read only)
+
+- **How staff are linked to accounts:** `account_person_links` (0037).
+  - It has one role, `analyst_of_record` (`account_person_role` enum), with a title on that account, who linked it,
+    when, and its retirement.
+  - W1 writes it (`POST /api/institutions/:id/analyst-of-record`), open to any signed-in staff member.
+  - Nothing reads a link to limit what a person sees.
+- **How a non-steward signs in:** `POST /api/auth/login` admits a person of your company's staff (`tenant_id` set) who
+  has a current credential and a current access grant, found by email.
+  - The steward grants access by `scripts/grant_access.ts` (or `set_password.ts` for a starting password); §32 requires
+    an email for a credential.
+  - There is no page for it.
+- **What a non-steward sees today: everything in your company.** Every read is scoped to the company
+  (`isOtherTenant`), never to an account. A signed-in staff member reads every account, run, case, POV, the War Room
+  and the packs.
+- **What refuses them:**
+  - **50 steward-only route checks in 13 route files** (`requireSteward`): research clearances, errata, withdrawals,
+    corrections, the supersession batch, role grants, markers, policies, lens policies, shares for review, levers and
+    their links, industries and exclusions, pack retirements.
+  - **The database's steward guards** behind them (21 "only the steward …" messages, §30).
+- **What does not refuse them: about 40 writes are open to any signed-in staff member.** Among them:
+  - creating an account;
+  - naming an analyst of record;
+  - recording and opening evidence;
+  - commit, measure and verify;
+  - producing and locking a run;
+  - hypotheses and executive summaries;
+  - research prompts and imports;
+  - facts, the classification and the pack basis;
+  - rates, milestones and print requests.
+
+  Today an account-team member would have nearly the steward's whole walk.
+- **On the page:** 17 controls are shown to a non-steward but disabled, with "… is the steward's act — {name}'s alone".
+  None is hidden.
+- **On prod:** 1 member of staff (Brad), 1 credential, 1 access grant, 1 account link (Brad, analyst of record on
+  Curia). No account-team member exists.
+- **S2's research:** account prompts send the account's name, website, pinned entity, disclosure regime and current
+  facts. Bring-back items would be none of these. S2 recorded a residual risk "to revisit when LVRF first holds
+  confidential customer-side data" (§21).
+
+### 2. Scope (Brad's proposal), and what it needs
+
+1. **Who:** a signed-in member of your company's staff, not the steward, linked to the account. They see only their
+   linked accounts, this page and the prints. Steward-only cards and buttons are **hidden** from them, not shown and
+   refused.
+2. **The page,** per account, summary first, in plain words, no card numbers:
+   - **Where it stands:** one short paragraph: the stage, the latest locked run's confidence with any erratum beside
+     it, and what's missing;
+   - **The asks:** the value case's asks as a checklist, each with the one question to put to the customer;
+   - **What to take into the meeting:** links to the POV and the value case prints (both lenses);
+   - **Bring back:** a short form to record what the customer said;
+   - **A one-line definition** in place for each term of the method used on the page (hypothesis, commitment,
+     baseline, system of record, attestation), from one glossary file that every page can later use.
+3. **Bring back:** what an account-team member records is never evidence, and never read by scoring, runs, cases or
+   prints. It goes to the steward's review queue.
+   - **Each item:** what kind (a person and their role; a figure from the customer's system; who would commit and to
+     what; a document to request; other), what was said, who said it, when, and whether a source exists.
+   - **Append-only.** The steward either uses it (opens the matching existing form pre-filled; the item then links to
+     the row it became) or declines it with a reason. Nothing else changes it.
+4. **The steward's queue:** on the steward's view, the open items across accounts, oldest first, with "Use…" and
+   "Decline…".
+5. **Phone width (390) works:** the account-team member may read it in a lobby before a meeting.
+
+### 3. Decisions (recommendations first)
+
+- **D1 (first, and Brad's to rule): what an account-team member may record in Bring back,** given the SOW's "no
+  Skillsoft confidential customer data goes into LVRF".
+  - **(a) Only what the customer agrees can be recorded.** Every item requires a confirmation: "The customer agreed
+    this can be recorded."
+    - **For the page:** the form takes any kind, figures included, and refuses an item without the confirmation
+      (route and database).
+    - **For S2:** an item is never part of a research prompt, so research is unchanged. But once the steward *uses* an
+      item, it becomes evidence or a fact, and a fact *is* in the account's prompt. So (a) is the point where LVRF first
+      holds customer-side data, and S2's recorded residual risk comes due. A used fact would need excluding from
+      prompts, or the composer root-owned, before research runs on that account again.
+    - **For the SOW:** it reads as within "no confidential data" only if the customer's agreement makes the item not
+      confidential. That is a contract reading, not a technical one.
+  - **(b) Only names and roles already public, plus the customer's yes or no to each ask; no figures.**
+    - **For the page:** the kinds narrow to "a person and their role, from a public source" and "the answer to an ask"
+      (yes / no / not yet). No figure field, and no free text that could carry one.
+    - **For S2:** no change; nothing confidential enters.
+    - **What it costs:** the value of Bring back is the customer's figures and documents. (b) records that they exist
+      and were agreed ("yes, our EHS lead will share the FY25 TRIR"), not the figure. The steward records the figure
+      later from a source, as today.
+  - **(c) Amend the SOW,** so pilot accounts may hold customer data the customer agrees to share.
+    - **For the page:** as (a), with the confirmation.
+    - **For S2:** as (a): the residual risk comes due, and is fixed before research runs on a pilot account holding
+      such data.
+    - **For the SOW:** a contract change, Brad's and Skillsoft's.
+  - **Recommended: (b) for the pilot's start, built so that (a) is one change away.** The items, the queue and "Use…"
+    are the same under each; only the kinds and the confirmation differ. (b) keeps the SOW as written and S2 as
+    approved. If the first working session shows the teams need figures, (a) or (c) is a ruling plus a small change,
+    and S2's residual risk is fixed first.
+- **D2, sign-in and links.**
+  - **Sign-in:** as today, `grant_access.ts` with an email (§32), the steward's act, and a starting password changed at
+    first sign-in. No page for it in this slice.
+  - **Linking to an account:** a new link role, `account_team` (migration: the enum gains a value), written by **the
+    steward's act** on a new "Account team" card on the steward's account page, with a title on that account. Retired
+    as links are today.
+  - **Recommended:** both as above; the steward, never the account-team member, decides who sees which account.
+- **D3, "Use…" passes every existing rule.** **Recommended: yes, nothing bypasses them.** "Use…" opens the existing
+  form for that kind, pre-filled from the item:
+  - a person → "Add a person" (§32);
+  - a role → "Name a customer-side role…" (from a source);
+  - a figure → "Record a source…";
+  - who would commit → "Commit…" (customer-side, §29; the promised date, §26; the walk-date rule, §31).
+
+  Each with its full-text confirmation, and the steward completes what the item lacks (a source, a date). The item links
+  to the row the form wrote, only when that row is written.
+- **D4, the account-team member sees declined items and the reason.** **Recommended: yes**, in their account's Bring back
+  history, with the steward's reason, for learning. They never see the steward's queue across accounts.
+- **D5, the playbook.** **Recommended: the page's wording is the playbook's first draft, from one source.** The page's
+  headings, the asks' questions and the glossary's definitions live in one file. The playbook's account-team chapter is
+  generated from it with the steward's notes added, so the page and the playbook cannot drift.
+- **D6, what an account-team member may do, enforced on the server.** **Recommended:** a new staff role,
+  `account_team` (`person_roles`), set by the steward when granting access. A person with it:
+  - **reads** only their linked accounts' account-team page, and the POV and value case prints of those accounts'
+    locked runs;
+  - **writes** only Bring back items on those accounts;
+  - **is refused** every other route (403, plain words), in the API and not only by hiding.
+
+  Staff without the role keep today's rights (today, only Brad). Whether the ~40 open writes should also close to
+  value engineers is a separate ruling, outside this slice.
+- **D7, where Bring back lives.** **Recommended:**
+  - **A new table, `bring_back_items`** (migration): append-only, no update but the use or decline fields, never
+    deleted, with an audit trigger.
+  - **No route that reads evidence, runs, cases or prints reads it.** Gate A proves this, by a break and by a static
+    check that only the account-team page, the queue and "Use…" name the table.
+  - **Use and decline** each record the steward's act.
+- **D8, timing.** S7b's Gate C targets Fri 18 Dec 2026. The 4–15 Jan window is untouchable. **Recommended:** the mock-ups
+  before 18 Dec; the build to Gate A in the first week after 15 Jan; Gate B and Gate D before the account teams' first
+  working session. The session's date is Brad's to name. If it falls in the window's first week after 15 Jan, the slice
+  is cut to the page and Bring back, with the steward's queue reading items by SQL for one session.
+
+### 4. Mock-ups (before code; fictional accounts and names only)
+
+- the account-team page for a fictional account at Decision, at 1280 and 390: where it stands, the asks as a checklist
+  with their questions, what to take into the meeting, Bring back, and the glossary's one-line definitions in place;
+- the Bring back form and its confirmation, under D1 as ruled;
+- the steward's queue across accounts, oldest first;
+- "Use…" opening a pre-filled form, and "Decline…" with its reason;
+- the account-team member's view of a declined item (D4).
+
+The review PDF goes in `~/lvrf-backups/s34-mockup/` (`chmod 600`).
+
+### 5. Gate A (planned)
+
+- **A new verify script,** on a clone with fictional account-team members and accounts:
+  - **visibility:** an account-team member sees their linked accounts only; the API refuses every other account and
+    route (403, plain words);
+  - **the page:** each section, the glossary's definitions, 390 with no sideways scroll, contrast;
+  - **Bring back:** recorded, append-only; use and decline by the steward only, each with its act; "Use…" opens the
+    right form pre-filled and passes every rule (D3); the item links to the row only when it is written;
+  - **D1's rule as ruled** (under (b): no figure field, and the route and the database refuse one).
+- **Breaks:**
+  - an account-team member seeing an account they're not linked to;
+  - an account-team member seeing a steward-only control;
+  - a Bring back item read by scoring, a run, a case or a print;
+  - an item changed other than by use or decline;
+  - D1's rule removed.
+- **The full regression, and equivalence:** every existing GET identical; the new routes named.
+
+### 6. Gate D (new: before any account team uses it)
+
+- **One person who is not Brad,** ideally a Skillsoft AE or CSM, or anyone unfamiliar with LVRF, on a clone with
+  fictional data, unaided, for 30 minutes, does three tasks:
+  1. find their account;
+  2. say where it stands and what to ask the customer;
+  3. record one thing the customer said.
+- **Recorded:** where they hesitated, what they asked, how long each task took.
+- **Fixes** before the first working session. Gate D's record goes in `BUILD_STATUS.md` with the fixes it led to.
+
+### 7. Effort
+
+About half a day for the mock-ups, then about four days to Gate A: two migrations (the link role, the staff role, the
+table), the server's role checks across about 40 writes and every read, the page, the queue and "Use…" for four
+forms. Then Gate D, a 30-minute session and its fixes.

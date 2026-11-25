@@ -246,6 +246,14 @@ cut line applied first.
          2. then the baseline's `baseline_measured_at` (W4);
          3. then a role's `granted_at`.
          The promised measurement date stays future by design (§26);
+       - **before any member of staff other than the steward is given sign-in (Brad, 25 Nov 2026, from §34): a ruling on
+         the ~40 writes open to any signed-in staff member.** Creating an account, recording and opening evidence, commit,
+         measure and verify, producing and locking a run, hypotheses, research prompts and imports, facts, rates and
+         milestones are not steward-only today (LVRF_PLAN §34, section 1). §34's `account_team` role closes them for
+         account teams only;
+       - **the account-team page (Brad, 25 Nov 2026), after S7b:** LVRF_PLAN §34, approved with D1 (b). Mock-ups before
+         18 Dec 2026, after S7a's Gate B; Gate B and Gate D by Fri 22 Jan 2027; the first working session Thu 28 Jan
+         2027; the 4–15 Jan window untouched;
        - **then, before the pilot (Brad, 24 Nov 2026): no walk date in the future** (LVRF_PLAN §31, approved by Brad 24 Nov 2026 with D1–D5). **Closed 24 Nov 2026,** deployed at `7be9031`, Gate C clean (`BUILD_STATUS.md`, "§31 closed"). A Committed on,
          Measured on or Verified on date later than one day after today's UTC date is refused, by the route and by the
          database (hardening §34's guard, which every walk step passes through), with a Gate A break. One day's margin admits
