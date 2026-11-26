@@ -18250,3 +18250,81 @@ mistake; the same story stands as fb473904."
 
 **Next, in this order, all before 4 Jan 2027 (Brad, 26 Nov 2026):** "every script stops its servers by port"; then
 **S7b.2** (one issue per story); then S4's full-text confirmation on W6's "Add evidence".
+
+### 3.1 done: every script stops its servers by port — 26 Nov 2026
+
+Plan approved by Brad (26 Nov 2026) with his three rulings: the runner watches 5190–5220 plus every port a verify
+script declares; a leftover fails its script and is stopped only if `owns_listener` passes, an unowned one halts the
+run; s4 moves onto `finish.sh`. He added two cases to `verify_port_stops`. Branch `port-stops`, `ff31a8b`. Test scripts
+only: no product file, migration, route or client change, nothing on the box.
+
+**The cause, reproduced:** in a script with an EXIT trap, bash does not exec the last command of
+`(cd client && npx vite …) &`, so `VITE_PID` is a subshell, and `kill "$VITE_PID"` leaves `npm exec vite` and its node
+child listening. The API (`npx tsx … &`) and Chrome are exec'd and did not leak; four servers are double-forked
+(`( … &)`) and only a stop by port reaches them.
+
+**What changed:**
+- **`scripts/lib/ports.sh`:**
+  - `owns_listener PORT`: the listener's command line names this checkout (`<root>/`, the slash included, so
+    `lvrf-rule76-x/` is not it) or the script's `$W`, and its command line or environment (`PORT=N`, by `ps -E`) names
+    the port;
+  - `stop_port`: its own listener and the node and `npm exec` processes above it; SIGTERM, 10 s, then SIGKILL; then
+    confirms nothing answers. A listener that is not its own is left running and named, with its pid and whole
+    command, in a FAIL. It always returns 0, so a cleanup under `set -e` still restores its files; a failure sets a flag.
+- **`scripts/lib/finish.sh`:** on any exit it stops every port the script names before `cleanup` (so `dropdb` finds no
+  connection) and confirms each free after it. A port left taken fails the script even when its tally passed. The
+  stop-early line no longer states an exit code (Brad): a script stopped by Ctrl-C exits 130.
+- **20 verify scripts:**
+  - 15 lose their own blind `stop_port`;
+  - `verify_c3b`, `verify_evidence_final` and `verify_supersession` lose `lsof -ti tcp:…` kills, which matched any
+    process with a connection to the port, not only its listener; `verify_signin_p2b` loses a blind kill;
+  - `verify_s4_form_confirmation` moves onto `finish.sh` and gains the tally guard (19 Oct audit) it lacked;
+  - `verify_s3_print_family`'s `CDP_COLD` is `CDP_COLD_PORT`, so the port guard and the stop see it.
+- **New `scripts/run_regression.sh`** (none was committed before):
+  - each script runs with its own `TMPDIR`, so its `$W` (Chrome's profile) proves a leftover its own;
+  - results are PASS, FAIL, NOT-RUN (exit 3) or REFUSED (the port guard);
+  - after each script: nothing on a watched port (146) and no new `npm exec vite|tsx`. Otherwise the script is LEFTOVER
+    and fails; an owned leftover is stopped and the run goes on; an unowned one halts it;
+  - Ctrl-C stops the run after the script's own trap, reporting INTERRUPTED.
+- **New `scripts/verify_port_stops.sh`, 47 checks:**
+  - the leak as a control;
+  - this checkout's Vite, API (double-forked) and Chrome stopped with their wrappers;
+  - not owned, left running and named: another checkout's listener, one under `lvrf-rule76-x/` (Brad), and one naming
+    this checkout but another port;
+  - through `finish.sh`: pass, fail, a crash, SIGINT to the process group and SIGTERM, each leaving its ports free;
+  - another checkout's listener on the very port the script owns: the script fails naming its pid and command, and the
+    listener is left running (Brad);
+  - the port guard still refuses before the trap;
+  - SIGKILL leaves its servers, which is what the runner is for.
+
+**A correction to the plan (the SIGINT evidence):** the plan said the EXIT trap runs on SIGINT. Its probes were started
+with `&`, which leaves SIGINT ignored, so the sleep they ran simply finished. The SIGTERM and SIGHUP results stood.
+`verify_port_stops` now starts its harness with SIGINT at its default, as a terminal leaves it, and the real Ctrl-C
+case passes: exit 130, the trap stops its servers, its ports are free.
+
+**Gate A:**
+- **`verify_port_stops`: 47/0**, alone, on a fresh restore, after the stop-early line's change.
+- **Break 1, a file edit:**
+  - `verify_workspace_path` started a Vite on 5219, a port no variable names, after its tally. It passed (107/0), and
+    the runner failed it as LEFTOVER, stopped the Vite (its own) and exited 1;
+  - restored from a saved copy, byte-identical to HEAD; the rerun passed with no leftovers.
+- **Break 2, SIGKILL mid-walk:** exit 137. The runner failed it on 3092, 5192 and 9352; all three were its own (Chrome by
+  its `TMPDIR`) and stopped, and no wrapper was left. Its clone `lvrf_verifyws` was dropped by hand, and no product file
+  had been edited.
+- **Ctrl-C to the runner's process group mid-script:** the script stopped before its tally, stopped its three servers
+  and dropped its clone. The runner reported INTERRUPTED, exited 130 and started nothing further.
+- **The full regression with `run_regression.sh`,** on the pinned `lvrf_snapshot_20261114.dump` (sha256 `5dd04f9d…`),
+  freshly restored, 06:29–07:39 UTC:
+  - **66 scripts: 65 passed, 0 failed, 1 not run** (`verify_story`, exit 3: the copy holds 0 of Brad's six Curia rows);
+  - **0 left a server running, 0 refused by the port guard;** 6,502 checks from tally lines;
+  - no listener on a watched port and no `npm exec`/`vite`/`tsx` process, before or after;
+  - every tracked file byte-identical, Brad's `scripts/demo/` changes included; no `lvrf_verify*` clone left.
+- **Found by the regression, fixed (display only):** `verify_tenant_scope`'s last line (`==> setup 22 passed, 0 failed;
+  cases passed`) is not a standard tally, so the runner showed none. The runner now counts PASS/FAIL lines for such a
+  script, marked `~`; its result is still its exit code. Rerun alone on a fresh restore: PASS, ~345/0.
+
+**Not run:** equivalence (no product change). **No Gate B or C:** nothing deploys; the files reach the box only in the
+next deploy's checkout, where they do not run.
+
+**Next (Brad, 26 Nov 2026), both before 4 Jan 2027:** **S7b.2** (one issue per story); then S4's full-text confirmation
+on W6's "Add evidence".

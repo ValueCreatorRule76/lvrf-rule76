@@ -289,7 +289,8 @@ cut line applied first.
          on its first try. That depends on a race: in §28's full regression it found the stub already up and failed
          (24/3), then passed alone (27/0). **The stub API starts on a signal the test controls** (it answers only
          after the test says so), never on timing. A red result is then never ignorable;
-       - **The leaked Vite servers (approved by Brad, 24 Nov 2026, from §28's Gate A).** 27 scripts stop Vite by the
+       - **The leaked Vite servers (approved by Brad, 24 Nov 2026, from §28's Gate A; done 26 Nov 2026 as "every script
+         stops its servers by port", `ff31a8b`).** 27 scripts stop Vite by the
          subshell's pid, which leaves Vite's own node process running; 20 were found in §28's regression. Every script
          stops Vite by its port, as `verify_s5`, `s6` and six others already do, and the regression checks that no
          Vite, Chrome or API is left running after each script;
@@ -297,8 +298,8 @@ cut line applied first.
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
-       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1, "every script stops its servers by port" and S7b.2
-         (Brad, 25–26 Nov 2026; all before 4 Jan 2027): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
+       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1, "every script stops its servers by port" (done 26 Nov
+         2026) and S7b.2 (Brad, 25–26 Nov 2026; all before 4 Jan 2027): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
          confirmation step (S7a's accepted departure, LVRF_PLAN §33), so the figure's class shows in the form only. The
          class is fixed once recorded, so W6 confirms every field in full, as card 01c's forms do (S4, LVRF_PLAN §23),
          before the pilot's account teams use it.
@@ -476,13 +477,15 @@ cut line applied first.
   already recorded; `verify_figure_class`'s rows with a class; `verify_plain_words`'s classification note;
   `verify_s1_hypothesis_rule`'s account already classified). Until then the regression runs on the pinned
   `lvrf_snapshot_20261114.dump`, and a newer dump only for the story of the real record and the equivalence.
-- **Every script stops its servers by the port they listen on** (Brad, 25 Nov 2026, from S7b's cross-check). **Next
-  after S7b.1, ahead of the rest of 3.1 (Brad, 25 Nov 2026):** S7b.1's regression again left a Vite on a script's port
+- **DONE (26 Nov 2026, `ff31a8b`, Gate A in BUILD_STATUS): every script stops its servers by the port they listen
+  on** (Brad, 25 Nov 2026, from S7b's cross-check). `scripts/lib/finish.sh` stops each port a script names on any exit,
+  only when the listener is its own (`owns_listener`, `scripts/lib/ports.sh`), and `scripts/run_regression.sh` fails a
+  script that leaves one. Was: **next after S7b.1, ahead of the rest of 3.1 (Brad, 25 Nov 2026):** S7b.1's regression again left a Vite on a script's port
   (5198 and 5197 refused `verify_corrections` and `verify_pov_print`; nineteen in all were stopped by hand). Twenty Vite
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
-- **S7b.2: one issue per story** (Brad, 26 Nov 2026, from S7b.1's Gate C; **next after "every script stops its servers
-  by port", before W6's full-text confirmation; all three before 4 Jan 2027** (order ruled by Brad, 26 Nov 2026)). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
+- **S7b.2: one issue per story** (Brad, 26 Nov 2026, from S7b.1's Gate C; **next** (the port item is done), before W6's
+  full-text confirmation; both before 4 Jan 2027 (order ruled by Brad, 26 Nov 2026)). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
   withdrew the second as a duplicate.
   - **Refused:** a duplicate issue, meaning the same account, audience and hash while a story with them is current (not
     withdrawn). Refused in the route and in the database guard (`lvrf_story_record_guard`), with its plain sentence
