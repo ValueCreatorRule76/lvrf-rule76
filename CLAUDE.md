@@ -84,15 +84,21 @@ sells, which is defensibility.
 
 ## Stack
 
-**Installed and verified on the VPS `srv1862778`:** Postgres 16.14 (db `lvrf`, owned by
+**Installed and verified on the VPS `srv1862778`:** Postgres 16.15 (db `lvrf`, owned by
 `lvrf_owner` (NOLOGIN); migrations as `lvrf_migrate`, which acts as `lvrf_owner`, with its
 URL in `~/.lvrf_migrate.env` (600) on the box and `.env.migrate` locally, never in the
 repo; the API as `lvrf_app`, granted only what the code writes (`db/ownership.sql`,
 OWN-1); localhost only, **data page checksums on**, tuning drop-in at
 `conf.d/10-lvrf-tuning.conf` for 8GB RAM) · pgvector 0.6.0 (unused for now) ·
-Node 24.18.0 / npm 11.16.0, matched on the dev Mac · Caddy with valid certs for
+Node 24.22.3 / npm 11.19.1, matched on the dev Mac · Caddy with valid certs for
 `lvrf-rule76.com`, proxying `127.0.0.1:3001` · nightly `pg_dump -Fc` at 03:00,
-14-day retention.
+14-day retention. (Versions read 26 Nov 2026, after the box's OS updates; Brad's ruling the
+same day matched the Mac and this line to the box.)
+
+**Unattended upgrades are on** (Ubuntu archive and `-security`, nothing excluded, no
+automatic reboot), so Postgres minors land automatically and take effect at the next
+restart: 16.15 was installed by `unattended-upgrade` on 21 Aug 2026, unnoticed until
+26 Nov. The version that runs is `SHOW server_version`, not the package's.
 
 > **Caddy is pinned to IPv4 deliberately.** `localhost` resolved to `::1` while
 > Express binds IPv4, which 502s. Do not "simplify" it back to `localhost`.

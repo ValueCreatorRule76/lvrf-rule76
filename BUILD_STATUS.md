@@ -18477,7 +18477,11 @@ services active, none failed, health ok, the 401s, 57 migrations, the story rows
 
 **Read after the restart:**
 - **Versions:** kernel `6.8.0-151-generic` (booted 16:25:35 UTC, no reboot pending); Node `v24.22.3`, npm `11.19.1`; Caddy
-  `v2.11.9`; **PostgreSQL 16.15** (server and client; the update took it from 16.14). Data checksums still on.
+  `v2.11.9`; **PostgreSQL 16.15** (server and client). Data checksums still on.
+  *(Corrected 26 Nov 2026: this line first read "the update took it from 16.14". It did not: the box's apt history shows
+  `unattended-upgrade` took `postgresql-16` from 16.14 to 16.15 on 21 Aug 2026 at 07:00 UTC. Whether the running server
+  stayed on 16.14 until today's restart is not established: no reading of `server_version` was recorded after 21 Aug, and
+  the Postgres logs of that day need `adm` and have rotated away.)*
 - **Services:** `lvrf-api`, `lvrf-research`, `caddy` and `postgresql@16-main` active; 0 failed units. The API active from
   16:25:50 UTC.
 
@@ -18496,3 +18500,15 @@ services active, none failed, health ok, the 401s, 57 migrations, the story rows
 **For Brad's ruling, not changed here:** `CLAUDE.md`'s stack line now differs from the box. It reads "Postgres 16.14" and
 "Node 24.18.0 / npm 11.16.0, matched on the dev Mac". The box is on 16.15 and Node 24.22.3 / npm 11.19.1, and the dev Mac
 is still on Node 24.18.0.
+
+**Brad's ruling (26 Nov 2026): the Mac and `CLAUDE.md` match the box.**
+- **On the Mac,** Node was from nodejs.org's installer package (`org.nodejs.node.pkg`), so the same package for v24.22.3:
+  its sha256 `0924690f…fd04` matching nodejs.org's `SHASUMS256.txt`; signed by the Node.js Foundation's Developer ID and
+  notarized by Apple; nodejs.org's release index giving npm 11.19.1. Brad installed it (`sudo installer`): `v24.22.3`,
+  `11.19.1`.
+- **A clean build of `c8a143e`** in a fresh worktree on it (`npm ci`, then `npm run build`): **`index-DdLM5B0v.js` /
+  `index-CimN7kyl.css`**, the box's bundle.
+- **`CLAUDE.md`:** the stack line reads Postgres 16.15 and Node 24.22.3 / npm 11.19.1, matched on the dev Mac. It notes
+  that unattended upgrades are on (read on the box: the Ubuntu archive and `-security`, nothing excluded, no automatic
+  reboot), so Postgres minors land automatically and take effect at the next restart, and that the running version is
+  `SHOW server_version`.
