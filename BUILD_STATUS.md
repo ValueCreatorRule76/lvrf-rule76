@@ -18466,3 +18466,33 @@ has changed since." and no issue button.
 - when the draft matches the current story, the draft's banner and stage line say so, instead of "a draft, not issued".
 
 **Next (Brad, 26 Nov 2026), before 4 Jan 2027:** S4's full-text confirmation on W6's "Add evidence".
+
+### Box maintenance: Ubuntu 24.04 updates and a restart; read-only check clean — 26 Nov 2026 (UTC)
+
+**Done by Brad:** 47 packages updated, no release upgrade, among them Caddy 2.11.4 → 2.11.9 and Node.js 24.18 → 24.22; the
+box restarted onto kernel 6.8.0-151. Pre-update backup `~/lvrf-pre-os-20261126T161631Z.dump`, **TOC 990**, sha256
+`6d104c77…30e7`. The copy at `~/lvrf-backups/` on the Mac was read again here: the same sha256
+(`6d104c775bf28040b522cce84b0b7022bcc1c0f0b7917aa81115c3f7473630e7`), TOC 990. Brad's checks after the restart: four
+services active, none failed, health ok, the 401s, 57 migrations, the story rows unchanged.
+
+**Read after the restart:**
+- **Versions:** kernel `6.8.0-151-generic` (booted 16:25:35 UTC, no reboot pending); Node `v24.22.3`, npm `11.19.1`; Caddy
+  `v2.11.9`; **PostgreSQL 16.15** (server and client; the update took it from 16.14). Data checksums still on.
+- **Services:** `lvrf-api`, `lvrf-research`, `caddy` and `postgresql@16-main` active; 0 failed units. The API active from
+  16:25:50 UTC.
+
+**The read-only check (as in a Gate C: as `lvrf_app`, over ssh with the LVRF key alone, inside `BEGIN READ ONLY`):**
+- **The box:** head `c8a143e`, tree clean; the served `index.html` names `index-DdLM5B0v.js` / `index-CimN7kyl.css`;
+  health 200, `origin_check` configured, `actor_header` off, `ai_research` off; 401 with no session, and 401 at the vhost.
+- **Drift none** (57 migrations, newest `0056_s7b2_one_current_story`; 1,381 schema objects match `0056_snapshot.json`).
+- **233 triggers**, none disabled; `lvrf_story_record_guard` **`beb740bb189f4e503b6a23458abca548`**; the index
+  `story_records_one_current`, `UNIQUE (institution_id, audience) WHERE (withdrawn_at IS NULL)`; ownership clean.
+- **The three story rows unchanged:** `cf99dbf3` withdrawn (`e66fa9ff…`, `d2514a3d…fd363`), `fb473904` current and
+  `78c1a025` withdrawn (each `0460866b…`, `916cee16…38892`), each hash the sha256 of its payload.
+- Runs 27, all locked; **`check_run_hashes` 27/27**.
+- **Since the 16:16:31 UTC backup: nothing written.** Audit none; 0 acts (243 in all); 0 refusals, 0 research-process
+  refusals, 0 record documents, 0 heartbeat events, 0 evidence rows, 0 new sessions.
+
+**For Brad's ruling, not changed here:** `CLAUDE.md`'s stack line now differs from the box. It reads "Postgres 16.14" and
+"Node 24.18.0 / npm 11.16.0, matched on the dev Mac". The box is on 16.15 and Node 24.22.3 / npm 11.19.1, and the dev Mac
+is still on Node 24.18.0.
