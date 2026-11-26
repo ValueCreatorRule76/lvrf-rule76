@@ -7574,3 +7574,53 @@ where it claims it.
   its findings under "Findings on the record").
 - Then a read-only Gate C: 1 `withdraw` act and 1 `issue` act; two story rows, the first withdrawn and the second at
   `storyVersion` 2.
+
+## 36. S7b.2: one current story per account and audience (planned 26 Nov 2026, from S7b.1's Gate C; **approved by Brad, 26 Nov 2026, with one change: one current story per account and audience, not only one per hash**; branch `s7b2-one-issue`)
+
+**Value spine stage:** `return`. The story of record is one document per account and audience. Brad issued the same
+version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and withdrew the second as a duplicate.
+
+**What the code holds (read 26 Nov 2026, `19cf76a`):** the payload is composed from the record alone (`server/lib/story.ts`
+reads no `now()` and no current date), and its stage and audience are inside it. The same hash therefore means that
+nothing on the record has changed. Neither the route nor `lvrf_story_record_guard` refuses a second current story.
+
+**Brad's rulings (26 Nov 2026):**
+- **The rule:** one current (not withdrawn) story per account and audience.
+- **D1, the constraint:** migration `0056`, a partial unique index `UNIQUE (institution_id, audience) WHERE withdrawn_at
+  IS NULL`. It closes the race (two issues at the same instant: the second waits for the first, then fails). The route
+  and the guard keep their own checks, for the plain sentences. It orphans nothing: prod's three rows hold one current.
+- **Two refusals, from the route and the guard alike:**
+  - the same hash: "This story is already issued as <id> on <date> (UTC), and nothing on the record has changed since.
+    Open that one."
+  - a changed record: "<id> is the current story for this audience. Withdraw it first, giving your reason, then issue
+    the new one."
+  - The index's own violation (only in a race) is mapped by the route to the sentence that fits.
+- **D2, the page (`/accounts/:id/story`), while a story for the audience is current:** no issue button.
+  - the hashes match: "Issued as <id> on <date> (UTC). Nothing on the record has changed since.", the id linked;
+  - the record has changed: "The record has changed since <id> was issued. Withdraw it to issue the new story.", the id
+    linked to the issued story, where the steward withdraws it.
+  - The draft route names the current story and whether its hash is the draft's.
+- **A consequence, named (not in Brad's text):** the issued story's note "Newer evidence exists: re-issue to include it."
+  describes an act now refused. It reads "Newer evidence exists: withdraw this story, then issue the new one to include
+  it."
+- **D3:** Gate A's fresh-copy part runs on Brad's dump taken after S7b.1's Gate C (TOC 989), which holds `fb473904`
+  current and `78c1a025` withdrawn.
+
+**Gate A:**
+1. On the fresh copy: `0056` applies (the rows satisfy it); re-issuing Curia's unchanged internal story is refused
+   through the page and the route, with the same-hash sentence, and by SQL through the guard; no row and no act is
+   written; Curia's page shows "Issued as fb473904 on 2026-11-26 (UTC)…" and no button.
+2. On a fixture account: issue; the same again is refused (same hash); the client audience issues; the record changes (a
+   new locked run), and the page shows "The record has changed since…" with no button; issuing is refused (the changed
+   sentence); withdraw through the page; issuing works.
+   Every act goes through the page; any made by route is named "not proven through the page".
+3. Breaks, each restored byte-identical: B1 the route's checks removed (the guard refuses); B2 the guard's checks removed
+   on the clone (the route refuses); B3 the race, two psql sessions on one account and audience (the second insert waits,
+   then fails on the index; with the index dropped it lands, and that is caught); B4 the draft route names no current
+   story (the walk sees a button and fails). A NULL-input refusal for each new check.
+4. Equivalence: the expected difference, the draft route's added field, named; nothing else.
+5. One full regression with `scripts/run_regression.sh` on the pinned snapshot: 0 leftovers, 0 refusals.
+
+**Gate B (Brad's pastes):** `pg_dump -Fc` first; merge and push; deploy; `ownership.sql` then `hardening.sql`; drift, TOC
+and index checks. **Gate C** read-only: the index, the guard's new md5, the three story rows unchanged, Curia's page
+showing "Issued as fb473904…". No act on prod.
