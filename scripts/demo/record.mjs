@@ -45,8 +45,13 @@ const FINALE_DIR = process.env.LVRF_DEMO_FINALE ?? path.join(os.homedir(), 'lvrf
 const CARDS_DIR = process.env.LVRF_DEMO_CARDS ?? path.join(os.homedir(), 'lvrf-backups', 'demo-cards');
 // The argument cards (rendered by cards/build.py), with seconds on screen. Cards carry no caption bar: they speak for themselves.
 const OPENING_CARDS = [
+  // Brad to Matt: who, what Rule 76 is, why LVRF exists, and the legacy.
+  ['00a-matt', 10], ['00b-rule76', 15], ['00c-why-built', 13], ['00d-rule76-lvrf', 13], ['00e-legacy', 13],
+  // The argument.
   ['01-catalyst', 12], ['02-why-now', 13], ['03-not-just-ve', 12], ['04-principles', 13],
   ['05-architecture', 13], ['06-ai-assist', 14], ['07-heartbeat-packs', 13], ['08-spine', 13],
+  // The challenge, then the walkthrough shows what answering it looks like.
+  ['08b-challenge', 11],
 ];
 const FINALE_ORIGIN = 'https://lvrf-demo.invalid';
 
@@ -54,13 +59,14 @@ const FINALE_ORIGIN = 'https://lvrf-demo.invalid';
 const C = {
   introTitle: 'LVRF',
   introSub: 'Learning Value Realization Framework, for Skillsoft',
-  home: ['Accounts', 'The value engineer’s home: every account, its engagements, and where each one stands.'],
+  home: ['Here’s what that looks like', 'The value engineer’s home: every account, its engagements, and where each one stands.'],
   warRoom: ['The War Room', 'Every live engagement in one view: what is due, confirmed, refuted or late.'],
   warRoomMoney: ['The War Room', 'It never sums or averages money across accounts. Each account’s case stands on its own evidence.'],
   storyOpen: ['Story of record · draft', 'Curia’s story, composed from real locked runs only. A draft is on screen only, and never prints.'],
   storyScore: ['A sealed score, with its erratum', 'Every sealed confidence prints with its correction beside it, the same size and weight. Nothing is recomputed or hidden.'],
   storyStage: ['The stage follows the evidence', 'A reference example stays a reference. Nothing is called a result until a verified actual says so.'],
   storyPublished: ['Each published figure, classed', 'What each figure can support, and what it cannot, with its source.'],
+  storyIssued: ['Issued, and sealed', 'Issued by the steward, with its record hash on every page. It is never edited; it can only be withdrawn, and a withdrawal stays on the record.'],
   runs: ['Runs', 'Every run is sealed when it’s locked. We’ll open Skillsoft’s run 3.'],
   run: ['Skillsoft · run 3', 'One run of record. From here, its value case.'],
   caseGeneral: ['Value case · general lens', 'Read from the run’s sealed payload. Nothing on this page is computed in the browser.'],
@@ -222,6 +228,7 @@ const signPage = await signCtx.newPage();
 await signPage.goto(BASE);
 console.log('\nSign in to LVRF in the Chrome window. Recording starts by itself once Accounts home appears.');
 await signPage.getByTestId('accounts-home').waitFor({ timeout: 10 * 60_000 });
+const signCss = await signPage.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href));
 const statePath = path.join(os.tmpdir(), `lvrf-demo-${process.pid}.json`);
 await signCtx.storageState({ path: statePath });
 await signCtx.close();
@@ -253,7 +260,7 @@ await ctx.route(`${FINALE_ORIGIN}/**`, async (route) => {
   try { return route.fulfill({ contentType: 'image/png', body: await readFile(path.join(FINALE_DIR, name)) }); }
   catch { return route.fulfill({ status: 404, body: 'missing' }); }
 });
-let finaleCss = [];
+let finaleCss = signCss;
 await ctx.addInitScript(installOverlay);
 const page = await ctx.newPage();
 
@@ -289,7 +296,11 @@ async function showCards(list) {
   const have = [];
   for (const [n, secs] of list) { try { await access(path.join(CARDS_DIR, `${n}.png`)); have.push([n, secs]); } catch { warn(`Card missing: ${n}.png in ${CARDS_DIR}`); } }
   if (!have.length) return false;
-  if (!page.url().endsWith('/slides.html')) { finaleCss = await cssHrefs(); await page.goto(`${FINALE_ORIGIN}/slides.html`); }
+  if (!page.url().endsWith('/slides.html')) {
+    const css = page.url().startsWith(BASE) ? await cssHrefs() : [];
+    if (css.length) finaleCss = css;
+    await page.goto(`${FINALE_ORIGIN}/slides.html`);
+  }
   for (const [n, secs] of have) { await page.evaluate((src) => window.__slide(src), `cards/${n}.png`); await hold(secs); }
   return true;
 }
@@ -297,10 +308,11 @@ async function settle() { await page.waitForLoadState('networkidle').catch(() =>
 
 try {
   // Intro
-  await page.goto(BASE + '/'); await settle();
-  await card(C.introTitle, C.introSub, 4.5);
-  if (await showCards(OPENING_CARDS)) { await page.goto(BASE + '/'); await settle(); }
-  else await uncard();
+  // Opens on the first card: no app on screen until the walkthrough.
+  if (!(await showCards(OPENING_CARDS))) {
+    await page.goto(BASE + '/'); await settle();
+    await card(C.introTitle, C.introSub, 4.5); await uncard();
+  } else { await page.goto(BASE + '/'); await settle(); }
   await caption(C.home, 4.5);
 
   // ── The War Room (read-only; no money anywhere on it) ──
@@ -386,6 +398,14 @@ try {
     if (await scrollTo(page.getByTestId('sealed-score'), 'center')) await caption(C.storyScore, 6.5);
     if (await scrollTo(page.getByTestId('stage-strip'), 'center')) await caption(C.storyStage, 6);
     if (await scrollTo(page.getByTestId('published'), 'start')) { await caption(C.storyPublished, 5); await glide(400, 2); await hold(1.5); }
+    // The issued story that stands (fb473904). Opening it is a read.
+    const issued = page.locator('a[href*="/stories/fb473904"]');
+    if (await scrollTo(page.getByTestId('issued-stories'), 'center', 1)) {
+      if (await visible(issued, 3000)) {
+        await clickShown(issued);
+        if (await visible(page.getByTestId('story-body'), 10000)) { await settle(); await caption(C.storyIssued, 7); await glide(500, 2.5); await hold(1); }
+      } else warn('Issued story fb473904 not listed; skipped');
+    }
   } else warn('No Story of record page (S7b not deployed yet?); skipped');
 
   // ── Finale: the outputs ──
@@ -417,6 +437,9 @@ try {
   await caption(['', ''], 0);
   await showCards([['10-defensible', 10]]);
   await card(C.outroTitle, C.outroSub, 5);
+  await uncard();
+  // It ends on the challenge.
+  await showCards([['11-challenge-close', 16]]);
 } catch (err) {
   console.error(`\nStopped: ${err.message}`);
   process.exitCode = 1;
