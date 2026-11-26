@@ -7417,3 +7417,157 @@ withdrawn). The latest locked run's `payload.case.hypotheses` is therefore the s
 
 **Mock-ups updated:** the request's notes carry no figure and the help line names figures (`s34-request`); "What to
 lead with" says it reads from the account's case, with its empty sentence shown as a note (`s34-page`).
+
+## 35. S7b.1: the story's placement, reading order and wording (planned 25 Nov 2026, from Brad's print review of `d2514a3d` and his rulings the same day; **not yet approved**)
+
+**Value spine stage:** `verify` and `return`. The story is the document a CFO reads, and S7b.1 fixes what it claims and
+where it claims it.
+
+**Brad's rulings (25 Nov 2026):**
+- **R1, what an issued story seals:** what it says and what each item belongs to; the layout comes from the current page.
+  - Version 2 seals each finding's `engagement_id` and the ledger in reading order.
+  - The `db/schema.ts` comment reads "the payload is byte-identical; the page renders it".
+  - The print's record line names the composer version.
+- **R2:** the engagement is not renamed. The page avoids "engagement" there:
+  - "Each line's latest run is its score";
+  - the heading reads "Each line's latest sealed run" when there is more than one.
+- **R3:** `prepared_by` becomes "Rule 76 Consulting LLC for Skillsoft", sealed in version 2. "for Skillsoft's people" on
+  the cover stays.
+- **R4, the rest as proposed:**
+  - the finding's ledger figure gets its unit;
+  - "in the platform's wording for their kind" is dropped;
+  - the stage-strip wording;
+  - the banner gutter and the # column;
+  - the placement and reading-order checks, each with a break.
+  - The placement fixture is one account with two engagements and a finding on the first.
+- **R5, the order:**
+  1. S7b's Gate C (clean, `BUILD_STATUS.md`, "S7b closed");
+  2. this plan;
+  3. Gate A with a full regression;
+  4. Gate B.
+  - After the deploy, Brad withdraws `cf99dbf3` (`d2514a3d`) and issues version 2, both through the page.
+
+### 1. What the code holds today (read 25 Nov 2026, `f2addac`; read only)
+
+- **The composer, `server/lib/story.ts`:**
+  - It seals, in `payload`, every figure, line and source sentence, plus `prepared_by` (`tenants.name`, the join
+    `t.name AS tenant`). The ledger and its `refs` are numbered in this order:
+    1. each engagement's latest score and its errata;
+    2. **the findings;**
+    3. the baselines, then the targets and actuals;
+    4. the published rows;
+    5. the earlier runs.
+  - A finding carries its `outcome_id`, but no engagement carries its outcomes. The page therefore cannot place a finding.
+- **The page, `client/src/pages/StoryPage.tsx`:**
+  - It prints the findings once, after the loop over all engagements (lines 118–119). Curia's `ee8a58a8` (outcome
+    `e3fb0061`, engagement `c47d075f`, time to productivity) therefore prints under the lot-acceptance block.
+  - It prints the baselines before the findings, so the finding's number reads out of order: locally, 7, 8, then 6.
+  - The ledger's # cell inherits `[overflow-wrap:anywhere]` from `TD`, so "10" can break in a narrow column.
+  - The banners copy the value case's markup (`ValueCasePage.tsx:203-207`): full width, `px-1`.
+- **Why verify_story missed it:**
+  - it checks the finding's words and that the finding has a ledger entry;
+  - the walk checks that every number on the page has an entry;
+  - nothing checks where a finding sits, or the order in which the numbers first appear;
+  - every fixture account has one engagement.
+- **`prepared_by`** prints in four places:
+  - under the title;
+  - in the record line;
+  - in the closing paragraph;
+  - on the cover ("for {prepared_by}'s people").
+  - Under R3 the cover needs the tenant's name separately (D2).
+
+### 2. Decisions (recommendations first)
+
+- **D1. Version 2's payload** (`STORY_VERSION` 2). Each finding gains `engagement_id`, from `value_outcomes.engagement_id`.
+  The ledger is numbered in the full form's reading order:
+  1. for each engagement, its latest score, then its errata;
+  2. for each engagement, its baseline, its target, then its findings;
+  3. the published rows;
+  4. the earlier runs, with their errata, in timeline order;
+  5. the actuals, under Results.
+  - The one-page form keeps the full numbering and lists only the entries it uses, so its numbers ascend with gaps, as
+    today.
+  - The finding's ledger figure reads "214 days, no source on record".
+  - The errata's source reads "Errata on runs 4, 5 and 13 of …", with "in the platform's wording for their kind" dropped.
+- **D2. The preparer.** Version 2 seals two fields: `prepared_by` "Rule 76 Consulting LLC for Skillsoft", and `tenant`
+  "Skillsoft".
+  - The cover reads "for {tenant}'s people" in v2, and "for {prepared_by}'s people" in v1, as it reads now.
+  - "Rule 76 Consulting LLC" is one constant in `story.ts`. The value case and POV keep their own closing wording (not in
+    scope).
+  - **Recommended wording:** "Prepared by Rule 76 Consulting LLC for Skillsoft, with LVRF", with a comma, so it does not
+    read "Skillsoft with LVRF".
+  - **Option:** "Prepared by Rule 76 Consulting LLC for Skillsoft", without "with LVRF".
+- **D3. The page renders both versions.** It reads `storyVersion`.
+  - In v2, each finding prints inside the block of its own engagement.
+  - In v1, the findings print in their own block, "Findings on the record", under no engagement. Their sealed numbers stay
+    as sealed: the v1 order cannot be corrected without a new issue.
+  - The withdrawn `cf99dbf3` keeps rendering this way.
+  - Each `measure` block carries `data-engagement`.
+- **D4. The record line:** "… · story, full · composer version 2 · story record hash … · printed …". `cf99dbf3` prints
+  "composer version 1".
+- **D5. Page wording:**
+  - the heading "Each line's latest sealed run" when there are two or more lines, "The latest sealed run" for one;
+  - the timeline's note "Each line's latest run is its score; earlier runs print here only.";
+  - the stage strip's "needs a second verified actual, from a separate measurement", in both places.
+- **D6. The banner gutter:** on screen, `px-4 sm:px-6`, matching the POV's frame and the 16 px gutter; print keeps `px-1`.
+  The cause is confirmed by a screenshot before the change, and the record says what it was.
+- **D7. The # column:** `whitespace-nowrap [overflow-wrap:normal]` on the # cell, with a fixed width.
+- **D8. `db/schema.ts`'s comment** on `story_records`: "the payload is byte-identical; the page renders it" (R1).
+
+### 3. Checks (in `verify_story` and `story_walk.mjs`), each with a break that must fail
+
+- **Placement:** on a fixture account with two engagements and a finding on the first engagement's outcome (R4).
+  - Each `[data-testid=finding]` sits inside the `[data-testid=measure]` whose `data-engagement` is the engagement that
+    owns its outcome, read from SQL.
+  - The same holds for Curia, on the prod copy.
+  - **Break P:** the findings printed after the loop, as today. Expected to fail.
+- **Reading order:** on the full form, each ledger number first appears on the page in ascending order, 1, 2, 3, with
+  none skipped.
+  - **Break R:** the composer's v1 order (findings before baselines). Expected to fail.
+- **Gutter:** at 390 and 1280, each banner's text starts at least 16 px from the viewport's left edge, and nothing scrolls
+  sideways.
+  - **Break G:** `px-1`.
+- **Column:** in print, every ledger # cell holding a two-digit number is one line high.
+  - **Break C:** the # cell with `[overflow-wrap:anywhere]`.
+- **Words:**
+  - the finding's figure carries its unit;
+  - no ledger source contains "in the platform's wording";
+  - `prepared_by` is "Rule 76 Consulting LLC for Skillsoft";
+  - the cover reads "for Skillsoft's people";
+  - the record line names "composer version 2";
+  - the three page sentences read as in D5;
+  - "engagement" appears in neither the heading nor the timeline note.
+- **v1 still renders:** on the fresh prod copy holding `cf99dbf3`:
+  - the issued story renders;
+  - its findings print under "Findings on the record";
+  - its record line names "composer version 1";
+  - its payload and hash are unchanged.
+- **Existing breaks B1–B9 stay.**
+
+### 4. What it changes and could orphan
+
+- **No migration, and no hardening change:** the TOC stays 989 and the triggers 233.
+  - The payload is `jsonb` and the guard does not read its shape; Gate A confirms this by reading section 39's guard.
+- **`cf99dbf3` is unchanged on the record.** Its payload and hash do not change. After the deploy, its page changes per
+  D3–D7.
+- **Nothing is orphaned.** v1 stays readable because the page reads `storyVersion`.
+
+### 5. Gate A
+
+- Run the full regression on the pinned 14 Nov snapshot, with the port guard, following §27's rules for refused scripts
+  and reruns.
+- On a **fresh prod copy taken after 23:06:11 UTC on 25 Nov** (Brad's dump paste; it holds `cf99dbf3`), run:
+  - `verify_story` in full, including v1's rendering and a v2 issue on the throwaway clone, never on prod;
+  - the equivalence against `f2addac`.
+- Print every page to PDF, look at every page, and check the stage-10 points on both forms.
+
+### 6. Gate B (planned): a redeploy only
+
+- Pull and deploy: a new bundle and the API, with no migration and no hardening change.
+- Expect 233 triggers and TOC 989, unchanged.
+- **Brad's acts, after it, through the page (rule 10):**
+  - withdraw `cf99dbf3`, with his reason;
+  - issue version 2;
+  - print both forms.
+- Then a read-only Gate C: 1 `withdraw` act and 1 `issue` act; two story rows, the first withdrawn and the second at
+  `storyVersion` 2.
