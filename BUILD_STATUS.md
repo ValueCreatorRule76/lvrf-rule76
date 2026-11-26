@@ -18248,4 +18248,5 @@ mistake; the same story stands as fb473904."
 
 **S7b.1 is closed** (26 Nov 2026). Curia's story of record is `fb473904`, version 2.
 
-**Next:** "every script stops its servers by port", then **S7b.2** (one issue per story; 3.1, before 4 Jan 2027).
+**Next, in this order, all before 4 Jan 2027 (Brad, 26 Nov 2026):** "every script stops its servers by port"; then
+**S7b.2** (one issue per story); then S4's full-text confirmation on W6's "Add evidence".

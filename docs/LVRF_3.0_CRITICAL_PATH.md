@@ -297,8 +297,8 @@ cut line applied first.
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
-       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1 and "every script stops its servers by port" (Brad,
-         25 Nov 2026): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
+       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1, "every script stops its servers by port" and S7b.2
+         (Brad, 25–26 Nov 2026; all before 4 Jan 2027): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
          confirmation step (S7a's accepted departure, LVRF_PLAN §33), so the figure's class shows in the form only. The
          class is fixed once recorded, so W6 confirms every field in full, as card 01c's forms do (S4, LVRF_PLAN §23),
          before the pilot's account teams use it.
@@ -482,7 +482,7 @@ cut line applied first.
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 - **S7b.2: one issue per story** (Brad, 26 Nov 2026, from S7b.1's Gate C; **next after "every script stops its servers
-  by port", before 4 Jan 2027**). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
+  by port", before W6's full-text confirmation; all three before 4 Jan 2027** (order ruled by Brad, 26 Nov 2026)). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
   withdrew the second as a duplicate.
   - **Refused:** a duplicate issue, meaning the same account, audience and hash while a story with them is current (not
     withdrawn). Refused in the route and in the database guard (`lvrf_story_record_guard`), with its plain sentence
