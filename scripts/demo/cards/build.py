@@ -23,7 +23,7 @@ for k in ('ink', 'gold', 'silver', 'offwhite', 'ink-45', 'ink-70', 'healthy', 'w
     assert k in T, k
 
 # Production counts, as read at Gate C. Update after a deploy and re-run.
-COUNTS = {'triggers': 229, 'checks': 160, 'migration': '0054', 'as_of': '25 Nov 2026'}
+COUNTS = {'triggers': 233, 'checks': 165, 'migration': '0056', 'as_of': '26 Nov 2026'}
 
 def e(s):
     return html.escape(s, quote=False)
@@ -275,7 +275,7 @@ cards['06-ai-assist'] = page(
 .st .k { font-family: 'Bebas Neue'; font-size: 38px; color: var(--gold); line-height: 1; padding-bottom: 8px; border-bottom: 2px solid var(--gold); margin-bottom: 12px; }
 .st h4 { font-family: 'Barlow Condensed'; font-weight: 600; font-size: 21px; margin-bottom: 6px; }
 .st p { font-size: 16px; line-height: 1.38; color: var(--silver); }
-.guard { border-left: 4px solid var(--critical); background: rgba(143,42,42,.16); padding: 14px 20px; font-size: 19px; line-height: 1.4; }
+.guard { border-left: 4px solid var(--critical); background: color-mix(in srgb, var(--critical) 16%, transparent); padding: 14px 20px; font-size: 19px; line-height: 1.4; }
 .lower { display: grid; grid-template-columns: 1fr 440px; gap: 56px; align-items: start; }
 .drift h3 { font-family: 'Barlow Condensed'; font-weight: 600; font-size: 22px; color: var(--gold); margin-bottom: 8px; }
 .drift p { font-size: 17.5px; line-height: 1.38; color: var(--silver); margin-bottom: 7px; }

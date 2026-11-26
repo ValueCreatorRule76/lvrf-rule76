@@ -9,3 +9,8 @@ records/out/
 *.dump
 .DS_Store
 .vscode/settings.json
+
+# Demo cards: scripts/demo/cards/build.py writes each card's HTML beside it, and its PNGs to png/ unless LVRF_CARDS_OUT is set.
+scripts/demo/cards/*.html
+scripts/demo/cards/*.png
+scripts/demo/cards/png/
