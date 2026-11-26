@@ -152,7 +152,7 @@ for t in research_clearances_guard research_clearances_immutable research_cleara
 done; ok "  ...the sixteen new triggers, each in the hardening manifest"
 [ "$(runs_md5)" = "$RUNS0" ] && ok "every one of the $N_RUNS0 sealed runs byte-identical after 0051 and section 36" || bad "a sealed run changed"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: $DRIFT" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 57 migrations, newest 0056_s7b2_one_current_story" && ok "drift: $DRIFT" || bad "drift: $DRIFT"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | grep -qE "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN (S2: +18)" || bad "plain: $PLAIN"
 OWN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_ownership.ts 2>&1 | tail -1)"

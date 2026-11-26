@@ -2540,6 +2540,12 @@ export const executiveSummaries = pgTable('executive_summaries', {
  * withdrawal fields are set together and once (story_records_withdrawal_is_complete; story_records_guard refuses every
  * other UPDATE); never deleted (story_records_no_delete). A reference example's story is the stage 'reference' and the
  * internal audience only (D3, D4; story_records_reference_internal, and the guard reads the account's marker).
+ *
+ * S7b.2 (LVRF_PLAN §36, Brad 26 Nov 2026): ONE CURRENT STORY PER ACCOUNT AND AUDIENCE
+ * (story_records_one_current, a partial unique index, so two issues at the same instant cannot both land). A new story
+ * for the audience is issued only after the current one is withdrawn. The route and the guard refuse first, with the
+ * plain sentence: the same hash ("already issued … nothing on the record has changed since") or a changed record
+ * ("<id> is the current story for this audience. Withdraw it first …").
  */
 export const storyRecords = pgTable('story_records', {
   id: id(),
@@ -2556,6 +2562,7 @@ export const storyRecords = pgTable('story_records', {
   withdrawalReason: text('withdrawal_reason'),
 }, (t) => [
   index('story_records_institution_idx').on(t.institutionId),
+  uniqueIndex('story_records_one_current').on(t.institutionId, t.audience).where(sql`${t.withdrawnAt} IS NULL`),
   check('story_records_audience_known', sql`${t.audience} IN ('internal', 'client')`),
   check('story_records_stage_known', sql`${t.stage} IN ('reference', 'decision', 'realization', 'compounding')`),
   check('story_records_reference_internal', sql`${t.stage} <> 'reference' OR ${t.audience} = 'internal'`),

@@ -90,7 +90,7 @@ trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON
 [ "$(trig)" = "233" ] && ok "233 triggers (S7b section 39: +4) (§32 section 38: +2) (S4 section 37: +1)" || bad "triggers: $(trig)"
 PLAIN="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_plain_refusals.ts 2>&1 | tail -1)"
 printf '%s' "$PLAIN" | has -E "^165 CHECKs in the database: 165 with a plain sentence, 0 without; 0 stale" && ok "$PLAIN" || bad "plain: $PLAIN"
-DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "$DRIFT" || bad "drift: $DRIFT"
+DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"; printf '%s' "$DRIFT" | has "schema drift: none (journal 57 migrations, newest 0056_s7b2_one_current_story" && ok "$DRIFT" || bad "drift: $DRIFT"
 [ "$(q "SELECT count(*) FROM business_metrics WHERE pack_basis_evidence_id IS NOT NULL")" = "0" ] && ok "pack_basis_evidence_id: NULL on every metric of the copy (nothing backfilled, nothing orphaned)" || bad "pack_basis_evidence_id set on the copy"
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 S="$(q "SELECT steward_person_id FROM tenants WHERE steward_person_id IS NOT NULL LIMIT 1")"; S_EMAIL="$(q "SELECT email FROM persons WHERE id = '$S'")"

@@ -134,7 +134,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "233" ] && ok "233 triggers (§31 adds none; §32 section 38: +2)" || bad "triggers: $(trig)"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 57 migrations, newest 0056_s7b2_one_current_story" && ok "drift: none" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical after hardening" || bad "a run changed"
 [ "$(q "SELECT md5(to_jsonb(o)::text) FROM value_outcomes o WHERE id = '$CURIA_O'")" = "$ROW0" ] && ok "Curia's e3fb0061 byte-identical after hardening (D2: never re-read)" || bad "e3fb0061 changed"
 

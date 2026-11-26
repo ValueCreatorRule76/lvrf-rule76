@@ -11,6 +11,12 @@
 //            headline as in draft; a screenshot of each form
 //   html     /stories/E.STORY: prints the md5 of the story body's markup (a re-render is byte-identical)
 //   refused  /accounts/E.INST/story?audience=client: the refusal for a reference example, no issue control
+//   current  S7b.2 (LVRF_PLAN §36): /accounts/E.INST/story (E.AUDIENCE) while E.CURRENT is current: E.EXPECT_CURRENT
+//            'same' shows "Issued as <id> on E.CURRENT_ON (UTC). Nothing on the record has changed since.", 'changed'
+//            shows "The record has changed since <id> was issued. Withdraw it to issue the new story.", each with the id
+//            linked to /stories/E.CURRENT and no issue control; 'none' shows the issue control and neither line
+//   withdraw /stories/E.STORY as the steward: "Withdraw…", the reason E.REASON, "Yes, withdraw it"; the withdrawn note
+// issue takes E.AUDIENCE (internal unless 'client').
 //
 // S7b.1 (LVRF_PLAN §35), in every body read:
 //   E.FINDING_OWNERS  JSON {finding id: engagement id}, from SQL: on the full form each finding sits inside the measure
@@ -159,7 +165,7 @@ for (const s of SECTIONS) {
     await shot('story-draft');
   }
   if (s === 'issue') {
-    await go(`/accounts/${E.INST}/story`);
+    await go(`/accounts/${E.INST}/story${E.AUDIENCE === 'client' ? '?audience=client' : ''}`);
     await waitFor(`!!document.querySelector('[data-testid=issue-open]')`);
     await ev(`document.querySelector('[data-testid=issue-open]').click()`);
     await waitFor(`!!document.querySelector('[data-testid=issue-confirm]')`);
@@ -240,6 +246,47 @@ for (const s of SECTIONS) {
     const html = await ev(`document.querySelector('[data-testid=story-body]').outerHTML`);
     const { createHash } = await import('node:crypto');
     console.log(`HTML ${createHash('md5').update(html ?? '').digest('hex')}`);
+  }
+  if (s === 'current') {
+    await go(`/accounts/${E.INST}/story${E.AUDIENCE === 'client' ? '?audience=client' : ''}`);
+    await waitFor(`!!document.querySelector('[data-testid=story-body]')`);
+    await sleep(300);
+    const want = E.EXPECT_CURRENT;
+    const id8 = String(E.CURRENT ?? '').slice(0, 8);
+    const line = async (tid) => ev(`document.querySelector('[data-testid=${tid}]')?.textContent ?? null`);
+    const href = async (tid) => ev(`document.querySelector('[data-testid=${tid}] a')?.getAttribute('href') ?? null`);
+    const button = await ev(`!!document.querySelector('[data-testid=issue-open]')`);
+    if (want === 'same') {
+      const t = await line('issued-as');
+      check(t === `Issued as ${id8} on ${E.CURRENT_ON} (UTC). Nothing on the record has changed since.`, `current: "Issued as ${id8} on ${E.CURRENT_ON} (UTC). Nothing on the record has changed since."`, t);
+      check((await href('issued-as')) === `/stories/${E.CURRENT}`, `current: ${id8} links to its issued story`, await href('issued-as'));
+      check(!(await line('record-changed')), 'current: not "The record has changed"');
+    } else if (want === 'changed') {
+      const t = await line('record-changed');
+      check(t === `The record has changed since ${id8} was issued. Withdraw it to issue the new story.`, `current: "The record has changed since ${id8} was issued. Withdraw it to issue the new story."`, t);
+      check((await href('record-changed')) === `/stories/${E.CURRENT}`, `current: ${id8} links to its issued story, where it is withdrawn`, await href('record-changed'));
+      check(!(await line('issued-as')), 'current: not "Issued as"');
+    }
+    if (want === 'none') {
+      check(button, 'current: no story is current, so "Issue this story…" is offered');
+      check(!(await line('issued-as')) && !(await line('record-changed')), 'current: neither line');
+    } else {
+      check(!button, `current: no issue control while ${id8} is current`);
+    }
+    await shot(`story-current-${want}`);
+  }
+  if (s === 'withdraw') {
+    await go(`/stories/${E.STORY}`);
+    await waitFor(`!!document.querySelector('[data-testid=withdraw-open]')`);
+    await ev(`document.querySelector('[data-testid=withdraw-open]').click()`);
+    await waitFor(`!!document.querySelector('[data-testid=withdraw-reason]')`);
+    await ev(`(()=>{const el=document.querySelector('[data-testid=withdraw-reason]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,${JSON.stringify(E.REASON ?? '')});el.dispatchEvent(new Event('input',{bubbles:true}));return true})()`);
+    await sleep(200);
+    await ev(`document.querySelector('[data-testid=withdraw-yes]').click()`);
+    const w = await waitFor(`!!document.querySelector('[data-testid=withdrawn-note]')`);
+    const t = w ? await ev(`document.querySelector('[data-testid=withdrawn-note]').textContent`) : '';
+    check(w && t.includes(E.REASON ?? '\u0000'), 'withdraw: withdrawn through the page, with its reason', t);
+    if (w) console.log(`WITHDRAWN ${E.STORY}`);
   }
   if (s === 'refused') {
     await go(`/accounts/${E.INST}/story?audience=client`);

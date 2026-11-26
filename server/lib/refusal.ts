@@ -44,6 +44,10 @@ const PLAIN_UNIQUE: Record<string, (detail: string | undefined) => string> = {
   // C1 review (Brad, 25 Oct 2026): one erratum per run and correction; each superseded at most once.
   run_errata_one_per_correction: () =>
     'An erratum for this correction is already recorded on this run; correct it with a new erratum that supersedes it.',
+  // S7b.2 (LVRF_PLAN §36): one current story per account and audience. Only in a race: the issue route answers the
+  // sentence that fits, from the story that landed first; this is the fallback when that story cannot be read.
+  story_records_one_current: () =>
+    'A story for this audience was issued a moment ago and is the current one; open it from the list, or withdraw it first to issue another.',
   run_errata_superseded_once: () =>
     'That erratum has already been superseded; supersede the current one instead.',
   persons_email_key: (detail) => {
@@ -122,7 +126,7 @@ export interface RefusalContext {
  * which this write is deliberately not part of, and which may be rolling
  * back at this exact moment regardless.
  */
-async function recordRefusal(
+export async function recordRefusal(
   pool: Pool,
   req: Request,
   context: RefusalContext,

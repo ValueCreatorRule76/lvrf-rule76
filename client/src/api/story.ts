@@ -45,6 +45,8 @@ export interface IssuedStory {
   newer_evidence: { ids: string[]; note: string } | null;
   payload: StoryPayload;
 }
+/** S7b.2 (LVRF_PLAN §36): the account's current story for the audience, and whether nothing has changed since (its hash is the draft's). */
+export interface CurrentStory { id: string; issued_at: string; same: boolean }
 export interface StoryListItem {
   id: string; audience: StoryAudience; stage: StoryStage; payload_hash: string; issued_at: string; issued_by: string;
   withdrawn_at: string | null; withdrawn_by: string | null; withdrawal_reason: string | null;

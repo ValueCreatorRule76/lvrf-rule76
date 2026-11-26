@@ -4522,7 +4522,10 @@ CREATE TRIGGER persons_email_rules BEFORE INSERT OR UPDATE ON persons FOR EACH R
 --   INSERT: the account is one of the company's, current; the issuer is the steward, as the acting person; the seal is
 --     the sha256 of the payload's text (the route never sets it on its own); the payload names the same account, stage
 --     and audience as the row; an account with a current reference-example marker is the stage 'reference', and no
---     other account is (D3); no withdrawal yet.
+--     other account is (D3); no withdrawal yet; and (S7b.2, LVRF_PLAN §36, Brad 26 Nov 2026) no story for the account and
+--     audience is current: the same hash is "already issued … nothing on the record has changed since", a changed record
+--     is "<id> is the current story for this audience. Withdraw it first …". The race between two issues is closed by
+--     story_records_one_current (0056), a partial unique index; this check gives the sentence.
 --   UPDATE: only the withdrawal, once, by the steward as the acting person; nothing else ever changes.
 -- story_records_audit (AFTER INSERT OR UPDATE), story_records_no_delete (BEFORE DELETE); story_records_act_present is
 -- section 27's (an 'issue' act on issuing, a 'withdraw' act on withdrawing, in the same transaction).
@@ -4530,6 +4533,7 @@ CREATE OR REPLACE FUNCTION lvrf_story_record_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
   marked boolean;
+  cur record;
 BEGIN
   IF TG_OP = 'UPDATE' THEN
     IF OLD.withdrawn_at IS NOT NULL THEN
@@ -4580,6 +4584,19 @@ BEGIN
   END IF;
   IF NOT marked AND NEW.stage = 'reference' THEN
     RAISE EXCEPTION 'LVRF: story_records: Only a reference example''s story is a reference story.'
+      USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+  END IF;
+  SELECT s.id, s.payload_hash, s.issued_at INTO cur FROM story_records s
+   WHERE s.institution_id = NEW.institution_id AND s.audience = NEW.audience AND s.withdrawn_at IS NULL
+   ORDER BY s.issued_at DESC LIMIT 1;
+  IF FOUND THEN
+    IF cur.payload_hash = NEW.payload_hash THEN
+      RAISE EXCEPTION 'LVRF: story_records: This story is already issued as % on % (UTC), and nothing on the record has changed since. Open that one.',
+        left(cur.id::text, 8), to_char(cur.issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+        USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
+    END IF;
+    RAISE EXCEPTION 'LVRF: story_records: % is the current story for this audience. Withdraw it first, giving your reason, then issue the new one.',
+      left(cur.id::text, 8)
       USING ERRCODE = 'check_violation', CONSTRAINT = 'story_records_guard';
   END IF;
   NEW.issued_at := now();

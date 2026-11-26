@@ -8,7 +8,7 @@ import { MARKER_KIND, type MarkerKind } from '../api/pov';
 import { PrintClose, PrintCover, PrintRecordLine } from '../components/print/PrintFamily';
 import { printFontsReady } from '../components/print/printFonts';
 import { KICKER_PRINT } from '../components/print/printText';
-import type { IssuedStory, StoryAudience, StoryEngagement, StoryListItem, StoryPayload, StoryRun, StoryStage } from '../api/story';
+import type { CurrentStory, IssuedStory, StoryAudience, StoryEngagement, StoryListItem, StoryPayload, StoryRun, StoryStage } from '../api/story';
 
 /**
  * S7b (3.1; LVRF_PLAN §27; Brad's rulings 24-25 Nov 2026) — the story of record.
@@ -235,11 +235,13 @@ export function StoryDraftPage() {
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [issued, setIssued] = useState<string | null>(null);
+  const [current, setCurrent] = useState<CurrentStory | null>(null);
 
   const load = useCallback(async () => {
     const r = await apiFetch(`/api/institutions/${id}/story-draft?audience=${audience}`);
     const b = await r.json().catch(() => ({}));
     setDraft(r.ok ? (b.payload as StoryPayload) : (b.message ?? 'The draft could not be composed.'));
+    setCurrent(r.ok ? ((b.current_story ?? null) as CurrentStory | null) : null);
     const l = await apiFetch(`/api/institutions/${id}/stories`);
     if (l.ok) setStories(((await l.json()).stories ?? []) as StoryListItem[]);
   }, [id, audience]);
@@ -283,7 +285,13 @@ export function StoryDraftPage() {
           : <>
               <div className="mb-4 border border-rule bg-paper p-3" data-testid="issue-panel">
                 {issued && <p className="m-0 mb-2 text-[12.5px] text-healthy" data-testid="issued-note">Issued. <Link to={`/stories/${issued}`} className={'underline ' + FOCUS_RING}>Open the issued story</Link> to print it.</p>}
-                {!confirming
+                {/* S7b.2 (LVRF_PLAN §36, Brad 26 Nov 2026): one current story per account and audience. While one is current,
+                    no issue button: the same hash says so; a changed record sends the steward to withdraw it first. */}
+                {current
+                  ? (current.same
+                      ? <p className="m-0 text-[12.5px] text-ink-70" data-testid="issued-as">Issued as <Link to={`/stories/${current.id}`} title={current.id} className={'text-gold-ink underline ' + FOCUS_RING}>{current.id.slice(0, 8)}</Link> on {current.issued_at.slice(0, 10)} (UTC). Nothing on the record has changed since.</p>
+                      : <p className="m-0 text-[12.5px] text-warning" data-testid="record-changed">The record has changed since <Link to={`/stories/${current.id}`} title={current.id} className={'text-gold-ink underline ' + FOCUS_RING}>{current.id.slice(0, 8)}</Link> was issued. Withdraw it to issue the new story.</p>)
+                  : !confirming
                   ? <button type="button" onClick={() => setConfirming(true)} disabled={Boolean(stewardOnly)} title={stewardOnly}
                       className={'border border-ink px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[.1em] text-ink hover:bg-ink hover:text-offwhite disabled:border-silver disabled:text-ink-45 disabled:hover:bg-transparent ' + FOCUS_RING}
                       data-testid="issue-open">Issue this story…</button>

@@ -67,8 +67,8 @@ PORT=3461; VITE_PORT=5461; CDP_PORT=9581
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_story.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-PAGE=client/src/pages/StoryPage.tsx; COMP=server/lib/story.ts; CSS=client/src/index.css
-EDITED=("$PAGE" "$COMP" "$CSS")
+PAGE=client/src/pages/StoryPage.tsx; COMP=server/lib/story.ts; CSS=client/src/index.css; ROUTE=server/routes/stories.ts
+EDITED=("$PAGE" "$COMP" "$CSS" "$ROUTE")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -133,15 +133,30 @@ broke() {  # LABEL LOG NEEDLE — a break is caught when the walk FAILS on the n
   grep -q "^FAIL .*$3" "$2" && ok "$1: caught — $(grep -m1 "^FAIL .*$3" "$2" | cut -c1-200)" || bad "$1: NOT caught ($(fails "$2") failures): $(grep -m1 '^FAIL' "$2" | cut -c1-200)"
 }
 draft() { req GET "/api/institutions/$1/story-draft${2:+?audience=$2}"; cp "$W/r.json" "$W/draft.json"; }
+# S7b.2 (LVRF_PLAN §36): one current story per account and audience, and its two sentences (Brad's wording, 26 Nov 2026).
+SAME_SAYS() { echo "This story is already issued as ${1:0:8} on $2 (UTC), and nothing on the record has changed since. Open that one."; }
+CHANGED_SAYS() { echo "${1:0:8} is the current story for this audience. Withdraw it first, giving your reason, then issue the new one."; }
+INSA() {  # INSTITUTION AUDIENCE STAGE PAYLOAD HASH_SQL ISSUER — an INSERT for any account
+  printf "INSERT INTO story_records (tenant_id, institution_id, audience, stage, payload, payload_hash, issued_by_person_id) VALUES ('%s', '%s', '%s', '%s', \$p\$%s\$p\$::jsonb, %s, '%s')" "$TEN" "$1" "$2" "$3" "$4" "$5" "$6"; }
+HXOF() { printf "encode(sha256(convert_to(\$p\$%s\$p\$::jsonb::text, 'UTF8')), 'hex')" "$1"; }
+DPAY() { node -e "console.log(JSON.stringify(require('$W/draft.json').payload))"; }
+day_of() { q "SELECT to_char(issued_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') FROM story_records WHERE id = '$1'"; }
+counts() { q "SELECT (SELECT count(*) FROM story_records) || '/' || (SELECT count(*) FROM governance_acts WHERE subject_table = 'story_records')"; }
+route_refusals() { q "SELECT count(*) FROM refusals WHERE source = 'route' AND endpoint = 'POST /api/institutions/:institutionId/stories' AND message = \$m\$$1\$m\$"; }
 dj() { node -e "const b=require('$W/draft.json'); const p=b.payload; console.log($1)"; }
 LOG="$W/main.log"; exec > >(tee "$LOG") 2>&1
 
-step "1. Clone the prod copy, migrate to 0055, harden"
+step "1. Clone the prod copy, migrate to 0056, harden"
 dropdb --if-exists "$VERIFY_DB"
 make_clone "$VERIFY_DB" lvrf_prodcopy || { bad "clone"; exit 1; }
 RUNS0="$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")"
 EV0="$(q "SELECT md5(string_agg(md5(e::text), '' ORDER BY id)) FROM evidence e")"
-migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated to 0055" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+migrate_clone "$VERIFY_DB" > "$W/migrate.log" 2>&1 && ok "migrated to 0056 (S7b.2: the copy's story rows satisfy one current story per account and audience)" || { bad "migrate: $(tail -5 "$W/migrate.log")"; exit 1; }
+[ "$(q "SELECT indexdef FROM pg_indexes WHERE indexname = 'story_records_one_current'")" = "CREATE UNIQUE INDEX story_records_one_current ON public.story_records USING btree (institution_id, audience) WHERE (withdrawn_at IS NULL)" ] \
+  && ok "S7b.2: story_records_one_current, UNIQUE (institution_id, audience) WHERE withdrawn_at IS NULL" || bad "the index: $(q "SELECT indexdef FROM pg_indexes WHERE indexname = 'story_records_one_current'")"
+[ "$(q "SELECT count(*) FROM (SELECT 1 FROM story_records WHERE withdrawn_at IS NULL GROUP BY institution_id, audience HAVING count(*) > 1) x")" = 0 ] \
+  && ok "  ...SQL: no account and audience with two current stories in the copy ($(q "SELECT count(*) FROM story_records") rows, $(q "SELECT count(*) FROM story_records WHERE withdrawn_at IS NULL") current)" || bad "  ...two current stories"
+
 psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>&1 && psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/hardening.sql > "$W/hard.log" 2>&1 \
   && ok "hardened (0 ERROR lines)" || { bad "hardening: $(grep -m2 ERROR "$W/hard.log")"; exit 1; }
 [ "$(trig)" = "233" ] && ok "233 triggers (section 39: +4)" || bad "triggers: $(trig)"
@@ -150,7 +165,7 @@ psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f db/ownership.sql > /dev/null 2>
 [ "$(q "SELECT has_table_privilege('lvrf_app','story_records','INSERT')::text || has_table_privilege('lvrf_app','story_records','UPDATE')::text || has_table_privilege('lvrf_app','story_records','DELETE')::text")" = "truetruefalse" ] \
   && ok "lvrf_app: insert and update on story_records, never delete" || bad "story_records grants"
 DRIFT="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 56 migrations, newest 0055_s7b_story_records" && ok "drift: none" || bad "drift: $DRIFT"
+printf '%s' "$DRIFT" | grep -q "schema drift: none (journal 57 migrations, newest 0056_s7b2_one_current_story" && ok "drift: none" || bad "drift: $DRIFT"
 [ "$(q "SELECT md5(string_agg(md5(r::text), '' ORDER BY id)) FROM value_runs r")" = "$RUNS0" ] && ok "every run byte-identical" || bad "a run changed"
 [ "$(q "SELECT md5(string_agg(md5(e::text), '' ORDER BY id)) FROM evidence e")" = "$EV0" ] && ok "every evidence row byte-identical" || bad "an evidence row changed"
 
@@ -209,6 +224,33 @@ R13="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagemen
 HE="$(q "SELECT json_agg(id) FROM run_errata x WHERE value_run_id = '$R13' AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)")"
 CURIA=(INST="$C" STAGE=reference TITLE="Story of record" HEADLINE_ERRATA="$HE" FINDING_OWNERS="$OWNERS_C" TENANT="$TENANT")
 for w in 1280 390; do walk draft,refused "draft $w" "$W/d$w.log" WIDTH=$w "${CURIA[@]}"; tally "$W/d$w.log"; done
+step "3a. S7b.2: Curia's current story (one current story per account and audience)"
+CUR="$(q "SELECT id FROM story_records WHERE institution_id = '$C' AND audience = 'internal' AND withdrawn_at IS NULL")"
+if [ -z "$CUR" ]; then
+  echo "  NOT CHECKED  this copy holds no current internal story for Curia"
+else
+  draft "$C"; DP="$(DPAY)"
+  SAME="$(q "SELECT (payload_hash = $(HXOF "$DP"))::text FROM story_records WHERE id = '$CUR'")"
+  [ "$SAME" = true ] && WANT=same || WANT=changed
+  CUR_ON="$(day_of "$CUR")"
+  [ "$(dj 'b.current_story && b.current_story.id')" = "$CUR" ] && [ "$(dj 'String(b.current_story && b.current_story.same)')" = "$SAME" ] \
+    && ok "the draft names Curia's current story ${CUR:0:8}, and SQL agrees its hash is $([ "$SAME" = true ] && echo "the draft's (nothing has changed)" || echo "not the draft's (the record has changed)")" \
+    || bad "the draft's current story: $(dj 'JSON.stringify(b.current_story)') (SQL: $CUR, same $SAME)"
+  for w in 1280 390; do walk current "current $w" "$W/c$w.log" WIDTH=$w INST="$C" EXPECT_CURRENT="$WANT" CURRENT="$CUR" CURRENT_ON="$CUR_ON"; tally "$W/c$w.log"; done
+  [ "$WANT" = same ] && SAYS="$(SAME_SAYS "$CUR" "$CUR_ON")" || SAYS="$(CHANGED_SAYS "$CUR")"
+  K0="$(counts)"; RR0="$(route_refusals "$SAYS")"
+  req POST "/api/institutions/$C/stories" '{"audience":"internal"}'
+  [ "$CODE" = 409 ] && [ "$(said)" = "$SAYS" ] && ok "issuing again is refused by the route -> 409: \"$SAYS\"" || bad "issue again -> $CODE $(said)"
+  [ "$(counts)" = "$K0" ] && ok "  ...no story row and no act written" || bad "  ...rows/acts: $(counts) (were $K0)"
+  [ "$(route_refusals "$SAYS")" = "$((RR0 + 1))" ] && ok "  ...the refusal recorded, as the route's, with its sentence" || bad "  ...route refusals: $(route_refusals "$SAYS")"
+  sqlrefused "an issue while ${CUR:0:8} is current, by SQL (the guard)" "$(INSA "$C" internal reference "$DP" "$(HXOF "$DP")" "$S")" "$SAYS"
+  RSN="Verification: withdrawn on the clone so Curia's story can be issued again (S7b.2)."
+  walk withdraw "withdraw ${CUR:0:8}" "$W/wc.log" STORY="$CUR" REASON="$RSN"; tally "$W/wc.log"
+  [ "$(q "SELECT (withdrawn_at IS NOT NULL)::text || ':' || withdrawal_reason FROM story_records WHERE id = '$CUR'")" = "true:$RSN" ] \
+    && [ "$(q "SELECT count(*) FROM governance_acts WHERE subject_id = '$CUR' AND act = 'withdraw' AND actor_person_id = '$S'")" = 1 ] \
+    && ok "  ...${CUR:0:8} withdrawn through the page, by the steward, with its act" || bad "  ...the withdrawal: $(q "SELECT withdrawn_at FROM story_records WHERE id = '$CUR'")"
+  walk current "current none" "$W/cn.log" INST="$C" EXPECT_CURRENT=none; tally "$W/cn.log"
+fi
 N0="$(q "SELECT count(*) FROM story_records")"
 walk issue "issue" "$W/issue.log" "${CURIA[@]}"; tally "$W/issue.log"
 ST="$(grep '^ISSUED' "$W/issue.log" | cut -d' ' -f2)"
@@ -290,7 +332,7 @@ SUP="$(node -e "const [kind,summary,prov,ref,q,how]=process.argv.slice(1);consol
   "$(q "SELECT kind FROM evidence WHERE id = '$ROW'")" "$(q "SELECT summary FROM evidence WHERE id = '$ROW'")" "$(q "SELECT provenance FROM evidence WHERE id = '$ROW'")" "$(q "SELECT source_reference FROM evidence WHERE id = '$ROW'")" "$(q "SELECT quote_text FROM evidence WHERE id = '$ROW'")" "$(q "SELECT how_read FROM evidence WHERE id = '$ROW'")")"
 P2="$(q "SELECT md5(payload::text) FROM story_records WHERE id = '$ST2'")"
 expect POST "/api/evidence/$ROW/supersede" "$SUP" 201 "  ...one of its cited rows superseded"
-req GET "/api/stories/$ST2"; [ "$(rj 'b.newer_evidence && b.newer_evidence.note')" = "Newer evidence exists: re-issue to include it." ] && ok "\"Newer evidence exists: re-issue to include it.\"" || bad "newer evidence: $(said)"
+req GET "/api/stories/$ST2"; [ "$(rj 'b.newer_evidence && b.newer_evidence.note')" = "Newer evidence exists: withdraw this story, then issue the new one to include it." ] && ok "\"Newer evidence exists: withdraw this story, then issue the new one to include it.\" (S7b.2)" || bad "newer evidence: $(said)"
 [ "$(q "SELECT md5(payload::text) FROM story_records WHERE id = '$ST2'")" = "$P2" ] && ok "...and the issued story is unchanged" || bad "the story changed"
 
 step "5. The database, as lvrf_app (rolled back)"
@@ -303,7 +345,9 @@ sqlrefused "a reference example issued as Decision" "$(INS internal decision "$P
 PAYC="$(node -e "const p=JSON.parse(process.argv[1]);p.audience='client';console.log(JSON.stringify(p))" "$PAY")"
 sqlrefused "a client copy of a reference example" "$(INS client reference "$PAYC" "encode(sha256(convert_to(\$p\$$PAYC\$p\$::jsonb::text, 'UTF8')), 'hex')" "$S")" "story_records_reference_internal"
 sqlrefused "a story issued by someone other than the steward" "$(INS internal reference "$PAY" "$HX" "$OTHER")" "Only the steward issues a story of record" "$OTHER"
-sqlrefused "a story issued with no act recorded" "$(INS internal reference "$PAY" "$HX" "$S")" "a story issued with no governance act recorded"
+# (S7b.2: "a story issued with no act recorded" moved to step 6c: here ${ST2:0:8} is current, and the guard refuses first.)
+sqlrefused "S7b.2 NULL input: a NULL hash while ${ST2:0:8} is current" "$(INS internal reference "$PAY" "NULL" "$S")" "The story's hash is not the hash of what it prints."
+sqlrefused "S7b.2 NULL input: a NULL audience" "$(printf "INSERT INTO story_records (tenant_id, institution_id, audience, stage, payload, payload_hash, issued_by_person_id) VALUES ('%s', '%s', NULL, 'reference', \$p\$%s\$p\$::jsonb, %s, '%s')" "$TEN" "$C" "$PAY" "$HX" "$S")" "The story names a different account, stage or audience"
 sqlrefused "an issued story edited" "UPDATE story_records SET audience = 'internal', payload = payload || '{\"title\":\"Edited\"}'::jsonb WHERE id = '$ST2'" "A story is sealed when it is issued; it is withdrawn, never edited."
 sqlrefused "a withdrawn story withdrawn again" "UPDATE story_records SET withdrawal_reason = 'Verification: again, and again.' WHERE id = '$ST'" "a withdrawn story stays on the record as it is"
 sqlrefused "a withdrawal by someone other than the steward" "UPDATE story_records SET withdrawn_at = now(), withdrawn_by_person_id = '$OTHER', withdrawal_reason = 'Verification: not the steward.' WHERE id = '$ST2'" "Only the steward withdraws a story of record" "$OTHER"
@@ -359,6 +403,41 @@ stage_is "a second verified run on a separate measurement" compounding "Success 
 walk draft "compounding" "$W/com.log" INST="$INST" STAGE=compounding TITLE="Success story"; tally "$W/com.log"
 grep -q 'results-heading' "$PAGE" && ok "\"Results\" renders only at Realization and above (the walks above: absent at Decision)" || bad "no Results section in the page"
 
+step "6c. S7b.2 on the fixture account: one current story per account and audience, every act through the page"
+walk current "fixture: none" "$W/f0.log" INST="$INST" EXPECT_CURRENT=none; tally "$W/f0.log"
+walk issue "fixture: issue" "$W/f1.log" INST="$INST"; tally "$W/f1.log"; SF1="$(grep '^ISSUED' "$W/f1.log" | cut -d' ' -f2)"
+[ -n "$SF1" ] && [ "$(q "SELECT audience || ':' || (withdrawn_at IS NULL)::text FROM story_records WHERE id = '$SF1'")" = "internal:true" ] && ok "  ...${SF1:0:8} issued through the page, internal, current" || bad "  ...fixture issue: $SF1"
+SF1_ON="$(day_of "$SF1")"
+walk current "fixture: same" "$W/f2.log" INST="$INST" EXPECT_CURRENT=same CURRENT="$SF1" CURRENT_ON="$SF1_ON"; tally "$W/f2.log"
+K0="$(counts)"
+expect POST "/api/institutions/$INST/stories" '{"audience":"internal"}' 409 "the same story again (nothing changed)" "$(SAME_SAYS "$SF1" "$SF1_ON")"
+[ "$(said)" = "$(SAME_SAYS "$SF1" "$SF1_ON")" ] && ok "  ...in exactly Brad's words" || bad "  ...said: $(said)"
+[ "$(counts)" = "$K0" ] && ok "  ...no story row and no act written" || bad "  ...rows/acts: $(counts) (were $K0)"
+walk issue "fixture: client" "$W/f3.log" INST="$INST" AUDIENCE=client; tally "$W/f3.log"; SC1="$(grep '^ISSUED' "$W/f3.log" | cut -d' ' -f2)"
+[ "$(q "SELECT string_agg(audience, ',' ORDER BY audience) FROM story_records WHERE institution_id = '$INST' AND withdrawn_at IS NULL")" = "client,internal" ] \
+  && ok "  ...the client audience issued (${SC1:0:8}) beside it: one current story for each audience" || bad "  ...current: $(q "SELECT string_agg(audience, ',') FROM story_records WHERE institution_id = '$INST' AND withdrawn_at IS NULL")"
+seal "$EB" "Verification: S7b.2, the record changes"
+draft "$INST"
+[ "$(dj 'b.current_story.id + ":" + b.current_story.same')" = "$SF1:false" ] && ok "the record changed (a new locked run): the draft names ${SF1:0:8}, its hash no longer the draft's" || bad "draft current: $(dj 'JSON.stringify(b.current_story)')"
+walk current "fixture: changed" "$W/f4.log" INST="$INST" EXPECT_CURRENT=changed CURRENT="$SF1"; tally "$W/f4.log"
+K0="$(counts)"
+expect POST "/api/institutions/$INST/stories" '{"audience":"internal"}' 409 "a changed record while ${SF1:0:8} is current" "$(CHANGED_SAYS "$SF1")"
+[ "$(said)" = "$(CHANGED_SAYS "$SF1")" ] && ok "  ...in exactly Brad's words" || bad "  ...said: $(said)"
+[ "$(counts)" = "$K0" ] && ok "  ...no story row and no act written" || bad "  ...rows/acts: $(counts) (were $K0)"
+FP1="$(DPAY)"; FST="$(dj 'p.stage')"
+sqlrefused "a changed record while ${SF1:0:8} is current, by SQL (the guard)" "$(INSA "$INST" internal "$FST" "$FP1" "$(HXOF "$FP1")" "$S")" "$(CHANGED_SAYS "$SF1")"
+walk withdraw "fixture: withdraw ${SF1:0:8}" "$W/f5.log" STORY="$SF1" REASON="Verification: the record changed; withdrawn to issue the new story."; tally "$W/f5.log"
+sqlrefused "a story issued with no act recorded (none current now)" "$(INSA "$INST" internal "$FST" "$FP1" "$(HXOF "$FP1")" "$S")" "a story issued with no governance act recorded"
+walk current "fixture: none again" "$W/f6.log" INST="$INST" EXPECT_CURRENT=none; tally "$W/f6.log"
+walk issue "fixture: the new story" "$W/f7.log" INST="$INST"; tally "$W/f7.log"; SF2="$(grep '^ISSUED' "$W/f7.log" | cut -d' ' -f2)"
+[ -n "$SF2" ] && [ "$(q "SELECT (a.payload_hash <> b.payload_hash)::text FROM story_records a, story_records b WHERE a.id = '$SF1' AND b.id = '$SF2'")" = true ] \
+  && ok "  ...after the withdrawal the new story issues (${SF2:0:8}), with the changed record's hash" || bad "  ...the new story: $SF2"
+walk withdraw "fixture: withdraw ${SF2:0:8}" "$W/f8.log" STORY="$SF2" REASON="Verification: withdrawn, to issue the identical story again."; tally "$W/f8.log"
+walk issue "fixture: identical to a withdrawn one" "$W/f9.log" INST="$INST"; tally "$W/f9.log"; SF3="$(grep '^ISSUED' "$W/f9.log" | cut -d' ' -f2)"
+[ -n "$SF3" ] && [ "$(q "SELECT (a.payload_hash = b.payload_hash)::text FROM story_records a, story_records b WHERE a.id = '$SF2' AND b.id = '$SF3'")" = true ] \
+  && ok "  ...a story identical to a withdrawn one issues (${SF3:0:8}, ${SF2:0:8}'s hash): the rule is about current stories" || bad "  ...identical after withdrawal: $SF3"
+[ "$(q "SELECT count(*) FROM story_records WHERE institution_id = '$INST' AND withdrawn_at IS NULL")" = 2 ] && ok "  ...SQL: two current stories on the account, one per audience" || bad "  ...current count"
+
 step "6b. The placement fixture (S7b.1): one account, two engagements, a finding on the first"
 expect POST /api/account-inputs "$(J institution "$(J name "Tessel Mills (S7b.1 fixture)" industry_slug manufacturing classification_note 'Verification: classified for S7b.1.')" persons "[$(J full_name 'K7p owner (fixture)' email "ownerp.$TS@k7b.example" title Owner)]")" 201 "a fixture account (no one customer-side, so a finding can be stated)"
 INSTP="$(rj b.institution_id)"; OWNERP="$(rj b.person_ids[0])"
@@ -394,6 +473,9 @@ restart_server; walk draft "B3" "$W/b3.log" "${CURIA_HE[@]}"; broke "B3" "$W/b3.
 echo "  B4: a reference example computed as Decision"
 edit "$COMP" "  if (marker) stage = 'reference';" "  if (marker && false) stage = 'reference';"
 restart_server; draft "$C"; [ "$(dj 'p.stage')" = decision ] && ok "B4: caught by the draft check — stage $(dj 'p.stage'), not reference" || bad "B4: stage $(dj 'p.stage')"
+# S7b.2: ${ST2:0:8} is Curia's current story, and the route refuses any issue while it is; withdrawn first through the
+# page, so this issue reaches the database's reference check, as B4 was built to show.
+walk withdraw "B4 setup: withdraw ${ST2:0:8}" "$W/b4w.log" STORY="$ST2" REASON="Verification: withdrawn so B4's issue reaches the database (S7b.2)."; tally "$W/b4w.log"
 RF0="$(q "SELECT count(*) FROM refusals WHERE message LIKE '%its story is a reference story%'")"
 expect POST "/api/institutions/$C/stories" '{"audience":"internal"}' 422 "B4: ...and issuing it is refused by the database" "reference story"
 [ "$(q "SELECT count(*) FROM refusals WHERE message LIKE '%its story is a reference story%'")" = "$((RF0 + 1))" ] && ok "B4: ...the database's refusal recorded" || bad "B4: no refusal recorded"
@@ -446,6 +528,58 @@ sleep 3; walk draft "G" "$W/bg.log" WIDTH=1280 "${CURIA_HE[@]}"; broke "G" "$W/b
 echo "  C: the ledger # free to break (S7b.1)"
 edit "$PAGE" "w-[3.2em] whitespace-nowrap font-mono text-gold-ink [overflow-wrap:normal]" "font-mono text-gold-ink"; edit "$PAGE" "<th className={TH + ' w-[3.2em]'}>#</th>" "<th className={TH}>#</th>"
 sleep 3; walk draft "C" "$W/bc.log" WIDTH=1280 "${CURIA_HE[@]}"; broke "C" "$W/bc.log" "two-digit ledger # is one line"; restore "$PAGE"
+
+step "7b. S7b.2 breaks"
+SF3_ON="$(day_of "$SF3")"
+echo "  S7b.2 B1: the route's check removed"
+edit "$ROUTE" "      if (current) {" "      if (current && false) {"
+restart_server; K0="$(counts)"
+expect POST "/api/institutions/$INST/stories" '{"audience":"internal"}' 422 "S7b.2 B1: caught — the guard refuses" "$(SAME_SAYS "$SF3" "$SF3_ON")"
+[ "$(counts)" = "$K0" ] && ok "  ...S7b.2 B1: no story row and no act written" || bad "  ...S7b.2 B1: rows/acts $(counts)"
+restore "$ROUTE"; restart_server
+echo "  S7b.2 B2: the guard's check removed, on the clone"
+q "SELECT pg_get_functiondef('lvrf_story_record_guard'::regproc)" > "$W/guard.sql"; G0="$(q "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_story_record_guard'")"
+python3 - "$W/guard.sql" "$W/guard_broken.sql" <<'PYB'
+import sys, re; s = open(sys.argv[1]).read()
+a = s.index("  SELECT s.id, s.payload_hash, s.issued_at INTO cur"); b = s.index("  NEW.issued_at := now();", a)
+open(sys.argv[2], 'w').write(s[:a] + s[b:])
+PYB
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/guard_broken.sql" > /dev/null && [ "$(q "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_story_record_guard'")" != "$G0" ] && ok "  ...S7b.2 B2: the guard replaced without its check" || bad "  ...S7b.2 B2: the broken guard did not apply"
+expect POST "/api/institutions/$INST/stories" '{"audience":"internal"}' 409 "S7b.2 B2: caught — the route refuses" "$(SAME_SAYS "$SF3" "$SF3_ON")"
+FP3="$(q "SELECT payload::text FROM story_records WHERE id = '$SF3'")"
+sqlrefused "S7b.2 B2: ...and by SQL the index still refuses it" "$(INSA "$INST" internal "$FST" "$FP3" "$(HXOF "$FP3")" "$S")" "story_records_one_current"
+psql -X -q -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -f "$W/guard.sql" > /dev/null; [ "$(q "SELECT md5(prosrc) FROM pg_proc WHERE proname = 'lvrf_story_record_guard'")" = "$G0" ] && ok "  ...S7b.2 B2: the guard restored (md5 of its source as before)" || bad "  ...S7b.2 B2: the guard not restored"
+echo "  S7b.2 B3: the race, two sessions on one account and audience (the B8 account, no story)"
+draft "$INST8"; P8="$(DPAY)"
+race() {  # -> stdout: session B's result. A inserts with its act and holds 6 s, then commits; B inserts 2 s in.
+  local a="$W/race_a.sql" b="$W/race_b.sql"
+  printf "BEGIN;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\nWITH s AS (%s RETURNING id) INSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, evidence_ids, actor_person_id, route) SELECT '%s', 'issue', 'story_records', s.id, '{}', '%s', 'POST /api/institutions/:institutionId/stories' FROM s;\nSELECT pg_sleep(6);\nCOMMIT;\n" \
+    "$S" "$(INSA "$INST8" internal decision "$P8" "$(HXOF "$P8")" "$S")" "$TEN" "$S" > "$a"
+  printf "BEGIN;\nSET LOCAL ROLE lvrf_app;\nSELECT set_config('lvrf.actor_person_id', '%s', true);\n%s;\nSELECT 'B LANDED';\nROLLBACK;\n" "$S" "$(INSA "$INST8" internal decision "$P8" "$(HXOF "$P8")" "$S")" > "$b"
+  psql -X -q -d "$VERIFY_DB" -f "$a" > "$W/race_a.out" 2>&1 & local ap=$!
+  sleep 2; local t0; t0=$(date +%s)
+  psql -X -q -At -d "$VERIFY_DB" -f "$b" > "$W/race_b.out" 2>&1 || true
+  echo "waited $(( $(date +%s) - t0 ))s: $(tr '\n' ' ' < "$W/race_b.out" | cut -c1-200)"
+  wait "$ap"
+}
+R1="$(race)"
+WAITED="$(printf '%s' "$R1" | sed -E 's/^waited ([0-9]+)s.*/\1/')"
+printf '%s' "$R1" | grep -q "story_records_one_current" && ! printf '%s' "$R1" | grep -q "B LANDED" && [ "$WAITED" -ge 3 ] \
+  && ok "S7b.2 B3: the second session waited ${WAITED}s for the first, then failed on story_records_one_current" || bad "S7b.2 B3: B: $R1 (A: $(tr '\n' ' ' < "$W/race_a.out" | cut -c1-200))"
+RACED="$(q "SELECT id FROM story_records WHERE institution_id = '$INST8' AND withdrawn_at IS NULL")"
+[ "$(q "SELECT count(*) FROM story_records WHERE institution_id = '$INST8'")" = 1 ] && ok "  ...one story for the account (the first session's, ${RACED:0:8})" || bad "  ...rows on the B8 account: $(q "SELECT count(*) FROM story_records WHERE institution_id = '$INST8'")"
+psql -X -q -d "$VERIFY_DB" -c "BEGIN; SELECT set_config('lvrf.actor_person_id', '$S', true); UPDATE story_records SET withdrawn_at = now(), withdrawn_by_person_id = '$S', withdrawal_reason = 'Verification: the race fixture, withdrawn.' WHERE id = '$RACED'; INSERT INTO governance_acts (tenant_id, act, subject_table, subject_id, evidence_ids, actor_person_id, reason, route) VALUES ('$TEN', 'withdraw', 'story_records', '$RACED', '{}', '$S', 'Verification: the race fixture, withdrawn.', 'POST /api/stories/:id/withdraw'); COMMIT;" > "$W/race_w.out" 2>&1
+[ "$(q "SELECT count(*) FROM story_records WHERE institution_id = '$INST8' AND withdrawn_at IS NULL")" = 0 ] && ok "  ...the race fixture withdrawn (by SQL on the clone, not proven through the page), so the break starts clean" || bad "  ...not withdrawn: $(cat "$W/race_w.out")"
+q "DROP INDEX story_records_one_current" > /dev/null && ok "  ...S7b.2 B3: the index dropped, on the clone"
+R2="$(race)"
+printf '%s' "$R2" | grep -q "B LANDED" && ok "S7b.2 B3: caught — without the index the second session's insert lands beside the first's ($R2)" || bad "S7b.2 B3: not caught: $R2"
+q "CREATE UNIQUE INDEX story_records_one_current ON story_records USING btree (institution_id, audience) WHERE withdrawn_at IS NULL" > /dev/null 2>&1 \
+  && ok "  ...S7b.2 B3: the index re-created (the first session's row is the only current one)" || bad "  ...S7b.2 B3: the index could not be re-created"
+echo "  S7b.2 B4: the draft route names no current story"
+edit "$ROUTE" "current_story: await currentStory(pool, institutionId, audience, payload) });" "current_story: null });"
+restart_server; walk current "S7b.2 B4" "$W/o4.log" INST="$INST" EXPECT_CURRENT=same CURRENT="$SF3" CURRENT_ON="$SF3_ON"; broke "S7b.2 B4" "$W/o4.log" "no issue control"
+restore "$ROUTE"; restart_server
+walk current "S7b.2 B4 restored" "$W/o4r.log" INST="$INST" EXPECT_CURRENT=same CURRENT="$SF3" CURRENT_ON="$SF3_ON"; [ "$(fails "$W/o4r.log")" = 0 ] && ok "  ...S7b.2 B4: restored, the page shows \"Issued as ${SF3:0:8}\" and no button" || bad "  ...S7b.2 B4 restored: $(grep -m1 '^FAIL' "$W/o4r.log")"
 
 step "8. The code restored, and the page passes again"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to the start" || bad "$f differs"; done

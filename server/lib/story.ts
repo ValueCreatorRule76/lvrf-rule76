@@ -89,6 +89,29 @@ export function storyTitle(stage: StoryStage): string {
 
 export class StoryRefusal extends Error {}
 
+/**
+ * S7b.2 (LVRF_PLAN §36, Brad 26 Nov 2026): ONE CURRENT STORY PER ACCOUNT AND AUDIENCE. The account's current (not
+ * withdrawn) story for the audience, and whether its hash is the hash `payload` would be sealed with, computed as the
+ * database computes it (sha256 of payload::jsonb::text; the payload holds no current date, so the same hash means
+ * nothing on the record has changed). Read by the issue route before it writes, by the draft route for the page, and
+ * after a race on story_records_one_current. The guard (hardening section 39) says the same sentences.
+ */
+export interface CurrentStory { id: string; issued_at: string; same: boolean }
+export async function currentStory(db: Q, institutionId: string, audience: StoryAudience, payload: StoryPayload): Promise<CurrentStory | null> {
+  const { rows: [c] } = await db.query<CurrentStory>(
+    `SELECT id, issued_at, payload_hash = encode(sha256(convert_to($3::jsonb::text, 'UTF8')), 'hex') AS same
+       FROM story_records WHERE institution_id = $1 AND audience = $2 AND withdrawn_at IS NULL
+      ORDER BY issued_at DESC LIMIT 1`, [institutionId, audience, JSON.stringify(payload)]);
+  return c ?? null;
+}
+/** The plain sentence for an issue refused because a story for the audience is current (Brad's wording, 26 Nov 2026). */
+export function oneCurrentRefusal(c: CurrentStory): string {
+  const id = c.id.slice(0, 8);
+  return c.same
+    ? `This story is already issued as ${id} on ${day(c.issued_at)} (UTC), and nothing on the record has changed since. Open that one.`
+    : `${id} is the current story for this audience. Withdraw it first, giving your reason, then issue the new one.`;
+}
+
 export async function composeStory(db: Q, tenantId: string, institutionId: string, audience: StoryAudience): Promise<StoryPayload | null> {
   const { rows: [acct] } = await db.query<{ id: string; name: string; vendor: string; marker_kind: string | null; marker_note: string | null }>(
     `SELECT i.id, i.name, t.name AS vendor, k.kind AS marker_kind, k.note AS marker_note

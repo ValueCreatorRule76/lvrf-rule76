@@ -393,6 +393,13 @@
       "when": 1795615611204,
       "tag": "0055_s7b_story_records",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795697803697,
+      "tag": "0056_s7b2_one_current_story",
+      "breakpoints": true
     }
   ]
 }

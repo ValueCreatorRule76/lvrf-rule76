@@ -515,7 +515,7 @@ expect POST "/api/industries/$UT/research-prompts" '{}' 201 "  ...and a pack res
 
 step "11. What held"
 DRIFT3="$(DATABASE_URL="$VERIFY_URL" node scripts/check_schema_drift.mjs 2>&1 | tail -1)"
-printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 56 migrations" && ok "drift: none" || bad "drift: $DRIFT3"
+printf '%s' "$DRIFT3" | grep -q "schema drift: none (journal 57 migrations" && ok "drift: none" || bad "drift: $DRIFT3"
 HASH1="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/check_run_hashes.ts 2>&1 | tail -1)"
 RUNS1="$(q "SELECT count(*) FROM value_runs")"
 printf '%s' "$HASH1" | grep -qE "^$RUNS1 runs: recompute matches $RUNS1, differs 0; embedded payloadHash matches $RUNS1, differs 0" && ok "check_run_hashes: $HASH1" || bad "hashes: $HASH1"

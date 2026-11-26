@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "story_records_one_current" ON "story_records" USING btree ("institution_id","audience") WHERE "story_records"."withdrawn_at" IS NULL;

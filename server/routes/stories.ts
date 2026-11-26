@@ -3,11 +3,11 @@ import type { Pool } from 'pg';
 import { isUuid } from './params.js';
 import { isOtherTenant } from '../lib/tenantScope.js';
 import { respondServerError } from '../lib/serverError.js';
-import { handleGovernanceError } from '../lib/refusal.js';
+import { handleGovernanceError, plainUniqueMessage, recordRefusal, recordRouteRefusal } from '../lib/refusal.js';
 import { refuseUnknownFields } from '../lib/strictBody.js';
 import { recordAct } from '../lib/governanceAct.js';
 import { requireSteward } from '../lib/stewardActs.js';
-import { composeStory, StoryRefusal, type StoryAudience, type StoryPayload } from '../lib/story.js';
+import { composeStory, currentStory, oneCurrentRefusal, StoryRefusal, type StoryAudience, type StoryPayload } from '../lib/story.js';
 
 /**
  * S7b (3.1; LVRF_PLAN §27; Brad's rulings 24-25 Nov 2026): the story of record.
@@ -19,7 +19,7 @@ import { composeStory, StoryRefusal, type StoryAudience, type StoryPayload } fro
  *   POST /api/stories/:id/withdraw  { reason }                                   the steward withdraws one
  *
  * Issuing and withdrawing are the steward's acts only (Brad, 25 Nov 2026). Only an issued story prints; a draft never
- * does. An issued story names the evidence heads it sealed: at read, "Newer evidence exists: re-issue to include it"
+ * does. An issued story names the evidence heads it sealed: at read, "Newer evidence exists: withdraw this story, then issue the new one to include it" (S7b.2)
  * when one was superseded or withdrawn since, and nothing changes.
  */
 const audienceOf = (v: unknown): StoryAudience | null => (v === 'internal' || v === 'client' ? v : null);
@@ -43,7 +43,8 @@ export function institutionStoriesRouter(pool: Pool): Router {
       if (!tenantId || isOtherTenant(req, tenantId, { table: 'institutions', id: institutionId })) { res.status(404).json({ message: `account ${institutionId} not found` }); return; }
       const payload = await composeStory(pool, tenantId, institutionId, audience);
       if (!payload) { res.status(409).json({ message: 'This account has no locked run that is not a system exercise: there is no story to tell yet.' }); return; }
-      res.json({ draft: true, payload });
+      // S7b.2 (§36): the current story for this audience, if any, and whether nothing has changed since it was issued.
+      res.json({ draft: true, payload, current_story: await currentStory(pool, institutionId, audience, payload) });
     } catch (err) {
       if (err instanceof StoryRefusal) { res.status(409).json({ message: err.message }); return; }
       respondServerError(res, err);
@@ -71,6 +72,7 @@ export function institutionStoriesRouter(pool: Pool): Router {
     const { institutionId } = req.params;
     if (!isUuid(institutionId)) { res.status(400).json({ message: `invalid account id: ${institutionId}` }); return; }
     let tenantId: string | null = null;
+    let payload: StoryPayload | null = null;
     try {
       const actor = req.actor?.personId;
       if (!actor) throw new Error('req.actor missing on a request past requireActor');
@@ -79,8 +81,17 @@ export function institutionStoriesRouter(pool: Pool): Router {
       if (await refuseUnknownFields(pool, req, res, ['audience'], { endpoint, subjectTable: 'institutions', subjectId: institutionId, tenantId, institutionId })) return;
       const audience = audienceOf(req.body?.audience);
       if (!audience) { res.status(422).json({ message: 'Say who the story is for: internal or client.' }); return; }
-      const payload = await composeStory(client, tenantId, institutionId, audience);
+      payload = await composeStory(client, tenantId, institutionId, audience);
       if (!payload) { res.status(409).json({ message: 'This account has no locked run that is not a system exercise: there is no story to tell yet.' }); return; }
+      // S7b.2 (§36, Brad 26 Nov 2026): one current story per account and audience. Refused before any write, with the
+      // sentence that fits: the same hash, or a changed record (the current one is withdrawn first).
+      const current = await currentStory(client, institutionId, audience, payload);
+      if (current) {
+        const message = oneCurrentRefusal(current);
+        await recordRouteRefusal(pool, req, { endpoint, subjectTable: 'institutions', subjectId: institutionId, tenantId, institutionId, attemptedPayload: req.body }, message);
+        res.status(409).json({ message, current_story: current });
+        return;
+      }
       const { rows: [s] } = await client.query<{ id: string; payload_hash: string; issued_at: string }>(
         `INSERT INTO story_records (tenant_id, institution_id, audience, stage, payload, payload_hash, issued_by_person_id)
          VALUES ($1, $2, $3, $4, $5::jsonb, encode(sha256(convert_to($5::jsonb::text, 'UTF8')), 'hex'), $6)
@@ -90,7 +101,17 @@ export function institutionStoriesRouter(pool: Pool): Router {
       res.status(201).json({ id: s.id, payload_hash: s.payload_hash, issued_at: s.issued_at, stage: payload.stage, audience });
     } catch (err) {
       if (err instanceof StoryRefusal) { res.status(409).json({ message: err.message }); return; }
-      if (await handleGovernanceError(pool, err, req, res, { endpoint, subjectTable: 'institutions', subjectId: institutionId, tenantId, institutionId, attemptedPayload: req.body })) return;
+      const ctx = { endpoint, subjectTable: 'institutions', subjectId: institutionId, tenantId, institutionId, attemptedPayload: req.body };
+      // A race on story_records_one_current: another issue for this audience committed first. The sentence that fits is
+      // read from that story, on the pool (this request's transaction is aborted); the raw text goes to `refusals`.
+      const e = err as { code?: string; constraint?: string; message?: string; detail?: string };
+      if (e.code === '23505' && e.constraint === 'story_records_one_current') {
+        await recordRefusal(pool, req, ctx, '23505', e.constraint, e.message ?? '');
+        const won = payload ? await currentStory(pool, institutionId, audienceOf(req.body?.audience) ?? 'internal', payload).catch(() => null) : null;
+        res.status(409).json({ message: won ? oneCurrentRefusal(won) : plainUniqueMessage({ message: e.message ?? '', constraint: e.constraint, detail: e.detail }), current_story: won });
+        return;
+      }
+      if (await handleGovernanceError(pool, err, req, res, ctx)) return;
       respondServerError(res, err);
     }
   });
@@ -121,7 +142,7 @@ export function storiesRouter(pool: Pool): Router {
         id: s.id, institution_id: s.institution_id, audience: s.audience, stage: s.stage, payload_hash: s.payload_hash,
         issued_at: s.issued_at, issued_by: s.issued_by,
         withdrawn: s.withdrawn_at ? { at: s.withdrawn_at, by: s.withdrawn_by, reason: s.withdrawal_reason } : null,
-        newer_evidence: s.newer.length > 0 ? { ids: s.newer, note: 'Newer evidence exists: re-issue to include it.' } : null,
+        newer_evidence: s.newer.length > 0 ? { ids: s.newer, note: 'Newer evidence exists: withdraw this story, then issue the new one to include it.' } : null,
         payload: s.payload,
       });
     } catch (err) { respondServerError(res, err); }
