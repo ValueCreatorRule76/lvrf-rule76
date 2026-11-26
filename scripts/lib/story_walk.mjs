@@ -192,6 +192,47 @@ for (const s of SECTIONS) {
     await body('issued, one page');
     await shot('story-issued-onepage');
   }
+  if (s === 'pdf') {
+    // S7b.1 (Brad, 26 Nov 2026): /stories/E.STORY printed to PDF, both forms, at each of E.SCALES; beside each PDF a JSON
+    // with what the page-by-page check needs: the record line, each ledger row (figure, source, ids), and each heading
+    // with the start of the first content after it. Writes E.OUT_DIR/E.PDF_NAME_<form>_<scale>.{pdf,json}.
+    const { writeFileSync } = await import('node:fs');
+    for (const form of ['full', 'onepage']) {
+      await go(`/stories/${E.STORY}${form === 'onepage' ? '?form=onepage' : ''}`);
+      await waitFor(`document.querySelector('[data-testid=story-body]')?.dataset.form === ${JSON.stringify(form)}`);
+      await ev(`document.fonts.ready.then(()=>true)`); await sleep(800);
+      await send('Emulation.setEmulatedMedia', { media: 'print' }); await sleep(300);
+      const meta = JSON.parse(await ev(`JSON.stringify({
+        record_line: document.querySelector('[data-testid=print-record-line]')?.dataset.recordLine ?? '',
+        ledger: [...document.querySelectorAll('[data-testid=ledger-entry]')].map(tr=>{const td=tr.querySelectorAll('td');
+          const ids=td[2].querySelector('[data-testid=ledger-ids]')?.innerText ?? '';
+          const src=td[2].innerText; return { n: tr.dataset.n, figure: td[1].innerText, source: src.endsWith(ids) ? src.slice(0, src.length - ids.length) : src, ids }}),
+        headings: [...document.querySelectorAll('[data-testid=story-body] h2, [data-testid=story-body] h3, [data-testid=print-close] h2')].map(h=>{
+          let x=h.nextElementSibling; while (x && /^H[23]$/.test(x.tagName)) x=x.nextElementSibling;
+          if (!x || !x.getClientRects().length) return null;
+          // What follows: a table's first body row (its header row repeats on every page); a block that opens with its
+          // own heading, the first thing after that heading (letter-spaced labels come apart into letters in the PDF).
+          const first = (el) => {
+            if (el.matches('table')) return el.tBodies[0]?.rows[0] ?? el;
+            if (el.firstElementChild && /^H[23]$/.test(el.firstElementChild.tagName)) {
+              let y = el.firstElementChild; while (y && /^H[23]$/.test(y.tagName)) y = y.nextElementSibling;
+              return y ? first(y) : el;
+            }
+            return el;
+          };
+          return { heading: h.innerText.trim(), follow: first(x).innerText.trim() };
+        }).filter(Boolean) })`));
+      await send('Emulation.setEmulatedMedia', { media: '' }); await sleep(300);
+      for (const scale of (E.SCALES ?? '1').split(',')) {
+        const pdf = await send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true, scale: Number(scale) });
+        if (!pdf.result) { check(false, `pdf: ${form} at ${scale} printed`, JSON.stringify(pdf).slice(0, 200)); continue; }
+        const base = `${E.OUT_DIR}/${E.PDF_NAME}_${form}_${scale}`;
+        writeFileSync(`${base}.pdf`, Buffer.from(pdf.result.data, 'base64'));
+        writeFileSync(`${base}.json`, JSON.stringify(meta));
+        console.log(`PDF ${base}.pdf`);
+      }
+    }
+  }
   if (s === 'html') {
     await go(`/stories/${E.STORY}`);
     await waitFor(`!!document.querySelector('[data-testid=story-body]')`);

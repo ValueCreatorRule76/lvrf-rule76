@@ -90,7 +90,8 @@ body {
   }
 }
 @media print {
-  [data-testid='value-case'], [data-testid='pov'] { page: letter; }
+  /* S7b.1 (Brad, 26 Nov 2026): the issued story too, so the record line with its full hash prints on every page. */
+  [data-testid='value-case'], [data-testid='pov'], [data-testid='issued-story-page'] { page: letter; }
   /* S3 (§22): the cover. Its banners are the very element every body page repeats (Brad's condition 1). */
   [data-testid='print-cover'] { page: lvrf-cover; break-after: page; height: calc(11in - var(--lvrf-cover-foot, 0.6in)); display: flex; flex-direction: column;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }

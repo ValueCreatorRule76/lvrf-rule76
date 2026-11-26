@@ -31,6 +31,10 @@
 #      "Prepared by Rule 76 Consulting LLC for {tenant}, with LVRF"; "composer version 2"; the banners' 16 px gutter; a
 #      printed two-digit # on one line; "line", not "engagement". A version-1 story in the copy (Curia's cf99dbf3) keeps
 #      its payload and hash, and renders as version 1: its findings under "Findings on the record".
+#   3c. S7b.1 (Brad, 26 Nov 2026): the printed pages, read from the PDFs of a version-1 and a version-2 story, both forms,
+#      at 100, 95, 90 and 85%: the record line, whole, with the full hash, on every page; each ledger row on one page;
+#      each heading on the page of what follows it. Breaks: RL the story page taken out of the Letter page setup; ROW a
+#      ledger row free to split; HEAD a heading free to end a page.
 #   Breaks: B1 the headline score printed without its adjacent errata; B2 "Results" (and its words) below Realization;
 #   B3 a figure with no ledger entry; B4 a reference example computed as Decision (the database refuses issuing it,
 #   its refusal recorded); B5 Print on a draft; B6 an erratum dropped; B7 a plan code on screen; B8 "Success story"
@@ -63,8 +67,8 @@ PORT=3461; VITE_PORT=5461; CDP_PORT=9581
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_story.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-PAGE=client/src/pages/StoryPage.tsx; COMP=server/lib/story.ts
-EDITED=("$PAGE" "$COMP")
+PAGE=client/src/pages/StoryPage.tsx; COMP=server/lib/story.ts; CSS=client/src/index.css
+EDITED=("$PAGE" "$COMP" "$CSS")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -228,6 +232,39 @@ else
   V1H="$(q "SELECT payload_hash FROM story_records WHERE id = '$V1'")"
   walk issued "v1" "$W/v1.log" WIDTH=1280 STORY="$V1" HASH="$V1H" EXPECT_V=1 INST="$C" STAGE=reference TITLE="Story of record" FINDING_OWNERS="$OWNERS_C" TENANT="$TENANT"; tally "$W/v1.log"
 fi
+
+step "3c. The printed pages (S7b.1): the record line on every page; each ledger row whole; each heading with what follows"
+command -v pdftotext > /dev/null && command -v pdfinfo > /dev/null || { bad "poppler not found (pdftotext, pdfinfo)"; exit 1; }
+SCALES=1,0.95,0.9,0.85
+pcheck() {  # LOG — the checker's PASS/FAIL lines into the tally
+  while IFS= read -r line; do case "$line" in PASS*) ok "${line#PASS  }" ;; FAIL*) bad "${line#FAIL  }" ;; esac; done < "$1"
+}
+printed() {  # NAME STORY HASH SCALES TAG — print both forms to PDF, then read every page
+  rm -f "$OUT/$1"_*.pdf "$OUT/$1"_*.json
+  walk pdf "$5" "$W/$1.walk.log" STORY="$2" PDF_NAME="$1" SCALES="$4"
+  grep -q '^DONE' "$W/$1.walk.log" && ! grep -q '^FAIL' "$W/$1.walk.log" || bad "$5: the PDF walk: $(grep -m1 '^FAIL' "$W/$1.walk.log")"
+  python3 -I scripts/lib/story_pdf_check.py "$OUT" "$1" "$3" > "$W/$1.check.log" 2>&1
+}
+printed v2 "$ST" "$SH" "$SCALES" "pdf v2"; pcheck "$W/v2.check.log"
+if [ -n "${V1:-}" ]; then printed v1 "$V1" "$V1H" "$SCALES" "pdf v1"; pcheck "$W/v1.check.log"; else echo "  NOT CHECKED  no version-1 story in this copy"; fi
+[ "$(ls "$OUT"/v2_*.pdf | wc -l | tr -d ' ')" = 8 ] && ok "  ...8 PDFs of the version-2 story read (2 forms x 4 scales)" || bad "  ...PDFs of v2: $(ls "$OUT"/v2_*.pdf | wc -l)"
+pbroke() {  # LABEL NEEDLE LOG... — a break is caught when a checker FAILs on the named check
+  local f; for f in "${@:3}"; do grep -q "^FAIL .*$2" "$f" && { ok "$1: caught — $(grep -m1 "^FAIL .*$2" "$f" | cut -c7-220)"; return; }; done
+  bad "$1: NOT caught ($(cat "${@:3}" | grep -c '^FAIL' || true) failures)"
+}
+echo "  RL: the story page taken out of the Letter page setup"
+edit "$CSS" "[data-testid='pov'], [data-testid='issued-story-page'] { page: letter; }" "[data-testid='pov'] { page: letter; }"; sleep 3
+printed rl "$ST" "$SH" 1 "RL"; pbroke "RL" "the record line, whole" "$W/rl.check.log"; restore "$CSS"
+echo "  ROW: a ledger row free to split across pages"
+edit "$PAGE" 'data-testid="ledger-entry" data-n={l.n} className="print:break-inside-avoid"' 'data-testid="ledger-entry" data-n={l.n}'; sleep 3
+printed row2 "$ST" "$SH" "$SCALES" "ROW v2"; ROWLOGS=("$W/row2.check.log")
+if [ -n "${V1:-}" ]; then printed row1 "$V1" "$V1H" "$SCALES" "ROW v1"; ROWLOGS+=("$W/row1.check.log"); fi
+pbroke "ROW" "ledger rows on one page" "${ROWLOGS[@]}"; restore "$PAGE"
+echo "  HEAD: a heading free to end a page"
+editall "$PAGE" " print:break-after-avoid';" "';"; sleep 3
+printed head2 "$ST" "$SH" "$SCALES" "HEAD v2"; HEADLOGS=("$W/head2.check.log")
+if [ -n "${V1:-}" ]; then printed head1 "$V1" "$V1H" "$SCALES" "HEAD v1"; HEADLOGS+=("$W/head1.check.log"); fi
+pbroke "HEAD" "headings on the page of what follows it" "${HEADLOGS[@]}"; restore "$PAGE"
 
 step "4. Issuing and withdrawing"
 [ "$(q "SELECT (payload_hash = encode(sha256(convert_to(payload::text, 'UTF8')), 'hex'))::text || stage || audience FROM story_records WHERE id = '$ST'")" = "truereferenceinternal" ] \

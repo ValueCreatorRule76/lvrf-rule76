@@ -24,8 +24,9 @@ import type { IssuedStory, StoryAudience, StoryEngagement, StoryListItem, StoryP
  */
 const STAGES: StoryStage[] = ['reference', 'decision', 'realization', 'compounding'];
 const STAGE_WORD: Record<StoryStage, string> = { reference: 'Reference', decision: 'Decision', realization: 'Realization', compounding: 'Compounding' };
-const KICK = 'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45 print:font-condensed print:text-[7.6pt]';
-const H2 = 'm-0 mt-7 font-display text-[22px] font-normal tracking-[.02em] text-ink print:text-[15pt]';
+// S7b.1 (Brad, 26 Nov 2026): in print a heading stays with what follows it, and a ledger row stays on one page.
+const KICK = 'text-[10px] font-semibold uppercase tracking-[.16em] text-ink-45 print:font-condensed print:text-[7.6pt] print:break-after-avoid';
+const H2 = 'm-0 mt-7 font-display text-[22px] font-normal tracking-[.02em] text-ink print:text-[15pt] print:break-after-avoid';
 const TH = 'border-b border-ink py-1 pr-3 text-left text-[10px] font-semibold uppercase tracking-[.12em] text-ink-45';
 const TD = 'border-b border-rule py-1.5 pr-3 align-top text-[12.5px] [overflow-wrap:anywhere] max-sm:block max-sm:border-b-0 max-sm:py-0.5';
 /** At phone width each row stacks, its cells one under another (390: no sideways scroll, nothing cramped). */
@@ -193,7 +194,7 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
         <thead><tr><th className={TH + ' w-[3.2em]'}>#</th><th className={TH}>Figure</th><th className={TH}>Source</th></tr></thead>
         <tbody>
           {p.ledger.filter((l) => !onePage || used.has(l.n)).map((l) => (
-            <tr key={l.n} data-testid="ledger-entry" data-n={l.n}>
+            <tr key={l.n} data-testid="ledger-entry" data-n={l.n} className="print:break-inside-avoid">
               <td className={TD + ' w-[3.2em] whitespace-nowrap font-mono text-gold-ink [overflow-wrap:normal]'} data-testid="ledger-n">{l.n}</td>
               <td className={TD}>{l.figure}</td>
               <td className={TD}>{l.source}
