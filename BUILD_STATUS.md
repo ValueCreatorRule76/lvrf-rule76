@@ -18328,3 +18328,101 @@ next deploy's checkout, where they do not run.
 
 **Next (Brad, 26 Nov 2026), both before 4 Jan 2027:** **S7b.2** (one issue per story); then S4's full-text confirmation
 on W6's "Add evidence".
+
+### S7b.2: one current story per account and audience — Gate A clean (26 Nov 2026, UTC)
+
+LVRF_PLAN §36, approved by Brad (26 Nov 2026) with his change: one current story per account and audience, not only one
+per hash. Branch `s7b2-one-issue`, code at `bd59c4b`.
+
+**What changed:**
+- **`0056`:** `story_records_one_current`, `UNIQUE (institution_id, audience) WHERE withdrawn_at IS NULL`. It closes the
+  race between two issues at the same instant. It orphans nothing: prod's three rows hold one current.
+- **The route** (before any write) and **`lvrf_story_record_guard`** (hardening §39) refuse an issue while a story for the
+  account and audience is current, in Brad's words:
+  - the same hash: "This story is already issued as <id> on <date> (UTC), and nothing on the record has changed since.
+    Open that one.";
+  - a changed record: "<id> is the current story for this audience. Withdraw it first, giving your reason, then issue
+    the new one.";
+  - the route records its refusal as the route's. A race on the index is answered with the sentence that fits, read
+    from the story that landed first.
+- **The draft route** names the current story and whether its hash is the draft's. **The page** shows "Issued as <id> on
+  <date> (UTC). Nothing on the record has changed since." or "The record has changed since <id> was issued. Withdraw it
+  to issue the new story.", the id linked, and no issue button while a story is current.
+- **A consequence, named in §36:** the issued story's note reads "Newer evidence exists: withdraw this story, then issue
+  the new one to include it."
+
+**Gate A:**
+- **`verify_story` 560/0 on Brad's dump `lvrf-post-s7b1-20261126T151730Z.dump`** (sha256 `563ec66c…`, TOC 989), copied
+  from the box with the LVRF key. Read from the file before use: `fb473904` current; `cf99dbf3` and `78c1a025`
+  withdrawn; `fb473904` and `78c1a025` the same hash `916cee16…38892`.
+  - `0056` applies over these rows (3 rows, 1 current).
+  - Curia's page shows "Issued as fb473904 on 2026-11-26 (UTC). Nothing on the record has changed since." and no button,
+    at 1280 and 390.
+  - Re-issuing is refused by the route (409) and, by SQL, by the guard, in the same-hash sentence; no row and no act
+    written; the route's refusal recorded. `fb473904` is then withdrawn through the page, on the clone, and the story
+    issues.
+  - `cf99dbf3`'s payload and hash unchanged; it renders as version 1.
+- **On the fixture account, every act through the page:**
+  - issue; the same again refused (same-hash sentence, exact);
+  - the client audience issued beside it;
+  - a new locked run: "The record has changed since…", no button; refused by the route and the guard (changed sentence,
+    exact);
+  - withdraw, then issue: issued; a story identical to a withdrawn one also issues.
+- **Breaks, each restored byte-identical:**
+  - B1: the route's check removed; the guard refuses (422).
+  - B2: the guard's check removed on the clone; the route refuses (409), and by SQL the index still refuses; the guard
+    restored to its md5.
+  - B3: the race on two sessions, one account and audience: the second waited 4 s, then failed on
+    `story_records_one_current`. With the index dropped, its insert landed at once: caught.
+  - B4: the draft route naming no current story; the walk sees a button and fails.
+  - NULL inputs refused: a NULL hash, a NULL audience.
+  - The race fixture's withdrawal was made by SQL on the clone: not proven through the page.
+- **S7b's own B4** now withdraws Curia's current story through the page first, so its issue still reaches the
+  database's reference check.
+- **`verify_story` 560/0 also on `lvrf-post-story-20261126T002256Z.dump`,** where `cf99dbf3` was current and the record
+  had changed since: the page, the route and the guard gave the changed-record sentence.
+- **Equivalence against the deployed `ed47a7d`** (on `lvrf-post-story-20261126T002256Z.dump`): 219 GETs, 219 identical,
+  0 differing, no added keys. The harness does not cover the story routes, so the draft's `current_story` and the new
+  note are checked by `verify_story` alone.
+- **The full regression with `run_regression.sh`** on the pinned `lvrf_snapshot_20261114.dump`, 13:13–14:23 UTC: 66
+  scripts, **65 passed, 0 failed, 1 not run** (`verify_story`, exit 3); 0 leftovers, 0 refused by the port guard; 6,847
+  checks; files byte-identical. 17 scripts' drift line now reads 57 migrations, newest `0056_s7b2_one_current_story`.
+- **The TOC after the migration, measured:** a migrated copy of Brad's dump differs from it by exactly one entry, `INDEX
+  public story_records_one_current`, besides pgvector's two entries, which this Mac's Postgres lacks. Prod: **989 →
+  990**. `lvrf_story_record_guard` `md5(prosrc)` after hardening: **`beb740bb189f4e503b6a23458abca548`** (was
+  `8a42b278…`); triggers stay **233**.
+- **The bundle,** from a clean build of `bd59c4b` in a fresh worktree (`npm ci`, then `npm run build`):
+  **`index-DdLM5B0v.js` / `index-CimN7kyl.css`**. The docs commit after it changes no client file.
+
+#### Gate B for S7b.2 (not run; Brad's pastes)
+
+A migration (`0056`) and hardening §39. Every step is Brad's paste. **Stop at any step whose expectation is not met.**
+Between the migration and the deploy, the running code is S7b.1's. The index is compatible with it: a second issue
+in that window is refused by the index, in its plain fallback sentence.
+1. **Merge (fast-forward) and push,** on the Mac. Three commits go to `main`, `19cf76a` → this one: §36, S7b.2's code and
+   checks, and this record. `scripts/demo/` is in none of them.
+2. **On the box (LVRF key only), pull, then back up before migrating** (rule 8): the head of step 1; TOC **989**.
+3. **Migrate `0056`, then ownership, then hardening:**
+   - the migrate applies `0056` with no error;
+   - `ownership exit 0`; `hardening exit 0`, `0` ERROR lines;
+   - **233** triggers; the guard **`beb740bb189f4e503b6a23458abca548`**;
+   - the index `CREATE UNIQUE INDEX story_records_one_current ON public.story_records USING btree (institution_id,
+     audience) WHERE (withdrawn_at IS NULL)`;
+   - the story rows `cf99dbf3|false`, `fb473904|true`, `78c1a025|false` (id, current), in that order; the query was run as
+     written on the migrated, hardened copy of Brad's dump and printed exactly these six lines.
+4. **The TOC after hardening:** **990**.
+5. **Deploy:**
+   - bundle **`index-DdLM5B0v.js` / `index-CimN7kyl.css`**;
+   - drift none (**57 migrations, newest `0056_s7b2_one_current_story`**);
+   - "active and answering", health 200, `actor_header` off;
+   - the 401 checks, **`deploy OK`**.
+
+**Brad's look (records nothing):** Curia's story page shows "Issued as fb473904 on 2026-11-26 (UTC). Nothing on the
+record has changed since." with `fb473904` linked, and no "Issue this story…".
+
+**Then a read-only Gate C (as `lvrf_app`):**
+- head and bundle as above; drift none (57, newest `0056`);
+- 233 triggers, none disabled; the guard `beb740bb…`; the index present;
+- the three story rows, each payload and hash unchanged;
+- nothing written since the pre-migration backup, apart from any session of Brad's own;
+- ownership clean; hashes 27/27; TOC 990.
