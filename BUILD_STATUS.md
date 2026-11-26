@@ -18154,17 +18154,27 @@ A redeploy: no migration and no hardening change. Stop at any step whose expecta
    `verify_commit_measure_verify`, the 3.1 order, and these records. `scripts/demo/` is in none of them.
 2. **On the box (LVRF key only), a backup:** TOC **989**.
 3. **Pull:** the head of step 1.
-4. **No migration pending:** the journal is 56, newest `0055_s7b_story_records`.
+4. **No migration pending:** `ls db/drizzle/*.sql` gives 56, the newest `0055_s7b_story_records.sql`.
 5. **Deploy:**
    - drift none (56);
    - ownership clean;
    - health 200;
    - the 401 checks;
-   - bundle **`index-CbMGHNT0.js` / `index-CimN7kyl.css`**;
+   - bundle **`index-CbMGHNT0.js` / `index-CimN7kyl.css`** (a clean build of `c3627cc` in a fresh worktree, `npm ci`
+     then `npm run build`, as the deploy builds; the docs commit after it changes no client file);
    - "deploy OK".
 6. **Read-only checks:** 233 triggers; `lvrf_story_record_guard` `8a42b278b6fea86e88215db8be6d6439`; 1 story row,
-   `cf99dbf3`, whose hash still equals the sha256 of its payload.
+   `cf99dbf3-e238-4eba-a3e4-3454a924f504|1|t` (its hash still the sha256 of `payload::text`, the expression the issue
+   route and the guard use). The query was run as written on the fresh copy and printed exactly these three lines.
 
-**Then Brad, through the page (rule 10):** open `cf99dbf3` and see it render as version 1 (Brad's addition: confirmed
-before the withdrawal); withdraw it, with his reason; issue the version-2 story; print both forms. Then a read-only
-Gate C.
+**Then Brad, through the page (rule 10):**
+1. Open `cf99dbf3` and see it render as version 1 (Brad's addition: confirmed before the withdrawal).
+2. Print `cf99dbf3` again, both forms, and check that every page carries the record line and the full hash
+   `d2514a3d879af0dd6463863f73c449d2bc27435ae80e36f2f766d51e3a2fd363`.
+3. Withdraw it, with his reason.
+4. Issue the version-2 story, and print both forms.
+
+Then a read-only Gate C.
+
+**Brad's rulings at Gate A (26 Nov 2026):** "About this story" on its own last page is accepted. "Published-figure rows
+stay on one page" goes on 3.1 as the next print item.

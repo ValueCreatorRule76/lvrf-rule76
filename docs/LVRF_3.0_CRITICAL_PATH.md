@@ -482,6 +482,9 @@ cut line applied first.
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 
+- **Published-figure rows stay on one page** (Brad, 26 Nov 2026, from S7b.1's Gate A; the next print item). In the
+  printed story a row of "What each published figure can and cannot support" can split across pages (the "8,487 Total
+  badges" row, page 3 to 4 of the full form). The fix, a check from the PDFs and its break, as S7b.1's ledger rows.
 - **The plain-words sweep's window crosses a summary/provenance join** (Brad, 25 Nov 2026, from S7b's Gate A).
   - **The case:** on `/runs` (`client/src/components/C3Batches.tsx` line 132), the system-exercise batch quotes each
     candidate's note, which `server/routes/creditAndMarks.ts` line 424 builds as `summary || ' (' || provenance || ')'`.
