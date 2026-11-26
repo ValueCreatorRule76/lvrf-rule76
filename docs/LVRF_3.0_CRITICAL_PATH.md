@@ -298,8 +298,8 @@ cut line applied first.
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
-       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1, "every script stops its servers by port" (done 26 Nov
-         2026) and S7b.2 (Brad, 25–26 Nov 2026; all before 4 Jan 2027): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
+       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1, "every script stops its servers by port" and S7b.2 (both
+         done 26 Nov 2026), before 4 Jan 2027: S4's full-text confirmation on W6's "Add evidence".** W6's form has no
          confirmation step (S7a's accepted departure, LVRF_PLAN §33), so the figure's class shows in the form only. The
          class is fixed once recorded, so W6 confirms every field in full, as card 01c's forms do (S4, LVRF_PLAN §23),
          before the pilot's account teams use it.
@@ -484,14 +484,24 @@ cut line applied first.
   (5198 and 5197 refused `verify_corrections` and `verify_pov_print`; nineteen in all were stopped by hand). Twenty Vite
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
-- **S7b.2: one issue per story** (Brad, 26 Nov 2026, from S7b.1's Gate C; **next** (the port item is done), before W6's
-  full-text confirmation; both before 4 Jan 2027 (order ruled by Brad, 26 Nov 2026)). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
-  withdrew the second as a duplicate.
+- **DONE (26 Nov 2026, deployed at `c8a143e`, Gate C clean; LVRF_PLAN §36): S7b.2, one current story per account and
+  audience** (Brad, 26 Nov 2026, from S7b.1's Gate C, widened at approval from one per hash). Brad issued the same
+  version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and withdrew the second as a duplicate. As planned before
+  the approval:
   - **Refused:** a duplicate issue, meaning the same account, audience and hash while a story with them is current (not
     withdrawn). Refused in the route and in the database guard (`lvrf_story_record_guard`), with its plain sentence
     and a break.
   - **On the page:** when nothing has changed since the current story, "Issued as <id> on <date>" in place of the
     issue button.
+  - **As built (§36):** `story_records_one_current` (0056); the same hash and a changed record each refused in Brad's
+    words; "The record has changed since <id> was issued. Withdraw it to issue the new story." when it has.
+- **The "Issued stories" list: each entry's short id, the current one marked, dates with "(UTC)"** (Brad, 26 Nov 2026,
+  from S7b.2's Gate C). On `/accounts/:id/story` the list reads "Story of record, for your company · issued 2026-11-26 by
+  …" with no id, no mark of which story is current, and dates without "(UTC)". Each entry gives its short id, the current
+  one is marked, and every date says "(UTC)". Close to the withdrawal line's "(UTC)" below: the two may be one item.
+- **A draft that matches the current story says so** (Brad, 26 Nov 2026, from S7b.2's Gate C). When the draft's hash is
+  the current story's, the draft's banner ("DRAFT — on screen only …") and its stage line (" · a draft, not issued") say
+  that this is the story already issued, instead of "a draft, not issued". Nothing changes when the record has changed.
 
 - **The withdrawal line shows "(UTC)", as the issue line does** (Brad, 26 Nov 2026, from S7b.1's Gate C). An issued
   story's dates are UTC; the withdrawal line ("Withdrawn 2026-11-26 by …") does not say so.

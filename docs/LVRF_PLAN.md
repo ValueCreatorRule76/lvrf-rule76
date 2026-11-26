@@ -7575,7 +7575,7 @@ where it claims it.
 - Then a read-only Gate C: 1 `withdraw` act and 1 `issue` act; two story rows, the first withdrawn and the second at
   `storyVersion` 2.
 
-## 36. S7b.2: one current story per account and audience (planned 26 Nov 2026, from S7b.1's Gate C; **approved by Brad, 26 Nov 2026, with one change: one current story per account and audience, not only one per hash**; branch `s7b2-one-issue`)
+## 36. S7b.2: one current story per account and audience (planned 26 Nov 2026, from S7b.1's Gate C; **approved by Brad, 26 Nov 2026, with one change: one current story per account and audience, not only one per hash**; branch `s7b2-one-issue`; **Gate A 26 Nov 2026** at `bd59c4b`; **closed 26 Nov 2026**, deployed at `c8a143e`, Gate C clean (`BUILD_STATUS.md`, "S7b.2 closed"))
 
 **Value spine stage:** `return`. The story of record is one document per account and audience. Brad issued the same
 version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and withdrew the second as a duplicate.

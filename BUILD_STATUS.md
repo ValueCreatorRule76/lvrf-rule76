@@ -18426,3 +18426,43 @@ record has changed since." with `fb473904` linked, and no "Issue this story…".
 - the three story rows, each payload and hash unchanged;
 - nothing written since the pre-migration backup, apart from any session of Brad's own;
 - ownership clean; hashes 27/27; TOC 990.
+
+### S7b.2 closed: one current story per account and audience, deployed at `c8a143e`; Gate C clean — 26 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `c8a143e`.
+- Pre-migration backup `~/lvrf-pre-s7b2-20261126T155758Z.dump`, **TOC 989**.
+- Migrate `0056` (57 migrations recorded); `ownership.sql`; `hardening.sql`, 0 ERROR lines; **233 triggers**; the guard
+  **`beb740bb…`**; `story_records_one_current`; the story rows `cf99dbf3|false`, `fb473904|true`, `78c1a025|false`.
+- Post-hardening backup `~/lvrf-post-s7b2-20261126T155939Z.dump`, **TOC 990**.
+- Deploy OK, bundle `index-DdLM5B0v.js` / `index-CimN7kyl.css`; the API active from 16:00:30 UTC.
+
+**Brad's look (recorded nothing):** Curia's Story tab shows "Issued as fb473904 on 2026-11-26 (UTC). Nothing on the record
+has changed since." and no issue button.
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone, inside `BEGIN READ ONLY`):**
+- **The box:** head `c8a143e`, tree clean; the served `index.html` names `index-DdLM5B0v.js` / `index-CimN7kyl.css`;
+  health 200, `origin_check` configured, `actor_header` off, `ai_research` off; 401 with no session.
+- **Drift none** (57 migrations, newest `0056_s7b2_one_current_story`; 1,381 schema objects match `0056_snapshot.json`).
+- **233 triggers**, none disabled; `lvrf_story_record_guard` **`beb740bb189f4e503b6a23458abca548`**; the index
+  `UNIQUE (institution_id, audience) WHERE (withdrawn_at IS NULL)`; ownership clean.
+- **The three story rows, unchanged** (each `md5(payload::text)` and hash as in Brad's 15:17 dump, each hash the sha256 of
+  its payload):
+
+  | Row | Current | Payload md5 | Hash |
+  |---|---|---|---|
+  | `cf99dbf3` | no | `e66fa9ff…` | `d2514a3d…fd363` |
+  | `fb473904` | **yes** | `0460866b…` | `916cee16…38892` |
+  | `78c1a025` | no | `0460866b…` | `916cee16…38892` |
+
+- **Since the 15:57:58 UTC backup: nothing written.** Audit none; 0 acts (243 in all); 0 refusals, 0 research-process
+  refusals, 0 record documents, 0 heartbeat events, 0 evidence rows, 0 new sessions.
+- Runs 27, all locked; **`check_run_hashes` 27/27**. The backups' TOCs read on the box (as brad): 989 before, 990 after.
+
+**S7b.2 is closed** (26 Nov 2026).
+
+**3.1, added (Brad, 26 Nov 2026, from this Gate C):**
+- the "Issued stories" list shows each entry's short id, marks the current one, and gives its dates with "(UTC)";
+- when the draft matches the current story, the draft's banner and stage line say so, instead of "a draft, not issued".
+
+**Next (Brad, 26 Nov 2026), before 4 Jan 2027:** S4's full-text confirmation on W6's "Add evidence".
