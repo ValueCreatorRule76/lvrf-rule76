@@ -7418,7 +7418,7 @@ withdrawn). The latest locked run's `payload.case.hypotheses` is therefore the s
 **Mock-ups updated:** the request's notes carry no figure and the help line names figures (`s34-request`); "What to
 lead with" says it reads from the account's case, with its empty sentence shown as a note (`s34-page`).
 
-## 35. S7b.1: the story's placement, reading order and wording (planned 25 Nov 2026, from Brad's print review of `d2514a3d` and his rulings the same day; **not yet approved**)
+## 35. S7b.1: the story's placement, reading order and wording (planned 25 Nov 2026, from Brad's print review of `d2514a3d` and his rulings the same day; **approved by Brad, 25 Nov 2026, with D1, D2 (the recommended wording, "with LVRF" kept) and D3 as written, and one addition to Gate C**)
 
 **Value spine stage:** `verify` and `return`. The story is the document a CFO reads, and S7b.1 fixes what it claims and
 where it claims it.
@@ -7569,5 +7569,8 @@ where it claims it.
   - withdraw `cf99dbf3`, with his reason;
   - issue version 2;
   - print both forms.
+- **Before Brad withdraws it (Brad's addition, 25 Nov 2026):** read-only, confirm that `cf99dbf3`'s stored hash still
+  equals the SHA-256 of its payload, and that its page renders as version 1 ("composer version 1" in the record line,
+  its findings under "Findings on the record").
 - Then a read-only Gate C: 1 `withdraw` act and 1 `issue` act; two story rows, the first withdrawn and the second at
   `storyVersion` 2.
