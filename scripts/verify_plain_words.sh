@@ -11,6 +11,8 @@
 #      "tenant" is refused in client strings).
 #   2. The words on the page, on a clone of the prod copy: card 01d's two sentences on Curia's commitment made before
 #      attribution and promised dates were recorded; the value case's attribution line; "(UTC)" beside printed-on dates.
+#   3b. S7b.1 (Brad, 25 Nov 2026): B6, the story pages read by the sweep: "(D7)" put into the story page's own heading,
+#      the story pages swept alone, the code caught as app text on a /story page; the page restored; swept clean again.
 #   3. The rendered sweep: every page at 1280, its visible text scanned. A hit in app text fails; a hit in the record (a
 #      person's own words, sealed text) is listed, never failed: the record is never rewritten (D1).
 
@@ -31,8 +33,8 @@ PORT=3391; VITE_PORT=5391; CDP_PORT=9501
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_plain.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
-SPINE=client/src/components/OutcomeSpine.tsx; GAPR=server/routes/gapRegister.ts; HARD=db/hardening.sql
-EDITED=("$SPINE" "$GAPR" "$HARD")
+SPINE=client/src/components/OutcomeSpine.tsx; GAPR=server/routes/gapRegister.ts; HARD=db/hardening.sql; STORY=client/src/pages/StoryPage.tsx
+EDITED=("$SPINE" "$GAPR" "$HARD" "$STORY")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -189,7 +191,8 @@ NPATHS="$(grep -c . "$W/paths.txt")"; NREAD="$(grep -oE '^PASS  sweep: [0-9]+ pa
 [ "$NREAD" = "$NPATHS" ] && ok "coverage: all $NPATHS pages read" || bad "coverage: $NREAD of $NPATHS pages read: an unread page proves nothing"
 # Classify: a hit whose text is in the record (the clone's data) is the record's own words; anything else is app text.
 pg_dump -a -X -d "$VERIFY_DB" 2>/dev/null > "$W/data.sql" || pg_dump -a -d "$VERIFY_DB" > "$W/data.sql"
-python3 - "$W/sweep.log" "$W/data.sql" > "$W/classified.txt" <<'PY'
+classify() {  # SWEEP_LOG OUT
+python3 - "$1" "$W/data.sql" > "$2" <<'PY'
 import json, sys, re
 data = open(sys.argv[2], encoding='utf-8', errors='replace').read()
 data_n = re.sub(r'\s+', ' ', data.replace('\\n', ' '))
@@ -200,11 +203,26 @@ for line in open(sys.argv[1]):
     rec = (frag in data_n) or (len(t) <= 40 and t in data_n) or h.get('mono')
     print(('RECORD' if rec else 'APP') + '\t' + h['path'] + '\t[' + h['code'] + ']\t' + t[:160])
 PY
+}
+classify "$W/sweep.log" "$W/classified.txt"
 APPN="$(grep -c '^APP' "$W/classified.txt" || true)"; RECN="$(grep -c '^RECORD' "$W/classified.txt" || true)"
 [ "$APPN" = "0" ] && ok "the sweep: 0 plan codes in app text" || { bad "the sweep: $APPN plan code(s) in app text"; grep '^APP' "$W/classified.txt" | sort -u | head -20; }
 echo "  listed, not failed: $RECN hit(s) in the record's own words (people's text, sealed text, ids), by code and text:"
 grep '^RECORD' "$W/classified.txt" | cut -f3,4 | sort | uniq -c | sort -rn | head -30 | sed 's/^/    /'
-cover "$LOG" 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'B4: "tenant" in JSX text' 'B5: "tenant" in a client string' 'pages to read' 'coverage: all' 'the sweep: 0 plan codes'
+echo "  B6: a plan code in the story page's own text, read by the sweep (S7b.1)"
+grep -E '^/accounts/[^/]+/story$|^/stories/' "$W/paths.txt" > "$W/story_paths.txt"
+NSTORY="$(grep -c . "$W/story_paths.txt" || true)"
+edit "$STORY" "<h2 className={H2}>Where it stands</h2>" "<h2 className={H2}>Where it stands (D7)</h2>"; sleep 3
+env VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_PORT" S_EMAIL="$S_EMAIL" PW="$PW" PATHS="$W/story_paths.txt" node scripts/lib/plain_words_sweep.mjs > "$W/b6.log" 2>&1 || true
+classify "$W/b6.log" "$W/b6.txt"
+B6HIT="$(awk -F'\t' '$1 == "APP" && $2 ~ /^\/accounts\/[^\/]+\/story$/ && $3 == "[D7]"' "$W/b6.txt" | head -1)"
+[ -n "$B6HIT" ] && ok "B6: caught — the sweep of the $NSTORY story pages finds \"(D7)\" as app text: $(printf '%s' "$B6HIT" | cut -f2,4 | cut -c1-140)" \
+  || bad "B6: NOT caught — the story pages swept: $(grep -oE 'sweep: [0-9]+ pages read.*' "$W/b6.log"); hits: $(grep -c . "$W/b6.txt" || true)"
+restore "$STORY"
+env VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_PORT" S_EMAIL="$S_EMAIL" PW="$PW" PATHS="$W/story_paths.txt" node scripts/lib/plain_words_sweep.mjs > "$W/b6r.log" 2>&1 || true
+classify "$W/b6r.log" "$W/b6r.txt"
+[ "$(grep -c '^APP' "$W/b6r.txt" || true)" = 0 ] && grep -q "^PASS  sweep: $NSTORY pages read" "$W/b6r.log" && ok "  ...restored: the $NSTORY story pages swept again, 0 plan codes in app text" || bad "  ...after the restore: $(grep -c '^APP' "$W/b6r.txt" || true) app hit(s); $(grep -oE 'sweep: [0-9]+ pages read.*' "$W/b6r.log")"
+cover "$LOG" 'B6: caught' 'check_plain_words: plain words' 'B1: a "§" in a client string' 'B2: "(C3)" in an ask' 'B3: "(D2)" back' 'B4: "tenant" in JSX text' 'B5: "tenant" in a client string' 'pages to read' 'coverage: all' 'the sweep: 0 plan codes'
 
 echo "  screenshots: $OUT"
 
