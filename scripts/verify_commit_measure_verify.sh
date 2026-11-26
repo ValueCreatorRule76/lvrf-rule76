@@ -37,7 +37,8 @@ SHOTS="${1:-$W/shots}"; mkdir -p "$SHOTS"
 PAGE=client/src/pages/ValueCasePage.tsx
 INSTPAGE=client/src/pages/InstitutionPage.tsx
 PRODUCE=server/routes/produceRun.ts
-EDITED=("$PAGE" "$INSTPAGE" "$PRODUCE" server/routes/outcomeWalk.ts)
+WITHDRAW=server/routes/outcomeWithdrawals.ts
+EDITED=("$PAGE" "$INSTPAGE" "$PRODUCE" server/routes/outcomeWalk.ts "$WITHDRAW")
 for f in "${EDITED[@]}"; do cp "$f" "$W/$(basename "$f").orig"; done
 PASS=0; FAIL=0; SERVER_PID=""; VITE_PID=""; CHROME_PID=""
 step() { echo; echo "==> $*"; }
@@ -51,14 +52,22 @@ cleanup() {
   for f in "${EDITED[@]}"; do
     cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }
   done
-  sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
+  # S7b.1 (Brad, 25 Nov 2026): on any failure the clone is kept, and named, for inspection; it is dropped only when
+  # every check passed. The server log is kept in $W either way (appended across restarts).
+  if [ "$FAIL" != 0 ] || [ "${REACHED_TALLY:-0}" != 1 ]; then
+    echo "  clone kept for inspection: $VERIFY_DB (server log: $W/server.log); dropped by the next run of this script"
+  else
+    sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true
+  fi
   rm -rf "$W/chrome"
 }
 . scripts/lib/finish.sh
 trap finish EXIT
 q() { psql -X -At -d "$VERIFY_DB" -c "$1"; }
 start_server() {
-  LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 &
+  # S7b.1: appended, never overwritten: each start marked, so a failure's requests survive the next restart.
+  echo "===== server start $(date -u +%Y-%m-%dT%H:%M:%SZ) =====" >> "$W/server.log"
+  LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts >> "$W/server.log" 2>&1 &
   SERVER_PID=$!
   for _ in $(seq 1 40); do curl -s -o /dev/null "$BASE/api/health" && return 0; sleep 0.5; done
   bad "server did not start: $(tail -5 "$W/server.log")"; exit 1
@@ -251,6 +260,19 @@ SQL
   C1="${C1//f23ee6a8/${FOUT:0:8}}"; C2="${C2//f23ee6a8/${FOUT:0:8}}"; C3="${C3//2c10e091/${FS1:0:8}}"; C4="${C4//eea43d9a/${FS2:0:8}}"
   OUT="$FOUT"; SIM1="$FS1"; SIM2="$FS2"; export OUT SIM1 SIM2 C1 C2 C3 C4
 fi
+echo "  W1 (S7b.1, Brad 25 Nov 2026): the measurement's withdrawal answered 500 — the walk names it, and nothing is written"
+edit "$WITHDRAW" "      if (!isUuid(outcomeId)) { res.status(400).json({ message: \`invalid value outcome id: \${outcomeId}\` }); return; }
+      try {" "      if (!isUuid(outcomeId)) { res.status(400).json({ message: \`invalid value outcome id: \${outcomeId}\` }); return; }
+      try {
+        if (kind === 'measurement') throw new Error('W1 break: the route answers 500');"
+stop_server; start_server
+W1LOG="$W/walk.w1.log"
+MEAS_ONLY=1 node scripts/lib/l41_walk.mjs spineacts "$VITE_PORT" "$CDP_PORT" "$SHOTS" "$TOKEN" > "$W1LOG" 2>&1 || true
+grep -q "^  FAIL    ...measurement: the withdrawal: its POST was sent and answered 200 — answered 500" "$W1LOG" \
+  && ok "W1: caught — $(grep -m1 'the withdrawal: its POST' "$W1LOG" | sed 's/^ *//')" || bad "W1: not named: $(grep -E '^  (PASS|FAIL)' "$W1LOG" | tail -3 | tr '\n' ' ')"
+[ "$(q "SELECT count(*) FROM outcome_withdrawals WHERE value_outcome_id = '$OUT'")" = 0 ] && ok "  ...and nothing was written under the break" || bad "  ...a withdrawal was written under the break"
+grep -q "POST /api/value-outcomes/:outcomeId/measurement/withdraw 500" "$W/server.log" && ok "  ...the server log holds the 500, kept across the restart" || bad "  ...the server log does not hold the 500"
+restore "$WITHDRAW"; stop_server; start_server
 cw spineacts
 [ "$(q "SELECT kind || ':' || (withdrawn_values->>'actual_value') || ':' || (withdrawn_values->>'realized_currency_impact') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'measurement'")" = "measurement:100.4:8400000" ] && ok "act 1: the measurement's values kept exactly (actual 100.4, realized 8400000)" || bad "act 1 values: $(q "SELECT withdrawn_values FROM outcome_withdrawals WHERE value_outcome_id = '$OUT'")"
 [ "$(q "SELECT (withdrawn_values->>'target_value') || ':' || (withdrawn_values->>'committed_by') FROM outcome_withdrawals WHERE value_outcome_id = '$OUT' AND kind = 'commitment'")" = "100:[SIM] Customer Sponsor" ] && ok "act 2: the commitment's values kept exactly" || bad "act 2 values"

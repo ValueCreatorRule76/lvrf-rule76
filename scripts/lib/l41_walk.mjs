@@ -18,11 +18,30 @@ await new Promise((r) => ws.addEventListener('open', r));
 let n = 0;
 const pend = new Map();
 const posts = [];
+// S7b.1 (Brad, 25 Nov 2026): every POST with the status it was answered (null until answered; 'failed' if it never was).
+const postLog = [];
 ws.addEventListener('message', (e) => {
   const m = JSON.parse(e.data);
   if (m.id && pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); }
-  if (m.method === 'Network.requestWillBeSent' && m.params.request.method === 'POST') posts.push(new URL(m.params.request.url).pathname);
+  if (m.method === 'Network.requestWillBeSent' && m.params.request.method === 'POST') {
+    const path = new URL(m.params.request.url).pathname;
+    posts.push(path); postLog.push({ requestId: m.params.requestId, path, status: null });
+  }
+  if (m.method === 'Network.responseReceived') { const x = postLog.find((p) => p.requestId === m.params.requestId); if (x) x.status = m.params.response.status; }
+  if (m.method === 'Network.loadingFailed') { const x = postLog.find((p) => p.requestId === m.params.requestId); if (x && x.status === null) x.status = 'failed'; }
 });
+/** The first POST since index `from` whose path ends with `suffix`, waited for up to 15 s: { sent, status }. */
+const answerOf = async (suffix, from) => {
+  for (let i = 0; i < 75; i++) {
+    const x = postLog.slice(from).find((p) => p.path.endsWith(suffix));
+    if (x && x.status !== null) return { sent: true, status: x.status };
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  const x = postLog.slice(from).find((p) => p.path.endsWith(suffix));
+  return { sent: Boolean(x), status: x ? x.status : null };
+};
+const answerCheck = (a, label) => check(a.sent && a.status === 200, `${label}: its POST was sent and answered 200`,
+  !a.sent ? 'no POST was sent' : a.status === null ? 'sent, and not answered within 15 s' : a.status === 'failed' ? 'sent, and the request failed' : `answered ${a.status}`);
 const send = (method, params = {}) => new Promise((r) => { const id = ++n; pend.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
 const ev = async (expr) => (await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
 const waitFor = async (expr, ms = 15000) => { for (let i = 0; i < ms / 200; i++) { if (await ev(expr)) return true; await sleep(200); } return false; };
@@ -375,7 +394,12 @@ if (MODE === 'spineacts') {
     const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
     check(ct === expected, `  ...the ${kind}'s confirmation reads exactly as §14's act session quotes it`, ct);
     if (kind === 'measurement') await shotOf('b4_withdraw_measurement_1280', `[data-testid=spine-outcome][data-outcome="${E.OUT}"]`, 1280);
-    await confirmIn(f); await sleep(1200);
+    const p0 = postLog.length;
+    check(await confirmIn(f), `  ...${kind}: Confirm clicked`, 'no Confirm button in the form');
+    answerCheck(await answerOf(`/${kind}/withdraw`, p0), `  ...${kind}: the withdrawal`);
+    await sleep(300);
+    // S7b.1: the break run (MEAS_ONLY) stops after the measurement's withdrawal, before anything else is performed.
+    if (E.MEAS_ONLY) { console.log('DONE'); ws.close(); process.exit(0); }
     await page();
     check(await waitFor(`(${row}?.textContent ?? '').includes(${JSON.stringify(kind === 'measurement' ? 'not measured' : 'no commitment')})`), `  ...recorded: the outcome reads ${kind === 'measurement' ? 'not measured' : 'with no commitment'}`, await ev(`(${row}?.textContent ?? '').slice(0, 300)`));
   }
@@ -390,7 +414,10 @@ if (MODE === 'spineacts') {
     await submitIn(f, 'Withdraw the link'); await sleep(300);
     const ct = await ev(`${f}.querySelector('[data-testid=confirm-text]')?.textContent ?? ''`);
     check(ct === expected, `  ...${id.slice(0, 8)}: its confirmation reads exactly as the act session quotes it`, ct);
-    await confirmIn(f); await sleep(1200);
+    const p0 = postLog.length;
+    check(await confirmIn(f), `  ...${id.slice(0, 8)}: Confirm clicked`, 'no Confirm button in the form');
+    answerCheck(await answerOf(`/evidence/${id}/withdraw`, p0), `  ...${id.slice(0, 8)}: the link's withdrawal`);
+    await sleep(300);
     await page();
   }
   await shot('b4_card01d_after_1280', 1280);

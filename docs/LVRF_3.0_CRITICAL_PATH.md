@@ -297,7 +297,8 @@ cut line applied first.
          approved by Brad (24 Nov 2026) with four conditions, mock-ups before code, S7b's Gate C targeted by Fri 18 Dec
          2026 (January the fallback only); two deploys (S7a the published-figure class, then Brad's
          acts recording Curia's published figures; S7b the story);
-       - **next, after S7b (Brad, 25 Nov 2026): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
+       - **next, after S7b (Brad, 25 Nov 2026), now after S7b.1 and "every script stops its servers by port" (Brad,
+         25 Nov 2026): S4's full-text confirmation on W6's "Add evidence".** W6's form has no
          confirmation step (S7a's accepted departure, LVRF_PLAN §33), so the figure's class shows in the form only. The
          class is fixed once recorded, so W6 confirms every field in full, as card 01c's forms do (S4, LVRF_PLAN §23),
          before the pilot's account teams use it.
@@ -475,7 +476,9 @@ cut line applied first.
   already recorded; `verify_figure_class`'s rows with a class; `verify_plain_words`'s classification note;
   `verify_s1_hypothesis_rule`'s account already classified). Until then the regression runs on the pinned
   `lvrf_snapshot_20261114.dump`, and a newer dump only for the story of the real record and the equivalence.
-- **Every script stops its servers by the port they listen on** (Brad, 25 Nov 2026, from S7b's cross-check). Twenty Vite
+- **Every script stops its servers by the port they listen on** (Brad, 25 Nov 2026, from S7b's cross-check). **Next
+  after S7b.1, ahead of the rest of 3.1 (Brad, 25 Nov 2026):** S7b.1's regression again left a Vite on a script's port
+  (5198 and 5197 refused `verify_corrections` and `verify_pov_print`; nineteen in all were stopped by hand). Twenty Vite
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 
