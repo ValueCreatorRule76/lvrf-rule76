@@ -18178,3 +18178,43 @@ Then a read-only Gate C.
 
 **Brad's rulings at Gate A (26 Nov 2026):** "About this story" on its own last page is accepted. "Published-figure rows
 stay on one page" goes on 3.1 as the next print item.
+
+### S7b.1: deployed at `ed47a7d`; Gate C read-only — not clean (26 Nov 2026, UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `ed47a7d`.
+- Pre-deploy backup `~/lvrf-pre-s7b1-20261126T031817Z.dump`, **TOC 989**.
+- Deploy: the API active from 03:19:35 UTC, bundle `index-CbMGHNT0.js` / `index-CimN7kyl.css`.
+
+**Brad's acts, through the page (rule 10):**
+- He printed `cf99dbf3` again before the withdrawal.
+- He withdrew it at 03:25:27 UTC, with the reason "Replaced by a version-2 story: a finding printed under the wrong
+  line, and the ledger was not numbered in reading order."
+- He issued the version-2 story; its full print checks out (Brad).
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone, inside `BEGIN READ ONLY`):**
+- **The box:** head `ed47a7d`, tree clean; the served `index.html` names `index-CbMGHNT0.js` / `index-CimN7kyl.css`;
+  health 200, `origin_check` configured, `actor_header` off, `ai_research` off; 401 with no session.
+- **Drift none** (56 migrations, newest `0055_s7b_story_records`; 1,380 schema objects match `0055_snapshot.json`).
+- **233 triggers**, none disabled; `lvrf_story_record_guard` `8a42b278b6fea86e88215db8be6d6439`; ownership clean.
+- Runs 27, all locked; **`check_run_hashes` 27/27**.
+- **`cf99dbf3`:** withdrawn at 03:25:27 by Brad Piver, with his reason. Its payload is unchanged (md5
+  `e66fa9ff69050f362bfa9d8b6744eef5`, as in the copy taken before the withdrawal); its hash is
+  `d2514a3d…fd363`, still the sha256 of its payload; `storyVersion` 1, `prepared_by` "Skillsoft".
+- **Not as expected: two version-2 rows, not one.**
+  - `fb473904`, issued 03:35:45 UTC by Brad Piver; and `78c1a025`, issued 03:36:29 UTC by Brad Piver, 44 s later.
+  - Both: `storyVersion` 2, reference, internal; "Rule 76 Consulting LLC for Skillsoft"; 6 evidence heads; 22 ledger
+    entries. The payload is identical (md5 `0460866b3e8164c1cd2c0cc0b268a709`), and so is the hash, `916cee16…38892`,
+    the sha256 of the payload.
+- **Since the pre-deploy backup (03:18:17 UTC): three acts, not two.**
+  - 1 `withdraw` (`POST /api/stories/:id/withdraw`, `cf99dbf3`);
+  - 2 `issue` (`POST /api/institutions/:institutionId/stories`, `fb473904` and `78c1a025`), each naming the six rows;
+  - all by Brad Piver, 242 acts in all.
+  - Audit: 3 `governance_acts` inserts, 2 `story_records` inserts and 1 `story_records` update, and nothing else.
+  - 0 refusals, 0 research-process refusals, 0 record documents, 0 heartbeat events, 0 new sessions, 0 evidence rows.
+
+**S7b.1 is not recorded closed.** Whether the second issue was meant, and what to do with it (rule 2: nothing is
+deleted; a story is withdrawn with a reason, by the steward), is Brad's to rule.
+
+**3.1, added (Brad, 26 Nov 2026):** the withdrawal line shows "(UTC)", as the issue line does; run hashes in the ledger
+do not break across lines.

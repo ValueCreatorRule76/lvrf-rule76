@@ -482,6 +482,10 @@ cut line applied first.
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
 
+- **The withdrawal line shows "(UTC)", as the issue line does** (Brad, 26 Nov 2026, from S7b.1's Gate C). An issued
+  story's dates are UTC; the withdrawal line ("Withdrawn 2026-11-26 by …") does not say so.
+- **Run hashes in the ledger do not break across lines** (Brad, 26 Nov 2026, from S7b.1's Gate C). A 64-character run
+  hash wraps inside its cell in print ("…fe1a" / "de03"); it prints on one line, whole.
 - **Published-figure rows stay on one page** (Brad, 26 Nov 2026, from S7b.1's Gate A; the next print item). In the
   printed story a row of "What each published figure can and cannot support" can split across pages (the "8,487 Total
   badges" row, page 3 to 4 of the full form). The fix, a check from the PDFs and its break, as S7b.1's ledger rows.
