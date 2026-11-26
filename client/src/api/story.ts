@@ -15,7 +15,7 @@ export interface StoryEngagement {
   result: { run_id: string; actual: number; realization: string } | null;
   asks: { code: string; need: string; question: string }[];
 }
-export interface StoryFinding { id: string; outcome_id: string; field: string; value: string; line: string; recorded_on: string }
+export interface StoryFinding { id: string; outcome_id: string; /** v2 */ engagement_id?: string; field: string; value: string; line: string; recorded_on: string }
 export interface StoryPublished {
   id: string; kind: string; class: string; class_label: string; can: string; cannot: string; basis: string;
   form: string; quote: string | null; locator: unknown; how_read: string | null; summary: string; source_reference: string | null;
@@ -25,6 +25,8 @@ export interface LedgerEntry { n: number; figure: string; source: string; ids: s
 export interface StoryPayload {
   storyVersion: number; audience: StoryAudience; stage: StoryStage;
   account: { id: string; name: string }; prepared_by: string;
+  /** v2: the tenant's name, on its own. */
+  tenant?: string;
   marker: { kind: string; note: string | null } | null;
   title: string; subtitle: string | null;
   banners: { outside_in: boolean; unverified: boolean };

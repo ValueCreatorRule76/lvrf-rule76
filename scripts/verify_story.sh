@@ -25,10 +25,18 @@
 #      words); a verified actual opens Realization ("Success story", Results); a correction of the same row sealed in
 #      a second run is still ONE measurement (Realization); a second engagement verified on its own row opens
 #      Compounding.
+#   6b. S7b.1 (LVRF_PLAN §35, Brad 25 Nov 2026): a placement fixture, one account with two engagements and a finding on
+#      the first: the finding prints inside the first engagement's block. Version 2 throughout: each finding seals its
+#      engagement; the ledger in reading order; the finding's figure with its unit; no "in the platform's wording";
+#      "Prepared by Rule 76 Consulting LLC for {tenant}, with LVRF"; "composer version 2"; the banners' 16 px gutter; a
+#      printed two-digit # on one line; "line", not "engagement". A version-1 story in the copy (Curia's cf99dbf3) keeps
+#      its payload and hash, and renders as version 1: its findings under "Findings on the record".
 #   Breaks: B1 the headline score printed without its adjacent errata; B2 "Results" (and its words) below Realization;
 #   B3 a figure with no ledger entry; B4 a reference example computed as Decision (the database refuses issuing it,
 #   its refusal recorded); B5 Print on a draft; B6 an erratum dropped; B7 a plan code on screen; B8 "Success story"
-#   below Realization; B9 a corrected row counted as a second measurement.
+#   below Realization; B9 a corrected row counted as a second measurement; S7b.1: P a finding printed after every
+#   engagement, under none; R the ledger numbered findings-first (version 1's order); G the banners at 4 px; C the
+#   ledger # free to break.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -92,6 +100,11 @@ sqlrefused() {  # LABEL SQL NEEDLE [ACTOR]
   printf '%s' "$out" | grep -qF -- "$3" && ok "$1 → refused by the database: \"$3\"" || bad "$1: not refused as expected: $(printf '%s' "$out" | tail -2)"
 }
 trig() { q "SELECT count(DISTINCT t.tgname) FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND NOT t.tgisinternal"; }
+editall() { python3 - "$1" "$2" "$3" <<'PY'
+import sys; p, a, b = sys.argv[1:4]; s = open(p).read()
+assert s.count(a) >= 1, a; open(p, 'w').write(s.replace(a, b))
+PY
+}
 edit() { python3 - "$1" "$2" "$3" <<'PY'
 import sys; p, a, b = sys.argv[1:4]; s = open(p).read()
 assert s.count(a) == 1, a; open(p, 'w').write(s.replace(a, b))
@@ -174,6 +187,14 @@ const p=require('$W/draft.json').payload; console.log(p.published.every(e=>{cons
   && ok "every figure the story prints is a ledger entry: each score, erratum, finding and published row" || bad "a figure without a ledger entry"
 SC_SQL="$(q "SELECT string_agg(r.id::text || '=' || trim_scale(r.confidence_score)::text || '|' || r.payload_hash, ',' ORDER BY r.id) FROM value_runs r WHERE r.id IN (SELECT unnest(string_to_array('$RUNS_SQL', ','))::uuid)")"
 [ "$(dj 'p.engagements.flatMap(g=>g.runs.map(r=>r.id+"="+r.score+"|"+r.payload_hash)).sort().join(",")')" = "$SC_SQL" ] && ok "each sealed score and hash as sealed, never recomputed" || bad "scores differ from SQL"
+TENANT="$(q "SELECT name FROM tenants WHERE id = '$TEN'")"
+OWNERS_C="$(q "SELECT json_object_agg(f.id, vo.engagement_id) FROM figure_findings f JOIN value_outcomes vo ON vo.id = f.value_outcome_id WHERE f.institution_id = '$C'")"
+[ "$(dj 'p.storyVersion')" = 2 ] && ok "S7b.1: composer version 2" || bad "storyVersion: $(dj 'p.storyVersion')"
+[ "$(dj 'JSON.stringify(Object.fromEntries(p.findings.map(f=>[f.id,f.engagement_id])))')" = "$(node -e "const o=JSON.parse(process.argv[1]);console.log(JSON.stringify(Object.fromEntries(Object.keys(o).sort().map(k=>[k,o[k]]))))" "$OWNERS_C")" ] \
+  && ok "S7b.1: each finding seals the engagement that owns its outcome (SQL)" || bad "finding engagements: $(dj 'JSON.stringify(p.findings.map(f=>[f.id.slice(0,8),f.engagement_id]))') vs $OWNERS_C"
+[ "$(dj 'p.findings.map(f=>p.ledger.find(l=>l.n===p.refs["finding:"+f.id]).figure).join("|")')" = "214 days, no source on record" ] && ok "S7b.1: the finding's ledger figure carries its unit: \"214 days, no source on record\"" || bad "finding figure: $(dj 'p.findings.map(f=>p.ledger.find(l=>l.n===p.refs["finding:"+f.id]).figure).join("|")')"
+[ "$(dj 'p.ledger.filter(l=>/platform.s wording/.test(l.source)).length')" = 0 ] && ok "S7b.1: no ledger source says \"in the platform's wording\"" || bad "a ledger source still says it"
+[ "$(dj 'p.prepared_by+"|"+p.tenant')" = "Rule 76 Consulting LLC for $TENANT|$TENANT" ] && ok "S7b.1: prepared by \"Rule 76 Consulting LLC for $TENANT\"; the tenant sealed on its own" || bad "preparer: $(dj 'p.prepared_by+"|"+p.tenant')"
 draft "$C" client
 [ "$CODE" = 409 ] && grep -q "no client copy" "$W/r.json" && ok "the client copy of a reference example is refused (D4) -> 409" || bad "client copy -> $CODE $(said)"
 
@@ -183,7 +204,7 @@ step "3. The page: the draft, issued through the page, the issued story"
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$VITE_PORT/" && curl -s -o /dev/null "http://127.0.0.1:$CDP_PORT/json/version" && break; sleep 0.5; done
 R13="$(q "SELECT r.id FROM value_runs r JOIN engagements g ON g.id = r.engagement_id WHERE g.institution_id = '$C' AND r.payload_hash LIKE 'b15dd9b7209e%'")"
 HE="$(q "SELECT json_agg(id) FROM run_errata x WHERE value_run_id = '$R13' AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)")"
-CURIA=(INST="$C" STAGE=reference TITLE="Story of record" HEADLINE_ERRATA="$HE")
+CURIA=(INST="$C" STAGE=reference TITLE="Story of record" HEADLINE_ERRATA="$HE" FINDING_OWNERS="$OWNERS_C" TENANT="$TENANT")
 for w in 1280 390; do walk draft,refused "draft $w" "$W/d$w.log" WIDTH=$w "${CURIA[@]}"; tally "$W/d$w.log"; done
 N0="$(q "SELECT count(*) FROM story_records")"
 walk issue "issue" "$W/issue.log" "${CURIA[@]}"; tally "$W/issue.log"
@@ -194,6 +215,19 @@ for w in 1280 390; do walk issued "issued $w" "$W/i$w.log" WIDTH=$w STORY="$ST" 
 walk html "render 1" "$W/h1.log" STORY="$ST"; walk html "render 2" "$W/h2.log" STORY="$ST"
 H1="$(grep '^HTML' "$W/h1.log" | cut -d' ' -f2)"; H2="$(grep '^HTML' "$W/h2.log" | cut -d' ' -f2)"
 [ -n "$H1" ] && [ "$H1" = "$H2" ] && ok "the issued story re-renders byte-identical (its body's markup, md5 $H1)" || bad "re-render differs: $H1 vs $H2"
+
+step "3b. A version-1 story in the copy (S7b.1, D3): its payload and hash unchanged; it renders as version 1"
+V1="$(q "SELECT id FROM story_records WHERE institution_id = '$C' AND payload->>'storyVersion' = '1' ORDER BY issued_at LIMIT 1")"
+if [ -z "$V1" ]; then
+  echo "  NOT CHECKED  this copy holds no version-1 story (Curia's cf99dbf3 was issued 25 Nov 2026, 23:06 UTC)"
+else
+  [ "$(q "SELECT md5(payload::text) || payload_hash FROM story_records WHERE id = '$V1'")" = "$(psql -X -At -d lvrf_prodcopy -c "SELECT md5(payload::text) || payload_hash FROM story_records WHERE id = '$V1'")" ] \
+    && ok "version-1 story ${V1:0:8}: payload and hash as in the prod copy" || bad "version-1 story ${V1:0:8} changed"
+  [ "$(q "SELECT (payload_hash = encode(sha256(convert_to(payload::text, 'UTF8')), 'hex'))::text FROM story_records WHERE id = '$V1'")" = true ] \
+    && ok "version-1 story ${V1:0:8}: its hash is still the sha256 of its payload" || bad "version-1 story ${V1:0:8}: hash mismatch"
+  V1H="$(q "SELECT payload_hash FROM story_records WHERE id = '$V1'")"
+  walk issued "v1" "$W/v1.log" WIDTH=1280 STORY="$V1" HASH="$V1H" EXPECT_V=1 INST="$C" STAGE=reference TITLE="Story of record" FINDING_OWNERS="$OWNERS_C" TENANT="$TENANT"; tally "$W/v1.log"
+fi
 
 step "4. Issuing and withdrawing"
 [ "$(q "SELECT (payload_hash = encode(sha256(convert_to(payload::text, 'UTF8')), 'hex'))::text || stage || audience FROM story_records WHERE id = '$ST'")" = "truereferenceinternal" ] \
@@ -289,6 +323,27 @@ stage_is "a second verified run on a separate measurement" compounding "Success 
 walk draft "compounding" "$W/com.log" INST="$INST" STAGE=compounding TITLE="Success story"; tally "$W/com.log"
 grep -q 'results-heading' "$PAGE" && ok "\"Results\" renders only at Realization and above (the walks above: absent at Decision)" || bad "no Results section in the page"
 
+step "6b. The placement fixture (S7b.1): one account, two engagements, a finding on the first"
+expect POST /api/account-inputs "$(J institution "$(J name "Tessel Mills (S7b.1 fixture)" industry_slug manufacturing classification_note 'Verification: classified for S7b.1.')" persons "[$(J full_name 'K7p owner (fixture)' email "ownerp.$TS@k7b.example" title Owner)]")" 201 "a fixture account (no one customer-side, so a finding can be stated)"
+INSTP="$(rj b.institution_id)"; OWNERP="$(rj b.person_ids[0])"
+expect POST "/api/institutions/$INSTP/offerings" "$(J offering_key skillsoft_compliance_suite capability_name 'K7p capability' owner_person_id "$OWNERP" is_primary false basis 'Verification: EHS solution.')" 201 "  ...an offering, with its capability"
+outp() {  # NAME -> stdout: outcome id, engagement id
+  req POST "/api/institutions/$INSTP/value-outcomes" "$(J engagement_name "K7p engagement $1" engagement_owner_person_id "$OWNERP" capability_name 'K7p capability' metric "$(J name "K7p TRIR $1" unit 'incidents per 200,000 hours' direction decrease source_system 'verification system of record' owner_person_id "$OWNERP")" baseline_value 1.4 baseline_measured_at 2025-09-30T00:00:00Z)"
+  [ "$CODE" = "201" ] && echo "$(rj b.value_outcome_id) $(rj b.engagement_id)" || { echo "ERR $CODE $(said)"; return 1; }
+}
+read -r OPA EPA <<< "$(outp first)"; read -r OPB EPB <<< "$(outp second)"
+case "$OPA$OPB" in *ERR*) bad "fixture outcomes: $OPA $OPB"; exit 1 ;; esac
+seal "$EPA" "Verification: the first engagement sealed"; seal "$EPB" "Verification: the second engagement sealed"
+expect POST "/api/value-outcomes/$OPA/figure-findings" "$(J field baseline_value reason 'Verification: the first engagement baseline has no source on record.')" 201 "  ...a finding on the first engagement's baseline"
+FP="$(rj b.figure_finding_id)"
+OWNERS_P="$(q "SELECT json_object_agg(f.id, vo.engagement_id) FROM figure_findings f JOIN value_outcomes vo ON vo.id = f.value_outcome_id WHERE f.institution_id = '$INSTP'")"
+[ "$OWNERS_P" = "{ \"$FP\" : \"$EPA\" }" ] && ok "  ...SQL: the finding's outcome belongs to the first engagement" || bad "  ...owners: $OWNERS_P"
+draft "$INSTP"
+[ "$(dj 'p.engagements.map(g=>g.id).join(",")')" = "$EPA,$EPB" ] && ok "the draft reads two engagements, the first first" || bad "engagements: $(dj 'p.engagements.map(g=>g.id.slice(0,8)).join(",")')"
+[ "$(dj 'p.findings.map(f=>f.engagement_id).join(",")')" = "$EPA" ] && ok "the finding seals the first engagement" || bad "finding engagement: $(dj 'p.findings.map(f=>f.engagement_id).join(",")')"
+FIXP=(INST="$INSTP" STAGE=decision TITLE="Story of record: decision" FINDING_OWNERS="$OWNERS_P" TENANT="$TENANT")
+for w in 1280 390; do walk draft "placement $w" "$W/p$w.log" WIDTH=$w "${FIXP[@]}"; tally "$W/p$w.log"; done
+
 step "7. Breaks"
 CURIA_HE=(INST="$C" STAGE=reference TITLE="Story of record" HEADLINE_ERRATA="$HE")
 echo "  B1: the headline score printed without its adjacent errata"
@@ -298,7 +353,7 @@ echo "  B2: \"Results\" below Realization"
 edit "$PAGE" "      {reachedResult && (" "      {(reachedResult || true) && ("
 sleep 3; walk draft "B2" "$W/b2.log" "${CURIA_HE[@]}"; broke "B2" "$W/b2.log" '"Results" does not render'; restore "$PAGE"
 echo "  B3: a figure with no ledger entry"
-edit "$COMP" "  for (const f of findings) add(" "  for (const f of findings.slice(1)) add("
+edit "$COMP" "    for (const f of findings.filter((x) => x.engagement_id === g.id)) findingEntry(f);" "    for (const f of findings.filter((x) => x.engagement_id === g.id).slice(1)) findingEntry(f);"
 restart_server; walk draft "B3" "$W/b3.log" "${CURIA_HE[@]}"; broke "B3" "$W/b3.log" "ledger number"; restore "$COMP"; restart_server
 echo "  B4: a reference example computed as Decision"
 edit "$COMP" "  if (marker) stage = 'reference';" "  if (marker && false) stage = 'reference';"
@@ -337,6 +392,24 @@ STAGE_A="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/lib/story_stage.mts "$TEN"
 restore "$COMP"; restart_server
 STAGE_A2="$(DATABASE_URL="$VERIFY_URL" npx tsx scripts/lib/story_stage.mts "$TEN" "$INST" "$EA" 2>&1 | tail -1)"
 [ "$STAGE_A2" = realization ] && ok "  ...restored: A's row and its correction are one measurement (realization)" || bad "  ...restored, A alone reads $STAGE_A2"
+
+echo "  P: a finding printed after every engagement, under none (S7b.1)"
+edit "$PAGE" "  const placed = p.findings.filter((f) => f.engagement_id !== undefined" "  const placed = p.findings.filter((f) => false && f.engagement_id !== undefined"
+sleep 3; walk draft "P" "$W/bp.log" WIDTH=1280 "${FIXP[@]}"; broke "P" "$W/bp.log" "inside the block of the engagement"; restore "$PAGE"
+echo "  R: the ledger numbered findings-first, version 1's order (S7b.1)"
+edit "$COMP" "    scoreEntry(g, latest);
+    errataEntries(latest);
+  }" "    scoreEntry(g, latest);
+    errataEntries(latest);
+  }
+  for (const f of findings) findingEntry(f);"
+restart_server; walk draft "R" "$W/br.log" WIDTH=1280 "${CURIA_HE[@]}" FINDING_OWNERS="$OWNERS_C" TENANT="$TENANT"; broke "R" "$W/br.log" "reading order"; restore "$COMP"; restart_server
+echo "  G: the banners at 4 px (S7b.1)"
+editall "$PAGE" "px-4 py-1 font-mono sm:px-6 print:px-1" "px-1 py-1 font-mono"
+sleep 3; walk draft "G" "$W/bg.log" WIDTH=1280 "${CURIA_HE[@]}"; broke "G" "$W/bg.log" "16 px from the left edge"; restore "$PAGE"
+echo "  C: the ledger # free to break (S7b.1)"
+edit "$PAGE" "w-[3.2em] whitespace-nowrap font-mono text-gold-ink [overflow-wrap:normal]" "font-mono text-gold-ink"; edit "$PAGE" "<th className={TH + ' w-[3.2em]'}>#</th>" "<th className={TH}>#</th>"
+sleep 3; walk draft "C" "$W/bc.log" WIDTH=1280 "${CURIA_HE[@]}"; broke "C" "$W/bc.log" "two-digit ledger # is one line"; restore "$PAGE"
 
 step "8. The code restored, and the page passes again"
 for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" && ok "$f byte-identical to the start" || bad "$f differs"; done

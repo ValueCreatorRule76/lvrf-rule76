@@ -34,11 +34,14 @@ const TABLE = 'mt-1 w-full border-collapse max-sm:block max-sm:[&_thead]:hidden 
 function stageWhy(stage: StoryStage, s: StoryStage): string {
   const reached = STAGES.indexOf(s) <= STAGES.indexOf(stage) && !(stage === 'reference' && s !== 'reference');
   if (s === 'reference') return stage === 'reference' ? 'its marker: a reference example' : 'not a reference example';
-  if (stage === 'reference') return s === 'decision' ? 'never, for a reference example' : s === 'realization' ? 'needs a verified actual in a sealed run' : 'needs a second, a separate measurement';
+  if (stage === 'reference') return s === 'decision' ? 'never, for a reference example' : s === 'realization' ? 'needs a verified actual in a sealed run' : 'needs a second verified actual, from a separate measurement';
   if (s === 'decision') return reached ? 'a locked run' : '';
   if (s === 'realization') return reached ? 'a verified actual in a sealed run' : 'needs a verified actual in a sealed run';
-  return reached ? 'verified actuals in two sealed runs, separate measurements' : 'needs a second, a separate measurement';
+  return reached ? 'verified actuals in two sealed runs, separate measurements' : 'needs a second verified actual, from a separate measurement';
 }
+
+/** "Prepared by …, with LVRF" (S7b.1, D2): v2 names the firm for the tenant, with a comma; v1 reads as it was issued. */
+const preparedLine = (p: StoryPayload) => `Prepared by ${p.prepared_by}${p.storyVersion >= 2 ? ',' : ''} with LVRF`;
 
 function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; form: 'full' | 'onepage'; hash: string | null; issuedOn: string | null; withdrawn: boolean }) {
   const L = (key: string) => {
@@ -64,6 +67,13 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
     </p>
   );
 
+  // A finding prints under the engagement that owns it (v2 seals which one); a v1 story, or a finding whose engagement
+  // has no locked real run, prints its findings in their own block, under no engagement (S7b.1, D3).
+  const placed = p.findings.filter((f) => f.engagement_id !== undefined && p.engagements.some((g) => g.id === f.engagement_id));
+  const unplaced = p.findings.filter((f) => !placed.includes(f));
+  const finding = (f: StoryPayload['findings'][number]) => (
+    <p key={f.id} className="m-0 mt-1 text-[13px] text-warning" data-testid="finding" data-finding={f.id}>The finding under it: {f.line}{LU(`finding:${f.id}`)}.</p>);
+
   const headline = p.headline.map((h) => {
     const g = p.engagements.find((e) => e.id === h.engagement_id)!;
     const r = g.runs.find((x) => x.id === h.run_id)!;
@@ -80,7 +90,7 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
         Stage: {STAGE_WORD[p.stage]} · {p.engagements.reduce((n, g) => n + g.runs.length, 0)} runs read, none a system exercise
         {issuedOn ? ` · issued ${issuedOn} (UTC)` : ' · a draft, not issued'}{withdrawn ? ' · withdrawn' : ''}
       </p>
-      <p className="m-0 mt-1 font-condensed text-[11px] font-semibold tracking-[.08em] text-ink-45" data-testid="story-prepared">Prepared by {p.prepared_by} with LVRF</p>
+      <p className="m-0 mt-1 font-condensed text-[11px] font-semibold tracking-[.08em] text-ink-45" data-testid="story-prepared">{preparedLine(p)}</p>
 
       <h2 className={H2}>Where it stands</h2>
       <div className="mt-2 flex flex-wrap border-t-2 border-ink" data-testid="stage-strip">
@@ -96,7 +106,7 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
         })}
       </div>
 
-      <h3 className={KICK + ' mt-4 block'}>The latest sealed run</h3>
+      <h3 className={KICK + ' mt-4 block'} data-testid="headline-heading">{headline.length > 1 ? 'Each line’s latest sealed run' : 'The latest sealed run'}</h3>
       {headline.map(({ g, r }) => (
         <div key={g.id} className="mt-1" data-testid="headline">
           {scoreline(r, 'headline-score')}
@@ -107,16 +117,20 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
       {!onePage && <>
         <h2 className={H2}>{p.stage === 'reference' ? 'What outside-in research found' : 'What they chose'}</h2>
         {p.engagements.map((g) => (
-          <div key={g.id} className="mt-2" data-testid="measure">
+          <div key={g.id} className="mt-2" data-testid="measure" data-engagement={g.id}>
             <h3 className={KICK + ' block'}>{runLabel(g)}</h3>
             <p className="m-0 text-[13px]">{g.metric.name}{g.metric.baseline !== null && <>: baseline {withUnit(g.metric.baseline, g.metric.unit)}{LU(`baseline:${g.id}`)}</>}.</p>
             {g.commitment && p.stage !== 'reference' && (
               <p className="m-0 text-[13px]" data-testid="commitment">Target {withUnit(g.commitment.target, g.metric.unit)}{LU(`target:${g.id}`)}
                 {g.commitment.measured_by ? `, measured by ${g.commitment.measured_by}` : ''}
                 {g.commitment.committer ? `; committed by ${g.commitment.committer}${g.commitment.committer_customer_side === false ? ', who the record does not find customer-side' : ''}` : ''}.</p>)}
+            {placed.filter((f) => f.engagement_id === g.id).map(finding)}
           </div>))}
-        {p.findings.map((f) => (
-          <p key={f.id} className="m-0 mt-1 text-[13px] text-warning" data-testid="finding">The finding under it: {f.line}{LU(`finding:${f.id}`)}.</p>))}
+        {unplaced.length > 0 && (
+          <div className="mt-2" data-testid="findings-unplaced">
+            <h3 className={KICK + ' block'}>Findings on the record</h3>
+            {unplaced.map(finding)}
+          </div>)}
       </>}
 
       {p.published.length > 0 && <>
@@ -152,7 +166,7 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
               </tr>)))}
           </tbody>
         </table>
-        <p className="m-0 mt-1 text-[12px] text-ink-45">Each engagement’s latest run is its score; earlier runs print here only.</p>
+        <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="timeline-note">Each line’s latest run is its score; earlier runs print here only.</p>
       </>}
 
       {reachedResult && (
@@ -176,11 +190,11 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
       <h2 className={H2}>The ledger</h2>
       <h3 className={KICK + ' block'}>Every figure, and where it comes from</h3>
       <table className={TABLE} data-testid="ledger">
-        <thead><tr><th className={TH}>#</th><th className={TH}>Figure</th><th className={TH}>Source</th></tr></thead>
+        <thead><tr><th className={TH + ' w-[3.2em]'}>#</th><th className={TH}>Figure</th><th className={TH}>Source</th></tr></thead>
         <tbody>
           {p.ledger.filter((l) => !onePage || used.has(l.n)).map((l) => (
             <tr key={l.n} data-testid="ledger-entry" data-n={l.n}>
-              <td className={TD + ' font-mono text-gold-ink'}>{l.n}</td>
+              <td className={TD + ' w-[3.2em] whitespace-nowrap font-mono text-gold-ink [overflow-wrap:normal]'} data-testid="ledger-n">{l.n}</td>
               <td className={TD}>{l.figure}</td>
               <td className={TD}>{l.source}
                 <span className="mt-0.5 block font-mono text-[10.5px] text-ink-45 [overflow-wrap:anywhere]" data-testid="ledger-ids">{l.ids.map((x) => x.slice(0, 8)).join(', ')}{l.full_hash ? ` · run hash ${l.full_hash}` : ''}</span></td>
@@ -196,11 +210,11 @@ function Banners({ p, withdrawn, draft }: { p: StoryPayload; withdrawn: boolean;
   const name = p.account.name;
   return (
     <div data-testid="banners" className="text-[10.5px] tracking-[.03em]">
-      {draft && <div className="border-b border-warning px-1 py-1 font-mono text-warning" data-testid="banner-draft">DRAFT — on screen only; a story prints once the steward issues it</div>}
-      {withdrawn && <div className="border-b border-critical px-1 py-1 font-mono text-critical" data-testid="banner-withdrawn">WITHDRAWN — this story is on the record as it was issued, and no longer stands</div>}
-      {p.marker && MARKER_KIND[p.marker.kind as MarkerKind] && <div className="border-b border-rule px-1 py-1 font-mono text-ink-70" data-testid="banner-reference">{MARKER_KIND[p.marker.kind as MarkerKind].banner}</div>}
-      {p.banners.outside_in && <div className="border-b border-rule px-1 py-1 font-mono text-ink-70" data-testid="banner-outside-in">OUTSIDE-IN HYPOTHESIS — {p.marker ? 'built from published sources only; ' : ''}no figure rests on {name}’s own records or on a named person at {name}</div>}
-      {p.banners.unverified && <div className="border-b border-warning px-1 py-1 font-mono text-warning" data-testid="banner-unverified">UNVERIFIED — this story has no verified actual</div>}
+      {draft && <div className="border-b border-warning px-4 py-1 font-mono sm:px-6 print:px-1 text-warning" data-testid="banner-draft">DRAFT — on screen only; a story prints once the steward issues it</div>}
+      {withdrawn && <div className="border-b border-critical px-4 py-1 font-mono sm:px-6 print:px-1 text-critical" data-testid="banner-withdrawn">WITHDRAWN — this story is on the record as it was issued, and no longer stands</div>}
+      {p.marker && MARKER_KIND[p.marker.kind as MarkerKind] && <div className="border-b border-rule px-4 py-1 font-mono sm:px-6 print:px-1 text-ink-70" data-testid="banner-reference">{MARKER_KIND[p.marker.kind as MarkerKind].banner}</div>}
+      {p.banners.outside_in && <div className="border-b border-rule px-4 py-1 font-mono sm:px-6 print:px-1 text-ink-70" data-testid="banner-outside-in">OUTSIDE-IN HYPOTHESIS — {p.marker ? 'built from published sources only; ' : ''}no figure rests on {name}’s own records or on a named person at {name}</div>}
+      {p.banners.unverified && <div className="border-b border-warning px-4 py-1 font-mono sm:px-6 print:px-1 text-warning" data-testid="banner-unverified">UNVERIFIED — this story has no verified actual</div>}
     </div>
   );
 }
@@ -319,7 +333,7 @@ export function IssuedStoryPage() {
   const p = s.payload;
   const issuedOn = s.issued_at.slice(0, 10);
   const printedOn = new Date().toISOString().slice(0, 10);
-  const recordLine = `Prepared by ${p.prepared_by} with LVRF · ${p.account.name} · story, ${form === 'onepage' ? 'one page' : 'full'} · story record hash ${s.payload_hash} · printed ${printedOn} (UTC)`;
+  const recordLine = `${preparedLine(p)} · ${p.account.name} · story, ${form === 'onepage' ? 'one page' : 'full'} · composer version ${p.storyVersion} · story record hash ${s.payload_hash} · printed ${printedOn} (UTC)`;
   const banners = <Banners p={p} withdrawn={Boolean(s.withdrawn)} draft={false} />;
   const stewardOnly = actor?.is_steward ? undefined : `Withdrawing a story of record is the steward's act — ${actor?.steward_name ?? 'the steward'}'s alone.`;
   const btn = 'border border-ink px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.1em] text-ink hover:bg-ink hover:text-offwhite ' + FOCUS_RING;
@@ -328,7 +342,7 @@ export function IssuedStoryPage() {
       <div className="print:hidden">{banners}</div>
       <PrintRecordLine lines={[recordLine]} />
       {form === 'full' && <PrintCover banners={banners} kicker="Rule 76 · Learning Value Realization" title={p.account.name} doc={p.title}
-        meta={`Stage: ${STAGE_WORD[p.stage]} · issued ${issuedOn} (UTC) by ${s.issued_by} · for ${p.audience === 'internal' ? `${p.prepared_by}’s people` : 'the client'}`}
+        meta={`Stage: ${STAGE_WORD[p.stage]} · issued ${issuedOn} (UTC) by ${s.issued_by} · for ${p.audience === 'internal' ? `${p.tenant ?? p.prepared_by}’s people` : 'the client'}`}
         lede={p.subtitle ? `${p.subtitle}.` : undefined} />}
       <table className="block w-full border-collapse print:table print:table-fixed">
         <thead className="hidden print:table-header-group" data-testid="print-header"><tr className="print:table-row"><td className="p-0 print:table-cell">{banners}</td></tr></thead>
@@ -363,7 +377,7 @@ export function IssuedStoryPage() {
                 {note && <p className="m-0 mt-2 text-[12.5px] text-critical" data-testid="withdraw-note">{note}</p>}
               </div>)}
             <StoryBody p={p} form={form} hash={s.payload_hash} issuedOn={issuedOn} withdrawn={Boolean(s.withdrawn)} />
-            <PrintClose heading="About this story" text={`This story renders from its sealed record, hash ${s.payload_hash}, issued ${issuedOn} (UTC). Every figure carries its ledger entry and its basis; none is applied beyond it. ${p.banners.unverified ? 'It holds no verified actual.' : ''} Prepared by ${p.prepared_by} with LVRF.`} />
+            <PrintClose heading="About this story" text={`This story renders from its sealed record, hash ${s.payload_hash}, issued ${issuedOn} (UTC). Every figure carries its ledger entry and its basis; none is applied beyond it. ${p.banners.unverified ? 'It holds no verified actual.' : ''} ${preparedLine(p)}.`} />
           </Frame>
         </td></tr></tbody>
       </table>

@@ -11,6 +11,17 @@
 //            headline as in draft; a screenshot of each form
 //   html     /stories/E.STORY: prints the md5 of the story body's markup (a re-render is byte-identical)
 //   refused  /accounts/E.INST/story?audience=client: the refusal for a reference example, no issue control
+//
+// S7b.1 (LVRF_PLAN §35), in every body read:
+//   E.FINDING_OWNERS  JSON {finding id: engagement id}, from SQL: on the full form each finding sits inside the measure
+//                     block of its own engagement (v2), or, with E.EXPECT_V=1, in "Findings on the record" under none
+//   reading order     on the full form each ledger number first appears in order, 1, 2, 3, none skipped (v2); on the
+//                     one page, ascending
+//   gutter            each banner on screen starts its text at least 16 px from the left edge
+//   # column          printed (print media at 701 px, US Letter's width less its margins), each two-digit # is one line
+//   words             the heading and timeline note say "line", not "engagement"; the stage strip's "needs a second
+//                     verified actual, from a separate measurement"; "Prepared by …" for E.TENANT as E.EXPECT_V seals it;
+//                     on an issued story, "composer version N" in the record line and "for E.TENANT's people" on the cover
 const SECTIONS = (process.argv[2] ?? 'draft').split(',');
 const E = process.env;
 const TAG = E.TAG ?? 'story';
@@ -87,6 +98,51 @@ async function body(where) {
   check(refs.missing === 0 && lacking.length === 0 && refs.used.length > 0, `${where}: every figure's ledger number (${refs.used.length}) has its entry; none missing`, JSON.stringify({ lacking, missing: refs.missing }));
   const wide = await ev('document.documentElement.scrollWidth');
   check(wide <= WIDTH, `${where}: at ${WIDTH}, no sideways scroll`, wide);
+  await s7b1(where);
+}
+
+const V = Number(E.EXPECT_V ?? 2);
+async function s7b1(where) {
+  const form = await ev(`document.querySelector('[data-testid=story-body]')?.dataset.form ?? ''`);
+  if (E.FINDING_OWNERS && form === 'full') {
+    const owners = JSON.parse(E.FINDING_OWNERS);
+    const got = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[data-testid=story-body] [data-testid=finding]')].map(f=>[f.dataset.finding, f.closest('[data-testid=measure]')?.dataset.engagement ?? null, !!f.closest('[data-testid=findings-unplaced]')]))`));
+    const ids = Object.keys(owners).sort().join(',');
+    check(got.map((x) => x[0]).sort().join(',') === ids, `${where}: each finding on the record prints once (${Object.keys(owners).length})`, JSON.stringify(got));
+    if (V >= 2) check(got.length > 0 && got.every(([f, g]) => g !== null && g === owners[f]), `${where}: each finding sits inside the block of the engagement that owns its outcome`, JSON.stringify({ got, owners }));
+    else check(got.every(([, g, u]) => g === null && u), `${where}: a version-1 story prints its findings under "Findings on the record", under no engagement`, JSON.stringify(got));
+  }
+  if (V >= 2) {
+    const order = JSON.parse(await ev(`JSON.stringify((()=>{const seen=[];for(const x of document.querySelectorAll('[data-testid=story-body] [data-testid=ledger-ref]')){const n=Number(x.dataset.n);if(!seen.includes(n))seen.push(n)}return seen})())`));
+    const entries = await ev(`document.querySelectorAll('[data-testid=ledger-entry]').length`);
+    if (form === 'full') check(order.length === entries && order.every((n, i) => n === i + 1), `${where}: the ledger numbers first appear in reading order, 1 to ${entries}, none skipped`, JSON.stringify(order));
+    else check(order.every((n, i) => i === 0 || n > order[i - 1]), `${where}: on the one page, the ledger numbers ascend`, JSON.stringify(order));
+  }
+  const gut = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[data-testid=banners] > div')].filter(d=>d.getClientRects().length>0).map(d=>{const w=document.createTreeWalker(d,NodeFilter.SHOW_TEXT);const t=w.nextNode();if(!t)return [d.dataset.testid,-1];const r=document.createRange();r.selectNodeContents(t);return [d.dataset.testid,Math.round(r.getClientRects()[0].left)]}))`));
+  check(gut.length > 0 && gut.every(([, x]) => x >= 16), `${where}: each banner's text starts at least 16 px from the left edge (${gut.map(([t, x]) => `${t} ${x}`).join(', ')})`, JSON.stringify(gut));
+  await send('Emulation.setEmulatedMedia', { media: 'print' });
+  await send('Emulation.setDeviceMetricsOverride', { width: 701, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(400);
+  const cols = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[data-testid=ledger-n]')].filter(c=>c.textContent.trim().length>=2).map(c=>{const r=document.createRange();r.selectNodeContents(c);return [c.textContent.trim(), [...r.getClientRects()].filter(x=>x.width>0).length]}))`));
+  await send('Emulation.setEmulatedMedia', { media: '' });
+  await send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: 900, deviceScaleFactor: 1, mobile: WIDTH < 600 });
+  await sleep(400);
+  if (cols.length) check(cols.every(([, n]) => n === 1), `${where}: printed, each two-digit ledger # is one line (${cols.length})`, JSON.stringify(cols.filter(([, n]) => n !== 1)));
+  const lines = await ev(`document.querySelectorAll('[data-testid=headline]').length`);
+  const head = await ev(`document.querySelector('[data-testid=headline-heading]')?.textContent ?? ''`);
+  check(head === (lines > 1 ? 'Each line’s latest sealed run' : 'The latest sealed run'), `${where}: the headline's heading reads "${head}" over ${lines} line(s)`, head);
+  if (form === 'full') {
+    const note = await ev(`document.querySelector('[data-testid=timeline-note]')?.textContent ?? ''`);
+    check(note === 'Each line’s latest run is its score; earlier runs print here only.', `${where}: the timeline's note says "line"`, note);
+    check(!/engagement/i.test(head + note), `${where}: neither the heading nor the note says "engagement"`);
+  }
+  const why = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[data-testid^=stage-] span')].map(x=>x.textContent).filter(t=>/^needs a second/.test(t)))`));
+  if (E.STAGE !== 'compounding') check(why.length > 0 && why.every((t) => t === 'needs a second verified actual, from a separate measurement'), `${where}: the stage strip reads "needs a second verified actual, from a separate measurement"`, JSON.stringify(why));
+  if (E.TENANT) {
+    const prep = await ev(`document.querySelector('[data-testid=story-prepared]')?.textContent ?? ''`);
+    const want = V >= 2 ? `Prepared by Rule 76 Consulting LLC for ${E.TENANT}, with LVRF` : `Prepared by ${E.TENANT} with LVRF`;
+    check(prep === want, `${where}: "${want}"`, prep);
+  }
 }
 
 for (const s of SECTIONS) {
@@ -120,6 +176,11 @@ for (const s of SECTIONS) {
     check(hash === `Story record hash ${E.HASH}`, 'issued: the full story record hash prints on the page', hash);
     const line = await ev(`document.querySelector('[data-testid=print-record-line]')?.dataset.recordLine ?? ''`);
     check(line.includes(`story record hash ${E.HASH}`) && line.includes('Prepared by '), 'issued: the record line on every printed page carries the full hash and "Prepared by … with LVRF"', line);
+    check(line.includes(` · composer version ${V} · `), `issued: the record line names "composer version ${V}"`, line);
+    if (E.TENANT) {
+      const meta = await ev(`document.querySelector('[data-testid=cover-meta]')?.textContent ?? ''`);
+      check(meta.endsWith(`for ${E.TENANT}’s people`), `issued: the cover reads "for ${E.TENANT}’s people"`, meta);
+    }
     await body('issued, full');
     await shot('story-issued-full');
     await go(`/stories/${E.STORY}?form=onepage`);

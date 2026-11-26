@@ -2530,10 +2530,11 @@ export const executiveSummaries = pgTable('executive_summaries', {
 
 /**
  * S7b (3.1; LVRF_PLAN §27, D1, D2, D3, D4; Brad's rulings 24-25 Nov 2026). A STORY OF RECORD, issued: the account's
- * record told in sequence, sealed when the steward issues it. `payload` is everything the story prints, composed by
- * server/lib/story.ts from the account's real locked runs, their current errata, its figure findings and the current
- * heads of the evidence it cites; `payload_hash` is the sha256 of `payload::text`, set by the database
- * (story_records_guard), and printed in full on every page. Only an issued story prints; a re-render is byte-identical.
+ * record told in sequence, sealed when the steward issues it. `payload` is what the story says and what each item
+ * belongs to (S7b.1, Brad 25 Nov 2026), composed by server/lib/story.ts from the account's real locked runs, their
+ * current errata, its figure findings and the current heads of the evidence it cites; `payload_hash` is the sha256 of
+ * `payload::text`, set by the database (story_records_guard), and printed in full on every page. Only an issued story
+ * prints. The payload is byte-identical; the page renders it (its layout is the current page's).
  *
  * Issuing and withdrawing are the steward's acts only (Brad, 25 Nov 2026). APPEND-ONLY but for WITHDRAWAL: the three
  * withdrawal fields are set together and once (story_records_withdrawal_is_complete; story_records_guard refuses every

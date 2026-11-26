@@ -26,7 +26,11 @@ import { sealedAsks } from './sealedAsks.js';
 
 export type StoryStage = 'reference' | 'decision' | 'realization' | 'compounding';
 export type StoryAudience = 'internal' | 'client';
-export const STORY_VERSION = 1;
+/** Version 2 (S7b.1, Brad 25 Nov 2026): each finding seals its engagement; the ledger is numbered in reading order;
+ *  the preparer is "Rule 76 Consulting LLC for {tenant}", with the tenant sealed on its own. Version 1 stays readable. */
+export const STORY_VERSION = 2;
+/** The firm that prepares a story (S7b.1, R3). One constant, cited here only. */
+export const STORY_PREPARER = 'Rule 76 Consulting LLC';
 
 type Q = Pick<PoolClient, 'query'> | Pick<Pool, 'query'>;
 
@@ -45,7 +49,7 @@ export interface StoryEngagement {
   result: { run_id: string; actual: number; realization: string } | null;
   asks: { code: string; need: string; question: string }[];
 }
-export interface StoryFinding { id: string; outcome_id: string; field: string; value: string; line: string; recorded_on: string }
+export interface StoryFinding { id: string; outcome_id: string; /** v2: the engagement that owns the outcome. */ engagement_id?: string; field: string; value: string; line: string; recorded_on: string }
 export interface StoryPublished {
   id: string; kind: string; class: string; class_label: string; can: string; cannot: string; basis: string;
   form: string; quote: string | null; locator: unknown; how_read: string | null; summary: string; source_reference: string | null;
@@ -55,6 +59,8 @@ export interface LedgerEntry { n: number; figure: string; source: string; ids: s
 export interface StoryPayload {
   storyVersion: number; audience: StoryAudience; stage: StoryStage;
   account: { id: string; name: string }; prepared_by: string;
+  /** v2: the tenant's name, on its own (the cover's "for {tenant}'s people"). */
+  tenant?: string;
   marker: { kind: string; note: string | null } | null;
   title: string; subtitle: string | null;
   /** Rule 6, on every page: outside-in when every real run is (lvrf_run_banners); unverified when none holds a verified actual. */
@@ -84,8 +90,8 @@ export function storyTitle(stage: StoryStage): string {
 export class StoryRefusal extends Error {}
 
 export async function composeStory(db: Q, tenantId: string, institutionId: string, audience: StoryAudience): Promise<StoryPayload | null> {
-  const { rows: [acct] } = await db.query<{ id: string; name: string; tenant: string; marker_kind: string | null; marker_note: string | null }>(
-    `SELECT i.id, i.name, t.name AS tenant, k.kind AS marker_kind, k.note AS marker_note
+  const { rows: [acct] } = await db.query<{ id: string; name: string; vendor: string; marker_kind: string | null; marker_note: string | null }>(
+    `SELECT i.id, i.name, t.name AS vendor, k.kind AS marker_kind, k.note AS marker_note
        FROM institutions i JOIN tenants t ON t.id = i.tenant_id
        LEFT JOIN reference_example_markers k ON k.institution_id = i.id AND k.deleted_at IS NULL AND k.superseded_by_id IS NULL
       WHERE i.id = $1 AND i.tenant_id = $2 AND i.deleted_at IS NULL AND i.superseded_by_id IS NULL`, [institutionId, tenantId]);
@@ -112,8 +118,8 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
       WHERE x.value_run_id = ANY($1::uuid[]) AND NOT EXISTS (SELECT 1 FROM run_errata s WHERE s.supersedes_id = x.id)
       ORDER BY x.recorded_at, x.kind, x.id`, [runs.map((r) => r.id)]);
 
-  const { rows: findingRows } = await db.query<{ id: string; value_outcome_id: string; field: string; value: string; unit: string | null; recorded_at: Date }>(
-    `SELECT f.id, f.value_outcome_id, f.field::text, trim_scale(f.value)::text AS value, bm.unit, f.recorded_at
+  const { rows: findingRows } = await db.query<{ id: string; value_outcome_id: string; engagement_id: string; field: string; value: string; unit: string | null; recorded_at: Date }>(
+    `SELECT f.id, f.value_outcome_id, vo.engagement_id, f.field::text, trim_scale(f.value)::text AS value, bm.unit, f.recorded_at
        FROM figure_findings f JOIN value_outcomes vo ON vo.id = f.value_outcome_id
        LEFT JOIN business_metrics bm ON bm.id = vo.business_metric_id
       WHERE f.institution_id = $1 ORDER BY f.recorded_at, f.id`, [institutionId]);
@@ -196,7 +202,7 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
 
   const findings: StoryFinding[] = findingRows.map((f) => {
     const value = trimNum(f.value);
-    return { id: f.id, outcome_id: f.value_outcome_id, field: f.field, value,
+    return { id: f.id, outcome_id: f.value_outcome_id, engagement_id: f.engagement_id, field: f.field, value,
              line: `the ${FIELD_WORD[f.field] ?? f.field}, ${withUnit(value, f.unit)}, has no source on record`, recorded_on: day(f.recorded_at) };
   });
 
@@ -211,8 +217,7 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     };
   });
 
-  // The ledger (D7): every figure the text prints is a numbered entry. Order: each engagement's headline score and its
-  // errata groups, then the findings, the measure's baseline, the published rows, then the earlier runs' scores.
+  // The ledger (D7): every figure the text prints is a numbered entry, in reading order (below).
   const ledger: LedgerEntry[] = [];
   const refs: Record<string, number> = {};
   const add = (key: string, figure: string, source: string, ids: string[], full_hash?: string) => {
@@ -230,43 +235,45 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
     const list = (xs: number[]) => (xs.length === 1 ? `run ${xs[0]}` : `runs ${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
     const runsNamed = byEng.map(({ g, nums }) => `${list(nums)} of ${g.name}${g.retired ? ' (retired)' : ''}`);
     const ids = [...new Set(all.map(({ x }) => x.id))];
-    return { ids, source: `Errata on ${runsNamed.join('; ')}, in the platform's wording for their kind`, first: all[0]?.x.line ?? '' };
+    return { ids, source: `Errata on ${runsNamed.join('; ')}`, first: all[0]?.x.line ?? '' };
   };
   const scoreEntry = (g: StoryEngagement, r: StoryRun) =>
     add(`run:${r.id}`, `${r.score} / 100, ${r.band}`, `Sealed ${runLabel(g, r)}, its confidence`, [r.id], r.payload_hash);
+  const errataEntries = (r: StoryRun) => { for (const x of r.errata) { const eg = errataGroup(x.group); add(`erratum:${x.group}`, eg.first, eg.source, eg.ids); } };
+  const unitOf = new Map(findingRows.map((f) => [f.id, f.unit]));
+  const findingEntry = (f: StoryFinding) =>
+    add(`finding:${f.id}`, `${withUnit(f.value, unitOf.get(f.id) ?? null)}, no source on record`, `Figure finding on the outcome ${f.outcome_id.slice(0, 8)}`, [f.id]);
+  // The ledger is numbered in the full form's reading order (S7b.1, D1; the page prints in this order):
+  //   1. each engagement's latest score, then its errata        (the headline)
+  //   2. each engagement's baseline, its target, its findings    (what they chose / what research found)
+  //   3. any finding whose engagement has no locked real run     (its own block)
+  //   4. the published rows
+  //   5. the earlier runs, with their errata, in timeline order  (how it went)
+  //   6. the verified actuals                                     (Results)
   for (const g of engagements) {
     const latest = g.runs.find((r) => r.id === g.latest_run_id)!;
     scoreEntry(g, latest);
-    for (const x of latest.errata) {
-      const eg = errataGroup(x.group);
-      add(`erratum:${x.group}`, eg.first, eg.source, eg.ids);
-    }
+    errataEntries(latest);
   }
-  for (const f of findings) add(`finding:${f.id}`, `${f.value}, no source on record`, `Figure finding on the outcome ${f.outcome_id.slice(0, 8)}`, [f.id]);
   for (const g of engagements) {
     const latest = g.runs.find((r) => r.id === g.latest_run_id)!;
     if (g.metric.baseline !== null) {
       add(`baseline:${g.id}`, withUnit(g.metric.baseline, g.metric.unit), `Sealed ${runLabel(g, latest)}, the baseline field`, [latest.id], latest.payload_hash);
     }
-  }
-  for (const g of engagements) {
-    const latest = g.runs.find((r) => r.id === g.latest_run_id)!;
     if (g.commitment) add(`target:${g.id}`, withUnit(g.commitment.target, g.metric.unit), `Sealed ${runLabel(g, latest)}, the target field`, [latest.id], latest.payload_hash);
-    if (g.result) {
-      const vr = g.runs.find((r) => r.id === g.result!.run_id)!;
-      add(`actual:${g.id}`, withUnit(g.result.actual, g.metric.unit), `Sealed ${runLabel(g, vr)}, the actual field, verified`, [vr.id], vr.payload_hash);
-    }
+    for (const f of findings.filter((x) => x.engagement_id === g.id)) findingEntry(f);
   }
+  for (const f of findings.filter((x) => !engagements.some((g) => g.id === x.engagement_id))) findingEntry(f);
   for (const e of published) {
     add(`evidence:${e.id}`, e.summary, `Evidence ${e.id.slice(0, 8)} · ${e.kind.replace(/_/g, ' ')} · ${e.basis.replace(/_/g, ' ')} · ${e.form.replace(/_/g, ' ')} · ${e.open_state === 'verified' ? 'verified' : e.open_state === 'not_supported' ? 'opened; does not support it' : 'unverified'}`, [e.id]);
   }
   for (const g of engagements) {
-    for (const r of g.runs) {
-      scoreEntry(g, r);
-      for (const x of r.errata) {
-        const eg = errataGroup(x.group);
-        add(`erratum:${x.group}`, eg.first, eg.source, eg.ids);
-      }
+    for (const r of g.runs) { scoreEntry(g, r); errataEntries(r); }
+  }
+  for (const g of engagements) {
+    if (g.result) {
+      const vr = g.runs.find((r) => r.id === g.result!.run_id)!;
+      add(`actual:${g.id}`, withUnit(g.result.actual, g.metric.unit), `Sealed ${runLabel(g, vr)}, the actual field, verified`, [vr.id], vr.payload_hash);
     }
   }
 
@@ -275,7 +282,7 @@ export async function composeStory(db: Q, tenantId: string, institutionId: strin
 
   return {
     storyVersion: STORY_VERSION, audience, stage,
-    account: { id: acct.id, name: acct.name }, prepared_by: acct.tenant,
+    account: { id: acct.id, name: acct.name }, prepared_by: `${STORY_PREPARER} for ${acct.vendor}`, tenant: acct.vendor,
     marker, title, subtitle,
     banners: { outside_in: runs.every((r) => r.banners?.outside_in === true), unverified: !runs.some((r) => r.payload.realization === 'verified') },
     engagements,
