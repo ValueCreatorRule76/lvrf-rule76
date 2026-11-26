@@ -17971,3 +17971,33 @@ any step whose expectation is not met.**
 8. **Health, by hand:** 200, `actor_header` off, `ai_research` off; 401 with no session.
 
 The exact commands are given to Brad with these expectations.
+
+### S7b closed: the story of record, deployed at `f2addac`; Gate C clean — 25 Nov 2026 (UTC)
+
+**Gate B, run by Brad:**
+- Main and the box at `f2addac`.
+- Pre-deploy backup `~/lvrf-pre-s7b-20261125T195850Z.dump`, **TOC 975**; post-hardening backup
+  `~/lvrf-post-s7b-20261125T200008Z.dump`, **TOC 989**.
+- Migrate `0055`, `ownership.sql`, `hardening.sql`; deploy, the API active from 20:01:07 UTC.
+
+**Brad's act, through the page (rule 10):** at 23:06:11 UTC he issued Curia's story: internal audience, stage Reference,
+6 published rows, 22 ledger entries, record hash `d2514a3d879af0dd6463863f73c449d2bc27435ae80e36f2f766d51e3a2fd363`
+(story `cf99dbf3`). His print review gave the points S7b.1 answers (below).
+
+**Gate C (read-only, as `lvrf_app`, over ssh with the LVRF key alone, inside `BEGIN READ ONLY`):**
+- **The box:** head `f2addac`, tree clean; the served `index.html` names `index-CofOK_sV.js` / `index-Cm0s_icv.css`;
+  health 200, `origin_check` configured, `actor_header` off, `ai_research` off.
+- **Drift none** (56 migrations, newest `0055_s7b_story_records`; 1,380 schema objects match `0055_snapshot.json`).
+- **233 triggers**, none disabled; `lvrf_story_record_guard` **`8a42b278b6fea86e88215db8be6d6439`**; ownership clean
+  (`lvrf_ownership_violations()` 0).
+- **One story row,** `cf99dbf3`, issued by Brad Piver, not withdrawn, `storyVersion` 1. Its stored hash equals the SHA-256
+  of its payload. Its `evidence_heads` are exactly the six current Curia rows (`ff0717c0`, `f6a51004`, `dc93b3a4`,
+  `245b5df4`, `e6b7d7d8`, `04989916`).
+- **Since the pre-deploy backup (19:58:50 UTC), one act:** `issue` on `story_records` `cf99dbf3`, by Brad Piver, by
+  `POST /api/institutions/:institutionId/stories`, naming those six rows (239 acts in all). Audit holds 1
+  `story_records` insert and 1 `governance_acts` insert, and nothing else. There are 0 refusals, 0 research-process
+  refusals, 0 record documents, 0 heartbeat events, 0 new sessions and 0 evidence rows.
+- Runs 27, all locked; **`check_run_hashes` 27/27**.
+
+**S7b is closed** (25 Nov 2026). **Next: S7b.1** (Brad's rulings, 25 Nov 2026). After its deploy, Brad withdraws
+`cf99dbf3` and issues version 2, both through the page.
