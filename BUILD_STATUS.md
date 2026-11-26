@@ -18102,3 +18102,69 @@ S7b.1's changes print as intended:
    ends page 2, and its table starts page 3.
 
 Brad's print of `cf99dbf3` would show 1 too. **Gate A waits for Brad's ruling on these three.**
+
+#### S7b.1's print findings fixed; Gate A closed — 26 Nov 2026 (UTC)
+
+**Brad's ruling (26 Nov 2026):** all three fixes are made in S7b.1, page-only, each checked from the PDFs with a break
+(`5449d2e`).
+1. **The story page uses the Letter page setup, with its record line** (`client/src/index.css`). The record line and
+   full hash now print on every page of both forms.
+2. **A ledger row stays on one page.**
+3. **A heading stays with what follows it.**
+
+**`verify_story` 3c** prints both forms of the version-1 `cf99dbf3` and of a version-2 story issued on a throwaway
+clone, at 100, 95, 90 and 85%: 16 PDFs. It reads every page with `pdftotext` (`scripts/lib/story_pdf_check.py`): the
+record line, whole, with the full hash, on every page; each ledger row's figure, source and ids on one page; each
+heading on the page of the first words that follow it.
+- **The fresh copy:** `verify_story` 484/0, the 48 page checks among them.
+- **The breaks, each caught:**
+  - **RL:** the story page taken out of the Letter setup: the record line missing on pages 2–7;
+  - **ROW:** a ledger row free to split: row 21 split at 85%;
+  - **HEAD:** a heading free to end a page: "How it went" and its kicker stranded at 90%.
+- **The checker's own faults, found on its first two runs and fixed before the third** (a false failure is not a
+  pass, and a "caught" under a faulty checker proves nothing, so all three breaks were rerun):
+  - text taken with `textContent`, which runs block elements together;
+  - a run hash that wraps over two lines, read as two words;
+  - a table's header row taken as what follows a heading;
+  - letter-spaced labels coming apart into letters.
+- **The sealed payloads did not change:** `cf99dbf3`'s payload and hash are as in the prod copy, and its hash is still
+  the sha256 of its payload.
+
+**Reruns, each on a fresh 14 Nov restore** (the print CSS and the story page changed): `verify_s3_print_family`
+133/0, `verify_s5_account_frame` 289/0, `verify_plain_words` 47/0 (B6 caught).
+
+**The full PDF read again** (both forms of `cf99dbf3` and of the version-2 story, at 100%; 26 Letter pages): every
+page carries the banners and the record line with the full hash; every ledger row is whole; every heading sits with
+what follows it; `cf99dbf3` prints as sealed, with "composer version 1".
+
+**Noted for Brad, not changed (outside the ruling):**
+- **Published-figures rows can split across pages** (the "8,487 Total badges" row from page 3 to page 4 of the full
+  form; a row from page 1 to page 2 of the one page). The ruling covered ledger rows only.
+- **"About this story" now prints alone on the last page,** as the print family's close does on the Letter setup
+  (`PrintClose`: "the last page").
+
+**S7b.1's Gate A is closed** (26 Nov 2026), at `5449d2e`. The bundle is **`index-CbMGHNT0.js` /
+`index-CimN7kyl.css`**.
+
+#### Gate B for S7b.1 (not run; Brad's pastes)
+
+A redeploy: no migration and no hardening change. Stop at any step whose expectation is not met.
+1. **Merge (fast-forward) and push,** on the Mac. Ten commits go to `main`, `f2addac` → this one: S7b's Gate C record,
+   §35 and its approval, S7b.1's code, its checks and its print fixes, the test fix for
+   `verify_commit_measure_verify`, the 3.1 order, and these records. `scripts/demo/` is in none of them.
+2. **On the box (LVRF key only), a backup:** TOC **989**.
+3. **Pull:** the head of step 1.
+4. **No migration pending:** the journal is 56, newest `0055_s7b_story_records`.
+5. **Deploy:**
+   - drift none (56);
+   - ownership clean;
+   - health 200;
+   - the 401 checks;
+   - bundle **`index-CbMGHNT0.js` / `index-CimN7kyl.css`**;
+   - "deploy OK".
+6. **Read-only checks:** 233 triggers; `lvrf_story_record_guard` `8a42b278b6fea86e88215db8be6d6439`; 1 story row,
+   `cf99dbf3`, whose hash still equals the sha256 of its payload.
+
+**Then Brad, through the page (rule 10):** open `cf99dbf3` and see it render as version 1 (Brad's addition: confirmed
+before the withdrawal); withdraw it, with his reason; issue the version-2 story; print both forms. Then a read-only
+Gate C.
