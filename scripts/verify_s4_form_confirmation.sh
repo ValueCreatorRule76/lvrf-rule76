@@ -41,20 +41,19 @@ step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 q()    { psql -X -At -v ON_ERROR_STOP=1 -d "$VERIFY_DB" -c "$1"; }
-stop_server() { local p; p="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null || true)"; [ -n "$p" ] && kill $p 2>/dev/null; sleep 1; }
+stop_server() { stop_port "$PORT"; }   # ports.sh: its own listener only, confirmed free
 start_server() {
   (LVRF_PUBLIC_ORIGIN="http://localhost:$VITE_PORT" NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=1 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$W/server.log" 2>&1 < /dev/null &)
   for _ in $(seq 1 80); do /usr/bin/curl -s -o /dev/null "$BASE/api/health" && return 0; sleep 0.5; done; return 1
 }
-finish() {
+# On finish.sh since "every script stops its servers by port" (Brad, 26 Nov 2026): finish.sh stops PORT, VITE_PORT and
+# CDP_PORT (its own listeners only) before this cleanup, and fails the script if it did not reach its tally.
+cleanup() {
   for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for p in $(lsof -nP -iTCP:"$PORT" -iTCP:"$VITE_PORT" -sTCP:LISTEN -t 2>/dev/null | sort -u); do kill "$p" 2>/dev/null || true; done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "${W:?}/chrome"
-  [ "$FAIL$PASS" = "00" ] || true
 }
-. scripts/lib/ports.sh
-refuse_taken_ports
+. scripts/lib/finish.sh
 trap finish EXIT
 has()  { grep "$@" > /dev/null; }   # grep -q's early exit SIGPIPEs the writer, failing the pipe under pipefail
 edit() { python3 - "$1" "$2" "$3" <<'PY'
@@ -252,4 +251,5 @@ step "7. Nothing else written"
 
 echo
 echo "==> $PASS passed, $FAIL failed"
+REACHED_TALLY=1
 [ "$FAIL" = "0" ]

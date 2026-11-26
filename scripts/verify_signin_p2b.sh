@@ -69,7 +69,7 @@ must_refuse() {
     bad "$label: the server started (still running after 20s)"
     curl -s -o /dev/null "$BASE/api/health" && bad "  ...and it is listening on $PORT" || true
     kill "$pid" 2>/dev/null || true; sleep 1
-    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | xargs kill 2>/dev/null || true
+    stop_port "$PORT"   # only its own listener (ports.sh)
     return
   fi
   if [ "$rc" = "0" ]; then

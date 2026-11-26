@@ -34,7 +34,7 @@ command -v pdftotext > /dev/null && command -v pdffonts > /dev/null || { echo "R
 
 VERIFY_DB=lvrf_verifys3
 VERIFY_URL="${LOCAL_URL%/*}/${VERIFY_DB}"
-PORT=3341; VITE_PORT=5341; MAIN_PORT=5342; CDP_PORT=9441; CDP_COLD=9443
+PORT=3341; VITE_PORT=5341; MAIN_PORT=5342; CDP_PORT=9441; CDP_COLD_PORT=9443
 BASE="http://127.0.0.1:${PORT}"
 W="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_s3.XXXXXX")"
 OUT="${1:-$W/out}"; mkdir -p "$OUT"
@@ -47,8 +47,7 @@ step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
 has()  { grep "$@" > /dev/null; }   # grep -q's early exit SIGPIPEs the writer (pdftotext), failing the pipe under pipefail
-by_port() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
-stop_port() { local p; p="$(by_port "$1")"; [ -n "$p" ] && kill $p 2>/dev/null || true; for _ in $(seq 1 20); do [ -z "$(by_port "$1")" ] && return 0; sleep 0.25; done; }
+# stop_port and by_port are scripts/lib/ports.sh's (sourced by finish.sh): a listener is stopped only if it is this script's own.
 cleanup() {
   stop_port "$PORT"; stop_port "$VITE_PORT"; stop_port "$MAIN_PORT"
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
@@ -215,9 +214,9 @@ step "3b. A person's first print (S3 Gate C finding, Brad, 19 Nov 2026)"
 # the invariants that failed, on the page as loaded on screen, in a fresh profile, before any print:
 coldwalk() {  # NAME PATH -> $OUT/NAME.pdf (Background graphics off) and $OUT/NAME.json
   local prof; prof="$(mktemp -d "$W/cold.XXXXXX")"
-  "$CHROME" --headless=new --remote-debugging-port="$CDP_COLD" --user-data-dir="$prof" --no-first-run about:blank > /dev/null 2>&1 & local cp=$!
-  for _ in $(seq 1 40); do /usr/bin/curl -s -o /dev/null "http://127.0.0.1:$CDP_COLD/json/version" && break; sleep 0.25; done
-  VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_COLD" OUT="$OUT" S_EMAIL="$S_EMAIL" PW="$PW" PRINT_BG=0 node scripts/lib/s3_walk.mjs cold "$2" "$1" > /dev/null 2>&1 || true
+  "$CHROME" --headless=new --remote-debugging-port="$CDP_COLD_PORT" --user-data-dir="$prof" --no-first-run about:blank > /dev/null 2>&1 & local cp=$!
+  for _ in $(seq 1 40); do /usr/bin/curl -s -o /dev/null "http://127.0.0.1:$CDP_COLD_PORT/json/version" && break; sleep 0.25; done
+  VITE_PORT="$VITE_PORT" CDP_PORT="$CDP_COLD_PORT" OUT="$OUT" S_EMAIL="$S_EMAIL" PW="$PW" PRINT_BG=0 node scripts/lib/s3_walk.mjs cold "$2" "$1" > /dev/null 2>&1 || true
   kill "$cp" 2>/dev/null; wait "$cp" 2>/dev/null || true
 }
 coldcheck() {  # NAME HASH — the invariants, then the print's every page

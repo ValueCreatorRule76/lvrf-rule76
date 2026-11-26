@@ -13,6 +13,11 @@
 # script stopped by `set -e` inside a redirected function call (`q … > /dev/null`)
 # runs its EXIT trap with that redirection still in place: the stop-early line
 # would go to /dev/null while the exit stayed 1 (found 25 Oct 2026, P1).
+#
+# Every script stops its servers by port (ports.sh, Brad 26 Nov 2026): on any exit (pass, fail, Ctrl-C, SIGTERM), before
+# its cleanup (so dropdb finds no connection), every port it names is stopped if the listener is its own, and after its
+# cleanup each is confirmed free. A port still taken, or held by a process it did not start, fails the script even when
+# its tally passed.
 # Every script's ports are its own: a taken port stops the script here, before its EXIT trap is set (ports.sh).
 . scripts/lib/ports.sh
 refuse_taken_ports
@@ -20,9 +25,15 @@ exec 8>&1 9>&2
 REACHED_TALLY=0
 finish() {
   local rc=$?
+  stop_own_ports >&8 2>&9
   cleanup >&8 2>&9
+  confirm_own_ports_free >&8 2>&9
   if [ "$REACHED_TALLY" != 1 ]; then
-    echo "  FAIL  stopped before its final tally (a crash, an unset variable or an early exit); exit 1" >&8
+    echo "  FAIL  stopped before its final tally (a crash, an unset variable, an early exit, or a signal such as Ctrl-C)" >&8
+    exit 1
+  fi
+  if [ "$PORTS_LEFT" != 0 ]; then
+    echo "  FAIL  a port it names was not free when it ended (above)" >&8
     exit 1
   fi
   exit "$rc"

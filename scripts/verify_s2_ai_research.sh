@@ -45,8 +45,7 @@ PASS=0; FAIL=0; CHROME_PID=""
 step() { echo; echo "==> $*"; }
 ok()   { PASS=$((PASS + 1)); echo "  PASS  $*"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  FAIL  $*"; }
-by_port() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null || true; }
-stop_port() { local p; p="$(by_port "$1")"; [ -n "$p" ] && kill $p 2>/dev/null || true; for _ in $(seq 1 20); do [ -z "$(by_port "$1")" ] && return 0; sleep 0.25; done; }
+# stop_port and by_port are scripts/lib/ports.sh's (sourced by finish.sh): a listener is stopped only if it is this script's own.
 stop_sidecar() { pkill -f "research-sidecar.mjs $MARK" 2>/dev/null || true; for _ in $(seq 1 20); do pgrep -f "research-sidecar.mjs $MARK" > /dev/null || return 0; sleep 0.25; done; }
 cleanup() {
   stop_port "$PORT"; stop_port "$VITE_PORT"; stop_port "$FAKE_PORT"; stop_sidecar

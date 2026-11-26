@@ -64,7 +64,7 @@ cleanup() {
   stop_server
   [ -n "$VITE_PID" ] && kill "$VITE_PID" 2>/dev/null || true
   [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null || true
-  for p in $(lsof -ti tcp:$PORT,$VITE_PORT,$CDP_PORT 2>/dev/null); do kill "$p" 2>/dev/null || true; done
+  stop_port "$PORT"; stop_port "$VITE_PORT"; stop_port "$CDP_PORT"   # only its own listeners (ports.sh)
   for f in "${EDITED[@]}"; do cmp -s "$W/$(basename "$f").orig" "$f" || { cp "$W/$(basename "$f").orig" "$f"; echo "  (EXIT trap restored $f)"; }; done
   sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -rf "$W/chrome"
 }

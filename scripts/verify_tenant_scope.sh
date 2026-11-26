@@ -256,7 +256,7 @@ PRODUCE=server/routes/produceRun.ts; CREDIT=server/routes/creditAndMarks.ts
 B5="$(mktemp -d "${TMPDIR:-/tmp}/lvrf_p3_5c.XXXXXX")"; cp "$PRODUCE" "$B5/produceRun.ts"; cp "$CREDIT" "$B5/creditAndMarks.ts"
 restore5c() { for f in "$PRODUCE" "$CREDIT"; do [ -f "$B5/$(basename "$f")" ] && { cmp -s "$B5/$(basename "$f")" "$f" || cp "$B5/$(basename "$f")" "$f"; }; done; true; }
 cleanup() { restore5c; stop_port "$PORT"; [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1; dropdb --if-exists "$VERIFY_DB" 2>/dev/null || true; rm -f "$LOG"; }
-stop_port() { local p; for p in $(lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null); do kill "$p" 2>/dev/null || true; done; }
+# stop_port and by_port are scripts/lib/ports.sh's (sourced by finish.sh): a listener is stopped only if it is this script's own.
 restart() {
   stop_port "$PORT"; [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true; sleep 1
   env -u LVRF_PUBLIC_ORIGIN NODE_ENV=development LVRF_ALLOW_ACTOR_HEADER=0 DATABASE_URL="$VERIFY_URL" PORT="$PORT" npx tsx server/index.ts > "$LOG" 2>&1 < /dev/null &
