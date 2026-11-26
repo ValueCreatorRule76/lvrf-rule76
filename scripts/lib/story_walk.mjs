@@ -19,7 +19,7 @@
 //                     one page, ascending
 //   gutter            each banner on screen starts its text at least 16 px from the left edge
 //   # column          printed (print media at 701 px, US Letter's width less its margins), each two-digit # is one line
-//   words             the heading and timeline note say "line", not "engagement"; the stage strip's "needs a second
+//   words             the heading, its note and the timeline note say "line", not "engagement"; the stage strip's "needs a second
 //                     verified actual, from a separate measurement"; "Prepared by …" for E.TENANT as E.EXPECT_V seals it;
 //                     on an issued story, "composer version N" in the record line and "for E.TENANT's people" on the cover
 const SECTIONS = (process.argv[2] ?? 'draft').split(',');
@@ -131,6 +131,10 @@ async function s7b1(where) {
   const lines = await ev(`document.querySelectorAll('[data-testid=headline]').length`);
   const head = await ev(`document.querySelector('[data-testid=headline-heading]')?.textContent ?? ''`);
   check(head === (lines > 1 ? 'Each line’s latest sealed run' : 'The latest sealed run'), `${where}: the headline's heading reads "${head}" over ${lines} line(s)`, head);
+  if (lines > 1) {
+    const hn = await ev(`document.querySelector('[data-testid=headline-note]')?.textContent ?? ''`);
+    check(hn === 'No score is averaged or combined across lines.', `${where}: "No score is averaged or combined across lines."`, hn);
+  }
   if (form === 'full') {
     const note = await ev(`document.querySelector('[data-testid=timeline-note]')?.textContent ?? ''`);
     check(note === 'Each line’s latest run is its score; earlier runs print here only.', `${where}: the timeline's note says "line"`, note);

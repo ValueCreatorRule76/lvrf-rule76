@@ -169,6 +169,9 @@ step "5. The rendered sweep: every page at 1280"
   echo /; echo /book; echo /runs; echo /packs; echo /policies
   q "SELECT '/accounts/' || id FROM institutions WHERE tenant_id = '$TEN' AND deleted_at IS NULL"
   q "SELECT '/accounts/' || id || '/pov' FROM institutions WHERE tenant_id = '$TEN' AND deleted_at IS NULL"
+  # S7b.1 Gate A (Brad, 25 Nov 2026): the story pages, each account's draft and every issued story
+  q "SELECT '/accounts/' || id || '/story' FROM institutions WHERE tenant_id = '$TEN' AND deleted_at IS NULL"
+  q "SELECT '/stories/' || id FROM story_records WHERE tenant_id = '$TEN'"
   q "SELECT '/packs/' || slug FROM industries"
   q "SELECT '/engagements/' || e.id || '/snapshots' FROM engagements e JOIN institutions i ON i.id = e.institution_id WHERE i.tenant_id = '$TEN'"
   q "SELECT '/runs/' || r.id FROM value_runs r WHERE lvrf_system_exercise_mark('value_runs', r.id) IS NULL"

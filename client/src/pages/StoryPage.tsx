@@ -112,7 +112,7 @@ function StoryBody({ p, form, hash, issuedOn, withdrawn }: { p: StoryPayload; fo
           {scoreline(r, 'headline-score')}
           <p className="m-0 mt-1 text-[12px] text-ink-70">Run {r.run_number} of {runLabel(g)}, {r.band}. The sealed figure is never recomputed or hidden.</p>
         </div>))}
-      {headline.length > 1 && <p className="m-0 mt-1 text-[12px] text-ink-45">No score is averaged or combined across engagements.</p>}
+      {headline.length > 1 && <p className="m-0 mt-1 text-[12px] text-ink-45" data-testid="headline-note">No score is averaged or combined across lines.</p>}
 
       {!onePage && <>
         <h2 className={H2}>{p.stage === 'reference' ? 'What outside-in research found' : 'What they chose'}</h2>
