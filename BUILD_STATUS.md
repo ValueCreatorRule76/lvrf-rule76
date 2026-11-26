@@ -18001,3 +18001,104 @@ The exact commands are given to Brad with these expectations.
 
 **S7b is closed** (25 Nov 2026). **Next: S7b.1** (Brad's rulings, 25 Nov 2026). After its deploy, Brad withdraws
 `cf99dbf3` and issues version 2, both through the page.
+
+### S7b.1: the story's placement, reading order and wording — Gate A, 26 Nov 2026 (UTC) — one print finding open
+
+LVRF_PLAN §35, approved by Brad 25 Nov 2026. Branch `s7b1`:
+- `9f087f9`: the code;
+- `6e6b831`: "No score is averaged or combined across lines.", and the sweep reads the story pages;
+- `8efa736`: break B6;
+- `8e89073`: the test fix, W1 and W2, and the 3.1 order.
+
+No migration and no hardening change: 233 triggers and drift none at `0055` on every clone, so the TOC stays 989.
+`scripts/demo/` (Brad's other session) is in no S7b.1 commit.
+
+**Changes during the gate (Brad, 25 Nov 2026):**
+- "No score is averaged or combined across lines." (was "…across engagements"), with a walk check.
+- `verify_plain_words`' sweep reads the story pages (each account's draft, every issued story). It had read only the
+  page's source, through `check_plain_words`.
+- **B6:** "(D7)" put into the story page's own heading is caught by the sweep of the story pages, as app text, then
+  restored and swept clean. On the 14 Nov copy (3 story pages) 47/0; on the fresh copy (4, with `cf99dbf3`) caught too.
+- **The test fix in `verify_commit_measure_verify`, test only:**
+  - the walk checks each Confirm landed, and that its withdrawal POST was sent and answered 200;
+  - the server log is appended across restarts, with a marker at each start;
+  - on any failure the clone is kept and named.
+  - **W1:** the route answering 500 is named "answered 500", nothing is written, and the log keeps the 500. With the
+    route restored, 233/0.
+  - **W2:** one check forced to fail gives 232/1 and exit 1; the clone `lvrf_verifyspine` is kept, named and readable
+    (4 withdrawals, 20 withdraw acts); the server log is intact (469 lines, 9 starts, W1's 500 and the real 200). The
+    clone was dropped by hand and the script restored byte-identical.
+  - The five other users of `l41_walk.mjs`, each on a fresh 14 Nov restore: `verify_case_snapshot` 117/0,
+    `verify_evidence_final` 181/0, `verify_steward_safety` 31/0, `verify_value_case` 201/0, `verify_supersession` 224/0.
+- **3.1:** "every script stops its servers by port" is next after S7b.1, ahead of W6's confirmation.
+
+**The full regression on the pinned 14 Nov snapshot** (at `9f087f9`, 19:37–20:43 EST on 25 Nov, 00:37–01:43 UTC on
+26 Nov):
+- **60 of 65 passed,** 5,885 checks.
+- **Not run:** `verify_story` (exit 3: the copy predates Brad's six Curia rows).
+- **Refused by the port guard, counted as not run:**
+  - `verify_corrections`: a Vite left on 5198 by `verify_cohort`;
+  - `verify_pov_print`: a Vite left on 5197 by `verify_acts_lineage`.
+  - Nineteen leftover Vites were stopped afterwards, each matched to its script's port and this checkout.
+- **Failed, one occurrence whose cause was not established:** `verify_commit_measure_verify`, 212/8.
+  - At 19:49:53 EST the measurement's confirmation read exactly as quoted (screenshot), and the walk clicked Confirm.
+  - No withdrawal and no act were written, and the Vite proxy logged no error. The commitment step and acts 1–2's
+    checks then failed from it; acts 3–4 (the link withdrawals) recorded normally seconds later.
+  - The server log was overwritten at the next restart, and the clone (with its refusals) was dropped, so whether the
+    request was refused or never sent cannot be said. The test fix above is what makes a recurrence name its cause.
+  - **Ruled out (Brad, 25 Nov 2026):** a date cause. The form sends only the reason, and the route and guard compare
+    stored values; the database's date rules are UTC and none applies to a withdrawal. The rerun passed inside the
+    window when the New York date is a day behind. No product bug. S7b.1's diff does not reach the outcome page or the
+    withdrawal path.
+- **Files:** byte-identical, except Brad's `scripts/demo/record.mjs` and `scripts/demo/cards/build.py`, changed at
+  20:02 and 20:08 EST by his other session.
+
+**Reruns, each on a fresh 14 Nov restore:**
+- **The scripts that read the story page:**
+  - `verify_story`: not run (exit 3), as above;
+  - `verify_plain_words`: 43/0 (54 pages, the 3 story drafts among them);
+  - `verify_s5_account_frame`: 289/0.
+- **The failure:** `verify_commit_measure_verify` 220/0, at 01:57–02:00 UTC.
+- **The refused:** `verify_corrections` 212/0; `verify_pov_print` 121/0.
+- **Not counted:** `verify_acts_lineage`, `verify_steward_acts` and `verify_tenant_scope` read the story routes' source or
+  their API, not the page, and those routes have not changed since the regression ran on the version-2 composer.
+
+**The fresh prod copy** (`lvrf-post-story-20261126T002256Z.dump`, TOC 989, holding `cf99dbf3`):
+- **`verify_story` 428/0:**
+  - composer version 2;
+  - each finding seals its engagement, matching SQL;
+  - "214 days, no source on record";
+  - no "in the platform's wording";
+  - "Rule 76 Consulting LLC for Skillsoft", with the tenant sealed on its own.
+  - **`cf99dbf3`:** its payload and hash unchanged, and its hash still the sha256 of its payload. It renders as version
+    1, with its finding under "Findings on the record" and "composer version 1" in its record line.
+  - **The placement fixture:** the finding inside its own engagement's block.
+  - **Caught:** P (the finding after every engagement), R (`…7, 9, 8…`), G (banners at 4 px), C (two-digit # on two
+    lines in print), and B1–B9.
+- **`verify_plain_words` 45/2:** the known `/runs` hit (3.1: the window crosses the summary/provenance join) and its
+  coverage line; no story page had a hit. B6 caught on 4 story pages.
+- **The equivalence against `f2addac`:** 219/219 GETs identical. The story routes are listed as not covered, so their
+  intended change to version 2 is not compared.
+
+**The PDF read** (`cf99dbf3` and a version-2 story issued on a throwaway clone; both forms; 22 pages read).
+
+S7b.1's changes print as intended:
+- the finding under its own engagement, numbered 9 between the baselines' 8 and 10;
+- every two-digit # on one line;
+- "line" where ruled;
+- "Prepared by Rule 76 Consulting LLC for Skillsoft, with LVRF" and "for Skillsoft's people";
+- "composer version 2" in the full form's cover record line (version 1 for `cf99dbf3`);
+- `cf99dbf3` as sealed.
+
+**Open, found by the read, present since S7b (`f2addac`):**
+1. **The record line, with the full hash, prints on the full form's cover only.**
+   - Pages 2–7 of the full form, and every page of the one-page form, carry no record line. Those pages carry the hash
+     only in the body on the last one.
+   - **The cause:** `client/src/index.css:93` puts only the value case and the POV on the `letter` page that carries
+     it. `verify_story`'s record-line check reads the page's markup, not the printed pages.
+   - This breaks "every printed page carries the disclosure banner and the run's `payload_hash`".
+2. **A ledger row splits across pages:** in the version-1 full form, entry 22's short id is alone at the top of page 7.
+3. **A heading strands at a page's foot:** in the version-2 full form, "The published story, read against the record"
+   ends page 2, and its table starts page 3.
+
+Brad's print of `cf99dbf3` would show 1 too. **Gate A waits for Brad's ruling on these three.**
