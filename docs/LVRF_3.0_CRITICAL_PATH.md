@@ -481,6 +481,14 @@ cut line applied first.
   (5198 and 5197 refused `verify_corrections` and `verify_pov_print`; nineteen in all were stopped by hand). Twenty Vite
   servers from earlier runs were still listening (npx's node child outlives the wrapper a script stops). The other half
   is done in S7b: every script refuses to start when one of its ports is taken (`scripts/lib/ports.sh`).
+- **S7b.2: one issue per story** (Brad, 26 Nov 2026, from S7b.1's Gate C; **next after "every script stops its servers
+  by port", before 4 Jan 2027**). Brad issued the same version-2 story twice, 44 s apart (`fb473904`, `78c1a025`), and
+  withdrew the second as a duplicate.
+  - **Refused:** a duplicate issue, meaning the same account, audience and hash while a story with them is current (not
+    withdrawn). Refused in the route and in the database guard (`lvrf_story_record_guard`), with its plain sentence
+    and a break.
+  - **On the page:** when nothing has changed since the current story, "Issued as <id> on <date>" in place of the
+    issue button.
 
 - **The withdrawal line shows "(UTC)", as the issue line does** (Brad, 26 Nov 2026, from S7b.1's Gate C). An issued
   story's dates are UTC; the withdrawal line ("Withdrawn 2026-11-26 by …") does not say so.

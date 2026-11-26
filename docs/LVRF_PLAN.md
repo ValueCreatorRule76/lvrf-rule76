@@ -7418,7 +7418,7 @@ withdrawn). The latest locked run's `payload.case.hypotheses` is therefore the s
 **Mock-ups updated:** the request's notes carry no figure and the help line names figures (`s34-request`); "What to
 lead with" says it reads from the account's case, with its empty sentence shown as a note (`s34-page`).
 
-## 35. S7b.1: the story's placement, reading order and wording (planned 25 Nov 2026, from Brad's print review of `d2514a3d` and his rulings the same day; **approved by Brad, 25 Nov 2026, with D1, D2 (the recommended wording, "with LVRF" kept) and D3 as written, and one addition to Gate C**)
+## 35. S7b.1: the story's placement, reading order and wording (planned 25 Nov 2026, from Brad's print review of `d2514a3d` and his rulings the same day; **approved by Brad, 25 Nov 2026, with D1, D2 (the recommended wording, "with LVRF" kept) and D3 as written, and one addition to Gate C**; **Gate A closed 26 Nov 2026** at `5449d2e`, with the print findings fixed; **closed 26 Nov 2026**: deployed at `ed47a7d`, Gate C clean after Brad withdrew a duplicate issue (`BUILD_STATUS.md`, "S7b.1 closed"))
 
 **Value spine stage:** `verify` and `return`. The story is the document a CFO reads, and S7b.1 fixes what it claims and
 where it claims it.

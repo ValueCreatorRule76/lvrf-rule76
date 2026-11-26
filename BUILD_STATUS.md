@@ -18218,3 +18218,34 @@ deleted; a story is withdrawn with a reason, by the steward), is Brad's to rule.
 
 **3.1, added (Brad, 26 Nov 2026):** the withdrawal line shows "(UTC)", as the issue line does; run hashes in the ledger
 do not break across lines.
+
+### S7b.1 closed: the story's placement, reading order and wording, deployed at `ed47a7d`; Gate C clean — 26 Nov 2026 (UTC)
+
+**Brad's act, through the page (rule 10):** at 04:07:13 UTC he withdrew `78c1a025`, with the reason "Issued twice by
+mistake; the same story stands as fb473904."
+
+**Gate C again (read-only, as `lvrf_app`, over ssh with the LVRF key alone, inside `BEGIN READ ONLY`):**
+- **The box:** head `ed47a7d`, tree clean; the served `index.html` names `index-CbMGHNT0.js` / `index-CimN7kyl.css`;
+  health 200, `actor_header` off, `ai_research` off.
+- **Drift none** (56 migrations, newest `0055_s7b_story_records`); **233 triggers**, none disabled;
+  `lvrf_story_record_guard` `8a42b278b6fea86e88215db8be6d6439`; ownership clean; runs 27, all locked,
+  **`check_run_hashes` 27/27**.
+- **Three story rows, each hash the sha256 of its payload:**
+
+  | Row | Version | State | Hash | Payload md5 |
+  |---|---|---|---|---|
+  | `cf99dbf3` | 1 | withdrawn 03:25:27 by Brad Piver, with his reason | `d2514a3d…fd363` | `e66fa9ff…`, unchanged since before the withdrawal |
+  | `fb473904` | 2 | **current**, issued 03:35:45 by Brad Piver | `916cee16…38892` | `0460866b…` |
+  | `78c1a025` | 2 | withdrawn 04:07:13 by Brad Piver: a duplicate | `916cee16…38892` | `0460866b…`, unchanged |
+
+- **Since the pre-deploy backup (03:18:17 UTC): four acts,** all by Brad Piver, 243 in all:
+  1. `withdraw` `cf99dbf3` (`POST /api/stories/:id/withdraw`);
+  2. `issue` `fb473904`, naming the six rows (`POST /api/institutions/:institutionId/stories`);
+  3. `issue` `78c1a025`, naming the six rows;
+  4. `withdraw` `78c1a025`.
+- **Audit:** 4 `governance_acts` inserts, 2 `story_records` inserts and 2 `story_records` updates, and nothing else.
+  0 refusals, 0 research-process refusals, 0 record documents, 0 heartbeat events, 0 new sessions, 0 evidence rows.
+
+**S7b.1 is closed** (26 Nov 2026). Curia's story of record is `fb473904`, version 2.
+
+**Next:** "every script stops its servers by port", then **S7b.2** (one issue per story; 3.1, before 4 Jan 2027).
